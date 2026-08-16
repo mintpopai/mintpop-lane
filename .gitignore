@@ -1,0 +1,8 @@
+# JetBrains 工程文件
+.idea/
+
+# Claude Code 本地配置
+.claude/
+
+# 系统文件
+.DS_Store
