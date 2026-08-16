@@ -22,9 +22,9 @@
 - 桌面终端本体（PTY + 终端渲染，能完整跑 Agent 的 TUI）
 - 内嵌 mihomo 内核，实现「机场节点 → 后置落地代理」两跳链式代理
 - Agent 子进程的强制代理注入与 fail-closed 保护
-- Claude 账号登录窗（登录流量同样走公司链路）
+- Claude 长效凭据由服务端下发并注入，**员工无需自行登录 Claude**
 - Logto 统一身份接入
-- 服务端薄实现：链路下发 + 心跳吊销 + 每人固定落地 IP 绑定
+- 服务端薄实现：链路与凭据下发 + 心跳吊销 + 每人固定落地 IP 绑定
 
 ### 本期不做（后续子项目）
 
@@ -43,9 +43,17 @@
 |---|---|
 | 员工看到或抄走节点地址与密码（不落盘、不进渲染层） | 有管理员权限的员工 attach 调试主进程、dump 内存捞凭据 |
 | 手改配置文件换出口（配置只存在于 mihomo 内存） | 员工自行抓取 App 流量分析其行为 |
-| 同机其它进程蹭本地代理端口（回环绑定 + 认证） | 员工把 Claude 凭据拷到别的机器上用 |
+| 同机其它进程蹭本地代理端口（回环绑定 + 认证） | 员工从自己的 shell 里读到注入的 Claude 凭据并带走 |
 
-对「防不住」的部分，缓解手段是**凭据短期化 + 服务端可随时吊销 + 产品内强提示（绕过=封号）**，而不是在客户端堆混淆。
+关于最后一条：Claude 长效凭据以环境变量形式注入子进程，**员工在自己的 tab 里 `echo $CLAUDE_CODE_OAUTH_TOKEN` 即可看到**。这是「注入」这一形态的固有代价，不打算用混淆去掩盖。之所以可以接受：
+
+- 员工本就有权使用该账号，凭据本身对他不是秘密；
+- 带走它唯一的用途是脱离本终端使用，而那正是会触发 Anthropic 风控、把账号封掉的行为——惩罚自然落回员工自己头上；
+- 服务端可随时轮换与吊销该员工的凭据。
+
+若后续确需收紧，可改用 Claude Code 的 `apiKeyHelper` 机制（凭据不进环境变量，由外部程序按需吐出），但这只是提高门槛而非消除，列为后续加固项。
+
+对「防不住」的部分，整体缓解手段是**凭据短期化 + 服务端可随时吊销 + 产品内强提示（绕过=封号）**，而不是在客户端堆混淆。
 
 ### 安全不变量（测试必须守住）
 
@@ -134,17 +142,19 @@ rules:
 - **端口**：在高位区间（如 20000–60000）随机取值，先试绑确认空闲再写入配置；被占用则重试。
 - **凭据**：32 字节 CSPRNG 随机数经 Base64 编码，App 每次启动重新生成，不持久化。
 
-## 6. Claude 账号登录窗
+## 6. Claude 凭据下发
 
-`claude /login` 与 `claude setup-token` 都会拉起**系统浏览器**完成 claude.ai 授权。系统浏览器走员工自己的网络，会在 Anthropic 侧留下一个国内登录 IP——这恰恰是最容易触发风控的一步，且终端注入的环境变量管不到它。
+**员工不自行登录 Claude。** 若走 `claude /login`，会拉起**系统浏览器**完成 claude.ai 授权，而系统浏览器走员工自己的网络——那会在 Anthropic 侧留下一个国内登录 IP，恰恰是最容易触发风控的一步，且终端注入的环境变量管不到系统浏览器。
 
-**解法**：App 内提供「登录 Claude」入口，打开一个 `WebviewWindowBuilder::proxy_url()` 指向本地 mihomo listener 的独立窗口，员工在窗内完成授权。Anthropic 看到的登录 IP 就是该员工的固定落地 IP，与后续 API 请求同源，风控画像一致。
+**做法**：管理员在受控环境中用 `claude setup-token` 为每个团队席位预先生成**长效凭据**，录入服务端；员工登录 Logto 后，凭据随链路配置一并下发，由主进程注入 Agent 子进程的环境变量 `CLAUDE_CODE_OAUTH_TOKEN`。
 
-约束与注意：
+由此得到的性质：
 
-- macOS 需启用 Tauri 的 `macos-proxy` feature，且**仅支持 macOS 14 及以上**（写入系统要求）。Windows 原生支持。
-- `proxy_url` 是否接受 `user:pass@` 形式的认证需实测；若不接受，为登录窗**单开一个无认证、仅绑回环的 listener**（出口同样钉死 LAND）。
-- 授权完成后取得的凭据交回 claude CLI 完成登录，具体交接方式在实现期按 Claude Code 当时的登录形态确定（授权码粘贴 / 本地回调）。
+- 员工机上**从不发生 Claude 侧的登录动作**，Anthropic 看到的所有请求都来自该员工的固定落地 IP，画像干净且稳定。
+- 员工无需理解链路与账号的关系，打开终端即可用——符合「默认正确、易于使用」的产品取向。
+- 凭据与员工是**一对一绑定**（一席位一凭据），出问题可精确定位与单独吊销。
+
+凭据同样只存在于主进程内存与注入给子进程的环境变量中，不落盘。其对员工 shell 可见的固有代价与取舍见第 3 节。
 
 ## 7. 服务端契约
 
@@ -169,7 +179,7 @@ rules:
 
 | 接口 | 作用 | `data` 要点 |
 |---|---|---|
-| `GET /api/link/config` | 拉取链路配置 | `front`（第一跳节点完整配置）、`land`（后置落地代理配置）、`expected_egress_ips[]`、`ttl_seconds` |
+| `GET /api/link/config` | 拉取链路配置与凭据 | `front`（第一跳节点完整配置）、`land`（后置落地代理配置）、`expected_egress_ips[]`、`claude_credential`（该员工席位的长效凭据）、`ttl_seconds` |
 | `POST /api/link/heartbeat` | 续期与吊销检查 | `status`：`ACTIVE` / `REVOKED` / `SUSPENDED` |
 
 ### 7.3 出口 IP 分配
@@ -179,6 +189,8 @@ rules:
 理由：Anthropic 风控对「同一账号 IP 频繁跳变」与「多个账号挤在同一 IP」都敏感。一人一 IP 是风控画像最干净的形态，代价是需要采购多个出口并做分配管理。
 
 落地代理更换 IP 时，服务端更新绑定，客户端在下次心跳后自动跟上。
+
+**Claude 席位凭据同样一人一份**，与落地 IP 绑定在同一条员工记录上：`员工 → (落地出口, Claude 席位凭据)`。这样「谁在用哪个 IP、用哪个席位」始终一一对应，风控排查与吊销都能精确到人。
 
 ### 7.4 错误码分段
 
@@ -220,6 +232,7 @@ rules:
   3. 构造子进程环境变量：
      - `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` = `http://<u>:<p>@127.0.0.1:<随机端口>`
      - `NO_PROXY` = `localhost,127.0.0.1,::1`
+     - `CLAUDE_CODE_OAUTH_TOKEN` = 服务端下发的该员工席位长效凭据
   4. 创建 PTY 并 spawn
 
 - **shell 范围**：tab 中启动的是环境已注入的登录 shell，员工可在其中执行任意命令。不做命令白名单——Agent 本身就能执行任意命令，限制 shell 没有额外安全收益。
@@ -246,7 +259,7 @@ rules:
 - **CI/CD 命名**：tag 前缀 `desktop-v*` / `server-v*`；workflow `release-desktop.yml`、`deploy-server.yml`、`ci-repo.yml`，以及必备的 `action-notify.yml`
 - **工具链**：全部收口到根 `mise.toml`，钉死 rust / node / pnpm / go 的具体版本；task 按「动作-组件」命名（`run-desktop`、`build-desktop`、`test-server` 等）
 - **mihomo**：作为 Tauri sidecar 打包进安装包，版本随 App 固定
-- **目标平台**：macOS arm64（14 及以上）+ Windows x64
+- **目标平台**：macOS arm64（13 及以上）+ Windows x64
 
 ## 12. 待验证风险清单
 
@@ -254,10 +267,10 @@ rules:
 
 | # | 风险 | 验证方式 | 退路 |
 |---|---|---|---|
-| 1 | Claude Code 是 Node 应用，其 HTTP 栈（undici）对 `HTTPS_PROXY` 的支持并非无条件，某些版本需要额外开关 | 起 mihomo + 注入环境变量 + 跑一次 `claude`，抓包确认流量确实经过 listener | 改用 `ANTHROPIC_BASE_URL` 指向本地反代，形态相近但需多写一层 |
-| 2 | Tauri `proxy_url` 是否接受 `user:pass@` 认证 | 实测登录窗 | 为登录窗单开一个无认证、仅绑回环的 listener |
+| 1 | `HTTPS_PROXY` 是否被 Claude Code 无条件遵循。已确认 2.x 是原生二进制且内部含 `HTTPS_PROXY` 处理，但也出现了 `NODE_USE_ENV_PROXY`，说明存在开关语义 | 起 mihomo + 注入环境变量 + 跑一次 `claude`，从 mihomo 日志确认连接确实经过 listener | 补设 `NODE_USE_ENV_PROXY=1`；仍不行则改用 `ANTHROPIC_BASE_URL` 指向本地反代 |
+| 2 | `CLAUDE_CODE_OAUTH_TOKEN` 注入后能否完全跳过交互式登录 | 在干净的 `HOME` 下只给该变量跑一次 `claude -p`，确认不弹登录 | 改用 `apiKeyHelper` 机制提供凭据 |
 | 3 | mihomo `PUT /configs` 携带 `payload` 时是否会将配置写回磁盘 | 推送后检查磁盘文件内容 | 改为写 0600 临时文件并在加载后立即删除 |
-| 4 | Claude Code 登录形态（授权码粘贴 / 本地回调）可能随版本变化 | 实现期实测当时版本 | 按当时形态适配交接方式 |
+| 4 | `claude setup-token` 生成的长效凭据的有效期与轮换周期 | 生成后记录其过期时间 | 服务端按周期批量轮换并下发 |
 
 ## 13. 后续子项目
 
