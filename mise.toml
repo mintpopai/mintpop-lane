@@ -1,0 +1,40 @@
+[tools]
+rust = "1.97.1"
+node = "26.7.0"
+pnpm = "11.22.0"
+
+# —— 安装 ——
+[tasks.install]
+description = "安装全部组件依赖"
+depends = ["install-desktop"]
+
+[tasks.install-desktop]
+description = "安装桌面端前端依赖"
+usage = '''
+flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker 用）"
+'''
+dir = "apps/desktop"
+run = "pnpm install ${usage_frozen:+--frozen-lockfile}"
+
+# —— 运行 ——
+[tasks.run-desktop]
+description = "以开发模式启动桌面端"
+dir = "apps/desktop"
+run = "pnpm tauri dev"
+
+# —— 构建 ——
+[tasks.build-desktop]
+description = "构建桌面端安装包"
+dir = "apps/desktop"
+run = "pnpm tauri build"
+
+# —— 质量 ——
+[tasks.test-desktop]
+description = "跑桌面端 Rust 测试"
+dir = "apps/desktop/src-tauri"
+run = "cargo test"
+
+[tasks.lint-desktop]
+description = "检查桌面端 Rust 代码"
+dir = "apps/desktop/src-tauri"
+run = "cargo clippy --all-targets -- -D warnings"

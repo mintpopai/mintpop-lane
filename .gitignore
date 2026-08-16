@@ -6,3 +6,12 @@
 
 # 系统文件
 .DS_Store
+
+# 依赖与构建产物
+node_modules/
+dist/
+target/
+
+# 本地链路配置（含真实节点凭据，严禁入库）
+link.json
+*.local
