@@ -19,3 +19,9 @@ link.json
 # 服务端环境配置（含节点与席位凭据，严禁入库）
 apps/server/src/main/resources/application-*.yaml
 !apps/server/src/main/resources/application-*.yaml.example
+
+# 部署机上的生产配置（含凭据）
+deploy/application-prod.yaml
+
+# mihomo sidecar 二进制，由 mise run fetch-mihomo 下载
+apps/desktop/src-tauri/binaries/

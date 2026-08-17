@@ -6,8 +6,15 @@ spring:
 
 server:
   port: 8080
-  # 只监听回环，对外访问由宿主上的反代承担
-  address: 127.0.0.1
+  # 不设 address：容器内必须绑 0.0.0.0（容器网络本身是边界，
+  # 不对外由 compose 的宿主端口只绑 127.0.0.1 保证）。
+  # 本地开发时在 application-local.yaml 里绑回环。
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
 
 logging:
   level:

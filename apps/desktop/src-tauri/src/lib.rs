@@ -18,24 +18,42 @@ use tauri::{AppHandle, Emitter, Manager};
 /// 心跳间隔。既是吊销的生效延迟上限，也是链路异常的发现延迟上限。
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 
-/// OIDC 配置。当前从环境变量读，计划三改为打包期注入的编译期常量。
+/// 取接入配置：构建期注入的值优先，缺失时回退到运行时环境变量（开发用）。
+/// 这些值不是秘密（issuer、client_id、服务端地址都会出现在网络请求里），
+/// 编译进二进制没有额外风险；真正的秘密只有服务端持有。
+macro_rules! injected {
+    ($key:literal) => {
+        option_env!($key)
+            .map(str::to_string)
+            .or_else(|| std::env::var($key).ok())
+    };
+}
+
 pub fn oidc_config() -> OidcConfig {
     OidcConfig {
-        issuer: std::env::var("MINTPOP_LOGTO_ISSUER").unwrap_or_default(),
-        client_id: std::env::var("MINTPOP_LOGTO_CLIENT_ID").unwrap_or_default(),
+        issuer: injected!("MINTPOP_LOGTO_ISSUER").unwrap_or_default(),
+        client_id: injected!("MINTPOP_LOGTO_CLIENT_ID").unwrap_or_default(),
         redirect_uri: "mintpop://callback".to_string(),
-        resource: std::env::var("MINTPOP_API_RESOURCE").unwrap_or_default(),
+        resource: injected!("MINTPOP_API_RESOURCE").unwrap_or_default(),
     }
 }
 
 pub fn server_base_url() -> String {
-    std::env::var("MINTPOP_SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string())
+    injected!("MINTPOP_SERVER_URL").unwrap_or_else(|| "http://127.0.0.1:8080".to_string())
 }
 
+/// 定位 mihomo 内核。
+/// 打包后它作为 sidecar 与主程序同级；开发时允许用 MIHOMO_BIN 指向任意二进制。
 fn mihomo_path() -> PathBuf {
-    std::env::var("MIHOMO_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("mihomo"))
+    if let Ok(custom) = std::env::var("MIHOMO_BIN") {
+        return PathBuf::from(custom);
+    }
+
+    let name = if cfg!(windows) { "mihomo.exe" } else { "mihomo" };
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(name)))
+        .unwrap_or_else(|| PathBuf::from(name))
 }
 
 /// 记录状态并返回，避免每处都重复写锁操作

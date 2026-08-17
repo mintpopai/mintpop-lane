@@ -1,0 +1,7 @@
+# 白名单式最小化构建上下文。
+# pattern 相对 context 根（仓库根）书写，不相对本文件所在目录。
+*
+!mise.toml
+!apps/server
+apps/server/target
+**/.git

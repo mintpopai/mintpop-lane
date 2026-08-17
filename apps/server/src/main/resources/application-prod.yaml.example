@@ -1,24 +1,21 @@
-# 本地环境配置模板。复制为 application-local.yaml 并填入真实值。
-# 真实文件含节点与席位凭据，已在 .gitignore 中排除，严禁入库。
-
-server:
-  # 本地开发只绑回环
-  address: 127.0.0.1
+# 生产环境配置模板。
+# 部署时复制为 application-prod.yaml 放在 deploy/ 目录下，由 compose 以只读卷挂进容器，
+# 不打进镜像。该文件含节点与席位凭据，已在 .gitignore 中排除，严禁入库。
+#
+# 注意：容器内不要设 server.address，必须绑 0.0.0.0；
+# 不对外由 compose 的宿主端口只绑 127.0.0.1 保证。
 
 spring:
   security:
     oauth2:
       resourceserver:
         jwt:
-          # Logto 租户的 OIDC issuer，形如 https://<tenant>.logto.app/oidc
           issuer-uri: "https://填入你的租户.logto.app/oidc"
-          # 本服务在 Logto 中注册的 API Resource 标识，会与 JWT 的 aud 比对
           audiences:
             - "https://api.mintpop.internal"
 
 mintpop:
   link:
-    # 第一跳：全员共用的美国机房机场节点。字段原样透传给 mihomo，按所用协议填写。
     front:
       type: trojan
       server: us.example.com
@@ -26,8 +23,6 @@ mintpop:
       password: 填入机场节点密码
       sni: us.example.com
 
-    # 员工绑定表：一人一条，专属落地出口与 Claude 席位凭据都绑在这里。
-    # land 的字段同样原样透传；节点名与 dialer-proxy 由客户端强制覆盖，无需填写。
     employees:
       - subject: 填入该员工在 Logto 中的 user id
         name: 张三
@@ -42,5 +37,4 @@ mintpop:
           password: 填入密码
         claude-credential: 填入该席位 claude setup-token 生成的长效凭据
 
-    # 下发给客户端的配置有效期（秒）
     ttl-seconds: 1800

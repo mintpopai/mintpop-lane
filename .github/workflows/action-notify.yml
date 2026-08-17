@@ -1,0 +1,33 @@
+name: Action Notify
+
+on:
+  workflow_run:
+    # 这里写各顶层 workflow 的 name 字段值（不是文件名）；
+    # Quality 是 workflow_call 复用型、不独立触发，故不列。
+    workflows:
+      - CI Repo
+      - Release Server
+      - Release Desktop
+    types: [completed]
+
+permissions:
+  contents: read
+  # 失败时读 jobs API 定位「哪个 job 的哪个 step 挂了」
+  actions: read
+
+jobs:
+  notify:
+    name: 推送流水线结果到飞书
+    runs-on: ubuntu-latest
+    steps:
+      - name: 推送流水线结果到飞书私聊
+        uses: yuebai-blast/feishu-notify-action@v1
+        with:
+          app_id: ${{ secrets.FEISHU_APP_ID }}
+          app_secret: ${{ secrets.FEISHU_APP_SECRET }}
+          receive_id: ${{ secrets.FEISHU_RECEIVE_ID }}
+          status: ${{ github.event.workflow_run.conclusion }}
+          workflow_name: ${{ github.event.workflow_run.name }}
+          repo: ${{ github.repository }}
+          run_url: ${{ github.event.workflow_run.html_url }}
+          github_token: ${{ github.token }}
