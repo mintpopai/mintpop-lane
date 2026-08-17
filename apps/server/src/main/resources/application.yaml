@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: mintpop-server
+  profiles:
+    default: local
+
+server:
+  port: 8080
+  # 只监听回环，对外访问由宿主上的反代承担
+  address: 127.0.0.1
+
+logging:
+  level:
+    com.mintpop.server: INFO

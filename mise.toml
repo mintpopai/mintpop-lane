@@ -2,11 +2,13 @@
 rust = "1.97.1"
 node = "26.7.0"
 pnpm = "11.22.0"
+java = "temurin-25.0.4+7.0.LTS"
+maven = "3.9.16"
 
 # —— 安装 ——
 [tasks.install]
 description = "安装全部组件依赖"
-depends = ["install-desktop"]
+depends = ["install-desktop", "install-server"]
 
 [tasks.install-desktop]
 description = "安装桌面端前端依赖"
@@ -16,11 +18,24 @@ flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker
 dir = "apps/desktop"
 run = "pnpm install ${usage_frozen:+--frozen-lockfile}"
 
+[tasks.install-server]
+description = "拉取服务端 Maven 依赖"
+dir = "apps/server"
+run = "mvn -q dependency:go-offline"
+
 # —— 运行 ——
 [tasks.run-desktop]
 description = "以开发模式启动桌面端"
 dir = "apps/desktop"
 run = "pnpm tauri dev"
+
+[tasks.run-server]
+description = "以开发模式启动服务端"
+usage = '''
+flag "-e --env <env>" help="运行环境，默认 local"
+'''
+dir = "apps/server"
+run = "mvn spring-boot:run -Dspring-boot.run.profiles=${usage_env:-local}"
 
 # —— 构建 ——
 [tasks.build-desktop]
@@ -28,11 +43,21 @@ description = "构建桌面端安装包"
 dir = "apps/desktop"
 run = "pnpm tauri build"
 
+[tasks.build-server]
+description = "打包服务端可执行 jar"
+dir = "apps/server"
+run = "mvn -q clean package"
+
 # —— 质量 ——
 [tasks.test-desktop]
 description = "跑桌面端 Rust 测试"
 dir = "apps/desktop/src-tauri"
 run = "cargo test"
+
+[tasks.test-server]
+description = "跑服务端测试"
+dir = "apps/server"
+run = "mvn -q test"
 
 [tasks.lint-desktop]
 description = "检查桌面端 Rust 代码"

@@ -1,0 +1,43 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 用 jwk-set-uri 而非 issuer-uri：后者会在应用启动时拉 OIDC discovery，
+          # 让测试依赖外网。jwk-set-uri 是懒加载，而 MockMvc 的 jwt() 后处理器
+          # 直接注入认证对象、不走真实解码，因此这个地址永远不会被真的请求。
+          jwk-set-uri: "http://127.0.0.1:9/jwks"
+
+mintpop:
+  link:
+    front:
+      type: trojan
+      server: us.test.example
+      port: 443
+      password: test-password
+    employees:
+      - subject: logto-user-1
+        name: 测试用户一
+        status: ACTIVE
+        expected-egress-ips:
+          - 77.47.143.6
+        land:
+          type: socks5
+          server: 77.47.143.6
+          port: 50101
+          username: u1
+          password: p1
+        claude-credential: sk-ant-test-1
+      - subject: logto-user-2
+        name: 测试用户二
+        status: REVOKED
+        expected-egress-ips:
+          - 8.8.8.8
+        land:
+          type: socks5
+          server: 8.8.8.8
+          port: 50102
+          username: u2
+          password: p2
+        claude-credential: sk-ant-test-2
+    ttl-seconds: 1800

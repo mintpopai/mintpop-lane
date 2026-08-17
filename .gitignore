@@ -15,3 +15,7 @@ target/
 # 本地链路配置（含真实节点凭据，严禁入库）
 link.json
 *.local
+
+# 服务端环境配置（含节点与席位凭据，严禁入库）
+apps/server/src/main/resources/application-*.yaml
+!apps/server/src/main/resources/application-*.yaml.example

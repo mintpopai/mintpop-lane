@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import LoginView from "./components/Login.vue";
 import TerminalView from "./components/Terminal.vue";
 
 type LinkState = "DISCONNECTED" | "CONNECTING" | "ACTIVE" | "DEGRADED" | "REVOKED";
 
 const status = ref<LinkState>("DISCONNECTED");
+const loggedIn = ref(false);
 let timer: ReturnType<typeof setInterval> | undefined;
+let unlisten: UnlistenFn | undefined;
 
 const label: Record<LinkState, string> = {
   DISCONNECTED: "链路未连接",
@@ -16,21 +20,28 @@ const label: Record<LinkState, string> = {
   REVOKED: "账号已被停用",
 };
 
-onMounted(() => {
-  const poll = async () => {
-    status.value = await invoke<LinkState>("link_status");
-  };
-  poll();
+async function poll() {
+  loggedIn.value = await invoke<boolean>("auth_status");
+  status.value = await invoke<LinkState>("link_status");
+}
+
+onMounted(async () => {
+  await poll();
   timer = setInterval(poll, 3000);
+  unlisten = await listen<{ logged_in: boolean }>("auth://changed", (event) => {
+    loggedIn.value = event.payload.logged_in;
+  });
 });
 
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  unlisten?.();
 });
 </script>
 
 <template>
-  <div class="app">
+  <LoginView v-if="!loggedIn" />
+  <div v-else class="app">
     <header :class="['bar', status]">{{ label[status] }}</header>
     <TerminalView v-if="status === 'ACTIVE'" />
     <div v-else class="blocked">

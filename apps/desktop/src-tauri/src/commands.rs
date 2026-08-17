@@ -1,13 +1,53 @@
-use crate::app_state::AppState;
+use crate::app_state::{AppState, PendingLogin};
+use crate::auth::{oidc, pkce, storage};
 use crate::link::state::LinkState;
 use crate::pty::session::{default_shell, spawn_agent_pty};
 use std::io::Read;
 use tauri::{AppHandle, Emitter, State};
 
-/// 前端唯一能拿到的链路信息：只有状态枚举，没有端口与凭据
+/// 前端唯一能拿到的链路信息：只有状态枚举，没有端口、密码与 Claude 凭据
 #[tauri::command]
 pub fn link_status(state: State<'_, AppState>) -> LinkState {
     *state.link_state.lock().unwrap()
+}
+
+/// 是否已登录（内存中是否持有 access_token）
+#[tauri::command]
+pub fn auth_status(state: State<'_, AppState>) -> bool {
+    state.access_token.lock().unwrap().is_some()
+}
+
+/// 发起登录：生成 PKCE，打开系统浏览器到 Logto 授权页。
+/// 授权完成后由 deep link 回调继续，见 lib.rs 的 handle_callback。
+#[tauri::command]
+pub fn start_login(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let cfg = crate::oidc_config();
+    if cfg.issuer.is_empty() || cfg.client_id.is_empty() {
+        return Err("登录配置缺失，请联系管理员".to_string());
+    }
+
+    let pair = pkce::generate();
+    let st = pkce::random_state();
+    let url = oidc::build_authorize_url(&cfg, &pair, &st);
+
+    *state.pending_login.lock().unwrap() = Some(PendingLogin {
+        verifier: pair.verifier,
+        state: st,
+    });
+
+    tauri_plugin_opener::OpenerExt::opener(&app)
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// 退出登录：清空内存令牌与钥匙串。链路会在下一次心跳时随之失效。
+#[tauri::command]
+pub fn logout(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    *state.access_token.lock().unwrap() = None;
+    storage::clear_refresh_token().map_err(|e| e.to_string())?;
+
+    let _ = app.emit("auth://changed", serde_json::json!({ "logged_in": false }));
+    Ok(())
 }
 
 /// 开一个新的终端会话。链路不活跃时返回错误，前端据此提示用户。
