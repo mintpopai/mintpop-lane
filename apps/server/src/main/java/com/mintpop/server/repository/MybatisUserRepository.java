@@ -15,6 +15,10 @@ import java.util.Optional;
 @Repository
 public class MybatisUserRepository implements UserRepository {
 
+    /** 分页大小的默认值与上限，钳制口径与管理端接口的默认值保持一致 */
+    private static final long DEFAULT_PAGE_SIZE = 20;
+    private static final long MAX_PAGE_SIZE = 100;
+
     private final UserMapper mapper;
     private final UserConverter converter;
 
@@ -53,11 +57,16 @@ public class MybatisUserRepository implements UserRepository {
 
     @Override
     public PageResult<UserDto> search(String keyword, long pageNo, long pageSize) {
+        // 钳制分页参数：MyBatis-Plus 在 size 为负且未设 maxLimit 时不会拼 LIMIT，
+        // 外部传入的负数会退化成全表返回、逐行解密，必须在这里挡住
+        long safePageNo = pageNo < 1 ? 1 : pageNo;
+        long safePageSize = pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+
         var query = Wrappers.<User>lambdaQuery().orderByAsc(User::getId);
         if (keyword != null && !keyword.isBlank()) {
             query.and(w -> w.like(User::getName, keyword).or().like(User::getSubject, keyword));
         }
-        Page<User> page = mapper.selectPage(Page.of(pageNo, pageSize), query);
+        Page<User> page = mapper.selectPage(Page.of(safePageNo, safePageSize), query);
         return new PageResult<>(
                 page.getRecords().stream().map(converter::toDto).toList(),
                 page.getTotal(),

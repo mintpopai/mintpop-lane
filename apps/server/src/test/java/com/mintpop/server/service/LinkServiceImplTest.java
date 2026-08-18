@@ -126,12 +126,26 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("节点被禁用时不下发链路")
-    void 节点被禁用时不下发链路() {
+    @DisplayName("落地节点被禁用时不下发链路")
+    void 落地节点被禁用时不下发链路() {
         库里有(user(UserStatus.ACTIVE));
         ProxyNodeDto disabled = node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10");
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(disabled));
+
+        assertThatThrownBy(() -> service.resolveLink("u1"))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.NODE_DISABLED);
+    }
+
+    @Test
+    @DisplayName("第一跳节点被禁用时同样不下发链路，避免只守住半条 fail-closed 保障")
+    void 第一跳节点被禁用时不下发链路() {
+        库里有(user(UserStatus.ACTIVE));
+        ProxyNodeDto disabled = node(10L, NodeRole.FRONT, NodeProtocol.TROJAN, "us.example.com");
+        disabled.setStatus(NodeStatus.DISABLED);
+        when(nodeRepository.findById(10L)).thenReturn(Optional.of(disabled));
 
         assertThatThrownBy(() -> service.resolveLink("u1"))
                 .isInstanceOf(BizException.class)

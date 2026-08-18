@@ -4,6 +4,7 @@ import com.mintpop.server.enumeration.NodeProtocol;
 import com.mintpop.server.enumeration.NodeRole;
 import com.mintpop.server.enumeration.NodeStatus;
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -31,7 +32,8 @@ public class ProxyNodeDto {
     /** 非敏感的 mihomo 透传键 */
     private Map<String, Object> extraConfig = Map.of();
 
-    /** 敏感键的明文，如 {password: xxx} */
+    /** 敏感键的明文，如 {password: xxx}。排除出 toString，避免凭据随日志外泄 */
+    @ToString.Exclude
     private Map<String, Object> secret = Map.of();
 
     /** 出口 IP 集合，仅 LAND 有值 */

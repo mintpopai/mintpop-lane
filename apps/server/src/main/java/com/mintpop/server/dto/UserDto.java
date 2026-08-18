@@ -3,6 +3,7 @@ package com.mintpop.server.dto;
 import com.mintpop.server.enumeration.UserRole;
 import com.mintpop.server.enumeration.UserStatus;
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -29,7 +30,8 @@ public class UserDto {
     /** 第二跳落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
 
-    /** Claude 席位长效凭据（明文） */
+    /** Claude 席位长效凭据（明文）。排除出 toString，避免凭据随日志外泄 */
+    @ToString.Exclude
     private String claudeCredential;
 
     private LocalDateTime createdAt;
