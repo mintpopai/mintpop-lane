@@ -140,6 +140,50 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("更新节点改名撞上其它节点的名字时报 410007")
+    void 更新节点改名冲突时报错() throws Exception {
+        Long a = fixtures.建FRONT节点("FRONT-A");
+        Long b = fixtures.建LAND节点("LAND-B", "203.0.113.10");
+        var body = Map.of(
+                "name", "FRONT-A",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10",
+                "port", 50101,
+                "egressIps", List.of("203.0.113.10"),
+                "status", "ENABLED");
+
+        mockMvc.perform(put("/api/admin/nodes/" + b).with(管理员())
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(410007));
+
+        assertThat(nodeRepository.findById(a).orElseThrow().getName()).isEqualTo("FRONT-A");
+        assertThat(nodeRepository.findById(b).orElseThrow().getName()).isEqualTo("LAND-B");
+    }
+
+    @Test
+    @DisplayName("更新节点时把名字改成它自己原来的名字，不误报重复")
+    void 更新节点改成自己原名不误报重复() throws Exception {
+        Long id = fixtures.建LAND节点("LAND-1", "203.0.113.10");
+        var body = Map.of(
+                "name", "LAND-1",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10",
+                "port", 50102,
+                "egressIps", List.of("203.0.113.10"),
+                "status", "ENABLED");
+
+        mockMvc.perform(put("/api/admin/nodes/" + id).with(管理员())
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(nodeRepository.findById(id).orElseThrow().getPort()).isEqualTo(50102);
+    }
+
+    @Test
     @DisplayName("节点名重复时报 410007")
     void 节点名重复时报错() throws Exception {
         fixtures.建FRONT节点("FRONT-1");
@@ -160,6 +204,14 @@ class AdminNodeControllerTest extends MysqlTestBase {
 
         mockMvc.perform(post("/api/admin/nodes").with(管理员())
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("角色查询参数取值非法（枚举转换失败）时报参数错误 110001，而不是 500")
+    void 角色查询参数非法时报参数错误() throws Exception {
+        mockMvc.perform(get("/api/admin/nodes").param("role", "不存在的角色").with(管理员()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(110001));
     }

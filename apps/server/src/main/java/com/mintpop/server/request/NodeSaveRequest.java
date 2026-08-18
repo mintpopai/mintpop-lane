@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import lombok.ToString;
 
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,14 @@ public class NodeSaveRequest {
     /** 非敏感的 mihomo 透传键 */
     private Map<String, Object> extraConfig = Map.of();
 
-    /** 敏感键明文。更新时留空表示沿用原值，不清空 */
+    /**
+     * 敏感键明文。更新时留空表示沿用原值，不清空。
+     * 排除出 toString，与 {@code ProxyNodeDto.secret} / {@code UserDto.claudeCredential}
+     * 保持一致：目前全仓没有任何地方打印这个入参对象，但一旦日后有人加一行
+     * {@code log.info("request={}", request)} 或某个异常把它塞进消息，
+     * 没有这个注解密码就会原样进日志。
+     */
+    @ToString.Exclude
     private Map<String, Object> secret = Map.of();
 
     /** 出口 IP 集合，仅 LAND 需要 */

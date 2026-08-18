@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -40,7 +41,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * `@Valid` 参数校验失败。统一映射成 110001 参数非法，
+     * `@Valid` 参数校验失败（请求体字段）。统一映射成 110001 参数非法，
      * 否则会落到兜底的 Exception 分支变成 110002（内部错误语义），
      * 前端无法区分「你参数填错了」和「服务端炸了」。
      */
@@ -51,6 +52,22 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .orElse(BizCodeEnum.PARAM_INVALID.getMessage());
         log.warn("参数校验失败：{}", detail);
+        return new ApiResponse<>(BizCodeEnum.PARAM_INVALID.getCode(), null, detail);
+    }
+
+    /**
+     * 查询参数/路径变量类型不匹配，典型场景是枚举类型的 `@RequestParam` 传了非法取值
+     * （如 `?role=XXX`）。与上面的 {@link MethodArgumentNotValidException} 分工：
+     * 那个处理器管请求体里 `@Valid` 字段校验失败，这个处理器管框架在绑定单个请求参数
+     * 时类型转换失败——两者都是「用户传参有问题」，同样归 110001，不能让后者漏网
+     * 落到兜底的 Exception 分支变成 110002（内部错误语义）。
+     * msg 里只带参数名与期望类型，不回显用户传入的原始值，避免把用户输入反射回响应体。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ApiResponse<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        String expectedType = e.getRequiredType() != null ? e.getRequiredType().getSimpleName() : "预期类型";
+        String detail = "参数 " + e.getName() + " 取值非法，期望类型：" + expectedType;
+        log.warn("参数类型不匹配：{}", detail);
         return new ApiResponse<>(BizCodeEnum.PARAM_INVALID.getCode(), null, detail);
     }
 
