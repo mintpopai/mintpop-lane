@@ -9,6 +9,9 @@ spring:
           jwk-set-uri: "http://127.0.0.1:9/jwks"
 
 mintpop:
+  crypto:
+    # 测试专用固定密钥（32 字节的 Base64），只用于测试，不是任何环境的真实密钥
+    key: "bWludHBvcC10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZCE="
   link:
     front:
       type: trojan
