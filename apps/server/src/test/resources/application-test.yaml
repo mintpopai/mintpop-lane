@@ -10,7 +10,9 @@ spring:
 
 mintpop:
   link:
-    ttl-seconds: 1800
+    # 特意与 LinkProperties.ttlSeconds 的默认值（1800）不同：若把配置绑定删掉，
+    # 字段会回落到默认值，测试断言必须能因此变红，才守得住「配置真的生效」
+    ttl-seconds: 900
   crypto:
     # 测试专用固定密钥（32 字节的 Base64），只用于测试，不是任何环境的真实密钥
     key: "bWludHBvcC10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZCE="

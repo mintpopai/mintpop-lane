@@ -15,6 +15,9 @@ class LinkPropertiesTest extends MysqlTestBase {
     @Test
     @DisplayName("链路有效期能从配置读入；用户与节点数据不再来自配置文件")
     void 链路有效期能从配置读入() {
-        assertThat(linkProperties.getTtlSeconds()).isEqualTo(1800);
+        // 断言值（900）刻意不同于 LinkProperties.ttlSeconds 的默认值（1800）：
+        // 若 @ConfigurationProperties 绑定被删掉，字段会回落到默认值，
+        // 这条断言就会变红，而不是像之前那样即使绑定失效也照样通过
+        assertThat(linkProperties.getTtlSeconds()).isEqualTo(900);
     }
 }

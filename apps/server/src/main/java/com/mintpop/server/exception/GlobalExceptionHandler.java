@@ -5,6 +5,7 @@ import com.mintpop.server.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -69,6 +70,23 @@ public class GlobalExceptionHandler {
         String detail = "参数 " + e.getName() + " 取值非法，期望类型：" + expectedType;
         log.warn("参数类型不匹配：{}", detail);
         return new ApiResponse<>(BizCodeEnum.PARAM_INVALID.getCode(), null, detail);
+    }
+
+    /**
+     * 请求体反序列化失败：JSON 语法错、字段类型不匹配（如 {@code "port":"abc"}）、
+     * body 里枚举取值非法等。与 {@link MethodArgumentTypeMismatchException} 是同一类
+     * 「用户传参有问题」，只是一个管 query/path 参数、一个管 body，同样归 110001，
+     * 不能让 body 这条漏网落到兜底的 Exception 分支变成 110002（内部错误语义），
+     * 否则前端无法区分「你传错了」和「服务端炸了」。
+     * <p>
+     * msg 用固定文案，绝不回显 {@code e.getMessage()}：Jackson 的报错里会带上
+     * 出错位置附近的原始输入片段，而请求体里恰恰可能装着用户提交的密码/凭据，
+     * 原样回显等于把敏感字段吐回响应体。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResponse<Void> handleBodyNotReadable(HttpMessageNotReadableException e) {
+        log.warn("请求体解析失败", e);
+        return new ApiResponse<>(BizCodeEnum.PARAM_INVALID.getCode(), null, "请求体格式非法");
     }
 
     @ExceptionHandler(Exception.class)

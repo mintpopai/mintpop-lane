@@ -2,6 +2,7 @@ package com.mintpop.server.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mintpop.server.enumeration.UserRole;
+import com.mintpop.server.enumeration.UserStatus;
 import com.mintpop.server.repository.ProxyNodeRepository;
 import com.mintpop.server.repository.UserRepository;
 import com.mintpop.server.support.DatabaseFixtures;
@@ -214,6 +215,25 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         assertThat(userRepository.findBySubject("logto-user-1").orElseThrow().getRole())
                 .isEqualTo(UserRole.MEMBER);
+    }
+
+    @Test
+    @DisplayName("更新一个 ADMIN 用户时，请求体里塞 role: MEMBER 也不能把它降级")
+    void 更新不能把管理员降级() throws Exception {
+        Long id = fixtures.建用户("logto-admin-1", UserRole.ADMIN,
+                UserStatus.ACTIVE, frontId, null, "sk-ant-admin");
+
+        Map<String, Object> body = 入参("logto-admin-1", frontId, null, null);
+        body.put("name", "改过的姓名");
+        body.put("role", "MEMBER");
+
+        mockMvc.perform(put("/api/admin/users/" + id).with(管理员())
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        var user = userRepository.findById(id).orElseThrow();
+        assertThat(user.getName()).isEqualTo("改过的姓名");
+        assertThat(user.getRole()).isEqualTo(UserRole.ADMIN);
     }
 
     @Test

@@ -113,6 +113,29 @@ class LinkServiceImplTest {
     }
 
     @Test
+    @DisplayName("已暂停的用户同样拿不到链路，判断条件是「非 ACTIVE」而不是只挡 REVOKED")
+    void 已暂停的用户拿不到链路() {
+        库里有(user(UserStatus.SUSPENDED));
+
+        assertThatThrownBy(() -> service.resolveLink("u1"))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.LINK_REVOKED);
+    }
+
+    @Test
+    @DisplayName("第一跳节点查不到（外键被绕过约束改坏）时按内部错误拒绝，不下发残缺链路")
+    void 第一跳节点查不到时按内部错误拒绝() {
+        库里有(user(UserStatus.ACTIVE));
+        when(nodeRepository.findById(10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resolveLink("u1"))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.INTERNAL_ERROR);
+    }
+
+    @Test
     @DisplayName("未分配落地节点的用户被拒绝，避免客户端放弃出口校验")
     void 未分配落地节点的用户被拒绝() {
         UserDto u = user(UserStatus.ACTIVE);
