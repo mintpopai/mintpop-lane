@@ -1,12 +1,20 @@
 package com.mintpop.server.controller;
 
+import com.mintpop.server.repository.ProxyNodeRepository;
+import com.mintpop.server.repository.UserRepository;
+import com.mintpop.server.support.DatabaseFixtures;
 import com.mintpop.server.support.MysqlTestBase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.mintpop.server.enumeration.UserRole.MEMBER;
+import static com.mintpop.server.enumeration.UserStatus.ACTIVE;
+import static com.mintpop.server.enumeration.UserStatus.REVOKED;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,6 +26,26 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private ProxyNodeRepository nodeRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @BeforeEach
+    void 准备数据() {
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository);
+        fixtures.清空();
+        Long front = fixtures.建FRONT节点("FRONT-1");
+        Long land1 = fixtures.建LAND节点("LAND-1", "77.47.143.6");
+        Long land2 = fixtures.建LAND节点("LAND-2", "8.8.8.8");
+        fixtures.建用户("logto-user-1", MEMBER, ACTIVE, front, land1, "sk-ant-test-1");
+        fixtures.建用户("logto-user-2", MEMBER, REVOKED, front, land2, "sk-ant-test-2");
+    }
 
     @Test
     @DisplayName("无令牌访问接口被拒")

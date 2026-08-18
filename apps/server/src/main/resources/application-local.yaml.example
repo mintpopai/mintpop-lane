@@ -1,5 +1,6 @@
 # 本地环境配置模板。复制为 application-local.yaml 并填入真实值。
-# 真实文件含节点与席位凭据，已在 .gitignore 中排除，严禁入库。
+# 真实文件含加密密钥，已在 .gitignore 中排除，严禁入库。
+# 节点池与用户绑定表已下沉到数据库（app_user / proxy_node），不再由本文件承载。
 
 server:
   # 本地开发只绑回环
@@ -17,30 +18,10 @@ spring:
             - "https://api.mintpop.internal"
 
 mintpop:
+  crypto:
+    # Base64 编码的 32 字节（256 位）AES 密钥，用于加密节点敏感键与用户席位凭据
+    key: 填入 Base64 编码的 32 字节密钥
+
   link:
-    # 第一跳：全员共用的美国机房机场节点。字段原样透传给 mihomo，按所用协议填写。
-    front:
-      type: trojan
-      server: us.example.com
-      port: 443
-      password: 填入机场节点密码
-      sni: us.example.com
-
-    # 用户绑定表：一人一条，专属落地出口与 Claude 席位凭据都绑在这里。
-    # land 的字段同样原样透传；节点名与 dialer-proxy 由客户端强制覆盖，无需填写。
-    users:
-      - subject: 填入该用户在 Logto 中的 user id
-        name: 张三
-        status: ACTIVE
-        expected-egress-ips:
-          - 填入该用户专属落地代理的出口 IP
-        land:
-          type: socks5
-          server: 填入落地代理地址
-          port: 50101
-          username: 填入用户名
-          password: 填入密码
-        claude-credential: 填入该席位 claude setup-token 生成的长效凭据
-
     # 下发给客户端的配置有效期（秒）
     ttl-seconds: 1800

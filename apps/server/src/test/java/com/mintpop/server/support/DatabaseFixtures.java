@@ -1,9 +1,13 @@
 package com.mintpop.server.support;
 
 import com.mintpop.server.dto.ProxyNodeDto;
+import com.mintpop.server.dto.UserDto;
 import com.mintpop.server.enumeration.NodeProtocol;
 import com.mintpop.server.enumeration.NodeRole;
+import com.mintpop.server.enumeration.UserRole;
+import com.mintpop.server.enumeration.UserStatus;
 import com.mintpop.server.repository.ProxyNodeRepository;
+import com.mintpop.server.repository.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
@@ -17,10 +21,12 @@ public class DatabaseFixtures {
 
     private final JdbcTemplate jdbc;
     private final ProxyNodeRepository nodeRepository;
+    private final UserRepository userRepository;
 
-    public DatabaseFixtures(JdbcTemplate jdbc, ProxyNodeRepository nodeRepository) {
+    public DatabaseFixtures(JdbcTemplate jdbc, ProxyNodeRepository nodeRepository, UserRepository userRepository) {
         this.jdbc = jdbc;
         this.nodeRepository = nodeRepository;
+        this.userRepository = userRepository;
     }
 
     /** 清空全部业务表。外键约束在清库期间临时关掉，顺序因此不敏感。 */
@@ -60,5 +66,23 @@ public class DatabaseFixtures {
     /** 直接读原始列，用于断言库里存的确实是密文 */
     public String 读原始密文列(String table, String column, Long id) {
         return jdbc.queryForObject("SELECT " + column + " FROM " + table + " WHERE id = ?", String.class, id);
+    }
+
+    /** 建一个可用的普通用户 */
+    public Long 建用户(String subject, Long frontNodeId, Long landNodeId) {
+        return 建用户(subject, UserRole.MEMBER, UserStatus.ACTIVE, frontNodeId, landNodeId, "sk-ant-" + subject);
+    }
+
+    public Long 建用户(String subject, UserRole role, UserStatus status,
+                    Long frontNodeId, Long landNodeId, String credential) {
+        UserDto user = new UserDto();
+        user.setSubject(subject);
+        user.setName("测试" + subject);
+        user.setRole(role);
+        user.setStatus(status);
+        user.setFrontNodeId(frontNodeId);
+        user.setLandNodeId(landNodeId);
+        user.setClaudeCredential(credential);
+        return userRepository.create(user);
     }
 }
