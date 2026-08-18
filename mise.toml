@@ -8,7 +8,7 @@ maven = "3.9.16"
 # —— 安装 ——
 [tasks.install]
 description = "安装全部组件依赖"
-depends = ["install-desktop", "install-server"]
+depends = ["install-desktop", "install-server", "fetch-mihomo"]
 
 [tasks.install-desktop]
 description = "安装桌面端前端依赖"

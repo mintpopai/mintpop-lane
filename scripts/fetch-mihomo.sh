@@ -16,6 +16,13 @@ case "$TRIPLE" in
   *) echo "不支持的目标平台：${TRIPLE}" >&2; exit 1 ;;
 esac
 
+DEST="${OUT_DIR}/mihomo-${TRIPLE}${EXT}"
+# 已就位则跳过，使 install 可重复执行；MIHOMO_FORCE=1 强制重新下载
+if [ -x "$DEST" ] && [ "${MIHOMO_FORCE:-}" != "1" ]; then
+  echo "已存在，跳过下载：${DEST}"
+  exit 0
+fi
+
 URL="https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VERSION}/${ASSET}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -25,13 +32,13 @@ curl -fsSL "$URL" -o "${TMP}/${ASSET}"
 
 case "$ASSET" in
   *.gz)
-    gunzip -c "${TMP}/${ASSET}" > "${OUT_DIR}/mihomo-${TRIPLE}${EXT}"
+    gunzip -c "${TMP}/${ASSET}" > "$DEST"
     ;;
   *.zip)
     unzip -q -o "${TMP}/${ASSET}" -d "$TMP"
-    mv "$TMP"/mihomo*.exe "${OUT_DIR}/mihomo-${TRIPLE}${EXT}"
+    mv "$TMP"/mihomo*.exe "$DEST"
     ;;
 esac
 
-chmod +x "${OUT_DIR}/mihomo-${TRIPLE}${EXT}"
-echo "已就位：${OUT_DIR}/mihomo-${TRIPLE}${EXT}"
+chmod +x "$DEST"
+echo "已就位：${DEST}"
