@@ -40,10 +40,10 @@ class AdminAuthorizationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("管理员通过授权关卡——接口尚未实现，因此得到的是 404 而不是 403")
+    @DisplayName("管理员能通过授权关卡访问管理端接口")
     void 管理员通过授权关卡() throws Exception {
         mockMvc.perform(get("/api/admin/nodes")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 }
