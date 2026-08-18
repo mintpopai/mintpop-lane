@@ -23,6 +23,9 @@ apps/server/src/main/resources/application-*.yaml
 # 部署机上的生产配置（含凭据）
 deploy/application-prod.yaml
 
+# 部署机上的环境变量文件（含数据库口令与加密密钥）
+deploy/.env
+
 # mihomo sidecar 二进制，由 mise run fetch-mihomo 下载
 apps/desktop/src-tauri/binaries/
 
