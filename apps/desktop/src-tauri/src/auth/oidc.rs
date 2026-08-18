@@ -75,7 +75,7 @@ pub fn extract_code(callback: &str, expected_state: &str) -> Result<String, Oidc
 }
 
 fn token_client() -> reqwest::Client {
-    // 登录发生在链路建立之前，只能走员工自己的网络，因此不套本地代理
+    // 登录发生在链路建立之前，只能走用户自己的网络，因此不套本地代理
     reqwest::Client::builder()
         .no_proxy()
         .build()

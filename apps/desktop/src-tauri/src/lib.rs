@@ -114,7 +114,7 @@ pub async fn establish_link(state: &AppState) -> LinkState {
         return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
     }
 
-    // fail-closed 第二道闸：出口 IP 必须是该员工绑定的落地 IP，
+    // fail-closed 第二道闸：出口 IP 必须是该用户绑定的落地 IP，
     // 只走通第一跳时看到的是机场节点 IP，同样会被判为不匹配。
     let event = match verify_egress(&inbound, &link.expected_egress_ips, DEFAULT_PROBE_URL).await {
         Ok(EgressVerdict::MATCHED(_)) => LinkEvent::EGRESS_VERIFIED,
@@ -127,8 +127,8 @@ pub async fn establish_link(state: &AppState) -> LinkState {
     advance(state, event)
 }
 
-/// 心跳循环：定期确认员工仍可用。被吊销时网络当场断开，
-/// 但不 kill 员工进程，让 Agent 自己报网络错误，避免丢失正在进行的工作。
+/// 心跳循环：定期确认用户仍可用。被吊销时网络当场断开，
+/// 但不 kill 用户进程，让 Agent 自己报网络错误，避免丢失正在进行的工作。
 async fn heartbeat_loop(app: AppHandle) {
     let base_url = server_base_url();
     loop {
@@ -140,7 +140,7 @@ async fn heartbeat_loop(app: AppHandle) {
         };
 
         match link::remote::heartbeat(&base_url, &token).await {
-            Ok(link::remote::EmployeeStatus::ACTIVE) => {}
+            Ok(link::remote::UserStatus::ACTIVE) => {}
             Ok(_) => {
                 reset_kernel(&state).await;
                 advance(&state, LinkEvent::REVOKED_BY_SERVER);
@@ -205,7 +205,7 @@ async fn handle_callback(app: AppHandle, url: String) {
     }
 }
 
-/// 启动时若钥匙串里已有 refresh_token，尝试静默登录，省掉员工每次授权
+/// 启动时若钥匙串里已有 refresh_token，尝试静默登录，省掉用户每次授权
 async fn try_silent_login(app: AppHandle) {
     let Ok(Some(refresh_token)) = auth::storage::load_refresh_token() else {
         return;
@@ -214,7 +214,7 @@ async fn try_silent_login(app: AppHandle) {
     match auth::oidc::refresh(&oidc_config(), &refresh_token).await {
         Ok(tokens) => on_authenticated(&app, tokens).await,
         Err(e) => {
-            // 刷新失败通常意味着员工已在 Logto 侧被停用，清掉本地残留
+            // 刷新失败通常意味着用户已在 Logto 侧被停用，清掉本地残留
             log_error("静默登录失败", &e);
             let _ = auth::storage::clear_refresh_token();
         }

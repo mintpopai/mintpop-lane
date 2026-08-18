@@ -26,14 +26,14 @@ mintpop:
       password: 填入机场节点密码
       sni: us.example.com
 
-    # 员工绑定表：一人一条，专属落地出口与 Claude 席位凭据都绑在这里。
+    # 用户绑定表：一人一条，专属落地出口与 Claude 席位凭据都绑在这里。
     # land 的字段同样原样透传；节点名与 dialer-proxy 由客户端强制覆盖，无需填写。
-    employees:
-      - subject: 填入该员工在 Logto 中的 user id
+    users:
+      - subject: 填入该用户在 Logto 中的 user id
         name: 张三
         status: ACTIVE
         expected-egress-ips:
-          - 填入该员工专属落地代理的出口 IP
+          - 填入该用户专属落地代理的出口 IP
         land:
           type: socks5
           server: 填入落地代理地址

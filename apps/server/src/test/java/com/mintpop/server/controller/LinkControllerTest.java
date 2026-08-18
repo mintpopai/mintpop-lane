@@ -27,8 +27,8 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("正常员工拿到链路配置，业务码为 0")
-    void 正常员工拿到链路配置() throws Exception {
+    @DisplayName("正常用户拿到链路配置，业务码为 0")
+    void 正常用户拿到链路配置() throws Exception {
         mockMvc.perform(get("/api/link/config")
                         .with(jwt().jwt(j -> j.subject("logto-user-1"))))
                 .andExpect(status().isOk())
@@ -40,8 +40,8 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("已吊销员工拿不到链路，HTTP 仍为 200 但业务码非 0")
-    void 已吊销员工拿不到链路() throws Exception {
+    @DisplayName("已吊销用户拿不到链路，HTTP 仍为 200 但业务码非 0")
+    void 已吊销用户拿不到链路() throws Exception {
         mockMvc.perform(get("/api/link/config")
                         .with(jwt().jwt(j -> j.subject("logto-user-2"))))
                 .andExpect(status().isOk())
@@ -59,8 +59,8 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("心跳返回员工当前状态")
-    void 心跳返回员工当前状态() throws Exception {
+    @DisplayName("心跳返回用户当前状态")
+    void 心跳返回用户当前状态() throws Exception {
         mockMvc.perform(post("/api/link/heartbeat")
                         .with(jwt().jwt(j -> j.subject("logto-user-1"))))
                 .andExpect(status().isOk())
@@ -69,8 +69,8 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("已吊销员工的心跳返回 REVOKED")
-    void 已吊销员工的心跳返回吊销() throws Exception {
+    @DisplayName("已吊销用户的心跳返回 REVOKED")
+    void 已吊销用户的心跳返回吊销() throws Exception {
         mockMvc.perform(post("/api/link/heartbeat")
                         .with(jwt().jwt(j -> j.subject("logto-user-2"))))
                 .andExpect(status().isOk())

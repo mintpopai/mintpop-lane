@@ -18,7 +18,7 @@ mintpop:
       server: us.test.example
       port: 443
       password: test-password
-    employees:
+    users:
       - subject: logto-user-1
         name: 测试用户一
         status: ACTIVE
