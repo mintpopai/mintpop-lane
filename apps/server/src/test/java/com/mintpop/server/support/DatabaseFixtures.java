@@ -1,0 +1,64 @@
+package com.mintpop.server.support;
+
+import com.mintpop.server.dto.ProxyNodeDto;
+import com.mintpop.server.enumeration.NodeProtocol;
+import com.mintpop.server.enumeration.NodeRole;
+import com.mintpop.server.repository.ProxyNodeRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 测试数据夹具。造数据一律走真实 repository，好让加密路径也被覆盖到；
+ * 只有清库这种绕过业务语义的操作才直接用 JdbcTemplate。
+ */
+public class DatabaseFixtures {
+
+    private final JdbcTemplate jdbc;
+    private final ProxyNodeRepository nodeRepository;
+
+    public DatabaseFixtures(JdbcTemplate jdbc, ProxyNodeRepository nodeRepository) {
+        this.jdbc = jdbc;
+        this.nodeRepository = nodeRepository;
+    }
+
+    /** 清空全部业务表。外键约束在清库期间临时关掉，顺序因此不敏感。 */
+    public void 清空() {
+        jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbc.execute("TRUNCATE TABLE app_user");
+        jdbc.execute("TRUNCATE TABLE proxy_node");
+        jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    /** 建一个 trojan 协议的第一跳节点 */
+    public Long 建FRONT节点(String name) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName(name);
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.TROJAN);
+        node.setServerAddr("us.example.com");
+        node.setPort(443);
+        node.setExtraConfig(Map.of("sni", "us.example.com"));
+        node.setSecret(Map.of("password", "front-密码"));
+        return nodeRepository.create(node);
+    }
+
+    /** 建一个 socks5 协议的落地节点，出口 IP 由调用方指定 */
+    public Long 建LAND节点(String name, String egressIp) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName(name);
+        node.setRole(NodeRole.LAND);
+        node.setProtocol(NodeProtocol.SOCKS5);
+        node.setServerAddr(egressIp);
+        node.setPort(50101);
+        node.setSecret(Map.of("username", "u1", "password", "land-密码"));
+        node.setEgressIps(List.of(egressIp));
+        return nodeRepository.create(node);
+    }
+
+    /** 直接读原始列，用于断言库里存的确实是密文 */
+    public String 读原始密文列(String table, String column, Long id) {
+        return jdbc.queryForObject("SELECT " + column + " FROM " + table + " WHERE id = ?", String.class, id);
+    }
+}
