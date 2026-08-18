@@ -25,3 +25,6 @@ deploy/application-prod.yaml
 
 # mihomo sidecar 二进制，由 mise run fetch-mihomo 下载
 apps/desktop/src-tauri/binaries/
+
+# Tauri 构建时生成的 ACL schema
+apps/desktop/src-tauri/gen/schemas/
