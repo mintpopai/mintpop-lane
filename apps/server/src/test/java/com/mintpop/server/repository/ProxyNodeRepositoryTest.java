@@ -46,7 +46,7 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         node.setServerAddr("203.0.113.10");
         node.setPort(50101);
         node.setExtraConfig(Map.of("udp", true));
-        node.setSecret(Map.of("username", "u1", "password", "落地密码"));
+        node.setSecret(Map.of("username", "落地用户名", "password", "落地密码"));
         node.setEgressIps(List.of("203.0.113.10", "203.0.113.11"));
         node.setRemark("给张三用");
 
@@ -71,7 +71,11 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
         String stored = fixtures.读原始密文列("proxy_node", "secret_cipher", id);
 
-        assertThat(stored).isNotBlank().doesNotContain("land-密码").doesNotContain("u1");
+        // 断言用的明文必须含中文：stored 是 AES-GCM 密文的 Base64，字母表只有 ASCII，
+        // 若拿纯 ASCII 短串（如曾经的 "u1"）去断言「不包含」，会有一定概率在随机密文里
+        // 偶然撞中而误报——这与加密是否正确无关，是断言本身的缺陷。中文在 Base64 里
+        // 不可能出现，断言才是恒定有效的。后人改动这两个夹具值时，务必保留中文。
+        assertThat(stored).isNotBlank().doesNotContain("land-密码").doesNotContain("land-用户名");
     }
 
     @Test

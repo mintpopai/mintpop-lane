@@ -58,7 +58,7 @@ public class DatabaseFixtures {
         node.setProtocol(NodeProtocol.SOCKS5);
         node.setServerAddr(egressIp);
         node.setPort(50101);
-        node.setSecret(Map.of("username", "u1", "password", "land-密码"));
+        node.setSecret(Map.of("username", "land-用户名", "password", "land-密码"));
         node.setEgressIps(List.of(egressIp));
         return nodeRepository.create(node);
     }
