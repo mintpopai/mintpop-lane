@@ -6,6 +6,10 @@
 
 ## 首次部署
 
+> 以下 1～6 步的命令都在仓库的 `deploy/` 目录下执行——先 `cd deploy`。（`mise run up` / `mise run down` 例外：它们是 mise task，任务定义里已带 `dir`，在仓库任意目录执行都可以。）
+>
+> **前置条件**：外置 MySQL 需为 **8.0 及以上**（本项目开发与测试用的是 8.4）。建库语句用了 `utf8mb4_0900_ai_ci` 排序规则，表结构里也有 JSON 列，这两者都要求 8.0+；5.x 会在建库这一步直接报错。
+
 1. **登录 GHCR**（镜像为私有包时必须）：
 
    ```bash
@@ -52,9 +56,26 @@
    VALUES ('<你的 Logto user id>', '<你的姓名>', 'ADMIN', 1);
    ```
 
-   > 节点的密码字段 `secret_cipher` 是密文，**不要手写**——插入时先留空，随后用 `PUT /api/admin/nodes/{id}` 带上 `secret` 补齐，由服务端加密写入。
+   > 节点的密码字段 `secret_cipher` 是密文，**不要手写**——插入时先留空，随后用管理接口补齐，由服务端加密写入。
 
-   c. 之后的一切（补齐节点密码、加落地节点、加用户、分配落地出口、录席位凭据）都走管理接口。
+   c. 用刚插入的 ADMIN 账号拿 access token，调用管理接口补齐节点密码。**`PUT /api/admin/nodes/{id}` 是整体覆盖式更新，不是局部补丁**——`name`/`role`/`protocol`/`serverAddr`/`port`/`status` 都是必填校验字段，必须连同 `secret` 一起原样提交，只传 `secret` 会被参数校验挡回来（`110001`）：
+
+   ```bash
+   curl -X PUT https://your-domain/api/admin/nodes/1 \
+     -H "Authorization: Bearer <access_token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "FRONT-1",
+       "role": "FRONT",
+       "protocol": "TROJAN",
+       "serverAddr": "us.example.com",
+       "port": 443,
+       "status": "ENABLED",
+       "secret": { "password": "<真实密码>" }
+     }'
+   ```
+
+   d. 之后的一切（加落地节点、加用户、分配落地出口、录席位凭据）都走管理接口。
 
 ## 授予或撤销管理员
 
@@ -73,7 +94,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 |---|---|
 | 启动 | `mise run up` |
 | 停止 | `mise run down` |
-| 查看日志 | `docker compose logs -f server` |
+| 查看日志（需在 `deploy/` 目录下执行） | `docker compose logs -f server` |
 | 健康检查 | `curl 127.0.0.1:8081/actuator/health` |
 
 管理接口（都需要 ADMIN 账号的 access token）：
