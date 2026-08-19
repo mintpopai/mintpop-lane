@@ -8,7 +8,7 @@ maven = "3.9.16"
 # —— 安装 ——
 [tasks.install]
 description = "安装全部组件依赖"
-depends = ["install-desktop", "install-server", "fetch-mihomo"]
+depends = ["install-desktop", "install-admin", "install-server", "fetch-mihomo"]
 
 [tasks.install-desktop]
 description = "安装桌面端前端依赖"
@@ -17,6 +17,14 @@ flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker
 '''
 dir = "apps/desktop"
 run = "pnpm install ${usage_frozen:+--frozen-lockfile}"
+
+[tasks.install-admin]
+description = "安装管理端前端依赖"
+usage = '''
+flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker 用）"
+'''
+# 不设 dir：pnpm 工作区的安装动作天然发生在仓库根，用 --filter 限定只装管理端这一个包
+run = "pnpm install --filter @mintpop/admin ${usage_frozen:+--frozen-lockfile}"
 
 [tasks.install-server]
 description = "拉取服务端 Maven 依赖"
@@ -33,6 +41,11 @@ description = "以开发模式启动桌面端"
 dir = "apps/desktop"
 run = "pnpm tauri dev"
 
+[tasks.run-admin]
+description = "以开发模式启动管理端"
+dir = "apps/admin"
+run = "pnpm vite"
+
 [tasks.run-server]
 description = "以开发模式启动服务端"
 usage = '''
@@ -47,10 +60,20 @@ description = "构建桌面端安装包"
 dir = "apps/desktop"
 run = "pnpm tauri build"
 
+[tasks.build-admin]
+description = "构建管理端静态产物到 apps/admin/dist"
+dir = "apps/admin"
+run = "pnpm vite build"
+
 [tasks.build-server]
 description = "打包服务端可执行 jar"
 dir = "apps/server"
 run = "mvn -q clean package"
+
+[tasks.image-admin]
+description = "构建管理端镜像（apps/admin/Dockerfile，mise 多阶段）"
+# 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
+run = "docker build -f apps/admin/Dockerfile -t mintpop-admin:local ."
 
 [tasks.image-server]
 description = "构建服务端镜像（apps/server/Dockerfile，mise 多阶段）"
@@ -58,6 +81,11 @@ description = "构建服务端镜像（apps/server/Dockerfile，mise 多阶段�
 run = "docker build -f apps/server/Dockerfile -t mintpop-server:local ."
 
 # —— 质量 ——
+[tasks.test-admin]
+description = "跑管理端单元测试"
+dir = "apps/admin"
+run = "pnpm vitest run"
+
 [tasks.test-desktop]
 description = "跑桌面端 Rust 测试"
 dir = "apps/desktop/src-tauri"
@@ -68,6 +96,11 @@ description = "跑服务端测试"
 dir = "apps/server"
 run = "mvn -q test"
 
+[tasks.lint-admin]
+description = "检查管理端代码风格与类型"
+dir = "apps/admin"
+run = ["pnpm eslint .", "pnpm vue-tsc --noEmit"]
+
 [tasks.lint-desktop]
 description = "检查桌面端 Rust 代码"
 dir = "apps/desktop/src-tauri"
@@ -75,12 +108,12 @@ run = "cargo clippy --all-targets -- -D warnings"
 
 # —— 部署 ——
 [tasks.up]
-description = "在部署机上拉起服务端"
+description = "在部署机上拉起服务端与管理端"
 dir = "deploy"
 run = "docker compose up -d"
 
 [tasks.down]
-description = "在部署机上停止服务端"
+description = "在部署机上停止服务端与管理端"
 dir = "deploy"
 run = "docker compose down"
 
@@ -100,3 +133,11 @@ arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
 arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
 '''
 run = "./scripts/release.sh server ${usage_arg1:-} ${usage_arg2:-}"
+
+[tasks.release-admin]
+description = "为管理端打 tag 并推送，触发发版流水线"
+usage = '''
+arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
+arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
+'''
+run = "./scripts/release.sh admin ${usage_arg1:-} ${usage_arg2:-}"

@@ -31,3 +31,12 @@ apps/desktop/src-tauri/binaries/
 
 # Tauri 构建时生成的 ACL schema
 apps/desktop/src-tauri/gen/schemas/
+
+# Superpowers SDD 工作区（临时产物，不入库）
+.superpowers/
+
+# 管理端本地开发的运行时配置（含 Logto 租户信息）
+apps/admin/public/config.json
+
+# 部署机上的管理端运行时配置
+deploy/admin-config.json

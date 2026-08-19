@@ -1,0 +1,142 @@
+name: Release Admin
+
+on:
+  push:
+    tags: ["admin-v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-admin
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/mintpop-admin
+
+jobs:
+  quality:
+    name: 发版前质量门禁
+    uses: ./.github/workflows/quality.yml
+
+  image:
+    name: 构建并推送镜像
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 计算镜像标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ github.ref_name }},match=admin-v(.+)
+            type=sha,enable=${{ github.ref_type != 'tag' }}
+          flavor: |
+            latest=auto
+
+      - name: 构建并推送
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/admin/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  github-release:
+    name: 建立 GitHub Release
+    needs: image
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          # COMMIT 模式的变更日志需要全量历史
+          fetch-depth: 0
+
+      - name: 解析上一版同前缀 tag
+        id: prev
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          prev="$(git tag -l 'admin-v*' --sort=-v:refname \
+            | awk -v cur="$TAG" 'f { print; exit } $0 == cur { f = 1 }')"
+          if [ -z "$prev" ]; then
+            # 首发：无上一版，起点取初始提交 = 全量历史
+            prev="$(git rev-list --max-parents=0 HEAD | tail -1)"
+          fi
+          echo "from=$prev" >> "$GITHUB_OUTPUT"
+          # 标题里的版本号要去掉 admin-v 前缀，在这里算好
+          echo "version=${TAG#admin-v}" >> "$GITHUB_OUTPUT"
+
+      - name: 生成变更日志
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v6
+        with:
+          fromTag: ${{ steps.prev.outputs.from }}
+          toTag: ${{ github.ref_name }}
+          configurationJson: |
+            {
+              "mode": "COMMIT",
+              "template": "#{{CHANGELOG}}",
+              "label_extractor": [
+                {
+                  "pattern": "^(feat|fix|perf|refactor|revert|build|chore|ci|docs|style|test)[^:]*:.*",
+                  "target": "$1",
+                  "on_property": "title",
+                  "method": "replace"
+                }
+              ],
+              "categories": [
+                { "title": "### 新功能", "labels": ["feat"] },
+                { "title": "### 问题修复", "labels": ["fix"] },
+                { "title": "### 性能优化", "labels": ["perf"] },
+                { "title": "### 重构", "labels": ["refactor"] },
+                { "title": "### 回滚", "labels": ["revert"] }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 组装 Release 正文
+        env:
+          TAG: ${{ github.ref_name }}
+          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+        run: |
+          : > notes.md
+          # 只有 annotated tag 才有注释；轻量 tag 的 %(contents) 会错把 commit 信息当注释
+          if [ "$(git cat-file -t "$TAG")" = "tag" ]; then
+            git tag -l --format='%(contents)' "$TAG" >> notes.md
+            printf '\n\n' >> notes.md
+          fi
+          printf '%s\n' "$CHANGELOG" >> notes.md
+          # 兜底：注释为空且提交全被过滤时，正文会整篇空白
+          if [ -z "$(tr -d '[:space:]' < notes.md)" ]; then
+            echo "- 本次无面向用户的变更" > notes.md
+          fi
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Mintpop admin v${{ steps.prev.outputs.version }}
+          body_path: notes.md

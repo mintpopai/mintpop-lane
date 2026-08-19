@@ -210,7 +210,7 @@ controller/LinkController   →  service/LinkService    ↗            ↓ 实�
 2. **用户列表**——分页 + 关键字搜索；行内展示状态、角色、前置节点、落地节点与出口 IP；新建 / 编辑走抽屉表单。凭据显示为掏码占位，留空即不改。
 3. **节点池**——FRONT / LAND 两个 tab。表单为「协议模板 + 自由键值对」：选 `TROJAN` 出 server / port / password / sni 等常用键，另允许追加任意键值对透传给 mihomo，保持终端 spec 里「协议字段千变万化，不做强类型化」的取向。LAND tab 每行显示「已分配给谁 / 未分配」。
 
-按 `global-reachability.md`：字体用 `@fontsource` 自托管，Element Plus 从 npm 打进产物，**页面不出现任何外链 CDN**。`package.json` 只留依赖不留 scripts，命令收口到根 `mise.toml`。
+按 `global-reachability.md`：字体用系统字体栈（零网络请求；原定的 `@fontsource` 自托管方案因中文字体包体 81 MB 而放弃，理由见二期计划），Element Plus 从 npm 打进产物，**页面不出现任何外链 CDN**。`package.json` 只留依赖不留 scripts，命令收口到根 `mise.toml`。
 
 ## 9. 构建、CI/CD 与部署
 
