@@ -124,9 +124,7 @@ jobs:
 
       - name: 构建安装包
         env:
-          MINTPOP_LOGTO_ISSUER: ${{ vars.MINTPOP_LOGTO_ISSUER }}
-          MINTPOP_LOGTO_CLIENT_ID: ${{ vars.MINTPOP_LOGTO_CLIENT_ID }}
-          MINTPOP_API_RESOURCE: ${{ vars.MINTPOP_API_RESOURCE }}
+          # Logto 的 issuer/client_id/api_resource 由服务端下发，不再编译进包
           MINTPOP_SERVER_URL: ${{ vars.MINTPOP_SERVER_URL }}
         run: mise run build-desktop
 
