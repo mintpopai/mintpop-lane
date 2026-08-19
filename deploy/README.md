@@ -77,27 +77,38 @@
    mise run up
    ```
 
-7. **录入初始数据**（首次没有管理员，用 SQL 与接口配合完成）：
+7. **录入初始数据**（首次没有管理员，用「登录一次 + 改库提权」配合完成——**新会话模型下不能再拿 Logto 的 access token 当 Bearer**，服务端只认自签会话 token）：
 
-   a. 先用一个已在 Logto 注册的账号拿 access token，向 `/api/link/config` 打一次——会得到 `210003 该账号未开通终端使用权限`，说明服务通了。
+   a. 浏览器访问 `https://<api 域名>/oauth2/authorization/logto`，用一个已在 Logto 注册的账号登录一次。登录成功即触发服务端唯一的建档入口——库里自动出现一行 `role=MEMBER` 的新用户，浏览器也已经拿到会话 Cookie（`lane_session`）。登录后 302 到管理端地址此时打不开属正常（管理端还没跟进新协议，由计划三接上），不影响建档与 Cookie 已经生效。
 
-   b. 直接用 SQL 插入第一个节点与第一个用户（就是你自己），并把角色设为 ADMIN：
+   b. 库里把这个账号提为管理员。**首个管理员只能改库产生**——这是设计决定，管理端本就不提供改角色的入口（见下一节「授予或撤销管理员」）：
+
+   ```sql
+   UPDATE app_user SET role = 'ADMIN' WHERE email = '<你刚登录用的邮箱>';
+   ```
+
+   c. 从浏览器开发者工具（Application → Cookies，找 api 域名下的 `lane_session`）复制它的值——这就是自签会话 token，Bearer 头与 Cookie 两种载体服务端都认。先验证登录态与刚才的提权：
+
+   ```bash
+   curl https://<api 域名>/api/me -H "Authorization: Bearer <lane_session 的值>"
+   ```
+
+   能拿到你自己的资料且 `role` 已是 `ADMIN`，说明会话可用、提权生效。
+
+   d. 插入第一个节点（节点池管理不要求先有管理员，但密码字段仍必须由服务端加密写入，不能手写密文）：
 
    ```sql
    INSERT INTO proxy_node (name, role, protocol, server_addr, port)
    VALUES ('FRONT-1', 'FRONT', 'TROJAN', 'us.example.com', 443);
-
-   INSERT INTO app_user (subject, name, role, front_node_id)
-   VALUES ('<你的 Logto user id>', '<你的姓名>', 'ADMIN', 1);
    ```
 
    > 节点的密码字段 `secret_cipher` 是密文，**不要手写**——插入时先留空，随后用管理接口补齐，由服务端加密写入。
 
-   c. 用刚插入的 ADMIN 账号拿 access token，调用管理接口补齐节点密码。**`PUT /api/admin/nodes/{id}` 是整体覆盖式更新，不是局部补丁**——`name`/`role`/`protocol`/`serverAddr`/`port`/`status` 都是必填校验字段，必须连同 `secret` 一起原样提交，只传 `secret` 会被参数校验挡回来（`110001`）：
+   e. 用第 c 步拿到的 `lane_session` 值调用管理接口补齐节点密码。**`PUT /api/admin/nodes/{id}` 是整体覆盖式更新，不是局部补丁**——`name`/`role`/`protocol`/`serverAddr`/`port`/`status` 都是必填校验字段，必须连同 `secret` 一起原样提交，只传 `secret` 会被参数校验挡回来（`110001`）：
 
    ```bash
-   curl -X PUT https://your-domain/api/admin/nodes/1 \
-     -H "Authorization: Bearer <access_token>" \
+   curl -X PUT https://<api 域名>/api/admin/nodes/1 \
+     -H "Authorization: Bearer <lane_session 的值>" \
      -H "Content-Type: application/json" \
      -d '{
        "name": "FRONT-1",
@@ -110,7 +121,7 @@
      }'
    ```
 
-   d. 之后的一切（加落地节点、加用户、分配落地出口、录席位凭据）都走管理接口。
+   f. 之后的一切（加落地节点、加用户、分配落地出口、录席位凭据）都走管理接口，继续用同一个 `lane_session` 值做 Bearer——网页会话有效期见 `lane.auth.web-session-ttl`（默认 7 天），过期后回到第 a 步重新登录一次即可拿到新值。
 
 ## 授予或撤销管理员
 
