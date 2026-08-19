@@ -14,6 +14,8 @@ pub enum RemoteError {
     Status(reqwest::StatusCode),
     #[error("业务错误 {code}：{msg}")]
     Biz { code: i32, msg: String },
+    #[error("服务端配置异常，请联系管理员：{0}")]
+    InvalidConfig(String),
 }
 
 /// 镜像服务端的统一返回体。HTTP 一律 200，成败只看 code。

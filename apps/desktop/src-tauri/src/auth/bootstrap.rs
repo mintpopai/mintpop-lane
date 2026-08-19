@@ -2,6 +2,7 @@ use crate::auth::oidc::OidcConfig;
 use crate::link::remote::{ApiResponse, RemoteError};
 use serde::Deserialize;
 use std::time::Duration;
+use url::Url;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -20,13 +21,45 @@ pub struct ClientConfigData {
 }
 
 impl ClientConfigData {
-    pub fn into_oidc_config(self) -> OidcConfig {
-        OidcConfig {
-            issuer: self.logto_issuer,
-            client_id: self.logto_client_id,
-            redirect_uri: REDIRECT_URI.to_string(),
-            resource: self.api_resource,
+    /// 服务端下发的字段只保证了 JSON 里"存在"，不保证内容合法（空串、缺协议头的地址
+    /// 都能正常反序列化）。这里做一次形状校验，把畸形配置挡在网络层之外——
+    /// 否则拼授权地址时会在 `Url::parse(...).expect(...)` 处直接 panic 整个客户端。
+    pub fn into_oidc_config(self) -> Result<OidcConfig, RemoteError> {
+        let issuer = self.logto_issuer.trim();
+        if issuer.is_empty() {
+            return Err(RemoteError::InvalidConfig("logtoIssuer 为空".to_string()));
         }
+        let client_id = self.logto_client_id.trim();
+        if client_id.is_empty() {
+            return Err(RemoteError::InvalidConfig("logtoClientId 为空".to_string()));
+        }
+        let resource = self.api_resource.trim();
+        if resource.is_empty() {
+            return Err(RemoteError::InvalidConfig("apiResource 为空".to_string()));
+        }
+
+        let issuer_url = Url::parse(issuer)
+            .map_err(|e| RemoteError::InvalidConfig(format!("logtoIssuer 不是合法地址：{e}")))?;
+
+        // 生产环境要求 https；http 只在 localhost/127.0.0.1 上放行——这是给「本地自建
+        // Logto 走 http 联调」留的口子，不是普遍允许明文协议。
+        let scheme_ok = match issuer_url.scheme() {
+            "https" => true,
+            "http" => matches!(issuer_url.host_str(), Some("localhost") | Some("127.0.0.1")),
+            _ => false,
+        };
+        if !scheme_ok {
+            return Err(RemoteError::InvalidConfig(format!(
+                "logtoIssuer 协议非法（仅允许 https，或本地开发用 http://localhost、http://127.0.0.1）：{issuer}"
+            )));
+        }
+
+        Ok(OidcConfig {
+            issuer: issuer.to_string(),
+            client_id: client_id.to_string(),
+            redirect_uri: REDIRECT_URI.to_string(),
+            resource: resource.to_string(),
+        })
     }
 }
 
@@ -52,7 +85,7 @@ pub async fn fetch_client_config(base_url: &str) -> Result<OidcConfig, RemoteErr
     }
 
     let body: ApiResponse<ClientConfigData> = resp.json().await.map_err(RemoteError::Request)?;
-    Ok(body.into_data()?.into_oidc_config())
+    body.into_data()?.into_oidc_config()
 }
 
 #[cfg(test)]
@@ -64,7 +97,7 @@ mod tests {
         let raw = r#"{"code":0,"data":{"logtoIssuer":"https://tenant.logto.app/oidc","logtoClientId":"client-1","apiResource":"https://api.mintpop.internal"},"msg":null}"#;
         let resp: ApiResponse<ClientConfigData> = serde_json::from_str(raw).unwrap();
 
-        let cfg = resp.into_data().unwrap().into_oidc_config();
+        let cfg = resp.into_data().unwrap().into_oidc_config().unwrap();
 
         assert_eq!(cfg.issuer, "https://tenant.logto.app/oidc");
         assert_eq!(cfg.client_id, "client-1");
@@ -96,5 +129,56 @@ mod tests {
         let parsed: Result<ApiResponse<ClientConfigData>, _> = serde_json::from_str(raw);
 
         assert!(parsed.is_err());
+    }
+
+    fn sample_data(issuer: &str, client_id: &str) -> ClientConfigData {
+        ClientConfigData {
+            logto_issuer: issuer.to_string(),
+            logto_client_id: client_id.to_string(),
+            api_resource: "https://api.mintpop.internal".to_string(),
+        }
+    }
+
+    #[test]
+    fn 合法的https_issuer校验通过() {
+        let cfg = sample_data("https://tenant.logto.app/oidc", "client-1")
+            .into_oidc_config()
+            .unwrap();
+        assert_eq!(cfg.issuer, "https://tenant.logto.app/oidc");
+    }
+
+    #[test]
+    fn 缺协议头的issuer被拒绝() {
+        // 真实的运维手滑：漏写 https:// 前缀
+        let err = sample_data("tenant.logto.app/oidc", "client-1")
+            .into_oidc_config()
+            .unwrap_err();
+        assert!(matches!(err, RemoteError::InvalidConfig(_)));
+    }
+
+    #[test]
+    fn 非本地的http_issuer被拒绝() {
+        // http 只给本地自建 Logto 联调放行，公网地址必须 https
+        let err = sample_data("http://tenant.logto.app/oidc", "client-1")
+            .into_oidc_config()
+            .unwrap_err();
+        assert!(matches!(err, RemoteError::InvalidConfig(_)));
+    }
+
+    #[test]
+    fn 本地回环地址的http_issuer被放行() {
+        // 本地自建 Logto 走 http 联调，是刻意开的口子
+        let cfg = sample_data("http://127.0.0.1:3001/oidc", "client-1")
+            .into_oidc_config()
+            .unwrap();
+        assert_eq!(cfg.issuer, "http://127.0.0.1:3001/oidc");
+    }
+
+    #[test]
+    fn 空的client_id被拒绝() {
+        let err = sample_data("https://tenant.logto.app/oidc", "")
+            .into_oidc_config()
+            .unwrap_err();
+        assert!(matches!(err, RemoteError::InvalidConfig(_)));
     }
 }
