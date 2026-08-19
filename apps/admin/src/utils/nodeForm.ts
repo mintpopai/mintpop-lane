@@ -28,6 +28,8 @@ export interface NodeFormModel {
   name: string;
   role: NodeRole;
   protocol: NodeProtocol;
+  /** 这条记录在库里的协议；新建时为 null。用来判断敏感键是否必须重填，见 validateNodeForm */
+  originalProtocol: NodeProtocol | null;
   serverAddr: string;
   port: number | null;
   /** 自由键值对，提交前转成对象 */
@@ -52,6 +54,7 @@ export function emptyNodeForm(role: NodeRole): NodeFormModel {
     name: "",
     role,
     protocol,
+    originalProtocol: null,
     serverAddr: "",
     port: null,
     extraConfig: PROTOCOL_EXTRA_HINTS[protocol].map((key) => ({ key, value: "" })),
@@ -77,6 +80,7 @@ export function nodeToForm(node: AdminNodeResponse): NodeFormModel {
     name: node.name,
     role: node.role,
     protocol: node.protocol,
+    originalProtocol: node.protocol,
     serverAddr: node.serverAddr,
     port: node.port,
     extraConfig: Object.entries(node.extraConfig ?? {}).map(([key, value]) => ({
@@ -133,6 +137,18 @@ export function validateNodeForm(form: NodeFormModel): string[] {
       errors.push(`透传键 ${key} 重复`);
     }
     见过的键.add(key);
+  }
+
+  // 编辑时切换了协议，敏感键就必须重填：留空在服务端是「沿用原值」，
+  // 而原值是旧协议的键（如 password），会与新协议的 type 拼成一个取不到密钥的节点，
+  // 且这种失效是静默的——保存成功、列表照常显示「已配置」，直到客户端连不上才发现
+  if (form.originalProtocol !== null && form.originalProtocol !== form.protocol) {
+    const 未填 = Object.entries(form.secret)
+      .filter(([, value]) => !value.trim())
+      .map(([key]) => key);
+    if (未填.length > 0) {
+      errors.push(`切换协议后必须重新填写敏感配置：${未填.join("、")}`);
+    }
   }
 
   for (const ip of 拆出口IP(form.egressIpsText)) {

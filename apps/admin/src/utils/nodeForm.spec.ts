@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyProtocol,
   buildNodePayload,
   emptyNodeForm,
   nodeToForm,
@@ -73,10 +74,58 @@ describe("validateNodeForm", () => {
     expect(validateNodeForm(表单({ port: 70000 }))).toContain("端口必须在 1 到 65535 之间");
   });
 
+  it("编辑时切换了协议、敏感键却留空要拦下——服务端会把留空当成沿用旧协议的密钥", () => {
+    const form = 表单({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "" } });
+
+    expect(validateNodeForm(form)).toContain("切换协议后必须重新填写敏感配置：uuid");
+  });
+
+  it("切换协议并重填了敏感键就放行", () => {
+    const form = 表单({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "新的uuid" } });
+
+    expect(validateNodeForm(form)).toEqual([]);
+  });
+
+  it("新建时没有原协议，敏感键留空仍然允许——先建节点、随后补密码是正常流程", () => {
+    const form = 表单({ originalProtocol: null, protocol: "VMESS", secret: { uuid: "" } });
+
+    expect(validateNodeForm(form)).toEqual([]);
+  });
+
   it("出口 IP 不允许含空白字符", () => {
     expect(validateNodeForm(表单({ egressIpsText: "1.2.3.4 5.6.7.8" }))).toContain(
       "出口 IP「1.2.3.4 5.6.7.8」格式不对，一行填一个",
     );
+  });
+});
+
+describe("applyProtocol", () => {
+  it("切协议时把敏感键整组换成新协议的那一组", () => {
+    const form = applyProtocol(表单({ protocol: "TROJAN" }), "VMESS");
+
+    expect(Object.keys(form.secret)).toEqual(["uuid"]);
+  });
+
+  it("已填的透传键保留，空行按新协议的常用键重铺", () => {
+    const form = applyProtocol(
+      表单({
+        protocol: "TROJAN",
+        extraConfig: [
+          { key: "sni", value: "a.com" },
+          { key: "skip-cert-verify", value: "" },
+        ],
+      }),
+      "VMESS",
+    );
+
+    expect(form.extraConfig[0]).toEqual({ key: "sni", value: "a.com" });
+    expect(form.extraConfig.slice(1).map((row) => row.key)).toEqual(["alterId", "cipher", "network"]);
+  });
+
+  it("不动 originalProtocol——它记的是库里那条记录的协议，正是判断要不要重填敏感键的依据", () => {
+    const form = applyProtocol(表单({ originalProtocol: "TROJAN", protocol: "TROJAN" }), "VMESS");
+
+    expect(form.originalProtocol).toBe("TROJAN");
   });
 });
 
@@ -158,6 +207,7 @@ describe("nodeToForm", () => {
     const form = nodeToForm(node);
 
     expect(form.secret).toEqual({ password: "" });
+    expect(form.originalProtocol).toBe("TROJAN");
     expect(form.extraConfig).toEqual([
       { key: "sni", value: "tokyo.example.com" },
       { key: "skip-cert-verify", value: "true" },

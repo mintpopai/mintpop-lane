@@ -22,9 +22,16 @@ const form = ref<NodeFormModel>(emptyNodeForm(props.role));
 const submitting = ref(false);
 
 const 标题 = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
-const 敏感键提示 = computed(() =>
-  props.editing?.secretConfigured ? "已配置，留空表示不修改" : "尚未配置",
+const 协议已变更 = computed(
+  () => props.editing !== null && props.editing.protocol !== form.value.protocol,
 );
+const 敏感键提示 = computed(() => {
+  // 协议一变，旧密钥就不再适用；此时若还显示「留空表示不修改」，管理员会以为留空是安全的
+  if (协议已变更.value) {
+    return "协议已变更，必须重新填写——留空会让服务端继续沿用旧协议的密钥";
+  }
+  return props.editing?.secretConfigured ? "已配置，留空表示不修改" : "尚未配置";
+});
 
 watch(
   () => props.modelValue,
