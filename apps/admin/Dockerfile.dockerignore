@@ -1,0 +1,12 @@
+# 白名单式最小化构建上下文。
+# pattern 相对 context 根（仓库根）书写，不相对本文件所在目录。
+*
+!mise.toml
+!pnpm-workspace.yaml
+!pnpm-lock.yaml
+!apps/admin
+apps/admin/node_modules
+apps/admin/dist
+# 开发者本机的运行时配置绝不能被烘进镜像——镜像必须对租户无感
+apps/admin/public/config.json
+**/.git
