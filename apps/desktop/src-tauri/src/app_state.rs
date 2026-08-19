@@ -1,3 +1,4 @@
+use crate::auth::oidc::OidcConfig;
 use crate::link::kernel::MihomoKernel;
 use crate::link::model::{InboundCredentials, LinkConfig};
 use crate::link::state::LinkState;
@@ -19,6 +20,8 @@ pub struct AppState {
     /// 内核用异步锁：吊销时需要在锁内 await reset_to_empty
     pub kernel: tokio::sync::Mutex<Option<MihomoKernel>>,
     pub sessions: Mutex<HashMap<String, PtySession>>,
+    /// 服务端下发的登录接入配置，启动时拉取；拉不到则无法登录
+    pub oidc_config: Mutex<Option<OidcConfig>>,
     /// 当前 access_token，只存内存；refresh_token 另存 OS 钥匙串
     pub access_token: Mutex<Option<String>>,
     pub pending_login: Mutex<Option<PendingLogin>>,
@@ -32,6 +35,7 @@ impl Default for AppState {
             link: Mutex::new(None),
             kernel: tokio::sync::Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
+            oidc_config: Mutex::new(None),
             access_token: Mutex::new(None),
             pending_login: Mutex::new(None),
         }
