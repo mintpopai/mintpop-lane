@@ -2,7 +2,7 @@
 # 只监听 127.0.0.1，对外访问由宿主 nginx / cloudflared 反代到这个端口。
 services:
   server:
-    image: ghcr.io/yuebai-blast/lane-server:${SERVER_TAG:-latest}
+    image: ghcr.io/mintpopai/lane-server:${SERVER_TAG:-latest}
     container_name: lane-server
     restart: unless-stopped
     ports:
@@ -28,7 +28,7 @@ services:
       start_period: 30s
 
   admin:
-    image: ghcr.io/yuebai-blast/lane-admin:${ADMIN_TAG:-latest}
+    image: ghcr.io/mintpopai/lane-admin:${ADMIN_TAG:-latest}
     container_name: lane-admin
     restart: unless-stopped
     ports:
