@@ -25,25 +25,31 @@
    GRANT ALL PRIVILEGES ON lane.* TO 'lane'@'%';
    ```
 
-3. **生成加密密钥并写入 `.env`**：
+3. **生成密钥并写入 `.env`**：
 
    ```bash
    cp .env.example .env
    openssl rand -base64 32   # 把输出填进 .env 的 LANE_CRYPTO_KEY
+   openssl rand -base64 32   # 再生成一个，填进 .env 的 LANE_AUTH_SESSION_SECRET
    ```
 
-   > ⚠️ 这个密钥用来加密席位凭据与节点密码。**丢失或更换 = 库里所有密文永久解不开**，必须重录全部凭据。请与数据库口令分开备份。
+   > ⚠️ `LANE_CRYPTO_KEY` 用来加密席位凭据与节点密码。**丢失或更换 = 库里所有密文永久解不开**，必须重录全部凭据。请与数据库口令分开备份。
+   >
+   > `LANE_AUTH_SESSION_SECRET` 是自签会话 token 的 HS256 签名密钥（至少 32 字节）。换掉它会让所有已登录会话（含管理端网页与桌面端钥匙串里的）立即失效——这也是一种应急踢下线手段。
+   >
+   > `.env` 里还有一个 `LOGTO_CLIENT_SECRET`，不是本地生成的，而是**第 5 步**在 Logto 控制台建好传统 Web 应用后从控制台复制过来的，先留空，走到那一步再填。
 
-4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入真实的 Logto issuer、audience 与 `lane.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）。该文件现在只有 OIDC 配置与链路有效期，**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
+4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入 Logto issuer 与传统 Web 应用的 App ID、管理端域名（`lane.auth.admin-frontend-url`）。`client-secret` 与会话签名密钥不写在这个文件里，由 compose 从 `.env` 注入。该文件**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
 
-5. **建 Logto 的 SPA 应用并放置管理端运行时配置**：
+5. **建 Logto 的传统 Web 应用并放置管理端运行时配置**：
 
-   a. 在 Logto 控制台新建一个 **Single Page App** 类型的应用（**不要复用桌面端那个 Native 应用**，两者的回调方式与客户端类型都不同），把服务端那个 API Resource 授权给它，并填两个地址：
+   a. 在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。只填一个地址：
 
    | 项 | 值 |
    |---|---|
-   | Redirect URI | `https://<管理端域名>/callback` |
-   | Post sign-out redirect URI | `https://<管理端域名>/` |
+   | Redirect URI | `https://<api 域名>/auth/callback` |
+
+   把 App ID 和 App Secret 记下来：App ID 填进第 4 步的 `application-prod.yaml`（`spring.security.oauth2.client.registration.logto.client-id`）；App Secret 回到第 3 步，填进 `.env` 的 `LOGTO_CLIENT_SECRET`。
 
    b. 把模板复制成部署机上的运行时配置并填真值：
 
@@ -53,16 +59,17 @@
 
    ```json
    {
-     "logtoEndpoint": "https://你的租户.logto.app",
-     "logtoAppId": "上一步拿到的 App ID",
-     "apiResource": "https://api.lane.mintpop.internal",
      "apiBaseUrl": "/api"
    }
    ```
 
-   > 这个文件由 compose 以只读卷挂进 nginx 的站点根目录，**镜像里没有它**——因此同一个镜像可以部署到任何租户，改租户不需要重新构建。它已在 `.gitignore` 中，不入库。
+   > 管理端网页现在不再直连 Logto——登录、回调、会话全由服务端承担，管理端只需要知道 API 前缀在哪。`logtoEndpoint`/`logtoAppId`/`apiResource` 这几个字段已不再使用；`config.example.json` 与 `apps/admin/src` 对该配置类型的收窄在计划三落地，本文档先按最终形态说明。
+   >
+   > 这个文件由 compose 以只读卷挂进 nginx 的站点根目录，**镜像里没有它**——因此同一个镜像可以部署到任何环境，改 API 地址不需要重新构建。它已在 `.gitignore` 中，不入库。
    >
    > ⚠️ **必须在 `mise run up` 之前把这个文件建好**：绑定挂载的宿主侧路径不存在时，Docker 会**自作主张建成一个空目录**，nginx 于是把 `/config.json` 当目录处理、返回 404，页面显示「管理端启动失败」。若已经踩到，先 `mise run down`、`rmdir admin-config.json`、建好真文件再起。
+
+   > ⚠️ **部署约束**：管理端与 API 必须部署在**同一注册域名**下（如 `admin.x.com` 与 `api.x.com` 都属于 `x.com`）。服务端签发的会话 Cookie 是 `SameSite=Lax`，跨注册域名（如 `admin.x.com` 与 `api.y.com`）时浏览器不会带上这个 Cookie，登录态传不过去。
 
 6. **拉起服务**：
 
@@ -195,13 +202,12 @@ server {
 
 ## 发版顺序（桌面端与服务端）
 
-桌面端的登录配置由服务端的 `GET /api/client-config` 下发，因此**必须先发服务端、再发桌面端**。
-顺序反了会让新装的桌面端卡在「无法连接服务端」，因为老服务端上没有这个端点。
+> ⚠️ **登录体系重构一期只改了服务端**：本文档描述的是新协议（服务端自签会话 + Logto 传统 Web 应用），桌面端与管理端要等计划二/三跟进后才能配合这套协议登录。旧的 `GET /api/client-config` 端点已随本次重构下线——若线上还有跑旧协议的桌面端，升级服务端会让它们的登录立即失效，升级前请确认桌面端/管理端已同步跟进，不要单独抢先上线服务端。
 
 服务端上线前确认 `application-prod.yaml` 里已配：
 
-- `spring.security.oauth2.resourceserver.jwt.issuer-uri`（形如 `https://<租户>.logto.app/oidc`）
-- `spring.security.oauth2.resourceserver.jwt.audiences[0]`（API Resource 标识）
-- `lane.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）
+- `spring.security.oauth2.client.registration.logto.client-id`（Logto 传统 Web 应用的 App ID）
+- `spring.security.oauth2.client.provider.logto.issuer-uri`（形如 `https://<租户>.logto.app/oidc`）
+- `lane.auth.admin-frontend-url`（管理端网页地址，登录成功/失败后的回跳落点）
 
-前两项同时被用于校验 JWT 和下发给客户端，改一处两处同时生效。
+`client-secret` 与 `lane.auth.session-secret` 不写在这个文件里，由 compose 从 `.env` 的 `LOGTO_CLIENT_SECRET`、`LANE_AUTH_SESSION_SECRET` 注入。

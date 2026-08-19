@@ -16,6 +16,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?需要在 .env 中设置 MYSQL_PASSWORD}
       # 席位凭据与节点密码的加密密钥。丢了等于库里所有密文作废
       LANE_CRYPTO_KEY: ${LANE_CRYPTO_KEY:?需要在 .env 中设置 LANE_CRYPTO_KEY}
+      # 自签会话 token 的签名密钥。换掉 = 全员下线（应急踢下线手段）
+      LANE_AUTH_SESSION_SECRET: ${LANE_AUTH_SESSION_SECRET:?需要在 .env 中设置 LANE_AUTH_SESSION_SECRET}
+      # Logto 传统 Web 应用的 App Secret
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_LOGTO_CLIENT_SECRET: ${LOGTO_CLIENT_SECRET:?需要在 .env 中设置 LOGTO_CLIENT_SECRET}
     volumes:
       # 只含 OIDC 配置与链路有效期，不含任何凭据；只读挂载，不进镜像
       - ./application-prod.yaml:/app/config/application-prod.yaml:ro
