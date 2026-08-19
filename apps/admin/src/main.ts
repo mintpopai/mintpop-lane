@@ -1,10 +1,12 @@
 import { createApp } from "vue";
+import { createPinia } from "pinia";
 import ElementPlus from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import "element-plus/dist/index.css";
 import "./styles/global.css";
 import App from "./App.vue";
 import { loadRuntimeConfig } from "./config/runtime";
+import { createAppRouter } from "./router";
 
 /** 配置读不到就没法建 Logto 客户端，直接给一句能照着排查的话，别让页面白屏 */
 function 显示启动失败(message: string): void {
@@ -23,7 +25,11 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
-  createApp(App).use(ElementPlus, { locale: zhCn }).mount("#app");
+  const app = createApp(App);
+  app.use(createPinia());
+  app.use(ElementPlus, { locale: zhCn });
+  app.use(createAppRouter());
+  app.mount("#app");
 }
 
 void bootstrap();
