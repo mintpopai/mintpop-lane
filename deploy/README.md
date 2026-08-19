@@ -6,7 +6,7 @@
 
 ## 首次部署
 
-> 以下 1～6 步的命令都在仓库的 `deploy/` 目录下执行——先 `cd deploy`。（`mise run up` / `mise run down` 例外：它们是 mise task，任务定义里已带 `dir`，在仓库任意目录执行都可以。）
+> 以下 1～7 步的命令都在仓库的 `deploy/` 目录下执行——先 `cd deploy`。（`mise run up` / `mise run down` 例外：它们是 mise task，任务定义里已带 `dir`，在仓库任意目录执行都可以。）
 >
 > **前置条件**：外置 MySQL 需为 **8.0 及以上**（本项目开发与测试用的是 8.4）。建库语句用了 `utf8mb4_0900_ai_ci` 排序规则，表结构里也有 JSON 列，这两者都要求 8.0+；5.x 会在建库这一步直接报错。
 
@@ -36,13 +36,41 @@
 
 4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入真实的 Logto issuer 与 audience。该文件现在只有 OIDC 配置与链路有效期，**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
 
-5. **拉起服务**：
+5. **建 Logto 的 SPA 应用并放置管理端运行时配置**：
+
+   a. 在 Logto 控制台新建一个 **Single Page App** 类型的应用（**不要复用桌面端那个 Native 应用**，两者的回调方式与客户端类型都不同），把服务端那个 API Resource 授权给它，并填两个地址：
+
+   | 项 | 值 |
+   |---|---|
+   | Redirect URI | `https://<管理端域名>/callback` |
+   | Post sign-out redirect URI | `https://<管理端域名>/` |
+
+   b. 把模板复制成部署机上的运行时配置并填真值：
+
+   ```bash
+   cp <仓库>/apps/admin/config.example.json admin-config.json
+   ```
+
+   ```json
+   {
+     "logtoEndpoint": "https://你的租户.logto.app",
+     "logtoAppId": "上一步拿到的 App ID",
+     "apiResource": "https://api.mintpop.internal",
+     "apiBaseUrl": "/api"
+   }
+   ```
+
+   > 这个文件由 compose 以只读卷挂进 nginx 的站点根目录，**镜像里没有它**——因此同一个镜像可以部署到任何租户，改租户不需要重新构建。它已在 `.gitignore` 中，不入库。
+   >
+   > ⚠️ **必须在 `mise run up` 之前把这个文件建好**：绑定挂载的宿主侧路径不存在时，Docker 会**自作主张建成一个空目录**，nginx 于是把 `/config.json` 当目录处理、返回 404，页面显示「管理端启动失败」。若已经踩到，先 `mise run down`、`rmdir admin-config.json`、建好真文件再起。
+
+6. **拉起服务**：
 
    ```bash
    mise run up
    ```
 
-6. **录入初始数据**（首次没有管理员，用 SQL 与接口配合完成）：
+7. **录入初始数据**（首次没有管理员，用 SQL 与接口配合完成）：
 
    a. 先用一个已在 Logto 注册的账号拿 access token，向 `/api/link/config` 打一次——会得到 `210003 该账号未开通终端使用权限`，说明服务通了。
 
@@ -92,10 +120,12 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 | 操作 | 命令 |
 |---|---|
-| 启动 | `mise run up` |
+| 启动（服务端 + 管理端） | `mise run up` |
 | 停止 | `mise run down` |
-| 查看日志（需在 `deploy/` 目录下执行） | `docker compose logs -f server` |
-| 健康检查 | `curl 127.0.0.1:8081/actuator/health` |
+| 查看日志（需在 `deploy/` 目录下执行） | `docker compose logs -f server` / `docker compose logs -f admin` |
+| 健康检查 | `curl 127.0.0.1:8081/actuator/health` / `curl -I 127.0.0.1:8082/` |
+
+从二期起，下面这些接口日常**不需要手工调**——打开管理端页面点就行。表格保留是为了排查问题时能直接验接口。
 
 管理接口（都需要 ADMIN 账号的 access token）：
 
@@ -120,6 +150,8 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 |---|---|---|
 | `SERVER_TAG` | `latest` | 镜像版本。回滚时指定具体版本，如 `SERVER_TAG=0.1.0` |
 | `SERVER_PORT` | `8081` | 宿主监听端口 |
+| `ADMIN_TAG` | `latest` | 管理端镜像版本。回滚时指定具体版本，如 `ADMIN_TAG=0.1.0` |
+| `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
 | `MYSQL_URL` / `MYSQL_USERNAME` / `MYSQL_PASSWORD` | 无（必填） | 外置 MySQL 连接信息 |
 | `MINTPOP_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
 
@@ -134,6 +166,29 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 ## 对外暴露
 
-容器端口**只绑 `127.0.0.1`**，公网访问不到。对外服务由宿主上的反代承担：nginx / Caddy 反代到 `127.0.0.1:8081`，或用 cloudflared 从本机连出去。
+两个容器端口**都只绑 `127.0.0.1`**，公网访问不到。对外由宿主上的反代承担，且**管理端与服务端必须同域分路径**——`/` 给管理端，`/api` 给服务端。这样前端不需要 CORS，Logto 的回调也只有一个源。
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name admin.example.com;
+
+    # 顺序要紧：/api 这条更具体，必须写在 / 前面
+    location /api/ {
+        # 不带路径的 proxy_pass 会原样保留 URI，服务端拿到的仍是 /api/admin/users
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
