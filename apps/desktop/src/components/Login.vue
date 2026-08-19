@@ -4,6 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 type ConfigPhase = "UNKNOWN" | "READY" | "FAILED";
+/** client_config_state 的返回形状：与 Rust 侧 BootstrapState 的 adjacently-tagged 序列化逐字对应 */
+type BootstrapState =
+  | { phase: "UNKNOWN" }
+  | { phase: "READY" }
+  | { phase: "FAILED"; reason: string };
 
 const error = ref("");
 const pending = ref(false);
@@ -15,10 +20,10 @@ const unlisteners: UnlistenFn[] = [];
 
 onMounted(async () => {
   // 先监听再补查，否则两次 await 之间到达的事件会丢失且不会重放：
-  // 若先 await invoke("client_config_ready") 再 listen，引导恰好在这两次
-  // await 之间完成时，auth://config-ready 会在没有监听者的情况下发出，
-  // Tauri 不会重放事件，页面就永久卡在失败态。故必须先挂好监听，
-  // 再用 invoke 补查一次"挂载前引导是否已经完成"。
+  // 若先 await invoke("client_config_state") 再 listen，引导恰好在这两次
+  // await 之间完成或失败时，对应事件会在没有监听者的情况下发出，
+  // Tauri 不会重放事件，页面就永久卡在中性态（且拉不到重试所需的失败原因）。
+  // 故必须先挂好监听，再用 invoke 补查一次"挂载前引导是否已经有结果"。
   unlisteners.push(
     await listen("auth://config-ready", () => {
       configPhase.value = "READY";
@@ -32,8 +37,18 @@ onMounted(async () => {
     }),
   );
 
-  if (await invoke<boolean>("client_config_ready")) {
+  // 查询在飞行期间也可能有事件先到达并把 configPhase 改掉（READY 或 FAILED），
+  // 事件的结论至少和查询一样新，因此只在查询回来时 phase 仍是 UNKNOWN 才采纳它，
+  // 绝不用查询结果覆盖已经落地的事件结论。
+  const state = await invoke<BootstrapState>("client_config_state");
+  if (configPhase.value !== "UNKNOWN") {
+    return;
+  }
+  if (state.phase === "READY") {
     configPhase.value = "READY";
+  } else if (state.phase === "FAILED") {
+    configPhase.value = "FAILED";
+    configError.value = state.reason;
   }
 });
 

@@ -1,4 +1,4 @@
-use crate::app_state::{AppState, PendingLogin};
+use crate::app_state::{AppState, BootstrapState, PendingLogin};
 use crate::auth::{oidc, pkce, storage};
 use crate::link::state::LinkState;
 use crate::pty::session::{default_shell, spawn_agent_pty};
@@ -17,11 +17,12 @@ pub fn auth_status(state: State<'_, AppState>) -> bool {
     state.access_token.lock().unwrap().is_some()
 }
 
-/// 引导配置是否已就绪。前端挂载可能晚于引导完成，光靠事件会漏掉，
-/// 因此挂载时先查这个，再监听后续事件。
+/// 引导配置的当前状态（三态）。前端挂载可能晚于引导完成或失败，光靠事件会漏掉，
+/// 因此挂载时先查这个，再监听后续事件；查询结果只在事件尚未到达时才采信
+/// （见 Login.vue 里 phase 仍为 UNKNOWN 才应用查询结果的注释）。
 #[tauri::command]
-pub fn client_config_ready(state: State<'_, AppState>) -> bool {
-    state.oidc_config.lock().unwrap().is_some()
+pub fn client_config_state(state: State<'_, AppState>) -> BootstrapState {
+    state.bootstrap_state.lock().unwrap().clone()
 }
 
 /// 重新拉取引导配置，供登录页的重试按钮调用

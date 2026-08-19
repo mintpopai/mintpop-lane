@@ -4,7 +4,7 @@ pub mod commands;
 pub mod link;
 pub mod pty;
 
-use app_state::AppState;
+use app_state::{AppState, BootstrapState};
 use link::inbound::allocate_inbound;
 use link::kernel::MihomoKernel;
 use link::probe::{verify_egress, EgressVerdict, DEFAULT_PROBE_URL};
@@ -207,9 +207,14 @@ async fn bootstrap(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let _guard = state.bootstrap_lock.lock().await;
 
+    // 每次引导（含重试）开始时先归零，让 client_config_state 在结果落地前
+    // 如实答"还在飞行中"；重试场景尤其重要——上一轮的 FAILED 不能残留到这一轮。
+    *state.bootstrap_state.lock().unwrap() = BootstrapState::UNKNOWN;
+
     match auth::bootstrap::fetch_client_config(&server_base_url()).await {
         Ok(cfg) => {
             *state.oidc_config.lock().unwrap() = Some(cfg);
+            *state.bootstrap_state.lock().unwrap() = BootstrapState::READY;
             let _ = app.emit("auth://config-ready", ());
             try_silent_login(app.clone()).await;
             Ok(())
@@ -217,6 +222,7 @@ async fn bootstrap(app: AppHandle) -> Result<(), String> {
         Err(e) => {
             log_error("拉取登录配置失败", &e);
             let reason = e.to_string();
+            *state.bootstrap_state.lock().unwrap() = BootstrapState::FAILED(reason.clone());
             let _ = app.emit("auth://config-failed", serde_json::json!({ "reason": reason }));
             Err(reason)
         }
@@ -296,7 +302,7 @@ pub fn run() {
             commands::auth_status,
             commands::start_login,
             commands::logout,
-            commands::client_config_ready,
+            commands::client_config_state,
             commands::reload_client_config,
         ])
         .run(tauri::generate_context!())
