@@ -1,0 +1,28 @@
+:root {
+  /* 不引入任何 webfont：中文字体包动辄几十 MB，系统字体栈在目标平台上都有，
+     且一个字节的外部请求都不产生，比自托管更彻底地满足全球可达性要求 */
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  color: #303133;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+.page-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.page-toolbar__spacer {
+  flex: 1;
+}
