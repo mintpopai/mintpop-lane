@@ -27,7 +27,9 @@ const submitting = ref(false);
 
 const 标题 = computed(() => (props.editing ? `编辑用户：${props.editing.name}` : "新建用户"));
 const 前置可选 = computed(() => selectableFrontNodes(props.nodes));
-const 落地可选 = computed(() => selectableLandNodes(props.nodes, form.value.landNodeId));
+// 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
+// 原节点就会从下拉里消失、再也切不回去，只能关掉抽屉丢弃全部改动重来
+const 落地可选 = computed(() => selectableLandNodes(props.nodes, props.editing?.landNodeId ?? null));
 const 凭据提示 = computed(() =>
   props.editing?.credentialConfigured ? "已配置，留空表示不修改" : "尚未配置",
 );

@@ -55,6 +55,13 @@ describe("buildUserPayload", () => {
     expect(buildUserPayload(表单({ landNodeId: null })).landNodeId).toBeNull();
   });
 
+  it("选了节点就原样直通两个节点 id——它们是整体覆盖式更新的一部分，错一个就改错了链路", () => {
+    const payload = buildUserPayload(表单({ frontNodeId: 3, landNodeId: 11 }));
+
+    expect(payload.frontNodeId).toBe(3);
+    expect(payload.landNodeId).toBe(11);
+  });
+
   it("姓名与 subject 去首尾空白后提交", () => {
     const payload = buildUserPayload(表单({ subject: " logto-user-1 ", name: " 张三 " }));
 
@@ -139,7 +146,16 @@ describe("userToForm", () => {
 
     const form = userToForm(user);
 
-    expect(form.claudeCredential).toBe("");
-    expect(form.landNodeId).toBe(11);
+    // 逐字段断言而不是只看凭据：服务端的更新是整体覆盖式的，
+    // 回填漏掉任何一个字段，用户只改个姓名就会把别的字段一起清掉
+    expect(form).toEqual({
+      id: 5,
+      subject: "logto-user-1",
+      name: "张三",
+      status: "ACTIVE",
+      frontNodeId: 1,
+      landNodeId: 11,
+      claudeCredential: "",
+    });
   });
 });
