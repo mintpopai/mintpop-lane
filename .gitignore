@@ -31,3 +31,6 @@ apps/desktop/src-tauri/binaries/
 
 # Tauri 构建时生成的 ACL schema
 apps/desktop/src-tauri/gen/schemas/
+
+# Superpowers SDD 工作区（临时产物，不入库）
+.superpowers/
