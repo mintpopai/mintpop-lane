@@ -133,3 +133,11 @@ arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
 arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
 '''
 run = "./scripts/release.sh server ${usage_arg1:-} ${usage_arg2:-}"
+
+[tasks.release-admin]
+description = "为管理端打 tag 并推送，触发发版流水线"
+usage = '''
+arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
+arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
+'''
+run = "./scripts/release.sh admin ${usage_arg1:-} ${usage_arg2:-}"
