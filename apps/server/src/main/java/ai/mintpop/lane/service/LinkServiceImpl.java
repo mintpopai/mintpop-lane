@@ -38,8 +38,8 @@ public class LinkServiceImpl implements LinkService {
     }
 
     @Override
-    public LinkConfigResponse resolveLink(String subject) {
-        UserDto user = userRepository.findBySubject(subject)
+    public LinkConfigResponse resolveLink(Long userId) {
+        UserDto user = userRepository.findById(userId)
                 .orElseThrow(() -> new BizException(BizCodeEnum.LINK_REVOKED));
 
         if (user.getStatus() != UserStatus.ACTIVE) {
@@ -98,9 +98,9 @@ public class LinkServiceImpl implements LinkService {
     }
 
     @Override
-    public HeartbeatResponse heartbeat(String subject) {
+    public HeartbeatResponse heartbeat(Long userId) {
         // 从库里消失等价于权限被收回，按吊销处理让客户端断链
-        return userRepository.findBySubject(subject)
+        return userRepository.findById(userId)
                 .map(user -> {
                     if (user.getStatus() == UserStatus.SUSPENDED) {
                         return new HeartbeatResponse(LinkStatus.SUSPENDED);

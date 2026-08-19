@@ -1,30 +1,31 @@
 package ai.mintpop.lane.config;
 
-import ai.mintpop.lane.enumeration.UserRole;
-import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.Instant;
+import java.time.Duration;
 
-import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
+import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
+import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * 鉴权链端到端：Bearer 会话 token → SessionAuthFilter 验签 → 查库装角色 → 授权判定。
+ * 角色来自 app_user.role 而非 token 本身——token 里只有 userid，提权只能改库。
+ */
 @AutoConfigureMockMvc
 class AdminAuthorizationTest extends MysqlTestBase {
 
@@ -43,73 +44,62 @@ class AdminAuthorizationTest extends MysqlTestBase {
     @Autowired
     private SubscriptionRepository subscriptionRepository;
 
-    /**
-     * 只在这一条端到端用例里用到：其余用例走 {@code jwt()} 后处理器直接注入认证对象，
-     * 不经过真实解码，因此不需要它。这里用 {@code @MockitoBean} 把生产环境里连
-     * Logto JWKS 端点的 {@link JwtDecoder} 换成假的，好让请求真正走一遍
-     * {@code oauth2ResourceServer().jwt()} 过滤器 → {@code DbRoleJwtAuthenticationConverter}
-     * → 授权判定这条完整链路——如果把 {@code SecurityConfig} 里接线转换器的那行删掉，
-     * 这条用例会变红，而其余用 {@code jwt()} 后处理器的用例不会。
-     */
-    @MockitoBean
-    private JwtDecoder jwtDecoder;
+    @Autowired
+    private SessionTokenService sessionTokenService;
 
-    private static Jwt 假Jwt(String subject, String tokenValue) {
-        return Jwt.withTokenValue(tokenValue)
-                .header("alg", "none")
-                .claim("sub", subject)
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(3600))
-                .build();
-    }
+    private Long adminId;
+    private Long memberId;
 
-    @Test
-    @DisplayName("无令牌访问管理端接口得 401")
-    void 无令牌访问管理端接口得401() throws Exception {
-        mockMvc.perform(get("/api/admin/nodes")).andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("普通成员访问管理端接口得 403")
-    void 普通成员访问管理端接口得403() throws Exception {
-        mockMvc.perform(get("/api/admin/nodes")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_MEMBER"))))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @DisplayName("没有任何权限的令牌（库里查无此人）访问管理端接口得 403")
-    void 无权限令牌访问管理端接口得403() throws Exception {
-        mockMvc.perform(get("/api/admin/nodes").with(jwt().authorities()))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    @DisplayName("管理员能通过授权关卡访问管理端接口")
-    void 管理员通过授权关卡() throws Exception {
-        mockMvc.perform(get("/api/admin/nodes")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    @DisplayName("端到端：库里的 role 经真实过滤器链转换成权限——ADMIN 放行、MEMBER 拒绝")
-    void 库里的role经真实过滤器链授权() throws Exception {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+    @BeforeEach
+    void 准备数据() {
+        DatabaseFixtures fixtures =
+                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.清空();
         Long front = fixtures.建FRONT节点("FRONT-1");
-        fixtures.建用户("admin-sub", UserRole.ADMIN, UserStatus.ACTIVE, front, null);
-        fixtures.建用户("member-sub", UserRole.MEMBER, UserStatus.ACTIVE, front, null);
+        adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, front, null);
+        memberId = fixtures.建用户("logto-member", MEMBER, ACTIVE, front, null);
+    }
 
-        when(jwtDecoder.decode("admin-token")).thenReturn(假Jwt("admin-sub", "admin-token"));
-        when(jwtDecoder.decode("member-token")).thenReturn(假Jwt("member-sub", "member-token"));
+    private String bearer(Long userId) {
+        return "Bearer " + sessionTokenService.issue(userId, Duration.ofMinutes(10));
+    }
 
-        // 不用 jwt() 后处理器：它会绕过 DbRoleJwtAuthenticationConverter 直接注入权限，
-        // 那样测的就不是「库里的 role 能不能落地成权限」，而是白测
-        mockMvc.perform(get("/api/admin/nodes").header("Authorization", "Bearer admin-token"))
-                .andExpect(status().isOk());
+    @Test
+    @DisplayName("无 token 访问业务接口得 401")
+    void 无token得401() throws Exception {
+        mockMvc.perform(get("/api/admin/users"))
+                .andExpect(status().isUnauthorized());
+    }
 
-        mockMvc.perform(get("/api/admin/nodes").header("Authorization", "Bearer member-token"))
+    @Test
+    @DisplayName("MEMBER 的 token 访问管理端得 403")
+    void 普通成员访问管理端得403() throws Exception {
+        mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(memberId)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("ADMIN 的 token 访问管理端得 200")
+    void 管理员访问管理端得200() throws Exception {
+        mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("token 的 userid 在库里已不存在时视同未登录")
+    void 已删用户的token视同未登录() throws Exception {
+        userRepository.deleteById(memberId);
+        mockMvc.perform(get("/api/link/config").header("Authorization", bearer(memberId)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("会话 Cookie 也是合法载体（管理端网页用）")
+    void 会话Cookie也是合法载体() throws Exception {
+        mockMvc.perform(get("/api/admin/users")
+                        .cookie(new jakarta.servlet.http.Cookie(
+                                AuthProperties.SESSION_COOKIE_NAME,
+                                sessionTokenService.issue(adminId, Duration.ofMinutes(10)))))
+                .andExpect(status().isOk());
     }
 }

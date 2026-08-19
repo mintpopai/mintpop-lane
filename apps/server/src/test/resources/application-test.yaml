@@ -1,27 +1,8 @@
-spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          # 用 jwk-set-uri 而非 issuer-uri：后者会在应用启动时拉 OIDC discovery，
-          # 让测试依赖外网。jwk-set-uri 是懒加载，而 MockMvc 的 jwt() 后处理器
-          # 直接注入认证对象、不走真实解码，因此这个地址永远不会被真的请求。
-          jwk-set-uri: "http://127.0.0.1:9/jwks"
-          # 下面两项只作为「下发给客户端的数据」被读取，不参与解码器构建：
-          # Spring Boot 的 IssuerUriCondition 在 jwk-set-uri 有值时直接判定不匹配，
-          # 故这里配了 issuer-uri 也不会触发启动期的 OIDC discovery。
-          issuer-uri: "https://tenant.test.example/oidc"
-          audiences:
-            - "https://api.lane.mintpop.test"
-
 lane:
   link:
     # 特意与 LinkProperties.ttlSeconds 的默认值（1800）不同：若把配置绑定删掉，
     # 字段会回落到默认值，测试断言必须能因此变红，才守得住「配置真的生效」
     ttl-seconds: 900
-  client:
-    # 同理：测试值与生产值不同，配置绑定被删时断言必须变红
-    logto-client-id: "test-client-id"
   crypto:
     # 测试专用固定密钥（32 字节的 Base64），只用于测试，不是任何环境的真实密钥
     key: "bWludHBvcC10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZCE="

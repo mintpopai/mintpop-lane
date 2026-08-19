@@ -32,6 +32,10 @@ import static org.mockito.Mockito.when;
 
 class LinkServiceImplTest {
 
+    private static final Long USER_ID = 1L;
+    /** 未使用的 id，代表库里查不到的用户 */
+    private static final Long 不存在的用户ID = 999999L;
+
     private UserRepository userRepository;
     private ProxyNodeRepository nodeRepository;
     private SubscriptionRepository subscriptionRepository;
@@ -54,7 +58,7 @@ class LinkServiceImplTest {
 
     private static UserDto user(UserStatus status) {
         UserDto u = new UserDto();
-        u.setId(1L);
+        u.setId(USER_ID);
         u.setSubject("u1");
         u.setEmail("u1@test.example");
         u.setName("张三");
@@ -69,7 +73,7 @@ class LinkServiceImplTest {
                                                  LocalDateTime startsAt, LocalDateTime endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
         s.setId(id);
-        s.setUserId(1L);
+        s.setUserId(USER_ID);
         s.setAgentType(agentType);
         s.setName(name);
         s.setStartsAt(startsAt);
@@ -98,20 +102,20 @@ class LinkServiceImplTest {
         props.setTtlSeconds(1800);
         service = new LinkServiceImpl(props, userRepository, nodeRepository, subscriptionRepository);
 
-        when(userRepository.findBySubject(any())).thenReturn(Optional.empty());
+        when(userRepository.findById(any())).thenReturn(Optional.empty());
         when(nodeRepository.findById(10L))
                 .thenReturn(Optional.of(node(10L, NodeRole.FRONT, NodeProtocol.TROJAN, "us.example.com")));
         when(nodeRepository.findById(20L))
                 .thenReturn(Optional.of(node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10")));
-        when(subscriptionRepository.findByUserId(1L)).thenReturn(List.of());
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of());
     }
 
     private void 库里有(UserDto user) {
-        when(userRepository.findBySubject("u1")).thenReturn(Optional.of(user));
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
     }
 
     private void 订阅有(SubscriptionDto... subscriptions) {
-        when(subscriptionRepository.findByUserId(1L)).thenReturn(List.of(subscriptions));
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(subscriptions));
     }
 
     @Test
@@ -120,7 +124,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(在期订阅(100L, "sk-ant-test"));
 
-        var resp = service.resolveLink("u1");
+        var resp = service.resolveLink(USER_ID);
 
         assertThat(resp.front()).containsEntry("type", "trojan").containsEntry("server", "us.example.com");
         assertThat(resp.land()).containsEntry("type", "socks5").containsEntry("server", "203.0.113.10");
@@ -134,7 +138,7 @@ class LinkServiceImplTest {
     @Test
     @DisplayName("未录入的账号被拒绝，按吊销处理")
     void 未录入的账号被拒绝() {
-        assertThatThrownBy(() -> service.resolveLink("陌生人"))
+        assertThatThrownBy(() -> service.resolveLink(不存在的用户ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -145,7 +149,7 @@ class LinkServiceImplTest {
     void 已吊销的用户拿不到链路() {
         库里有(user(UserStatus.REVOKED));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -156,7 +160,7 @@ class LinkServiceImplTest {
     void 已暂停的用户拿不到链路() {
         库里有(user(UserStatus.SUSPENDED));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -168,7 +172,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         // 订阅列表默认空，无需额外造数
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.SERVICE_NOT_PURCHASED);
@@ -180,7 +184,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(过期订阅(100L, "sk-ant-test"));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.SERVICE_EXPIRED);
@@ -195,7 +199,7 @@ class LinkServiceImplTest {
         库里有(u);
         订阅有(在期订阅(100L, "sk-ant-test"));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -209,7 +213,7 @@ class LinkServiceImplTest {
         库里有(u);
         订阅有(在期订阅(100L, "sk-ant-test"));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -222,7 +226,7 @@ class LinkServiceImplTest {
         订阅有(在期订阅(100L, "sk-ant-test"));
         when(nodeRepository.findById(10L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.INTERNAL_ERROR);
@@ -237,7 +241,7 @@ class LinkServiceImplTest {
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(disabled));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.NODE_DISABLED);
@@ -252,7 +256,7 @@ class LinkServiceImplTest {
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(10L)).thenReturn(Optional.of(disabled));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.NODE_DISABLED);
@@ -267,7 +271,7 @@ class LinkServiceImplTest {
         noIp.setEgressIps(List.of());
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(noIp));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -279,7 +283,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(在期订阅(100L, null));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.CREDENTIAL_NOT_ASSIGNED);
@@ -291,7 +295,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(在期订阅(100L, "   "));
 
-        assertThatThrownBy(() -> service.resolveLink("u1"))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.CREDENTIAL_NOT_ASSIGNED);
@@ -303,7 +307,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(在期订阅(100L, "sk-ant-有凭据"), 在期订阅(101L, null));
 
-        var resp = service.resolveLink("u1");
+        var resp = service.resolveLink(USER_ID);
 
         assertThat(resp.agentCredentials()).hasSize(1);
         assertThat(resp.agentCredentials().getFirst().credential()).isEqualTo("sk-ant-有凭据");
@@ -316,7 +320,7 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(在期订阅(100L, "sk-ant-test"));
 
-        assertThat(service.heartbeat("u1").status()).isEqualTo(LinkStatus.ACTIVE);
+        assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.ACTIVE);
     }
 
     @Test
@@ -324,7 +328,7 @@ class LinkServiceImplTest {
     void 心跳已暂停用户返回SUSPENDED() {
         库里有(user(UserStatus.SUSPENDED));
 
-        assertThat(service.heartbeat("u1").status()).isEqualTo(LinkStatus.SUSPENDED);
+        assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.SUSPENDED);
     }
 
     @Test
@@ -332,7 +336,7 @@ class LinkServiceImplTest {
     void 心跳已吊销用户返回REVOKED() {
         库里有(user(UserStatus.REVOKED));
 
-        assertThat(service.heartbeat("u1").status()).isEqualTo(LinkStatus.REVOKED);
+        assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.REVOKED);
     }
 
     @Test
@@ -341,12 +345,12 @@ class LinkServiceImplTest {
         库里有(user(UserStatus.ACTIVE));
         订阅有(过期订阅(100L, "sk-ant-test"));
 
-        assertThat(service.heartbeat("u1").status()).isEqualTo(LinkStatus.EXPIRED);
+        assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.EXPIRED);
     }
 
     @Test
     @DisplayName("心跳：未录入账号按吊销处理，客户端据此断链")
     void 心跳未录入账号按吊销处理() {
-        assertThat(service.heartbeat("陌生人").status()).isEqualTo(LinkStatus.REVOKED);
+        assertThat(service.heartbeat(不存在的用户ID).status()).isEqualTo(LinkStatus.REVOKED);
     }
 }
