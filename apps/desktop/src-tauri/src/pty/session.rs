@@ -142,24 +142,56 @@ mod tests {
 
     #[test]
     fn 活跃状态下可以启动子进程且注入了代理变量() {
+        // 用 /bin/sh 而非 default_shell()：本用例验的是「注入的环境变量有没有传进子进程」，
+        // 这与用哪个 shell 无关。交互式 zsh 会读用户的 ~/.zshrc，既会往 PTY 里吐提示符与
+        // 终端标题转义序列干扰断言，也会让结果取决于每个人的 dotfiles。
         let session = spawn_agent_pty(
             LinkState::ACTIVE,
             &sample_inbound(),
             "tok",
-            default_shell(),
+            "/bin/sh",
             24,
             80,
         )
         .expect("活跃状态应当放行");
 
-        // 让子进程回显环境变量，确认注入生效
-        session.write(b"echo $HTTPS_PROXY\n").unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(500));
-
+        // PTY 是流，一次 read 只拿到当时缓冲区里的一段。用后台线程持续泵读、主线程带
+        // 截止时间地收，避免「读一次刚好没读到」的假失败，也避免读不到时永久阻塞。
         let mut reader = session.reader().unwrap();
-        let mut buf = [0u8; 4096];
-        let n = std::io::Read::read(&mut reader, &mut buf).unwrap();
-        let out = String::from_utf8_lossy(&buf[..n]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if tx.send(String::from_utf8_lossy(&buf[..n]).into_owned()).is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        // 让子进程回显环境变量，确认注入生效。回显的命令行里只有变量名、没有端口号，
+        // 因此不会与展开结果混淆成假通过。
+        session.write(b"echo $HTTPS_PROXY\n").unwrap();
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let mut out = String::new();
+        while let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()) {
+            match rx.recv_timeout(remaining) {
+                Ok(chunk) => {
+                    out.push_str(&chunk);
+                    if out.contains("127.0.0.1:27890") {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
         assert!(out.contains("127.0.0.1:27890"), "实际输出：{out}");
     }
 }
