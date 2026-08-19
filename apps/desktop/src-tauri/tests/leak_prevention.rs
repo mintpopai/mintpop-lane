@@ -56,8 +56,8 @@ async fn 链路被重置后流量当场断开() {
         eprintln!("跳过：未设置 MIHOMO_BIN");
         return;
     };
-    let Ok(fixture) = std::env::var("PIER_TEST_LINK") else {
-        eprintln!("跳过：未设置 PIER_TEST_LINK（指向真实链路配置的 JSON）");
+    let Ok(fixture) = std::env::var("LANE_TEST_LINK") else {
+        eprintln!("跳过：未设置 LANE_TEST_LINK（指向真实链路配置的 JSON）");
         return;
     };
 

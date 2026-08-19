@@ -136,8 +136,8 @@ mod tests {
         OidcConfig {
             issuer: "https://tenant.logto.app/oidc".to_string(),
             client_id: "client-1".to_string(),
-            redirect_uri: "pier://callback".to_string(),
-            resource: "https://api.pier.mintpop.internal".to_string(),
+            redirect_uri: "lane://callback".to_string(),
+            resource: "https://api.lane.mintpop.internal".to_string(),
         }
     }
 
@@ -155,7 +155,7 @@ mod tests {
         )));
         assert!(url.contains("state=state-1"));
         // 必须带 resource，否则拿到的 access_token 没有本服务的 audience
-        assert!(url.contains("resource=https%3A%2F%2Fapi.pier.mintpop.internal"));
+        assert!(url.contains("resource=https%3A%2F%2Fapi.lane.mintpop.internal"));
         // 必须申请 offline_access，否则拿不到 refresh_token
         assert!(url.contains("offline_access"));
     }
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn 能从回调地址里取出授权码() {
-        let code = extract_code("pier://callback?code=abc123&state=state-1", "state-1").unwrap();
+        let code = extract_code("lane://callback?code=abc123&state=state-1", "state-1").unwrap();
         assert_eq!(code, "abc123");
     }
 
@@ -176,7 +176,7 @@ mod tests {
     fn state不匹配的回调被拒绝() {
         // 防 CSRF：不是本次登录发起的回调一律不认
         assert!(matches!(
-            extract_code("pier://callback?code=abc123&state=别的", "state-1"),
+            extract_code("lane://callback?code=abc123&state=别的", "state-1"),
             Err(OidcError::StateMismatch)
         ));
     }
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn 没有授权码的回调被拒绝() {
         assert!(matches!(
-            extract_code("pier://callback?error=access_denied&state=state-1", "state-1"),
+            extract_code("lane://callback?error=access_denied&state=state-1", "state-1"),
             Err(OidcError::NoCode)
         ));
     }

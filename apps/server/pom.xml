@@ -12,10 +12,10 @@
   </parent>
 
   <groupId>ai.mintpop</groupId>
-  <artifactId>pier-server</artifactId>
+  <artifactId>lane-server</artifactId>
   <version>0.1.0</version>
-  <name>pier-server</name>
-  <description>Pier 受控终端的链路下发服务</description>
+  <name>lane-server</name>
+  <description>Lane 受控终端的链路下发服务</description>
 
   <properties>
     <java.version>25</java.version>

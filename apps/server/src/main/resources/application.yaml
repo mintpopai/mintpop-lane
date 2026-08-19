@@ -1,6 +1,6 @@
 spring:
   application:
-    name: pier-server
+    name: lane-server
   profiles:
     default: local
   flyway:
@@ -31,4 +31,4 @@ management:
 
 logging:
   level:
-    ai.mintpop.pier: INFO
+    ai.mintpop.lane: INFO

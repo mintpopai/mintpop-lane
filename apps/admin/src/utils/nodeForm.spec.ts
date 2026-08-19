@@ -137,9 +137,9 @@ describe("buildNodePayload", () => {
   });
 
   it("敏感键填了才提交，且只提交填了的那些", () => {
-    const form = 表单({ protocol: "SOCKS5", secret: { username: "pier", password: "" } });
+    const form = 表单({ protocol: "SOCKS5", secret: { username: "lane", password: "" } });
 
-    expect(buildNodePayload(form).secret).toEqual({ username: "pier" });
+    expect(buildNodePayload(form).secret).toEqual({ username: "lane" });
   });
 
   it("透传键按标量还原类型后提交，空 key 的行丢弃", () => {

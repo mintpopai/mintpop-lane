@@ -12,9 +12,9 @@ spring:
           # 故这里配了 issuer-uri 也不会触发启动期的 OIDC discovery。
           issuer-uri: "https://tenant.test.example/oidc"
           audiences:
-            - "https://api.pier.mintpop.test"
+            - "https://api.lane.mintpop.test"
 
-pier:
+lane:
   link:
     # 特意与 LinkProperties.ttlSeconds 的默认值（1800）不同：若把配置绑定删掉，
     # 字段会回落到默认值，测试断言必须能因此变红，才守得住「配置真的生效」

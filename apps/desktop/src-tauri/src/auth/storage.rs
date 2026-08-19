@@ -1,7 +1,7 @@
 use keyring::Entry;
 use thiserror::Error;
 
-const SERVICE: &str = "ai.mintpop.pier";
+const SERVICE: &str = "ai.mintpop.lane";
 const ACCOUNT: &str = "logto-refresh-token";
 
 #[derive(Debug, Error)]

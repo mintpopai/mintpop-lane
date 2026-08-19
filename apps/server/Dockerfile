@@ -44,7 +44,7 @@ WORKDIR /app
 COPY mise.toml ./
 RUN mise trust && mise install java
 
-COPY --from=build /app/apps/server/target/pier-server-*.jar ./server.jar
+COPY --from=build /app/apps/server/target/lane-server-*.jar ./server.jar
 
 EXPOSE 8080
 # 配置由 compose 以只读卷挂到 /app/config，含凭据的配置文件不进镜像
