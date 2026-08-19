@@ -15,9 +15,9 @@ spring:
         jwt:
           issuer-uri: "https://填入你的租户.logto.app/oidc"
           audiences:
-            - "https://api.mintpop.internal"
+            - "https://api.pier.mintpop.internal"
 
-mintpop:
+pier:
   link:
     ttl-seconds: 1800
   client:

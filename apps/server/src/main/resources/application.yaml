@@ -1,6 +1,6 @@
 spring:
   application:
-    name: mintpop-server
+    name: pier-server
   profiles:
     default: local
   flyway:
@@ -31,4 +31,4 @@ management:
 
 logging:
   level:
-    com.mintpop.server: INFO
+    ai.mintpop.pier: INFO

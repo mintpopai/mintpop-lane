@@ -4,7 +4,7 @@ import { loadRuntimeConfig, resetRuntimeConfig, runtimeConfig } from "./runtime"
 const 完整配置 = {
   logtoEndpoint: "https://tenant.logto.app",
   logtoAppId: "abc123",
-  apiResource: "https://api.mintpop.internal",
+  apiResource: "https://api.pier.mintpop.internal",
   apiBaseUrl: "/api",
 };
 

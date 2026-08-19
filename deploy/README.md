@@ -20,21 +20,21 @@
 2. **在外置 MySQL 上建库**（表由 Flyway 在服务启动时自动创建）：
 
    ```sql
-   CREATE DATABASE mintpop DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-   CREATE USER 'mintpop'@'%' IDENTIFIED BY '<口令>';
-   GRANT ALL PRIVILEGES ON mintpop.* TO 'mintpop'@'%';
+   CREATE DATABASE pier DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+   CREATE USER 'pier'@'%' IDENTIFIED BY '<口令>';
+   GRANT ALL PRIVILEGES ON pier.* TO 'pier'@'%';
    ```
 
 3. **生成加密密钥并写入 `.env`**：
 
    ```bash
    cp .env.example .env
-   openssl rand -base64 32   # 把输出填进 .env 的 MINTPOP_CRYPTO_KEY
+   openssl rand -base64 32   # 把输出填进 .env 的 PIER_CRYPTO_KEY
    ```
 
    > ⚠️ 这个密钥用来加密席位凭据与节点密码。**丢失或更换 = 库里所有密文永久解不开**，必须重录全部凭据。请与数据库口令分开备份。
 
-4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入真实的 Logto issuer、audience 与 `mintpop.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）。该文件现在只有 OIDC 配置与链路有效期，**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
+4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入真实的 Logto issuer、audience 与 `pier.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）。该文件现在只有 OIDC 配置与链路有效期，**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
 
 5. **建 Logto 的 SPA 应用并放置管理端运行时配置**：
 
@@ -55,7 +55,7 @@
    {
      "logtoEndpoint": "https://你的租户.logto.app",
      "logtoAppId": "上一步拿到的 App ID",
-     "apiResource": "https://api.mintpop.internal",
+     "apiResource": "https://api.pier.mintpop.internal",
      "apiBaseUrl": "/api"
    }
    ```
@@ -153,14 +153,14 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `ADMIN_TAG` | `latest` | 管理端镜像版本。回滚时指定具体版本，如 `ADMIN_TAG=0.1.0` |
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
 | `MYSQL_URL` / `MYSQL_USERNAME` / `MYSQL_PASSWORD` | 无（必填） | 外置 MySQL 连接信息 |
-| `MINTPOP_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
+| `PIER_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
 
 ## 备份
 
 要备份两样东西，**且必须分开存放**：
 
-1. **数据库**（`mysqldump mintpop`）——里面的凭据是密文。
-2. **`MINTPOP_CRYPTO_KEY`**——没有它，数据库备份里的凭据无法解开。
+1. **数据库**（`mysqldump pier`）——里面的凭据是密文。
+2. **`PIER_CRYPTO_KEY`**——没有它，数据库备份里的凭据无法解开。
 
 两者存在同一处等于加密白做。
 
@@ -202,6 +202,6 @@ server {
 
 - `spring.security.oauth2.resourceserver.jwt.issuer-uri`（形如 `https://<租户>.logto.app/oidc`）
 - `spring.security.oauth2.resourceserver.jwt.audiences[0]`（API Resource 标识）
-- `mintpop.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）
+- `pier.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）
 
 前两项同时被用于校验 JWT 和下发给客户端，改一处两处同时生效。

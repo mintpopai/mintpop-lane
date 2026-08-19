@@ -11,11 +11,11 @@
     <relativePath/>
   </parent>
 
-  <groupId>com.mintpop</groupId>
-  <artifactId>mintpop-server</artifactId>
+  <groupId>ai.mintpop</groupId>
+  <artifactId>pier-server</artifactId>
   <version>0.1.0</version>
-  <name>mintpop-server</name>
-  <description>Mintpop 受控终端的链路下发服务</description>
+  <name>pier-server</name>
+  <description>Pier 受控终端的链路下发服务</description>
 
   <properties>
     <java.version>25</java.version>

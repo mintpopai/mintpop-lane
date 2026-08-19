@@ -7,7 +7,7 @@ use url::Url;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// 桌面端注册的 deep link 回调地址。它由客户端自己的 scheme 决定，服务端不下发。
-pub const REDIRECT_URI: &str = "mintpop://callback";
+pub const REDIRECT_URI: &str = "pier://callback";
 
 /// 服务端下发的登录接入配置。字段名是 Java 侧的驼峰形式。
 /// 三个字段都不是 Option：任一缺失都说明服务端配置有问题，应当当场报错，
@@ -94,16 +94,16 @@ mod tests {
 
     #[test]
     fn 业务码为零时映射成登录配置() {
-        let raw = r#"{"code":0,"data":{"logtoIssuer":"https://tenant.logto.app/oidc","logtoClientId":"client-1","apiResource":"https://api.mintpop.internal"},"msg":null}"#;
+        let raw = r#"{"code":0,"data":{"logtoIssuer":"https://tenant.logto.app/oidc","logtoClientId":"client-1","apiResource":"https://api.pier.mintpop.internal"},"msg":null}"#;
         let resp: ApiResponse<ClientConfigData> = serde_json::from_str(raw).unwrap();
 
         let cfg = resp.into_data().unwrap().into_oidc_config().unwrap();
 
         assert_eq!(cfg.issuer, "https://tenant.logto.app/oidc");
         assert_eq!(cfg.client_id, "client-1");
-        assert_eq!(cfg.resource, "https://api.mintpop.internal");
+        assert_eq!(cfg.resource, "https://api.pier.mintpop.internal");
         // redirect_uri 由客户端持有，与服务端下发的内容无关
-        assert_eq!(cfg.redirect_uri, "mintpop://callback");
+        assert_eq!(cfg.redirect_uri, "pier://callback");
     }
 
     #[test]
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn 缺字段的返回体解析失败而不是静默用空串() {
         // 服务端漏配 logto-client-id 时会下发 null，此处必须报错
-        let raw = r#"{"code":0,"data":{"logtoIssuer":"https://tenant.logto.app/oidc","logtoClientId":null,"apiResource":"https://api.mintpop.internal"},"msg":null}"#;
+        let raw = r#"{"code":0,"data":{"logtoIssuer":"https://tenant.logto.app/oidc","logtoClientId":null,"apiResource":"https://api.pier.mintpop.internal"},"msg":null}"#;
 
         let parsed: Result<ApiResponse<ClientConfigData>, _> = serde_json::from_str(raw);
 
@@ -135,7 +135,7 @@ mod tests {
         ClientConfigData {
             logto_issuer: issuer.to_string(),
             logto_client_id: client_id.to_string(),
-            api_resource: "https://api.mintpop.internal".to_string(),
+            api_resource: "https://api.pier.mintpop.internal".to_string(),
         }
     }
 

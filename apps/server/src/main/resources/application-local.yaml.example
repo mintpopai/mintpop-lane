@@ -10,7 +10,7 @@ server:
 spring:
   datasource:
     # 本地开发用的 MySQL；库需要提前建好，表由 Flyway 自动建
-    url: "jdbc:mysql://127.0.0.1:3306/mintpop?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+    url: "jdbc:mysql://127.0.0.1:3306/pier?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
     username: 填入数据库用户名
     password: 填入数据库口令
   security:
@@ -21,9 +21,9 @@ spring:
           issuer-uri: "https://填入你的租户.logto.app/oidc"
           # 本服务在 Logto 中注册的 API Resource 标识，会与 JWT 的 aud 比对
           audiences:
-            - "https://api.mintpop.internal"
+            - "https://api.pier.mintpop.internal"
 
-mintpop:
+pier:
   link:
     # 下发给客户端的配置有效期（秒）
     ttl-seconds: 1800

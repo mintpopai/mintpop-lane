@@ -2183,30 +2183,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mintpop-desktop"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "keyring",
- "portable-pty",
- "rand 0.8.7",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-deep-link",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "mio"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2666,6 +2642,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
 dependencies = [
  "siphasher",
+]
+
+[[package]]
+name = "pier-desktop"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "keyring",
+ "portable-pty",
+ "rand 0.8.7",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-deep-link",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "url",
 ]
 
 [[package]]
