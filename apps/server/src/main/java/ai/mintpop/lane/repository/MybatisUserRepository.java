@@ -56,7 +56,7 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public PageResult<UserDto> search(String keyword, long pageNo, long pageSize) {
+    public PageResult<UserDto> search(String keyword, Boolean hasActiveSubscription, long pageNo, long pageSize) {
         // 钳制分页参数：MyBatis-Plus 在 size 为负且未设 maxLimit 时不会拼 LIMIT，
         // 外部传入的负数会退化成全表返回、逐行解密，必须在这里挡住
         long safePageNo = pageNo < 1 ? 1 : pageNo;
@@ -65,6 +65,13 @@ public class MybatisUserRepository implements UserRepository {
         var query = Wrappers.<User>lambdaQuery().orderByAsc(User::getId);
         if (keyword != null && !keyword.isBlank()) {
             query.and(w -> w.like(User::getName, keyword).or().like(User::getSubject, keyword));
+        }
+        if (Boolean.TRUE.equals(hasActiveSubscription)) {
+            query.exists("SELECT 1 FROM subscription s WHERE s.user_id = app_user.id"
+                    + " AND s.starts_at <= NOW() AND s.ends_at > NOW()");
+        } else if (Boolean.FALSE.equals(hasActiveSubscription)) {
+            query.notExists("SELECT 1 FROM subscription s WHERE s.user_id = app_user.id"
+                    + " AND s.starts_at <= NOW() AND s.ends_at > NOW()");
         }
         Page<User> page = mapper.selectPage(Page.of(safePageNo, safePageSize), query);
         return new PageResult<>(
@@ -101,11 +108,6 @@ public class MybatisUserRepository implements UserRepository {
     @Override
     public void deleteById(Long id) {
         mapper.deleteById(id);
-    }
-
-    @Override
-    public boolean existsBySubject(String subject) {
-        return mapper.selectCount(Wrappers.<User>lambdaQuery().eq(User::getSubject, subject)) > 0;
     }
 
     @Override

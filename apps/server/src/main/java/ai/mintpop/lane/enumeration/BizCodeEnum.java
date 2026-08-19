@@ -22,7 +22,7 @@ public enum BizCodeEnum {
 
     /* 链路 */
     EGRESS_NOT_ASSIGNED(310001, "尚未为该用户分配落地出口"),
-    CREDENTIAL_NOT_ASSIGNED(310002, "尚未为该用户分配 Claude 席位凭据"),
+    CREDENTIAL_NOT_ASSIGNED(310002, "尚未为该用户的在期订阅录入席位凭据"),
     LINK_REVOKED(310003, "该用户的链路已被吊销"),
     NODE_DISABLED(310004, "链路节点已被禁用"),
     SERVICE_NOT_PURCHASED(310005, "尚未购买任何服务"),
@@ -32,7 +32,6 @@ public enum BizCodeEnum {
     NODE_NOT_FOUND(410001, "节点不存在"),
     LAND_NODE_OCCUPIED(410002, "该落地节点已被其他用户占用"),
     NODE_IN_USE(410003, "该节点仍被用户引用，无法删除"),
-    USER_ALREADY_EXISTS(410004, "该 Logto 用户已存在"),
     NODE_ROLE_MISMATCH(410005, "节点角色与用途不符"),
     USER_NOT_FOUND(410006, "用户不存在"),
     NODE_NAME_DUPLICATED(410007, "节点名已存在"),

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Void> handleNoResourceFound(NoResourceFoundException e) {
         log.warn("路由不存在：{}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    /**
+     * 路径匹配但 HTTP 方法不受支持（如某路径只注册了 GET，却收到 POST）。
+     * 站在调用方视角，这与「路由整体不存在」（见上面的 NoResourceFoundException）没有区别——
+     * 都是「这个操作打不通」，同样统一走原生 404、绕开 ApiResponse 的 200 通道，
+     * 不暴露标准 405 这类框架细节，前端也无需为此单独分支。
+     * 典型场景：删掉某接口的写入端点后，该路径只剩查询方法可用。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("方法不支持：{}", e.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
 

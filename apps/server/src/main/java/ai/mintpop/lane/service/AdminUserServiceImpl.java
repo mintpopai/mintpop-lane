@@ -2,18 +2,20 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.dto.PageResult;
 import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeRole;
-import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
+import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.UserSaveRequest;
 import ai.mintpop.lane.response.AdminUserResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -25,45 +27,37 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
+    private final SubscriptionRepository subscriptionRepository;
 
-    public AdminUserServiceImpl(UserRepository userRepository, ProxyNodeRepository nodeRepository) {
+    public AdminUserServiceImpl(UserRepository userRepository, ProxyNodeRepository nodeRepository,
+                                 SubscriptionRepository subscriptionRepository) {
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
+        this.subscriptionRepository = subscriptionRepository;
     }
 
     @Override
-    public PageResult<AdminUserResponse> page(String keyword, long pageNo, long pageSize) {
-        PageResult<UserDto> page = userRepository.search(keyword, pageNo, pageSize);
-        // 一次取出全部节点做成字典，避免每行用户都去查一次节点
+    public PageResult<AdminUserResponse> page(String keyword, Boolean hasActiveSubscription,
+                                              long pageNo, long pageSize) {
+        PageResult<UserDto> page = userRepository.search(keyword, hasActiveSubscription, pageNo, pageSize);
         Map<Long, ProxyNodeDto> nodes = nodeRepository.findAll(null).stream()
                 .collect(Collectors.toMap(ProxyNodeDto::getId, Function.identity()));
 
+        // 一次取回本页所有用户的订阅，避免逐行查询
+        List<Long> userIds = page.records().stream().map(UserDto::getId).toList();
+        LocalDateTime now = LocalDateTime.now();
+        Map<Long, List<AdminUserResponse.ActiveSubscriptionBrief>> briefs =
+                subscriptionRepository.findByUserIds(userIds).stream()
+                        .filter(s -> s.isActiveAt(now))
+                        .collect(Collectors.groupingBy(SubscriptionDto::getUserId,
+                                Collectors.mapping(s -> new AdminUserResponse.ActiveSubscriptionBrief(
+                                        s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()),
+                                        Collectors.toList())));
+
         List<AdminUserResponse> records = page.records().stream()
-                .map(user -> toResponse(user, nodes))
+                .map(user -> toResponse(user, nodes, briefs.getOrDefault(user.getId(), List.of())))
                 .toList();
-
         return new PageResult<>(records, page.total(), page.pageNo(), page.pageSize());
-    }
-
-    @Override
-    public Long create(UserSaveRequest request) {
-        if (userRepository.existsBySubject(request.getSubject())) {
-            throw new BizException(BizCodeEnum.USER_ALREADY_EXISTS);
-        }
-        校验节点(request.getFrontNodeId(), NodeRole.FRONT);
-        校验落地可用(request.getLandNodeId(), null);
-
-        UserDto user = new UserDto();
-        user.setSubject(request.getSubject());
-        user.setEmail(request.getEmail());
-        user.setName(request.getName());
-        // 角色固定 MEMBER：提权只能改库
-        user.setRole(UserRole.MEMBER);
-        user.setStatus(request.getStatus());
-        user.setFrontNodeId(request.getFrontNodeId());
-        user.setLandNodeId(request.getLandNodeId());
-
-        return 兜住唯一约束(() -> userRepository.create(user));
     }
 
     @Override
@@ -71,20 +65,16 @@ public class AdminUserServiceImpl implements AdminUserService {
         UserDto user = userRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
 
-        if (!user.getSubject().equals(request.getSubject())
-                && userRepository.existsBySubject(request.getSubject())) {
-            throw new BizException(BizCodeEnum.USER_ALREADY_EXISTS);
+        if (request.getFrontNodeId() != null) {
+            校验节点(request.getFrontNodeId(), NodeRole.FRONT);
         }
-        校验节点(request.getFrontNodeId(), NodeRole.FRONT);
         校验落地可用(request.getLandNodeId(), id);
 
-        user.setSubject(request.getSubject());
-        user.setEmail(request.getEmail());
         user.setName(request.getName());
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
         user.setLandNodeId(request.getLandNodeId());
-        // role 不从入参取，沿用库里的值
+        // subject/email/role 不从入参取，沿用库里的值
 
         兜住唯一约束(() -> {
             userRepository.update(user);
@@ -123,24 +113,18 @@ public class AdminUserServiceImpl implements AdminUserService {
     /**
      * 唯一约束的兜底：上面的预检查给的是可读错误，但两个管理员同时提交仍可能撞车，
      * 那时靠数据库的唯一索引挡住，这里把它翻译成对应的业务错误码。
+     * 用户表现存的唯一索引只剩 uk_app_user_land_node（subject 不再从接口改，不会冲突到这里）。
      */
     private <T> T 兜住唯一约束(java.util.function.Supplier<T> action) {
         try {
             return action.get();
         } catch (DuplicateKeyException e) {
-            String message = String.valueOf(e.getMessage());
-            if (message.contains("uk_app_user_land_node")) {
-                throw new BizException(BizCodeEnum.LAND_NODE_OCCUPIED);
-            }
-            throw new BizException(BizCodeEnum.USER_ALREADY_EXISTS);
+            throw new BizException(BizCodeEnum.LAND_NODE_OCCUPIED);
         }
     }
 
-    private static String 空白转null(String value) {
-        return value == null || value.isBlank() ? null : value;
-    }
-
-    private AdminUserResponse toResponse(UserDto user, Map<Long, ProxyNodeDto> nodes) {
+    private AdminUserResponse toResponse(UserDto user, Map<Long, ProxyNodeDto> nodes,
+                                         List<AdminUserResponse.ActiveSubscriptionBrief> activeSubscriptions) {
         ProxyNodeDto front = nodes.get(user.getFrontNodeId());
         ProxyNodeDto land = user.getLandNodeId() == null ? null : nodes.get(user.getLandNodeId());
 
@@ -156,6 +140,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),
                 land == null ? List.of() : land.getEgressIps(),
+                activeSubscriptions,
                 user.getCreatedAt(),
                 user.getUpdatedAt());
     }

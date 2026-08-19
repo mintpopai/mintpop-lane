@@ -1,7 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import ai.mintpop.lane.enumeration.UserRole;
+import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -19,6 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,6 +33,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * 用户由登录自动建档，管理端不再提供新建入口；这里只覆盖搜索、列表摘要、更新、删除。
+ */
 @AutoConfigureMockMvc
 class AdminUserControllerTest extends MysqlTestBase {
 
@@ -60,6 +64,10 @@ class AdminUserControllerTest extends MysqlTestBase {
     private Long frontId;
     private Long landId;
     private Long adminId;
+    /** 带在期订阅的普通成员 */
+    private Long memberWithSubId;
+    /** 没有任何订阅的普通成员 */
+    private Long memberNoSubId;
 
     private String bearer(Long userId) {
         return "Bearer " + sessionTokenService.issue(userId, Duration.ofMinutes(10));
@@ -70,12 +78,10 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     /** 可变 Map：部分用例要放 null 值，Map.of 不允许 */
-    private Map<String, Object> 入参(String subject, Long front, Long land) {
+    private Map<String, Object> 更新入参(String name, String status, Long front, Long land) {
         Map<String, Object> body = new HashMap<>();
-        body.put("subject", subject);
-        body.put("email", subject == null ? null : subject + "@test.example");
-        body.put("name", "张三");
-        body.put("status", "ACTIVE");
+        body.put("name", name);
+        body.put("status", status);
         body.put("frontNodeId", front);
         body.put("landNodeId", land);
         return body;
@@ -87,145 +93,91 @@ class AdminUserControllerTest extends MysqlTestBase {
         fixtures.清空();
         frontId = fixtures.建FRONT节点("FRONT-1");
         landId = fixtures.建LAND节点("LAND-1", "203.0.113.10");
-        adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, frontId, null);
+        memberWithSubId = fixtures.建用户("logto-m1", frontId, landId);
+        fixtures.建订阅(memberWithSubId, AgentType.CLAUDE, "Claude 席位 1",
+                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(30), "sk-ant-secret");
+        memberNoSubId = fixtures.建用户("logto-m2", frontId, null);
     }
 
     @Test
-    @DisplayName("新建用户并在列表里看到节点名与出口 IP")
-    void 新建用户并列出() throws Exception {
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", frontId, landId))))
-                .andExpect(status().isOk())
+    @DisplayName("列表带 email 与在期订阅摘要")
+    void 列表带邮箱与在期订阅摘要() throws Exception {
+        mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data").isNumber());
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].email")
+                        .value("logto-m1@test.example"))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].activeSubscriptions[0].agentType")
+                        .value("CLAUDE"))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].activeSubscriptions[0]")
+                        .isEmpty());
+    }
 
-        // 加关键字过滤掉 @BeforeEach 里造的管理员账号，避免断言与夹具耦合
-        mockMvc.perform(get("/api/admin/users").param("keyword", "logto-user-1")
+    @Test
+    @DisplayName("按有无在期订阅筛选")
+    void 按有无在期订阅筛选() throws Exception {
+        mockMvc.perform(get("/api/admin/users").param("hasActiveSubscription", "true")
                         .header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.records[0].subject").value("logto-user-1"))
-                .andExpect(jsonPath("$.data.records[0].role").value("MEMBER"))
-                .andExpect(jsonPath("$.data.records[0].frontNodeName").value("FRONT-1"))
-                .andExpect(jsonPath("$.data.records[0].landNodeName").value("LAND-1"))
-                .andExpect(jsonPath("$.data.records[0].egressIps[0]").value("203.0.113.10"));
+                .andExpect(jsonPath("$.data.records[0].subject").value("logto-m1"));
+
+        mockMvc.perform(get("/api/admin/users").param("hasActiveSubscription", "false")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')]").isEmpty());
     }
 
     @Test
-    @DisplayName("关键字搜索命中姓名或 subject")
-    void 关键字搜索() throws Exception {
-        fixtures.建用户("logto-user-1", frontId, landId);
-        fixtures.建用户("logto-user-2", frontId, null);
-
-        mockMvc.perform(get("/api/admin/users").param("keyword", "user-2").header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.records[0].subject").value("logto-user-2"));
-    }
-
-    @Test
-    @DisplayName("同一个 Logto 账号重复录入报 410004")
-    void 重复录入报错() throws Exception {
-        fixtures.建用户("logto-user-1", frontId, null);
-
+    @DisplayName("新建用户接口已不存在")
+    void 新建用户接口已不存在() throws Exception {
         mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", frontId, null))))
-                .andExpect(jsonPath("$.code").value(410004));
+                        .content(json(更新入参("张三", "ACTIVE", frontId, null))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("更新只改处置态与节点，subject 不受影响")
+    void 更新只改处置态与节点() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(更新入参("改名", "SUSPENDED", frontId, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        var user = userRepository.findById(memberNoSubId).orElseThrow();
+        assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+        assertThat(user.getName()).isEqualTo("改名");
+        assertThat(user.getSubject()).isEqualTo("logto-m2");
     }
 
     @Test
     @DisplayName("落地节点已被占用时报 410002")
-    void 落地被占用时报错() throws Exception {
-        fixtures.建用户("logto-user-1", frontId, landId);
-
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
+    void 落地节点占用时报错() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-2", frontId, landId))))
+                        .content(json(更新入参("改名", "ACTIVE", frontId, landId))))
                 .andExpect(jsonPath("$.code").value(410002));
     }
 
     @Test
     @DisplayName("节点不存在报 410001，节点角色用错报 410005")
     void 节点校验() throws Exception {
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", 99999L, null))))
+                        .content(json(更新入参("改名", "ACTIVE", 99999L, null))))
                 .andExpect(jsonPath("$.code").value(410001));
 
         // 把落地节点当第一跳用
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", landId, null))))
+                        .content(json(更新入参("改名", "ACTIVE", landId, null))))
                 .andExpect(jsonPath("$.code").value(410005));
 
         // 把第一跳节点当落地用
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", frontId, frontId))))
+                        .content(json(更新入参("改名", "ACTIVE", frontId, frontId))))
                 .andExpect(jsonPath("$.code").value(410005));
-    }
-
-    @Test
-    @DisplayName("更新能取消落地分配，释放出来的落地可以给别人")
-    void 更新能取消落地分配() throws Exception {
-        Long id = fixtures.建用户("logto-user-1", frontId, landId);
-
-        mockMvc.perform(put("/api/admin/users/" + id).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", frontId, null))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findById(id).orElseThrow().getLandNodeId()).isNull();
-
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-2", frontId, landId))))
-                .andExpect(jsonPath("$.code").value(0));
-    }
-
-    @Test
-    @DisplayName("更新时把落地改回自己名下不报占用")
-    void 更新时保留原落地不报占用() throws Exception {
-        Long id = fixtures.建用户("logto-user-1", frontId, landId);
-        Map<String, Object> body = 入参("logto-user-1", frontId, landId);
-        body.put("status", "SUSPENDED");
-
-        mockMvc.perform(put("/api/admin/users/" + id).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
-                .andExpect(jsonPath("$.code").value(0));
-    }
-
-    @Test
-    @DisplayName("角色不能通过接口修改：请求体里塞 role 也不生效")
-    void 角色不能通过接口修改() throws Exception {
-        Map<String, Object> body = 入参("logto-user-1", frontId, null);
-        body.put("role", "ADMIN");
-
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findBySubject("logto-user-1").orElseThrow().getRole())
-                .isEqualTo(UserRole.MEMBER);
-    }
-
-    @Test
-    @DisplayName("更新一个 ADMIN 用户时，请求体里塞 role: MEMBER 也不能把它降级")
-    void 更新不能把管理员降级() throws Exception {
-        Long id = fixtures.建用户("logto-admin-1", UserRole.ADMIN, UserStatus.ACTIVE, frontId, null);
-
-        Map<String, Object> body = 入参("logto-admin-1", frontId, null);
-        body.put("name", "改过的姓名");
-        body.put("role", "MEMBER");
-
-        mockMvc.perform(put("/api/admin/users/" + id).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
-                .andExpect(jsonPath("$.code").value(0));
-
-        var user = userRepository.findById(id).orElseThrow();
-        assertThat(user.getName()).isEqualTo("改过的姓名");
-        assertThat(user.getRole()).isEqualTo(UserRole.ADMIN);
     }
 
     @Test
@@ -233,7 +185,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void 用户不存在时报错() throws Exception {
         mockMvc.perform(put("/api/admin/users/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(入参("logto-user-1", frontId, null))))
+                        .content(json(更新入参("改名", "ACTIVE", frontId, null))))
                 .andExpect(jsonPath("$.code").value(410006));
 
         mockMvc.perform(delete("/api/admin/users/99999").header("Authorization", bearer(adminId)))
@@ -241,24 +193,21 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("删除用户后其落地出口即释放")
-    void 删除用户后落地释放() throws Exception {
-        Long id = fixtures.建用户("logto-user-1", frontId, landId);
-
-        mockMvc.perform(delete("/api/admin/users/" + id).header("Authorization", bearer(adminId)))
+    @DisplayName("删除用户级联删订阅")
+    void 删除用户级联删订阅() throws Exception {
+        mockMvc.perform(delete("/api/admin/users/" + memberWithSubId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
 
-        assertThat(userRepository.findById(id)).isEmpty();
-        assertThat(userRepository.findByLandNodeId(landId)).isEmpty();
+        assertThat(userRepository.findById(memberWithSubId)).isEmpty();
+        assertThat(subscriptionRepository.findByUserId(memberWithSubId)).isEmpty();
     }
 
     @Test
     @DisplayName("必填项缺失时报参数错误 110001")
     void 必填项缺失时报参数错误() throws Exception {
-        Map<String, Object> body = 入参(null, frontId, null);
-
-        mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(更新入参(null, "ACTIVE", frontId, null))))
                 .andExpect(jsonPath("$.code").value(110001));
     }
 }

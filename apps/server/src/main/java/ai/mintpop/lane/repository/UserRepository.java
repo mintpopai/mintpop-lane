@@ -19,8 +19,12 @@ public interface UserRepository {
     /** 反查某个落地节点当前被谁占用 */
     Optional<UserDto> findByLandNodeId(Long landNodeId);
 
-    /** 分页搜索；keyword 为空时不过滤，非空时匹配姓名或 subject。按 id 升序。 */
-    PageResult<UserDto> search(String keyword, long pageNo, long pageSize);
+    /**
+     * 分页搜索；keyword 为空时不过滤，非空时匹配姓名或 subject。
+     * hasActiveSubscription 为 null 时不按订阅状态过滤，非 null 时只返回「有/没有」在期订阅的用户。
+     * 按 id 升序。
+     */
+    PageResult<UserDto> search(String keyword, Boolean hasActiveSubscription, long pageNo, long pageSize);
 
     /** 新建，返回自增主键 */
     Long create(UserDto user);
@@ -39,8 +43,6 @@ public interface UserRepository {
     void update(UserDto user);
 
     void deleteById(Long id);
-
-    boolean existsBySubject(String subject);
 
     boolean existsByFrontNodeId(Long nodeId);
 }
