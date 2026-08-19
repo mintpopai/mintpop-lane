@@ -25,3 +25,7 @@ lane:
   crypto:
     # 测试专用固定密钥（32 字节的 Base64），只用于测试，不是任何环境的真实密钥
     key: "bWludHBvcC10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZCE="
+  auth:
+    # 测试专用固定密钥，32 字节，不是任何环境的真实密钥
+    session-secret: "lane-test-session-secret-0123456789ab"
+    admin-frontend-url: "http://admin.test.example"
