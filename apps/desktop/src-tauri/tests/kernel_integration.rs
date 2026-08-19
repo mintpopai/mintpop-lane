@@ -33,7 +33,7 @@ async fn 热加载配置后不会把凭据写回磁盘() {
     let kernel = MihomoKernel::spawn(&bin, dir.path()).unwrap();
     kernel.wait_ready(Duration::from_secs(10)).await.unwrap();
 
-    let secret_marker = "MINTPOP_SECRET_MARKER_9F2A";
+    let secret_marker = "PIER_SECRET_MARKER_9F2A";
     let yaml = format!(
         "allow-lan: false\nmode: rule\nproxies:\n  - name: LAND\n    type: socks5\n    \
          server: 127.0.0.1\n    port: 1080\n    password: {secret_marker}\nrules:\n  - MATCH,REJECT\n"

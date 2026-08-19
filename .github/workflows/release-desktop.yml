@@ -89,7 +89,7 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Mintpop desktop v${{ steps.prev.outputs.version }}
+          name: Pier desktop v${{ steps.prev.outputs.version }}
           body_path: notes.md
 
   bundle:
@@ -125,7 +125,7 @@ jobs:
       - name: 构建安装包
         env:
           # Logto 的 issuer/client_id/api_resource 由服务端下发，不再编译进包
-          MINTPOP_SERVER_URL: ${{ vars.MINTPOP_SERVER_URL }}
+          PIER_SERVER_URL: ${{ vars.PIER_SERVER_URL }}
         run: mise run build-desktop
 
       - name: 上传制品到 Release
