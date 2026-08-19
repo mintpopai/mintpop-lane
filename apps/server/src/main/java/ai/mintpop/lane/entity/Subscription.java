@@ -1,43 +1,41 @@
 package ai.mintpop.lane.entity;
 
+import ai.mintpop.lane.enumeration.AgentType;
 import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import ai.mintpop.lane.enumeration.UserRole;
-import ai.mintpop.lane.enumeration.UserStatus;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 /**
- * app_user 表映射。这是「带密文」的持久化形态，
- * 业务层一律使用 UserDto（明文），转换由 UserConverter 负责。
+ * subscription 表映射。这是「带密文」的持久化形态，
+ * 业务层一律使用 SubscriptionDto（明文），转换由 SubscriptionConverter 负责。
  */
 @Data
-@TableName("app_user")
-public class User {
+@TableName("subscription")
+public class Subscription {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** Logto 中的 user id，即 JWT 的 sub */
-    private String subject;
+    private Long userId;
 
-    /** 邮箱，登录时从 id_token 同步 */
-    private String email;
+    private AgentType agentType;
 
+    /** 用户可见的套餐名 */
     private String name;
 
-    private UserRole role;
+    private LocalDateTime startsAt;
 
-    private UserStatus status;
+    private LocalDateTime endsAt;
 
-    private Long frontNodeId;
+    /** 席位凭据的密文 */
+    private String credentialCipher;
 
-    /** 落地节点 id，null 表示尚未分配 */
-    private Long landNodeId;
+    private String remark;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createdAt;

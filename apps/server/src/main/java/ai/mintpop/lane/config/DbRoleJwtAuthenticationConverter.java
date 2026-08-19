@@ -18,7 +18,7 @@ import java.util.List;
  * 权限来自本系统的 app_user.role，而不是 token 里的 scope / roles 声明——
  * 身份提供方只回答「你是谁」，「你能干什么」由业务系统自己说了算。
  * 库里查不到这个 sub 时不授予任何权限：他访问 /api/admin/** 会得到 403，
- * 访问 /api/link/** 仍按业务错误 ACCOUNT_NOT_ENROLLED 处理，行为不变。
+ * 访问 /api/link/** 仍按业务错误 LINK_REVOKED 处理，行为不变。
  */
 @Component
 public class DbRoleJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {

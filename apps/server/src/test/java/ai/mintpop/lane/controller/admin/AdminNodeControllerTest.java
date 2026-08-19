@@ -3,6 +3,7 @@ package ai.mintpop.lane.controller.admin;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
+import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
@@ -47,6 +48,9 @@ class AdminNodeControllerTest extends MysqlTestBase {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
     private DatabaseFixtures fixtures;
 
     /** 管理员身份。角色到权限的映射另有单测覆盖，这里直接给权限。 */
@@ -60,7 +64,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void 准备() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.清空();
     }
 

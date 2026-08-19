@@ -55,13 +55,13 @@ public class AdminUserServiceImpl implements AdminUserService {
 
         UserDto user = new UserDto();
         user.setSubject(request.getSubject());
+        user.setEmail(request.getEmail());
         user.setName(request.getName());
         // 角色固定 MEMBER：提权只能改库
         user.setRole(UserRole.MEMBER);
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
         user.setLandNodeId(request.getLandNodeId());
-        user.setClaudeCredential(空白转null(request.getClaudeCredential()));
 
         return 兜住唯一约束(() -> userRepository.create(user));
     }
@@ -79,15 +79,11 @@ public class AdminUserServiceImpl implements AdminUserService {
         校验落地可用(request.getLandNodeId(), id);
 
         user.setSubject(request.getSubject());
+        user.setEmail(request.getEmail());
         user.setName(request.getName());
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
         user.setLandNodeId(request.getLandNodeId());
-        // 凭据留空表示沿用原值：页面上看不到原凭据，不能因为没重填就把它清掉
-        String credential = 空白转null(request.getClaudeCredential());
-        if (credential != null) {
-            user.setClaudeCredential(credential);
-        }
         // role 不从入参取，沿用库里的值
 
         兜住唯一约束(() -> {
@@ -151,6 +147,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         return new AdminUserResponse(
                 user.getId(),
                 user.getSubject(),
+                user.getEmail(),
                 user.getName(),
                 user.getRole(),
                 user.getStatus(),
@@ -159,7 +156,6 @@ public class AdminUserServiceImpl implements AdminUserService {
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),
                 land == null ? List.of() : land.getEgressIps(),
-                user.getClaudeCredential() != null && !user.getClaudeCredential().isBlank(),
                 user.getCreatedAt(),
                 user.getUpdatedAt());
     }

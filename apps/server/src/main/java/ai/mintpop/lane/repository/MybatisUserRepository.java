@@ -90,12 +90,12 @@ public class MybatisUserRepository implements UserRepository {
         mapper.update(null, Wrappers.<User>lambdaUpdate()
                 .eq(User::getId, user.getId())
                 .set(User::getSubject, entity.getSubject())
+                .set(User::getEmail, entity.getEmail())
                 .set(User::getName, entity.getName())
                 .set(User::getRole, entity.getRole())
                 .set(User::getStatus, entity.getStatus())
                 .set(User::getFrontNodeId, entity.getFrontNodeId())
-                .set(User::getLandNodeId, entity.getLandNodeId())
-                .set(User::getClaudeCredentialCipher, entity.getClaudeCredentialCipher()));
+                .set(User::getLandNodeId, entity.getLandNodeId()));
     }
 
     @Override

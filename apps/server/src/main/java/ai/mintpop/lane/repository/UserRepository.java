@@ -32,10 +32,9 @@ public interface UserRepository {
      * <p>
      * 调用前提：入参必须是先 {@link #findById(Long)} 拿到的完整 DTO，改动要改的字段后
      * 原样回传其余字段；如果直接 new 一个只填了部分字段的 DTO 调用本方法，未填的字段会
-     * 被当作「显式改成 null/默认值」真的写进库——例如漏填 {@code claudeCredential} 会
-     * 把该用户的席位凭据静默清空（等同吊销），漏填 {@code status} 会被重置成默认值
-     * {@code ACTIVE}。这与 {@link ProxyNodeRepository#update} 的「null 字段跳过」语义
-     * 相反，调用方不要搞混。
+     * 被当作「显式改成 null/默认值」真的写进库——例如漏填 {@code landNodeId} 会把已分配的
+     * 落地出口静默清空，漏填 {@code status} 会被重置成默认值 {@code ACTIVE}。这与
+     * {@link ProxyNodeRepository#update} 的「null 字段跳过」语义相反，调用方不要搞混。
      */
     void update(UserDto user);
 

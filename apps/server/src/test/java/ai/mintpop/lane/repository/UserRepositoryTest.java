@@ -24,6 +24,9 @@ class UserRepositoryTest extends MysqlTestBase {
     private ProxyNodeRepository nodeRepository;
 
     @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     private DatabaseFixtures fixtures;
@@ -32,14 +35,14 @@ class UserRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void 准备() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository, subscriptionRepository);
         fixtures.清空();
         frontId = fixtures.建FRONT节点("FRONT-1");
         landId = fixtures.建LAND节点("LAND-1", "203.0.113.10");
     }
 
     @Test
-    @DisplayName("用户存取往返，凭据能原样取回")
+    @DisplayName("用户存取往返，邮箱能原样取回")
     void 用户存取往返() {
         Long id = fixtures.建用户("logto-user-1", frontId, landId);
 
@@ -51,18 +54,8 @@ class UserRepositoryTest extends MysqlTestBase {
         assertThat(loaded.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(loaded.getFrontNodeId()).isEqualTo(frontId);
         assertThat(loaded.getLandNodeId()).isEqualTo(landId);
-        assertThat(loaded.getClaudeCredential()).isEqualTo("sk-ant-logto-user-1");
+        assertThat(loaded.getEmail()).isEqualTo("logto-user-1@test.example");
         assertThat(loaded.getCreatedAt()).isNotNull();
-    }
-
-    @Test
-    @DisplayName("席位凭据在库里是密文")
-    void 席位凭据在库里是密文() {
-        Long id = fixtures.建用户("logto-user-1", frontId, landId);
-
-        String stored = fixtures.读原始密文列("app_user", "claude_credential_cipher", id);
-
-        assertThat(stored).isNotBlank().doesNotContain("sk-ant-logto-user-1");
     }
 
     @Test

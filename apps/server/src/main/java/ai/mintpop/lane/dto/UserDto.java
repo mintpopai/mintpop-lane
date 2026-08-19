@@ -3,12 +3,12 @@ package ai.mintpop.lane.dto;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import lombok.Data;
-import lombok.ToString;
 
 import java.time.LocalDateTime;
 
 /**
- * 用户的明文领域对象。席位凭据在这里是明文，密文只存在于 entity 与 converter 之间。
+ * 用户的明文领域对象：身份、链路绑定与账号处置态。
+ * 服务权益（凭据在内）已搬到 SubscriptionDto，这里不再有密文字段。
  */
 @Data
 public class UserDto {
@@ -17,6 +17,9 @@ public class UserDto {
 
     /** Logto 中的 user id，即 JWT 的 sub */
     private String subject;
+
+    /** 邮箱，登录时从 id_token 同步 */
+    private String email;
 
     private String name;
 
@@ -29,10 +32,6 @@ public class UserDto {
 
     /** 第二跳落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
-
-    /** Claude 席位长效凭据（明文）。排除出 toString，避免凭据随日志外泄 */
-    @ToString.Exclude
-    private String claudeCredential;
 
     private LocalDateTime createdAt;
 

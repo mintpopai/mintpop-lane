@@ -1,0 +1,30 @@
+package ai.mintpop.lane.repository;
+
+import ai.mintpop.lane.dto.SubscriptionDto;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+/** 订阅的读写口。返回的一律是明文 DTO，密文与 MyBatis-Plus 都被挡在实现之下。 */
+public interface SubscriptionRepository {
+
+    Optional<SubscriptionDto> findById(Long id);
+
+    /** 某用户的全部订阅（含已过期），按 id 升序 */
+    List<SubscriptionDto> findByUserId(Long userId);
+
+    /** 批量取多个用户的全部订阅，供管理端列表拼摘要，避免逐行查询 */
+    List<SubscriptionDto> findByUserIds(Collection<Long> userIds);
+
+    /** 新建，返回自增主键 */
+    Long create(SubscriptionDto subscription);
+
+    /**
+     * 按 id 更新全部可变字段。null 会被显式写库（凭据置空即清除），
+     * 调用前提同 UserRepository.update：必须回传 findById 拿到的完整 DTO。
+     */
+    void update(SubscriptionDto subscription);
+
+    void deleteById(Long id);
+}

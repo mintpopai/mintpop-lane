@@ -3,6 +3,7 @@ package ai.mintpop.lane.config;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
+import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
@@ -38,6 +39,9 @@ class AdminAuthorizationTest extends MysqlTestBase {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
 
     /**
      * 只在这一条端到端用例里用到：其余用例走 {@code jwt()} 后处理器直接注入认证对象，
@@ -91,11 +95,11 @@ class AdminAuthorizationTest extends MysqlTestBase {
     @Test
     @DisplayName("端到端：库里的 role 经真实过滤器链转换成权限——ADMIN 放行、MEMBER 拒绝")
     void 库里的role经真实过滤器链授权() throws Exception {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.清空();
         Long front = fixtures.建FRONT节点("FRONT-1");
-        fixtures.建用户("admin-sub", UserRole.ADMIN, UserStatus.ACTIVE, front, null, "sk-ant-admin");
-        fixtures.建用户("member-sub", UserRole.MEMBER, UserStatus.ACTIVE, front, null, "sk-ant-member");
+        fixtures.建用户("admin-sub", UserRole.ADMIN, UserStatus.ACTIVE, front, null);
+        fixtures.建用户("member-sub", UserRole.MEMBER, UserStatus.ACTIVE, front, null);
 
         when(jwtDecoder.decode("admin-token")).thenReturn(假Jwt("admin-sub", "admin-token"));
         when(jwtDecoder.decode("member-token")).thenReturn(假Jwt("member-sub", "member-token"));

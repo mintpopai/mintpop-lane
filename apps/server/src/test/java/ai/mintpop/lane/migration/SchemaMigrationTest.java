@@ -19,6 +19,7 @@ class SchemaMigrationTest extends MysqlTestBase {
     @BeforeEach
     void 清空数据() {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
@@ -34,25 +35,35 @@ class SchemaMigrationTest extends MysqlTestBase {
 
     private void 建用户(String subject, long frontNodeId, Long landNodeId) {
         jdbc.update("""
-                INSERT INTO app_user (subject, name, front_node_id, land_node_id)
-                VALUES (?, ?, ?, ?)
-                """, subject, "测试" + subject, frontNodeId, landNodeId);
+                INSERT INTO app_user (subject, email, name, front_node_id, land_node_id)
+                VALUES (?, ?, ?, ?, ?)
+                """, subject, subject + "@test.example", "测试" + subject, frontNodeId, landNodeId);
     }
 
     @Test
-    @DisplayName("Flyway 迁移建出两张表，且列注释落到了数据库元数据上")
-    void 迁移建出两张表并带中文注释() {
+    @DisplayName("Flyway 迁移建出三张表，且列注释落到了数据库元数据上")
+    void 迁移建出三张表并带中文注释() {
         Integer tables = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = DATABASE() AND table_name IN ('proxy_node', 'app_user')
+                WHERE table_schema = DATABASE() AND table_name IN ('proxy_node', 'app_user', 'subscription')
                 """, Integer.class);
-        assertThat(tables).isEqualTo(2);
+        assertThat(tables).isEqualTo(3);
 
         String comment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
                 WHERE table_schema = DATABASE() AND table_name = 'app_user' AND column_name = 'land_node_id'
                 """, String.class);
         assertThat(comment).contains("NULL 表示尚未分配");
+    }
+
+    @Test
+    @DisplayName("subscription 表的列注释落到了数据库元数据上")
+    void 订阅表带中文注释() {
+        String comment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'ends_at'
+                """, String.class);
+        assertThat(comment).contains("在期判定");
     }
 
     @Test

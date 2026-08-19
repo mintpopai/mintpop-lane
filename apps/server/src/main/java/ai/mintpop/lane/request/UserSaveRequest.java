@@ -1,11 +1,11 @@
 package ai.mintpop.lane.request;
 
 import ai.mintpop.lane.enumeration.UserStatus;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import lombok.ToString;
 
 /**
  * 新建或更新用户的入参。
@@ -17,6 +17,11 @@ public class UserSaveRequest {
     @NotBlank(message = "Logto user id 不能为空")
     @Size(max = 128, message = "Logto user id 最长 128 个字符")
     private String subject;
+
+    @NotBlank(message = "邮箱不能为空")
+    @Email(message = "邮箱格式不正确")
+    @Size(max = 255, message = "邮箱最长 255 个字符")
+    private String email;
 
     @NotBlank(message = "姓名不能为空")
     @Size(max = 64, message = "姓名最长 64 个字符")
@@ -30,12 +35,4 @@ public class UserSaveRequest {
 
     /** 落地节点 id，null 表示不分配 */
     private Long landNodeId;
-
-    /**
-     * Claude 席位凭据。更新时留空表示沿用原值。
-     * 排除出 toString，与 {@code UserDto.claudeCredential} / {@code ProxyNodeDto.secret} /
-     * {@code NodeSaveRequest.secret} 保持一致：避免凭据随日志外泄。
-     */
-    @ToString.Exclude
-    private String claudeCredential;
 }
