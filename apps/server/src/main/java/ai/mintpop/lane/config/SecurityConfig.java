@@ -3,6 +3,7 @@ package ai.mintpop.lane.config;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.security.CookieOAuth2AuthorizationRequestRepository;
 import ai.mintpop.lane.security.DesktopFlowCookie;
+import ai.mintpop.lane.security.NoOpAuthorizedClientRepository;
 import ai.mintpop.lane.security.OidcLoginSuccessHandler;
 import ai.mintpop.lane.security.SessionAuthFilter;
 import ai.mintpop.lane.service.SessionTokenService;
@@ -54,6 +55,9 @@ public class SecurityConfig {
                         // 握手中间态存 Cookie（只对本浏览器有效），不落服务端 session
                         .authorizationEndpoint(ae -> ae.authorizationRequestRepository(
                                 new CookieOAuth2AuthorizationRequestRepository()))
+                        // Logto 的 access/refresh token 用完即弃：不让框架默认存进 HttpSession
+                        // （否则会话即状态，且会顺带下发 JSESSIONID，与自签会话、后端无状态相悖）
+                        .authorizedClientRepository(new NoOpAuthorizedClientRepository())
                         // 回调路径固定 /auth/callback，与 Logto 应用里注册的 Redirect URI 逐字一致
                         .redirectionEndpoint(re -> re.baseUri("/auth/callback"))
                         .successHandler(successHandler)

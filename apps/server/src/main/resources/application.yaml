@@ -22,6 +22,9 @@ server:
   # 不设 address：容器内必须绑 0.0.0.0（容器网络本身是边界，
   # 不对外由 compose 的宿主端口只绑 127.0.0.1 保证）。
   # 本地开发时在 application-local.yaml 里绑回环。
+  # 反代终结 TLS，按 X-Forwarded-* 还原 https，否则会话 Cookie 的 Secure 不生效；
+  # 本地无此头等于无操作。
+  forward-headers-strategy: framework
 
 management:
   endpoints:
