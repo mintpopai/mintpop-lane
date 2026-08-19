@@ -77,10 +77,9 @@ class AdminUserControllerTest extends MysqlTestBase {
         return objectMapper.writeValueAsString(body);
     }
 
-    /** 可变 Map：部分用例要放 null 值，Map.of 不允许 */
-    private Map<String, Object> 更新入参(String name, String status, Long front, Long land) {
+    /** 可变 Map：部分用例要放 null 值，Map.of 不允许。name 不再是入参字段，接口收窄为处置态+节点 */
+    private Map<String, Object> 更新入参(String status, Long front, Long land) {
         Map<String, Object> body = new HashMap<>();
-        body.put("name", name);
         body.put("status", status);
         body.put("frontNodeId", front);
         body.put("landNodeId", land);
@@ -132,21 +131,24 @@ class AdminUserControllerTest extends MysqlTestBase {
     void 新建用户接口已不存在() throws Exception {
         mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("张三", "ACTIVE", frontId, null))))
+                        .content(json(更新入参("ACTIVE", frontId, null))))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("更新只改处置态与节点，subject 不受影响")
+    @DisplayName("更新只改处置态与节点，subject/name 不受影响")
     void 更新只改处置态与节点() throws Exception {
+        var before = userRepository.findById(memberNoSubId).orElseThrow();
+
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("改名", "SUSPENDED", frontId, null))))
+                        .content(json(更新入参("SUSPENDED", frontId, null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         var user = userRepository.findById(memberNoSubId).orElseThrow();
         assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
-        assertThat(user.getName()).isEqualTo("改名");
+        // 更新接口不再收 name 参数：库里的原值不受影响（改名只能靠登录同步）
+        assertThat(user.getName()).isEqualTo(before.getName());
         assertThat(user.getSubject()).isEqualTo("logto-m2");
     }
 
@@ -155,7 +157,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void 落地节点占用时报错() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("改名", "ACTIVE", frontId, landId))))
+                        .content(json(更新入参("ACTIVE", frontId, landId))))
                 .andExpect(jsonPath("$.code").value(410002));
     }
 
@@ -164,19 +166,19 @@ class AdminUserControllerTest extends MysqlTestBase {
     void 节点校验() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("改名", "ACTIVE", 99999L, null))))
+                        .content(json(更新入参("ACTIVE", 99999L, null))))
                 .andExpect(jsonPath("$.code").value(410001));
 
         // 把落地节点当第一跳用
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("改名", "ACTIVE", landId, null))))
+                        .content(json(更新入参("ACTIVE", landId, null))))
                 .andExpect(jsonPath("$.code").value(410005));
 
         // 把第一跳节点当落地用
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("改名", "ACTIVE", frontId, frontId))))
+                        .content(json(更新入参("ACTIVE", frontId, frontId))))
                 .andExpect(jsonPath("$.code").value(410005));
     }
 
@@ -185,7 +187,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void 用户不存在时报错() throws Exception {
         mockMvc.perform(put("/api/admin/users/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("改名", "ACTIVE", frontId, null))))
+                        .content(json(更新入参("ACTIVE", frontId, null))))
                 .andExpect(jsonPath("$.code").value(410006));
 
         mockMvc.perform(delete("/api/admin/users/99999").header("Authorization", bearer(adminId)))
@@ -207,7 +209,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void 必填项缺失时报参数错误() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参(null, "ACTIVE", frontId, null))))
+                        .content(json(更新入参(null, frontId, null))))
                 .andExpect(jsonPath("$.code").value(110001));
     }
 }

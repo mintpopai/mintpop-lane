@@ -70,11 +70,10 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
         校验落地可用(request.getLandNodeId(), id);
 
-        user.setName(request.getName());
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
         user.setLandNodeId(request.getLandNodeId());
-        // subject/email/role 不从入参取，沿用库里的值
+        // subject/email/role/name 不从入参取，沿用库里的值（name 由登录同步维护，管理端不提供改名入口）
 
         兜住唯一约束(() -> {
             userRepository.update(user);

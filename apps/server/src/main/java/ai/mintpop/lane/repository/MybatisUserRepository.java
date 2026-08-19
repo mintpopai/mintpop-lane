@@ -64,7 +64,10 @@ public class MybatisUserRepository implements UserRepository {
 
         var query = Wrappers.<User>lambdaQuery().orderByAsc(User::getId);
         if (keyword != null && !keyword.isBlank()) {
-            query.and(w -> w.like(User::getName, keyword).or().like(User::getSubject, keyword));
+            // email 是管理员在列表里唯一认得出的标识（姓名可能重复、subject 是 Logto 内部 id），必须能搜
+            query.and(w -> w.like(User::getName, keyword)
+                    .or().like(User::getSubject, keyword)
+                    .or().like(User::getEmail, keyword));
         }
         if (Boolean.TRUE.equals(hasActiveSubscription)) {
             query.exists("SELECT 1 FROM subscription s WHERE s.user_id = app_user.id"

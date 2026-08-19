@@ -1,5 +1,6 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.config.AuthProperties;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -25,7 +26,9 @@ import java.util.Base64;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -153,5 +156,15 @@ class AuthControllerTest extends MysqlTestBase {
                         .param("code_challenge", "非法挑战串")
                         .param("state", "desktop-state-01"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("登出：302 回管理端，会话 Cookie 被置空过期")
+    void 登出清会话Cookie并回管理端() throws Exception {
+        mockMvc.perform(get("/auth/logout"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("http://admin.test.example"))
+                .andExpect(cookie().value(AuthProperties.SESSION_COOKIE_NAME, ""))
+                .andExpect(cookie().maxAge(AuthProperties.SESSION_COOKIE_NAME, 0));
     }
 }

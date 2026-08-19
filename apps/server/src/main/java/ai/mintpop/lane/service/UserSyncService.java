@@ -14,6 +14,9 @@ import java.util.Objects;
 @Service
 public class UserSyncService {
 
+    /** app_user.name 列宽 VARCHAR(64)，Logto 侧对 name 无此限制，超长必须先截断再落库 */
+    private static final int NAME_MAX_LENGTH = 64;
+
     private final UserRepository userRepository;
 
     public UserSyncService(UserRepository userRepository) {
@@ -21,7 +24,8 @@ public class UserSyncService {
     }
 
     public UserDto syncOnLogin(String subject, String email, String name) {
-        String safeName = name == null || name.isBlank() ? email.split("@")[0] : name;
+        String rawName = name == null || name.isBlank() ? email.split("@")[0] : name;
+        String safeName = 截断(rawName);
 
         return userRepository.findBySubject(subject)
                 .map(user -> 刷新资料(user, email, safeName))
@@ -52,5 +56,9 @@ public class UserSyncService {
             // 同一账号并发首登撞唯一索引：另一次已建好，读回来用
             return userRepository.findBySubject(subject).orElseThrow();
         }
+    }
+
+    private static String 截断(String name) {
+        return name.length() > NAME_MAX_LENGTH ? name.substring(0, NAME_MAX_LENGTH) : name;
     }
 }

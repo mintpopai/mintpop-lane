@@ -92,4 +92,16 @@ class UserSyncServiceTest extends MysqlTestBase {
         UserDto user = userSyncService.syncOnLogin("logto-c", "carol@example.com", null);
         assertThat(user.getName()).isEqualTo("carol");
     }
+
+    @Test
+    @DisplayName("name 超过 64 字符时截断，避免 VARCHAR(64) 落库报错")
+    void 超长姓名截断() {
+        String longName = "名".repeat(100);
+        UserDto user = userSyncService.syncOnLogin("logto-d", "d@example.com", longName);
+
+        assertThat(user.getName()).hasSize(64);
+        assertThat(user.getName()).isEqualTo("名".repeat(64));
+        UserDto read = userRepository.findById(user.getId()).orElseThrow();
+        assertThat(read.getName()).hasSize(64);
+    }
 }

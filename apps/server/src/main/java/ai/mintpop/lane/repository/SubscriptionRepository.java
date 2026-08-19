@@ -21,8 +21,10 @@ public interface SubscriptionRepository {
     Long create(SubscriptionDto subscription);
 
     /**
-     * 按 id 更新全部可变字段。null 会被显式写库（凭据置空即清除），
-     * 调用前提同 UserRepository.update：必须回传 findById 拿到的完整 DTO。
+     * 按 id 更新全部可变字段。null 会被显式写库；沿用/清除策略由调用方决定
+     * （当前管理端语义为留空沿用——调用前先 findById 拿完整 DTO，字段留空时原样回填，
+     * 而非传 null 靠本方法清空），调用前提同 UserRepository.update：
+     * 必须回传 findById 拿到的完整 DTO。
      */
     void update(SubscriptionDto subscription);
 

@@ -131,6 +131,18 @@ class UserRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("分页搜索：关键字也能命中邮箱")
+    void 分页搜索命中邮箱() {
+        fixtures.建用户("logto-user-1", frontId, landId);
+        fixtures.建用户("logto-user-2", frontId, null);
+
+        assertThat(repository.search("logto-user-1@test.example", null, 1, 10).records())
+                .singleElement()
+                .extracting(UserDto::getSubject)
+                .isEqualTo("logto-user-1");
+    }
+
+    @Test
     @DisplayName("按有无在期订阅筛选")
     void 按有无在期订阅筛选() {
         Long withSub = fixtures.建用户("logto-user-1", frontId, landId);
