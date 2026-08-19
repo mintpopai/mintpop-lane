@@ -199,10 +199,17 @@ async fn handle_callback(app: AppHandle, url: String) {
 }
 
 /// 启动引导：拉取登录接入配置。成功后才谈得上登录，因此静默登录串在它之后。
+///
+/// 用 bootstrap_lock 把整个函数体串行化：启动时的自动引导与用户点重试触发的
+/// 重新引导可能并发发生，两者都会走到 try_silent_login 用同一个 refresh_token
+/// 换新令牌，见 AppState::bootstrap_lock 的注释。持锁跨越下面的 await 是有意为之。
 async fn bootstrap(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let _guard = state.bootstrap_lock.lock().await;
+
     match auth::bootstrap::fetch_client_config(&server_base_url()).await {
         Ok(cfg) => {
-            *app.state::<AppState>().oidc_config.lock().unwrap() = Some(cfg);
+            *state.oidc_config.lock().unwrap() = Some(cfg);
             let _ = app.emit("auth://config-ready", ());
             try_silent_login(app.clone()).await;
             Ok(())

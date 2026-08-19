@@ -22,6 +22,11 @@ pub struct AppState {
     pub sessions: Mutex<HashMap<String, PtySession>>,
     /// 服务端下发的登录接入配置，启动时拉取；拉不到则无法登录
     pub oidc_config: Mutex<Option<OidcConfig>>,
+    /// 引导（bootstrap）互斥锁：串行化自动引导与用户点重试触发的重新引导，
+    /// 防止两次并发的静默登录同时用同一个 refresh_token 换新令牌——
+    /// Logto 每次刷新都会轮换 refresh_token，后完成的一次会读到已作废的旧值，
+    /// 失败分支若清空钥匙串会连带抹掉先完成那次刚保存的新令牌。
+    pub bootstrap_lock: tokio::sync::Mutex<()>,
     /// 当前 access_token，只存内存；refresh_token 另存 OS 钥匙串
     pub access_token: Mutex<Option<String>>,
     pub pending_login: Mutex<Option<PendingLogin>>,
@@ -36,6 +41,7 @@ impl Default for AppState {
             kernel: tokio::sync::Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
             oidc_config: Mutex::new(None),
+            bootstrap_lock: tokio::sync::Mutex::new(()),
             access_token: Mutex::new(None),
             pending_login: Mutex::new(None),
         }
