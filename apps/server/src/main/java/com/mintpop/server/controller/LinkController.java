@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 链路接口。
- * 员工身份取自 JWT 的 sub，客户端无法伪造，也无需在请求里自报身份。
+ * 用户身份取自 JWT 的 sub，客户端无法伪造，也无需在请求里自报身份。
  */
 @Slf4j
 @RestController

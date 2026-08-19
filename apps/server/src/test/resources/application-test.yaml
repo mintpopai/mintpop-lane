@@ -10,34 +10,9 @@ spring:
 
 mintpop:
   link:
-    front:
-      type: trojan
-      server: us.test.example
-      port: 443
-      password: test-password
-    employees:
-      - subject: logto-user-1
-        name: 测试用户一
-        status: ACTIVE
-        expected-egress-ips:
-          - 77.47.143.6
-        land:
-          type: socks5
-          server: 77.47.143.6
-          port: 50101
-          username: u1
-          password: p1
-        claude-credential: sk-ant-test-1
-      - subject: logto-user-2
-        name: 测试用户二
-        status: REVOKED
-        expected-egress-ips:
-          - 8.8.8.8
-        land:
-          type: socks5
-          server: 8.8.8.8
-          port: 50102
-          username: u2
-          password: p2
-        claude-credential: sk-ant-test-2
-    ttl-seconds: 1800
+    # 特意与 LinkProperties.ttlSeconds 的默认值（1800）不同：若把配置绑定删掉，
+    # 字段会回落到默认值，测试断言必须能因此变红，才守得住「配置真的生效」
+    ttl-seconds: 900
+  crypto:
+    # 测试专用固定密钥（32 字节的 Base64），只用于测试，不是任何环境的真实密钥
+    key: "bWludHBvcC10ZXN0LWtleS0wMTIzNDU2Nzg5YWJjZCE="

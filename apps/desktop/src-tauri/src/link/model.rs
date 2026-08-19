@@ -15,7 +15,7 @@ pub struct LinkConfig {
     pub land: Mapping,
     /// 期望的落地出口 IP 集合，用于出口校验
     pub expected_egress_ips: Vec<String>,
-    /// 该员工席位的 Claude 长效凭据
+    /// 该用户席位的 Claude 长效凭据
     pub claude_credential: String,
     /// 配置有效期（秒）
     pub ttl_seconds: u64,

@@ -40,10 +40,10 @@ impl<T> ApiResponse<T> {
     }
 }
 
-/// 员工状态，与服务端 EmployeeStatus 逐字对应
+/// 用户状态，与服务端 UserStatus 逐字对应
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum EmployeeStatus {
+pub enum UserStatus {
     ACTIVE,
     SUSPENDED,
     REVOKED,
@@ -51,7 +51,7 @@ pub enum EmployeeStatus {
 
 #[derive(Debug, Deserialize)]
 pub struct HeartbeatData {
-    pub status: EmployeeStatus,
+    pub status: UserStatus,
 }
 
 /// 服务端下发的链路配置。字段名是 Java 侧的驼峰形式。
@@ -78,7 +78,7 @@ impl LinkConfigData {
 }
 
 fn client() -> reqwest::Client {
-    // 拉配置发生在链路建立之前，只能走员工自己的网络
+    // 拉配置发生在链路建立之前，只能走用户自己的网络
     reqwest::Client::builder()
         .no_proxy()
         .timeout(REQUEST_TIMEOUT)
@@ -102,7 +102,7 @@ pub async fn fetch_link(base_url: &str, access_token: &str) -> Result<LinkConfig
     Ok(body.into_data()?.into_link_config())
 }
 
-pub async fn heartbeat(base_url: &str, access_token: &str) -> Result<EmployeeStatus, RemoteError> {
+pub async fn heartbeat(base_url: &str, access_token: &str) -> Result<UserStatus, RemoteError> {
     let resp = client()
         .post(format!("{base_url}/api/link/heartbeat"))
         .bearer_auth(access_token)
@@ -127,28 +127,28 @@ mod tests {
         let raw = r#"{"code":0,"data":{"status":"ACTIVE"},"msg":null}"#;
         let resp: ApiResponse<HeartbeatData> = serde_json::from_str(raw).unwrap();
 
-        assert_eq!(resp.into_data().unwrap().status, EmployeeStatus::ACTIVE);
+        assert_eq!(resp.into_data().unwrap().status, UserStatus::ACTIVE);
     }
 
     #[test]
     fn 业务码非零时转为错误并带上服务端文案() {
         // HTTP 是 200，成败只看 code——与服务端约定一致
-        let raw = r#"{"code":310003,"data":null,"msg":"该员工的链路已被吊销"}"#;
+        let raw = r#"{"code":310003,"data":null,"msg":"该用户的链路已被吊销"}"#;
         let resp: ApiResponse<HeartbeatData> = serde_json::from_str(raw).unwrap();
 
         match resp.into_data() {
             Err(RemoteError::Biz { code, msg }) => {
                 assert_eq!(code, 310003);
-                assert_eq!(msg, "该员工的链路已被吊销");
+                assert_eq!(msg, "该用户的链路已被吊销");
             }
             _ => panic!("应当转为业务错误"),
         }
     }
 
     #[test]
-    fn 员工状态按大写下划线取值解析() {
-        let s: EmployeeStatus = serde_json::from_str("\"REVOKED\"").unwrap();
-        assert_eq!(s, EmployeeStatus::REVOKED);
+    fn 用户状态按大写下划线取值解析() {
+        let s: UserStatus = serde_json::from_str("\"REVOKED\"").unwrap();
+        assert_eq!(s, UserStatus::REVOKED);
     }
 
     #[test]

@@ -1,0 +1,67 @@
+package com.mintpop.server.repository;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.mintpop.server.converter.ProxyNodeConverter;
+import com.mintpop.server.dto.ProxyNodeDto;
+import com.mintpop.server.entity.ProxyNode;
+import com.mintpop.server.enumeration.NodeRole;
+import com.mintpop.server.mapper.ProxyNodeMapper;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+/** 节点池的 MySQL 实现。 */
+@Repository
+public class MybatisProxyNodeRepository implements ProxyNodeRepository {
+
+    private final ProxyNodeMapper mapper;
+    private final ProxyNodeConverter converter;
+
+    public MybatisProxyNodeRepository(ProxyNodeMapper mapper, ProxyNodeConverter converter) {
+        this.mapper = mapper;
+        this.converter = converter;
+    }
+
+    @Override
+    public Optional<ProxyNodeDto> findById(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(mapper.selectById(id)).map(converter::toDto);
+    }
+
+    @Override
+    public List<ProxyNodeDto> findAll(NodeRole role) {
+        var query = Wrappers.<ProxyNode>lambdaQuery().orderByAsc(ProxyNode::getId);
+        if (role != null) {
+            query.eq(ProxyNode::getRole, role);
+        }
+        return mapper.selectList(query).stream().map(converter::toDto).toList();
+    }
+
+    @Override
+    public Long create(ProxyNodeDto node) {
+        ProxyNode entity = converter.toEntity(node);
+        entity.setId(null);
+        mapper.insert(entity);
+        return entity.getId();
+    }
+
+    @Override
+    public void update(ProxyNodeDto node) {
+        // 走实体更新（而非 update wrapper 的逐列 set）：JSON 列的 typeHandler 只在
+        // 实体方式下生效，用 set() 会把 Map 当普通参数写进去
+        mapper.updateById(converter.toEntity(node));
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        mapper.deleteById(id);
+    }
+
+    @Override
+    public boolean existsByName(String name) {
+        return mapper.selectCount(Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getName, name)) > 0;
+    }
+}

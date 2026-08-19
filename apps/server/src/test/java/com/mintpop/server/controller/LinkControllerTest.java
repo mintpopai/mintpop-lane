@@ -1,26 +1,51 @@
 package com.mintpop.server.controller;
 
+import com.mintpop.server.repository.ProxyNodeRepository;
+import com.mintpop.server.repository.UserRepository;
+import com.mintpop.server.support.DatabaseFixtures;
+import com.mintpop.server.support.MysqlTestBase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static com.mintpop.server.enumeration.UserRole.MEMBER;
+import static com.mintpop.server.enumeration.UserStatus.ACTIVE;
+import static com.mintpop.server.enumeration.UserStatus.REVOKED;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("test")
-class LinkControllerTest {
+class LinkControllerTest extends MysqlTestBase {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
+    private ProxyNodeRepository nodeRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @BeforeEach
+    void 准备数据() {
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository);
+        fixtures.清空();
+        Long front = fixtures.建FRONT节点("FRONT-1");
+        Long land1 = fixtures.建LAND节点("LAND-1", "77.47.143.6");
+        Long land2 = fixtures.建LAND节点("LAND-2", "8.8.8.8");
+        fixtures.建用户("logto-user-1", MEMBER, ACTIVE, front, land1, "sk-ant-test-1");
+        fixtures.建用户("logto-user-2", MEMBER, REVOKED, front, land2, "sk-ant-test-2");
+    }
 
     @Test
     @DisplayName("无令牌访问接口被拒")
@@ -30,8 +55,8 @@ class LinkControllerTest {
     }
 
     @Test
-    @DisplayName("正常员工拿到链路配置，业务码为 0")
-    void 正常员工拿到链路配置() throws Exception {
+    @DisplayName("正常用户拿到链路配置，业务码为 0")
+    void 正常用户拿到链路配置() throws Exception {
         mockMvc.perform(get("/api/link/config")
                         .with(jwt().jwt(j -> j.subject("logto-user-1"))))
                 .andExpect(status().isOk())
@@ -43,8 +68,8 @@ class LinkControllerTest {
     }
 
     @Test
-    @DisplayName("已吊销员工拿不到链路，HTTP 仍为 200 但业务码非 0")
-    void 已吊销员工拿不到链路() throws Exception {
+    @DisplayName("已吊销用户拿不到链路，HTTP 仍为 200 但业务码非 0")
+    void 已吊销用户拿不到链路() throws Exception {
         mockMvc.perform(get("/api/link/config")
                         .with(jwt().jwt(j -> j.subject("logto-user-2"))))
                 .andExpect(status().isOk())
@@ -62,8 +87,8 @@ class LinkControllerTest {
     }
 
     @Test
-    @DisplayName("心跳返回员工当前状态")
-    void 心跳返回员工当前状态() throws Exception {
+    @DisplayName("心跳返回用户当前状态")
+    void 心跳返回用户当前状态() throws Exception {
         mockMvc.perform(post("/api/link/heartbeat")
                         .with(jwt().jwt(j -> j.subject("logto-user-1"))))
                 .andExpect(status().isOk())
@@ -72,8 +97,8 @@ class LinkControllerTest {
     }
 
     @Test
-    @DisplayName("已吊销员工的心跳返回 REVOKED")
-    void 已吊销员工的心跳返回吊销() throws Exception {
+    @DisplayName("已吊销用户的心跳返回 REVOKED")
+    void 已吊销用户的心跳返回吊销() throws Exception {
         mockMvc.perform(post("/api/link/heartbeat")
                         .with(jwt().jwt(j -> j.subject("logto-user-2"))))
                 .andExpect(status().isOk())

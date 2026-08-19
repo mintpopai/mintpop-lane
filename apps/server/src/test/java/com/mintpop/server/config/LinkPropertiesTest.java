@@ -1,46 +1,23 @@
 package com.mintpop.server.config;
 
-import com.mintpop.server.enumeration.EmployeeStatus;
+import com.mintpop.server.support.MysqlTestBase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
-@ActiveProfiles("test")
-class LinkPropertiesTest {
+class LinkPropertiesTest extends MysqlTestBase {
 
     @Autowired
     private LinkProperties linkProperties;
 
     @Test
-    @DisplayName("第一跳节点的原始属性被完整读入")
-    void 第一跳节点的原始属性被完整读入() {
-        assertThat(linkProperties.getFront())
-                .containsEntry("type", "trojan")
-                .containsEntry("server", "us.test.example");
-    }
-
-    @Test
-    @DisplayName("员工绑定表按人读入，含出口 IP 与席位凭据")
-    void 员工绑定表按人读入() {
-        assertThat(linkProperties.getEmployees()).hasSize(2);
-
-        var first = linkProperties.getEmployees().getFirst();
-        assertThat(first.getSubject()).isEqualTo("logto-user-1");
-        assertThat(first.getStatus()).isEqualTo(EmployeeStatus.ACTIVE);
-        assertThat(first.getExpectedEgressIps()).containsExactly("77.47.143.6");
-        assertThat(first.getClaudeCredential()).isEqualTo("sk-ant-test-1");
-        assertThat(first.getLand()).containsEntry("type", "socks5");
-    }
-
-    @Test
-    @DisplayName("被停用的员工同样能读入，状态如实反映")
-    void 被停用的员工状态如实反映() {
-        var second = linkProperties.getEmployees().get(1);
-        assertThat(second.getStatus()).isEqualTo(EmployeeStatus.REVOKED);
+    @DisplayName("链路有效期能从配置读入；用户与节点数据不再来自配置文件")
+    void 链路有效期能从配置读入() {
+        // 断言值（900）刻意不同于 LinkProperties.ttlSeconds 的默认值（1800）：
+        // 若 @ConfigurationProperties 绑定被删掉，字段会回落到默认值，
+        // 这条断言就会变红，而不是像之前那样即使绑定失效也照样通过
+        assertThat(linkProperties.getTtlSeconds()).isEqualTo(900);
     }
 }

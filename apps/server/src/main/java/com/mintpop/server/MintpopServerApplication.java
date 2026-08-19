@@ -1,5 +1,6 @@
 package com.mintpop.server;
 
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -8,6 +9,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 只负责验身份、按人下发链路与凭据、心跳吊销，自身不承载任何代理流量。
  */
 @SpringBootApplication
+@MapperScan("com.mintpop.server.mapper")
 public class MintpopServerApplication {
 
     public static void main(String[] args) {

@@ -12,7 +12,7 @@ pub enum LinkState {
     ACTIVE,
     /// 降级：出口 IP 校验不通过，禁止启动新 Agent
     DEGRADED,
-    /// 已吊销：服务端判定该员工不可用，终态
+    /// 已吊销：服务端判定该用户不可用，终态
     REVOKED,
 }
 

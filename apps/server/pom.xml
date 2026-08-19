@@ -19,7 +19,20 @@
 
   <properties>
     <java.version>25</java.version>
+    <mybatis-plus.version>3.5.17</mybatis-plus.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.baomidou</groupId>
+        <artifactId>mybatis-plus-bom</artifactId>
+        <version>${mybatis-plus.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <dependency>
@@ -48,6 +61,44 @@
       <optional>true</optional>
     </dependency>
     <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+    </dependency>
+    <!-- 分页拦截器 PaginationInnerInterceptor 不在 mybatis-plus-extension 里，
+         而在这个单独的子模块（版本由 mybatis-plus-bom 统一管理，故不写 version） -->
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-jsqlparser</artifactId>
+    </dependency>
+    <!-- Spring Boot 4.1 默认只自动装配 Jackson 3（tools.jackson）的 JsonMapper，
+         不再提供经典 Jackson 2（com.fasterxml.jackson）的 ObjectMapper bean；
+         而 MyBatis-Plus 的 JacksonTypeHandler、以及本项目 converter 层的敏感键
+         序列化都依赖经典 ObjectMapper，故显式补上这个依赖（版本由 testcontainers
+         等已引入的 BOM 管理，不写 version） -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-mysql</artifactId>
+    </dependency>
+    <!-- 与 webmvc-test 同理：Spring Boot 4 把 Flyway 的自动配置（FlywayAutoConfiguration）
+         也拆到了独立模块，只有 flyway-core/flyway-mysql（Flyway 本体）不会触发自动迁移 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-flyway</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
@@ -57,10 +108,42 @@
       <artifactId>spring-security-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Spring Boot 4 把 MockMvc 的测试自动配置拆到了按技术切分的独立模块里，
+         starter-test 不再传递它，@AutoConfigureMockMvc 需要显式引入 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-mysql</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!-- JDK 23 起 javac 默认不再从 classpath 隐式发现注解处理器，
+               必须显式声明处理器路径，否则 Lombok 一个 getter 都不会生成 -->
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+              <version>${lombok.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>

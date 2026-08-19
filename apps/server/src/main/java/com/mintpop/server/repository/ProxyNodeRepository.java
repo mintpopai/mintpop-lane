@@ -1,0 +1,43 @@
+package com.mintpop.server.repository;
+
+import com.mintpop.server.dto.ProxyNodeDto;
+import com.mintpop.server.enumeration.NodeRole;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 节点池的读写口。上层只依赖这个接口，看不到 MyBatis-Plus 与密文。
+ */
+public interface ProxyNodeRepository {
+
+    Optional<ProxyNodeDto> findById(Long id);
+
+    /** 按角色列出节点；role 为 null 时返回全部。按 id 升序。 */
+    List<ProxyNodeDto> findAll(NodeRole role);
+
+    /** 新建，返回自增主键 */
+    Long create(ProxyNodeDto node);
+
+    /**
+     * 按 id 更新。
+     * <p>
+     * 用实体方式更新以便 JSON 列的 typeHandler 生效，代价是 **null 字段会被跳过**：
+     * <ul>
+     *   <li>{@code extraConfig} / {@code egressIps} 传空集合可以把该字段覆盖为空；</li>
+     *   <li>{@code secret} 传 null 或空 Map 都表示「沿用原有敏感键」，**无法通过 update
+     *       清空**——这与管理端「敏感键留空即不改」的语义一致（页面上看不到原密码，
+     *       没重填就不该被清掉）。</li>
+     * </ul>
+     * <p>
+     * 调用前提：入参必须是先 {@link #findById(Long)} 拿到的完整 DTO，改动要改的字段后
+     * 原样回传其余字段；如果直接 new 一个只填了部分字段的 DTO 调用本方法，
+     * {@code status} 会被静默重置成默认值 {@code ENABLED}，{@code extraConfig} /
+     * {@code egressIps} 会被覆盖成空集合。
+     */
+    void update(ProxyNodeDto node);
+
+    void deleteById(Long id);
+
+    boolean existsByName(String name);
+}
