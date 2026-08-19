@@ -9,7 +9,7 @@ const route = useRoute();
 <template>
   <el-container style="height: 100%">
     <el-aside width="180px" style="border-right: 1px solid #e4e7ed">
-      <div style="padding: 18px 16px; font-weight: 600">Pier 管控后台</div>
+      <div style="padding: 18px 16px; font-weight: 600">Lane 管控后台</div>
       <el-menu :default-active="String(route.name)" router>
         <el-menu-item index="USERS" :route="{ name: 'USERS' }">用户</el-menu-item>
         <el-menu-item index="NODES" :route="{ name: 'NODES' }">节点池</el-menu-item>

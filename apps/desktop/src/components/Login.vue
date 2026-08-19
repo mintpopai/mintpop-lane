@@ -83,7 +83,7 @@ async function retry() {
 
 <template>
   <div class="login">
-    <h1>Pier</h1>
+    <h1>Lane</h1>
     <p class="hint">
       用公司账号登录后，终端会自动接入公司链路并配好 Claude，你无需自行登录 Claude。
     </p>

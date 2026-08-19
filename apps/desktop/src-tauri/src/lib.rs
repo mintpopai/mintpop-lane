@@ -29,7 +29,7 @@ macro_rules! injected {
 }
 
 pub fn server_base_url() -> String {
-    injected!("PIER_SERVER_URL").unwrap_or_else(|| "http://127.0.0.1:8080".to_string())
+    injected!("LANE_SERVER_URL").unwrap_or_else(|| "http://127.0.0.1:8080".to_string())
 }
 
 /// 定位 mihomo 内核。
@@ -78,7 +78,7 @@ pub async fn establish_link(state: &AppState) -> LinkState {
         return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
     };
 
-    let work_dir = std::env::temp_dir().join("pier-kernel");
+    let work_dir = std::env::temp_dir().join("lane-kernel");
     if std::fs::create_dir_all(&work_dir).is_err() {
         return advance(state, LinkEvent::KERNEL_CRASHED);
     }
@@ -255,7 +255,7 @@ async fn try_silent_login(app: AppHandle) {
 }
 
 fn log_error(context: &str, e: &dyn std::fmt::Display) {
-    eprintln!("[pier] {context}：{e}");
+    eprintln!("[lane] {context}：{e}");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

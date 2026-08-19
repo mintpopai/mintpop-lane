@@ -24,7 +24,7 @@ usage = '''
 flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker 用）"
 '''
 # 不设 dir：pnpm 工作区的安装动作天然发生在仓库根，用 --filter 限定只装管理端这一个包
-run = "pnpm install --filter @mintpop/pier-admin ${usage_frozen:+--frozen-lockfile}"
+run = "pnpm install --filter @mintpop/lane-admin ${usage_frozen:+--frozen-lockfile}"
 
 [tasks.install-server]
 description = "拉取服务端 Maven 依赖"
@@ -73,12 +73,12 @@ run = "mvn -q clean package"
 [tasks.image-admin]
 description = "构建管理端镜像（apps/admin/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
-run = "docker build -f apps/admin/Dockerfile -t pier-admin:local ."
+run = "docker build -f apps/admin/Dockerfile -t lane-admin:local ."
 
 [tasks.image-server]
 description = "构建服务端镜像（apps/server/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
-run = "docker build -f apps/server/Dockerfile -t pier-server:local ."
+run = "docker build -f apps/server/Dockerfile -t lane-server:local ."
 
 # —— 质量 ——
 [tasks.test-admin]

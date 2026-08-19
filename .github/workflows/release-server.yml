@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/pier-server
+  IMAGE: ghcr.io/${{ github.repository_owner }}/lane-server
 
 jobs:
   quality:
@@ -138,5 +138,5 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Pier server v${{ steps.prev.outputs.version }}
+          name: Lane server v${{ steps.prev.outputs.version }}
           body_path: notes.md

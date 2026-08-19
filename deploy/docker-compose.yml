@@ -2,8 +2,8 @@
 # 只监听 127.0.0.1，对外访问由宿主 nginx / cloudflared 反代到这个端口。
 services:
   server:
-    image: ghcr.io/yuebai-blast/pier-server:${SERVER_TAG:-latest}
-    container_name: pier-server
+    image: ghcr.io/yuebai-blast/lane-server:${SERVER_TAG:-latest}
+    container_name: lane-server
     restart: unless-stopped
     ports:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
@@ -15,7 +15,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:?需要在 .env 中设置 MYSQL_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?需要在 .env 中设置 MYSQL_PASSWORD}
       # 席位凭据与节点密码的加密密钥。丢了等于库里所有密文作废
-      PIER_CRYPTO_KEY: ${PIER_CRYPTO_KEY:?需要在 .env 中设置 PIER_CRYPTO_KEY}
+      LANE_CRYPTO_KEY: ${LANE_CRYPTO_KEY:?需要在 .env 中设置 LANE_CRYPTO_KEY}
     volumes:
       # 只含 OIDC 配置与链路有效期，不含任何凭据；只读挂载，不进镜像
       - ./application-prod.yaml:/app/config/application-prod.yaml:ro
@@ -28,8 +28,8 @@ services:
       start_period: 30s
 
   admin:
-    image: ghcr.io/yuebai-blast/pier-admin:${ADMIN_TAG:-latest}
-    container_name: pier-admin
+    image: ghcr.io/yuebai-blast/lane-admin:${ADMIN_TAG:-latest}
+    container_name: lane-admin
     restart: unless-stopped
     ports:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定

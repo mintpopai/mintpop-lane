@@ -1,5 +1,5 @@
 /**
- * 与服务端 ai.mintpop.pier.enumeration 逐字镜像的枚举。
+ * 与服务端 ai.mintpop.lane.enumeration 逐字镜像的枚举。
  * 成员名与字符串取值一致、全大写下划线；改任一端两端同步。
  */
 export const USER_STATUS = {
