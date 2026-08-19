@@ -47,7 +47,7 @@
 
    | 项 | 值 |
    |---|---|
-   | Redirect URI | `https://<api 域名>/auth/callback` |
+   | Redirect URI | `https://<你的域名>/auth/callback` |
 
    把 App ID 和 App Secret 记下来：App ID 填进第 4 步的 `application-prod.yaml`（`spring.security.oauth2.client.registration.logto.client-id`）；App Secret 回到第 3 步，填进 `.env` 的 `LOGTO_CLIENT_SECRET`。
 
@@ -59,11 +59,14 @@
 
    ```json
    {
+     "logtoEndpoint": "https://占位.logto.app",
+     "logtoAppId": "占位",
+     "apiResource": "https://占位",
      "apiBaseUrl": "/api"
    }
    ```
 
-   > 管理端网页现在不再直连 Logto——登录、回调、会话全由服务端承担，管理端只需要知道 API 前缀在哪。`logtoEndpoint`/`logtoAppId`/`apiResource` 这几个字段已不再使用；`config.example.json` 与 `apps/admin/src` 对该配置类型的收窄在计划三落地，本文档先按最终形态说明。
+   > 管理端网页现在不再直连 Logto——登录、回调、会话全由服务端承担，管理端只需要知道 API 前缀在哪。`logtoEndpoint`/`logtoAppId`/`apiResource` 这几个字段语义上已不再使用，**但计划三落地前 `apps/admin/src` 仍对它们做强校验（缺失即拒绝加载）**，这里必须先填占位值撑住校验，**不要只留 `apiBaseUrl`**——那会让管理端页面直接加载失败。等计划三把这几个字段从代码里收窄掉之后，再把它们从这里删掉。
    >
    > 这个文件由 compose 以只读卷挂进 nginx 的站点根目录，**镜像里没有它**——因此同一个镜像可以部署到任何环境，改 API 地址不需要重新构建。它已在 `.gitignore` 中，不入库。
    >
@@ -79,7 +82,7 @@
 
 7. **录入初始数据**（首次没有管理员，用「登录一次 + 改库提权」配合完成——**新会话模型下不能再拿 Logto 的 access token 当 Bearer**，服务端只认自签会话 token）：
 
-   a. 浏览器访问 `https://<api 域名>/oauth2/authorization/logto`，用一个已在 Logto 注册的账号登录一次。登录成功即触发服务端唯一的建档入口——库里自动出现一行 `role=MEMBER` 的新用户，浏览器也已经拿到会话 Cookie（`lane_session`）。登录后 302 到管理端地址此时打不开属正常（管理端还没跟进新协议，由计划三接上），不影响建档与 Cookie 已经生效。
+   a. 浏览器访问 `https://<你的域名>/oauth2/authorization/logto`，用一个已在 Logto 注册的账号登录一次。登录成功即触发服务端唯一的建档入口——库里自动出现一行 `role=MEMBER` 的新用户，浏览器也已经拿到会话 Cookie（`lane_session`）。登录后 302 到管理端地址此时打不开属正常（管理端还没跟进新协议，由计划三接上），不影响建档与 Cookie 已经生效。
 
    b. 库里把这个账号提为管理员。**首个管理员只能改库产生**——这是设计决定，管理端本就不提供改角色的入口（见下一节「授予或撤销管理员」）：
 
@@ -87,10 +90,10 @@
    UPDATE app_user SET role = 'ADMIN' WHERE email = '<你刚登录用的邮箱>';
    ```
 
-   c. 从浏览器开发者工具（Application → Cookies，找 api 域名下的 `lane_session`）复制它的值——这就是自签会话 token，Bearer 头与 Cookie 两种载体服务端都认。先验证登录态与刚才的提权：
+   c. 从浏览器开发者工具（Application → Cookies，找 该域名下的 `lane_session`）复制它的值——这就是自签会话 token，Bearer 头与 Cookie 两种载体服务端都认。先验证登录态与刚才的提权：
 
    ```bash
-   curl https://<api 域名>/api/me -H "Authorization: Bearer <lane_session 的值>"
+   curl https://<你的域名>/api/me -H "Authorization: Bearer <lane_session 的值>"
    ```
 
    能拿到你自己的资料且 `role` 已是 `ADMIN`，说明会话可用、提权生效。
@@ -107,7 +110,7 @@
    e. 用第 c 步拿到的 `lane_session` 值调用管理接口补齐节点密码。**`PUT /api/admin/nodes/{id}` 是整体覆盖式更新，不是局部补丁**——`name`/`role`/`protocol`/`serverAddr`/`port`/`status` 都是必填校验字段，必须连同 `secret` 一起原样提交，只传 `secret` 会被参数校验挡回来（`110001`）：
 
    ```bash
-   curl -X PUT https://<api 域名>/api/admin/nodes/1 \
+   curl -X PUT https://<你的域名>/api/admin/nodes/1 \
      -H "Authorization: Bearer <lane_session 的值>" \
      -H "Content-Type: application/json" \
      -d '{
@@ -145,7 +148,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 从二期起，下面这些接口日常**不需要手工调**——打开管理端页面点就行。表格保留是为了排查问题时能直接验接口。
 
-管理接口（都需要 ADMIN 账号的 access token）：
+管理接口（都需要 ADMIN 账号的会话 token）：
 
 | 操作 | 请求 |
 |---|---|
@@ -154,9 +157,18 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | 改节点（密码留空即不改） | `PUT /api/admin/nodes/{id}` |
 | 删节点（被引用会拒绝） | `DELETE /api/admin/nodes/{id}` |
 | 用户列表 | `GET /api/admin/users?keyword=&pageNo=1&pageSize=20` |
-| 新建用户 | `POST /api/admin/users` |
-| 改用户（凭据留空即不改） | `PUT /api/admin/users/{id}` |
+| 改用户（只改处置态与节点分配） | `PUT /api/admin/users/{id}` |
 | 删用户 | `DELETE /api/admin/users/{id}` |
+| 某用户的订阅列表 | `GET /api/admin/users/{userId}/subscriptions` |
+| 给用户新建订阅 | `POST /api/admin/users/{userId}/subscriptions` |
+| 改订阅（凭据留空即沿用原值） | `PUT /api/admin/subscriptions/{id}` |
+| 删订阅 | `DELETE /api/admin/subscriptions/{id}` |
+
+> 用户没有「新建」接口——账号由登录自动建档，管理端只管处置态与资源分配（见上一节）。
+>
+> 订阅接口的响应体不回传凭据明文，只回传 `hasCredential`（是否已录入）；改订阅时凭据字段留空即沿用原值，不会被清空。
+>
+> 对不存在的路由、或路径存在但 HTTP 方法用错（如给只支持 GET 的路径发 POST），本服务统一返回原生 **404**（不是标准的 405），前端因此不需要为「方法不支持」单独分支。
 
 停用某人（终端下一次心跳即断链）：把其 `status` 改成 `SUSPENDED` 或 `REVOKED`。
 
@@ -172,6 +184,8 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
 | `MYSQL_URL` / `MYSQL_USERNAME` / `MYSQL_PASSWORD` | 无（必填） | 外置 MySQL 连接信息 |
 | `LANE_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
+| `LANE_AUTH_SESSION_SECRET` | 无（必填） | 自签会话 token 的 HS256 签名密钥，至少 32 字节 |
+| `LOGTO_CLIENT_SECRET` | 无（必填） | Logto 传统 Web 应用的 App Secret |
 
 ## 备份
 
@@ -182,18 +196,22 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 两者存在同一处等于加密白做。
 
+> `LANE_AUTH_SESSION_SECRET` 不属于上面这两样、也不需要备份：它只签自签会话 token，丢失或更换的后果是**全员下线**（无数据损失，重新登录一次即可拿到新会话），与 `LANE_CRYPTO_KEY` 丢失会让密文永久解不开是两种截然不同的后果，不要混为一谈。
+
 ## 对外暴露
 
-两个容器端口**都只绑 `127.0.0.1`**，公网访问不到。对外由宿主上的反代承担，且**管理端与服务端必须同域分路径**——`/` 给管理端，`/api` 给服务端。这样前端不需要 CORS，Logto 的回调也只有一个源。
+两个容器端口**都只绑 `127.0.0.1`**，公网访问不到。对外由宿主上的反代承担，且**管理端与服务端必须同域分路径**——`/api`、`/auth`、`/oauth2` 这三段前缀给服务端，其余（含 `/`）给管理端。这样前端不需要 CORS，Logto 的回调也只有一个源。
 
 ```nginx
 server {
     listen 443 ssl;
-    server_name admin.example.com;
+    server_name <你的域名>;
 
-    # /api/ 前缀更长，nginx 按最长前缀匹配优先命中它，与两段的书写顺序无关
-    location /api/ {
-        # 不带路径的 proxy_pass 会原样保留 URI，服务端拿到的仍是 /api/admin/users
+    # 服务端要转发的不只是 /api：登录握手（/auth/**）与 OAuth2 回调（/oauth2/**）也在服务端，
+    # 三段前缀用一条正则 location 一起转发。正则 location 的优先级天然高于下面的前缀 location `/`，
+    # 与两者的书写顺序无关——凡是命中这三段前缀的请求都会先落到这里。
+    location ~ ^/(api|auth|oauth2)/ {
+        # 不带路径的 proxy_pass 会原样保留 URI，服务端拿到的仍是 /api/admin/users、/auth/callback
         proxy_pass http://127.0.0.1:8081;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -208,6 +226,11 @@ server {
     }
 }
 ```
+
+> 单域名分路径模型下，`lane.auth.admin-frontend-url` 就是这里的站点根地址（如 `https://<你的域名>`）；
+> `spring.security.oauth2.client.registration.logto.redirect-uri` 配的是 `{baseUrl}/auth/callback`，
+> `{baseUrl}` 会按请求实际到达的域名展开，即解析成 `https://<你的域名>/auth/callback`——
+> 与第 5 步在 Logto 控制台登记的 Redirect URI、第 7 步访问的 `/oauth2/authorization/logto` 是同一个域名。
 
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
 
