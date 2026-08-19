@@ -108,12 +108,12 @@ run = "cargo clippy --all-targets -- -D warnings"
 
 # —— 部署 ——
 [tasks.up]
-description = "在部署机上拉起服务端"
+description = "在部署机上拉起服务端与管理端"
 dir = "deploy"
 run = "docker compose up -d"
 
 [tasks.down]
-description = "在部署机上停止服务端"
+description = "在部署机上停止服务端与管理端"
 dir = "deploy"
 run = "docker compose down"
 

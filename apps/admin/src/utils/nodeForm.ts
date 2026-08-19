@@ -83,10 +83,11 @@ export function nodeToForm(node: AdminNodeResponse): NodeFormModel {
     originalProtocol: node.protocol,
     serverAddr: node.serverAddr,
     port: node.port,
-    extraConfig: Object.entries(node.extraConfig ?? {}).map(([key, value]) => ({
-      key,
-      value: String(value),
-    })),
+    extraConfig: Object.entries(node.extraConfig ?? {})
+      // null/undefined 不铺成行：String(null) 会变成字符串 "null"，
+      // 保存时又被当作真值写回去，是个查不出来的静默腐化
+      .filter(([, value]) => value !== null && value !== undefined)
+      .map(([key, value]) => ({ key, value: String(value) })),
     // 服务端不回传密码，回填时一律是空的；留空提交即沿用原值
     secret: 空敏感键(node.protocol),
     egressIpsText: (node.egressIps ?? []).join("\n"),

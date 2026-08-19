@@ -1,4 +1,4 @@
-import { accessToken } from "../auth/logto";
+import { accessToken, callbackUri, logtoClient } from "../auth/logto";
 import { runtimeConfig } from "../config/runtime";
 import { createAdminApi, type AdminApi } from "./admin";
 import { createHttpClient } from "./http";
@@ -15,6 +15,9 @@ export function adminApi(): AdminApi {
       createHttpClient({
         baseUrl: runtimeConfig().apiBaseUrl,
         getToken: accessToken,
+        // 会话失效就直接重走一次 PKCE 登录。signIn 会跳转离开本页，
+        // 故不必等待它返回，也不必处理它的结果
+        onUnauthorized: () => void logtoClient().signIn(callbackUri()),
       }),
     );
   }

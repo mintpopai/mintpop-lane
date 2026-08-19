@@ -26,7 +26,7 @@ export async function loadRuntimeConfig(
 ): Promise<RuntimeConfig> {
   const response = await fetchImpl("/config.json", { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`读取 /config.json 失败（HTTP ${response.status}）：部署时需把 admin-config.json 挂到站点根目录`);
+    throw new Error(`读取 /config.json 失败（HTTP ${response.status}）：部署时需把宿主上的 admin-config.json 挂到站点根目录的 config.json`);
   }
 
   const raw = (await response.json()) as Partial<RuntimeConfig> | null;

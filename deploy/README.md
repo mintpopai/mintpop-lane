@@ -1,6 +1,6 @@
-# 服务端部署
+# 部署
 
-拉取 GHCR 上已发布的镜像运行。镜像由 `server-v*` tag 触发的发版流水线构建并推送，部署机不做构建。
+拉取 GHCR 上已发布的镜像运行。服务端与管理端是两个独立发版的组件，镜像分别由 `server-v*` 与 `admin-v*` tag 触发的发版流水线构建并推送，部署机不做构建。
 
 用户与节点数据都在外置 MySQL 里，日常运维（加人、停用、换落地出口、换席位凭据）走 `/api/admin/**` 接口，**不需要改配置文件、不需要重启服务**。
 
@@ -173,7 +173,7 @@ server {
     listen 443 ssl;
     server_name admin.example.com;
 
-    # 顺序要紧：/api 这条更具体，必须写在 / 前面
+    # /api/ 前缀更长，nginx 按最长前缀匹配优先命中它，与两段的书写顺序无关
     location /api/ {
         # 不带路径的 proxy_pass 会原样保留 URI，服务端拿到的仍是 /api/admin/users
         proxy_pass http://127.0.0.1:8081;

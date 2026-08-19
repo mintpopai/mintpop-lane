@@ -1,4 +1,4 @@
-# 部署：拉 GHCR 已发布镜像运行；本地构建镜像用 mise run image-server，不归 compose 管。
+# 部署：拉 GHCR 已发布镜像运行；本地构建镜像用 mise run image-server / mise run image-admin，不归 compose 管。
 # 只监听 127.0.0.1，对外访问由宿主 nginx / cloudflared 反代到这个端口。
 services:
   server:

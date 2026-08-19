@@ -214,4 +214,25 @@ describe("nodeToForm", () => {
     ]);
     expect(form.egressIpsText).toBe("1.2.3.4");
   });
+
+  it('库里的 null 值不铺成表单行——String(null) 会变成字符串 "null" 再被当真值写回去', () => {
+    const node = {
+      id: 3,
+      name: "LAND-东京-03",
+      role: "LAND",
+      protocol: "TROJAN",
+      serverAddr: "tokyo.example.com",
+      port: 443,
+      extraConfig: { sni: "tokyo.example.com", "skip-cert-verify": null },
+      egressIps: ["1.2.3.4"],
+      status: "ENABLED",
+      remark: "备注",
+      secretConfigured: true,
+      assignedUserName: "张三",
+      createdAt: "2026-08-18T10:00:00",
+      updatedAt: "2026-08-18T10:00:00",
+    } as AdminNodeResponse;
+
+    expect(nodeToForm(node).extraConfig).toEqual([{ key: "sni", value: "tokyo.example.com" }]);
+  });
 });

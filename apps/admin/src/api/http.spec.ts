@@ -64,6 +64,35 @@ describe("createHttpClient", () => {
     await expect(建客户端(fetchMock).request("/admin/users")).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
+  it("401 时通知装配层去重新登录，并且异常照抛不误吞", async () => {
+    const fetchMock = 假fetch(401, null);
+    const onUnauthorized = vi.fn();
+    const client = createHttpClient({
+      baseUrl: "/api",
+      getToken: async () => "token-abc",
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      onUnauthorized,
+    });
+
+    await expect(client.request("/admin/users")).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it("取 token 就失败时同样通知重新登录——SDK 换不出 token 是会话失效最常见的形态", async () => {
+    const onUnauthorized = vi.fn();
+    const client = createHttpClient({
+      baseUrl: "/api",
+      getToken: async () => {
+        throw new UnauthorizedError();
+      },
+      fetchImpl: 假fetch(200, { code: 0, data: null, msg: null }) as unknown as typeof fetch,
+      onUnauthorized,
+    });
+
+    await expect(client.request("/admin/users")).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
   it("其它非 2xx 状态不当成业务失败，直接报出状态码", async () => {
     const fetchMock = 假fetch(502, null);
 
