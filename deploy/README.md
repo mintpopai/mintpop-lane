@@ -34,7 +34,7 @@
 
    > ⚠️ 这个密钥用来加密席位凭据与节点密码。**丢失或更换 = 库里所有密文永久解不开**，必须重录全部凭据。请与数据库口令分开备份。
 
-4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入真实的 Logto issuer 与 audience。该文件现在只有 OIDC 配置与链路有效期，**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
+4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入真实的 Logto issuer、audience 与 `mintpop.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）。该文件现在只有 OIDC 配置与链路有效期，**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
 
 5. **建 Logto 的 SPA 应用并放置管理端运行时配置**：
 
@@ -192,3 +192,16 @@ server {
 ```
 
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
+
+## 发版顺序（桌面端与服务端）
+
+桌面端的登录配置由服务端的 `GET /api/client-config` 下发，因此**必须先发服务端、再发桌面端**。
+顺序反了会让新装的桌面端卡在「无法连接服务端」，因为老服务端上没有这个端点。
+
+服务端上线前确认 `application-prod.yaml` 里已配：
+
+- `spring.security.oauth2.resourceserver.jwt.issuer-uri`（形如 `https://<租户>.logto.app/oidc`）
+- `spring.security.oauth2.resourceserver.jwt.audiences[0]`（API Resource 标识）
+- `mintpop.client.logto-client-id`（Logto 里桌面端那个原生应用的 App ID）
+
+前两项同时被用于校验 JWT 和下发给客户端，改一处两处同时生效。

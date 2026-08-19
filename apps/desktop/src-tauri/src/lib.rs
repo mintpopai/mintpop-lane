@@ -4,8 +4,7 @@ pub mod commands;
 pub mod link;
 pub mod pty;
 
-use app_state::AppState;
-use auth::oidc::OidcConfig;
+use app_state::{AppState, BootstrapState};
 use link::inbound::allocate_inbound;
 use link::kernel::MihomoKernel;
 use link::probe::{verify_egress, EgressVerdict, DEFAULT_PROBE_URL};
@@ -18,24 +17,15 @@ use tauri::{AppHandle, Emitter, Manager};
 /// 心跳间隔。既是吊销的生效延迟上限，也是链路异常的发现延迟上限。
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
 
-/// 取接入配置：构建期注入的值优先，缺失时回退到运行时环境变量（开发用）。
-/// 这些值不是秘密（issuer、client_id、服务端地址都会出现在网络请求里），
-/// 编译进二进制没有额外风险；真正的秘密只有服务端持有。
+/// 取服务端地址：构建期注入的值优先，缺失时回退到运行时环境变量（开发用）。
+/// 它是整条信任链的锚点——客户端凭它决定去哪儿要登录配置，因此只能编译进二进制，
+/// 绝不做成用户可改的本地配置。
 macro_rules! injected {
     ($key:literal) => {
         option_env!($key)
             .map(str::to_string)
             .or_else(|| std::env::var($key).ok())
     };
-}
-
-pub fn oidc_config() -> OidcConfig {
-    OidcConfig {
-        issuer: injected!("MINTPOP_LOGTO_ISSUER").unwrap_or_default(),
-        client_id: injected!("MINTPOP_LOGTO_CLIENT_ID").unwrap_or_default(),
-        redirect_uri: "mintpop://callback".to_string(),
-        resource: injected!("MINTPOP_API_RESOURCE").unwrap_or_default(),
-    }
 }
 
 pub fn server_base_url() -> String {
@@ -190,7 +180,10 @@ async fn handle_callback(app: AppHandle, url: String) {
         return;
     };
 
-    let cfg = oidc_config();
+    let Some(cfg) = app.state::<AppState>().oidc_config.lock().unwrap().clone() else {
+        log_error("回调到达时尚无登录配置", &"引导未完成");
+        return;
+    };
     let code = match auth::oidc::extract_code(&url, &pending.state) {
         Ok(code) => code,
         Err(e) => {
@@ -205,13 +198,53 @@ async fn handle_callback(app: AppHandle, url: String) {
     }
 }
 
+/// 启动引导：拉取登录接入配置。成功后才谈得上登录，因此静默登录串在它之后。
+///
+/// 用 bootstrap_lock 把整个函数体串行化：启动时的自动引导与用户点重试触发的
+/// 重新引导可能并发发生，两者都会走到 try_silent_login 用同一个 refresh_token
+/// 换新令牌，见 AppState::bootstrap_lock 的注释。持锁跨越下面的 await 是有意为之。
+async fn bootstrap(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let _guard = state.bootstrap_lock.lock().await;
+
+    // 每次引导（含重试）开始时先归零，让 client_config_state 在结果落地前
+    // 如实答"还在飞行中"；重试场景尤其重要——上一轮的 FAILED 不能残留到这一轮。
+    *state.bootstrap_state.lock().unwrap() = BootstrapState::UNKNOWN;
+
+    match auth::bootstrap::fetch_client_config(&server_base_url()).await {
+        Ok(cfg) => {
+            *state.oidc_config.lock().unwrap() = Some(cfg);
+            *state.bootstrap_state.lock().unwrap() = BootstrapState::READY;
+            let _ = app.emit("auth://config-ready", ());
+            try_silent_login(app.clone()).await;
+            Ok(())
+        }
+        Err(e) => {
+            log_error("拉取登录配置失败", &e);
+            let reason = e.to_string();
+            *state.bootstrap_state.lock().unwrap() = BootstrapState::FAILED(reason.clone());
+            let _ = app.emit("auth://config-failed", serde_json::json!({ "reason": reason }));
+            Err(reason)
+        }
+    }
+}
+
+/// 供命令层调用的重试入口
+pub async fn reload_client_config(app: AppHandle) -> Result<(), String> {
+    bootstrap(app).await
+}
+
 /// 启动时若钥匙串里已有 refresh_token，尝试静默登录，省掉用户每次授权
 async fn try_silent_login(app: AppHandle) {
     let Ok(Some(refresh_token)) = auth::storage::load_refresh_token() else {
         return;
     };
 
-    match auth::oidc::refresh(&oidc_config(), &refresh_token).await {
+    let Some(cfg) = app.state::<AppState>().oidc_config.lock().unwrap().clone() else {
+        return;
+    };
+
+    match auth::oidc::refresh(&cfg, &refresh_token).await {
         Ok(tokens) => on_authenticated(&app, tokens).await,
         Err(e) => {
             // 刷新失败通常意味着用户已在 Logto 侧被停用，清掉本地残留
@@ -252,7 +285,9 @@ pub fn run() {
             });
 
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(try_silent_login(handle));
+            tauri::async_runtime::spawn(async move {
+                let _ = bootstrap(handle).await;
+            });
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(heartbeat_loop(handle));
@@ -267,6 +302,8 @@ pub fn run() {
             commands::auth_status,
             commands::start_login,
             commands::logout,
+            commands::client_config_state,
+            commands::reload_client_config,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

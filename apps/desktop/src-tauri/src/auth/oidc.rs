@@ -38,6 +38,9 @@ pub enum OidcError {
 /// 带 resource 才能拿到 audience 为本服务的 access_token；
 /// 带 offline_access 才能拿到 refresh_token，用于下次静默登录。
 pub fn build_authorize_url(cfg: &OidcConfig, pkce: &PkcePair, state: &str) -> String {
+    // issuer 的合法性已在 bootstrap::ClientConfigData::into_oidc_config 里校验过，
+    // 走到这里的 OidcConfig 一定是合法地址，故此处的 expect 是真正的不变量断言，
+    // 而不是对未经校验的远端输入直接 panic。
     let mut url = Url::parse(&format!("{}/auth", cfg.issuer)).expect("issuer 应当是合法地址");
     url.query_pairs_mut()
         .append_pair("client_id", &cfg.client_id)
