@@ -20,3 +20,6 @@ spring:
 mintpop:
   link:
     ttl-seconds: 1800
+  client:
+    # Logto 中桌面端那个「原生应用」的 App ID，会随引导配置下发给桌面端
+    logto-client-id: 填入 Logto 里那个原生应用的 App ID

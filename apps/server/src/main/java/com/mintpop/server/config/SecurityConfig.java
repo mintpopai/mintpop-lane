@@ -25,6 +25,8 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        // 引导配置匿名可取：客户端还没登录时就要用它去 Logto 授权
+                        .requestMatchers(HttpMethod.GET, "/api/client-config").permitAll()
                         // 管理端要求库里的角色是 ADMIN，规则必须排在下面那条通配之前
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/**").authenticated()
