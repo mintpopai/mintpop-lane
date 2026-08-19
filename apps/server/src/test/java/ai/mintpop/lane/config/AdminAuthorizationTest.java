@@ -19,7 +19,10 @@ import java.time.Duration;
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
+import static ai.mintpop.lane.enumeration.UserStatus.SUSPENDED;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -101,5 +104,20 @@ class AdminAuthorizationTest extends MysqlTestBase {
                                 AuthProperties.SESSION_COOKIE_NAME,
                                 sessionTokenService.issue(adminId, Duration.ofMinutes(10)))))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("停用的 ADMIN 不再享有管理端权限，但仍能通过认证调心跳得知处置态")
+    void 停用的管理员失去管理端权限但仍可心跳() throws Exception {
+        var suspendedAdmin = userRepository.findById(adminId).orElseThrow();
+        suspendedAdmin.setStatus(SUSPENDED);
+        userRepository.update(suspendedAdmin);
+
+        mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/link/heartbeat").header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
     }
 }

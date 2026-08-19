@@ -96,10 +96,12 @@ public class GlobalExceptionHandler {
      * msg 用固定文案，绝不回显 {@code e.getMessage()}：Jackson 的报错里会带上
      * 出错位置附近的原始输入片段，而请求体里恰恰可能装着用户提交的密码/凭据，
      * 原样回显等于把敏感字段吐回响应体。
+     * 日志同样不能带 cause，原因同上：异常栈里同样嵌着原始请求体片段
+     * （登录票据/verifier/凭据等），落进日志文件等于换了个地方泄露。
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ApiResponse<Void> handleBodyNotReadable(HttpMessageNotReadableException e) {
-        log.warn("请求体解析失败", e);
+        log.warn("请求体解析失败：{}", e.getClass().getSimpleName());
         return new ApiResponse<>(BizCodeEnum.PARAM_INVALID.getCode(), null, "请求体格式非法");
     }
 

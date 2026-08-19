@@ -36,8 +36,7 @@ public class SecurityConfig {
                                                    SessionTokenService sessionTokenService,
                                                    UserRepository userRepository,
                                                    OidcLoginSuccessHandler successHandler,
-                                                   DesktopFlowCookie desktopFlowCookie,
-                                                   AuthProperties authProperties) throws Exception {
+                                                   DesktopFlowCookie desktopFlowCookie) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -46,6 +45,9 @@ public class SecurityConfig {
                         // 登录握手与票据兑换发生在拿到会话之前，必须匿名可达
                         .requestMatchers("/auth/**", "/oauth2/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/desktop/exchange").permitAll()
+                        // 容器 ERROR dispatch（如 controller 内 response.sendError）会重新过一遍安全链，
+                        // 不放行会被拦成 401，掩盖掉真实的 4xx/5xx 状态码
+                        .requestMatchers("/error").permitAll()
                         // 管理端要求库里的角色是 ADMIN，规则必须排在下面那条通配之前
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/api/**").authenticated()

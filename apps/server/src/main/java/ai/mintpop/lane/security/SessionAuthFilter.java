@@ -1,6 +1,8 @@
 package ai.mintpop.lane.security;
 
 import ai.mintpop.lane.config.AuthProperties;
+import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import jakarta.servlet.FilterChain;
@@ -46,9 +48,21 @@ public class SessionAuthFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(
                             new UsernamePasswordAuthenticationToken(
                                     user.getId(), null,
-                                    List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())))));
+                                    List.of(new SimpleGrantedAuthority(authorityOf(user))))));
         }
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 被处置用户仍需通过认证以便心跳告知其处置态，但不再享有任何角色权限：
+     * status 非 ACTIVE 时一律装配 ROLE_RESTRICTED（不带任何业务角色），而非其库里的原始角色，
+     * 否则停用/吊销的 ADMIN 会因为角色字段未变而继续保有全部管理端权限。
+     */
+    private String authorityOf(UserDto user) {
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            return "ROLE_RESTRICTED";
+        }
+        return "ROLE_" + user.getRole().name();
     }
 
     /** Bearer 头优先（桌面端），其次会话 Cookie（管理端网页） */
