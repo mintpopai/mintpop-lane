@@ -3,30 +3,38 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+type ConfigPhase = "UNKNOWN" | "READY" | "FAILED";
+
 const error = ref("");
 const pending = ref(false);
-/** 引导配置是否已就绪。没就绪时登录按钮点了也没用，直接换成重试按钮 */
-const configReady = ref(false);
+/** 引导配置的当前阶段。UNKNOWN 是"还没听到结果"的中性态，不代表失败 */
+const configPhase = ref<ConfigPhase>("UNKNOWN");
 const configError = ref("");
 const retrying = ref(false);
 const unlisteners: UnlistenFn[] = [];
 
 onMounted(async () => {
-  // 引导可能在本组件挂载之前就已完成，光监听事件会漏掉，故先查一次当前状态
-  configReady.value = await invoke<boolean>("client_config_ready");
-
+  // 先监听再补查，否则两次 await 之间到达的事件会丢失且不会重放：
+  // 若先 await invoke("client_config_ready") 再 listen，引导恰好在这两次
+  // await 之间完成时，auth://config-ready 会在没有监听者的情况下发出，
+  // Tauri 不会重放事件，页面就永久卡在失败态。故必须先挂好监听，
+  // 再用 invoke 补查一次"挂载前引导是否已经完成"。
   unlisteners.push(
     await listen("auth://config-ready", () => {
-      configReady.value = true;
+      configPhase.value = "READY";
       configError.value = "";
     }),
   );
   unlisteners.push(
     await listen<{ reason: string }>("auth://config-failed", (event) => {
-      configReady.value = false;
+      configPhase.value = "FAILED";
       configError.value = event.payload.reason;
     }),
   );
+
+  if (await invoke<boolean>("client_config_ready")) {
+    configPhase.value = "READY";
+  }
 });
 
 onUnmounted(() => {
@@ -46,6 +54,7 @@ async function login() {
 }
 
 async function retry() {
+  configPhase.value = "UNKNOWN";
   retrying.value = true;
   try {
     await invoke("reload_client_config");
@@ -64,11 +73,15 @@ async function retry() {
       用公司账号登录后，终端会自动接入公司链路并配好 Claude，你无需自行登录 Claude。
     </p>
 
-    <template v-if="configReady">
+    <template v-if="configPhase === 'READY'">
       <button :disabled="pending" @click="login">
         {{ pending ? "正在打开浏览器…" : "用公司账号登录" }}
       </button>
       <p v-if="error" class="error">{{ error }}</p>
+    </template>
+
+    <template v-else-if="configPhase === 'UNKNOWN'">
+      <p class="hint">正在连接服务端…</p>
     </template>
 
     <template v-else>
