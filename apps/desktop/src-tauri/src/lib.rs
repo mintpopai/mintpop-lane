@@ -135,6 +135,37 @@ pub async fn establish_link(app: &AppHandle) -> LinkState {
     advance(state, event)
 }
 
+/// 心跳结果应采取的动作。抽成纯函数是为了让安全语义可测：
+/// SUSPENDED/REVOKED/401 必须清登录态回登录页，EXPIRED 只断链保留登录态。
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(Debug, PartialEq, Eq)]
+enum HeartbeatAction {
+    /// 一切正常，无操作
+    NONE,
+    /// 服务到期：断链但保留登录态
+    EXPIRE,
+    /// 清登录态回登录页，携带给用户看的原因
+    FORCE_RELOGIN(&'static str),
+    /// 网络类失败：断链，等下一轮心跳
+    NETWORK_LOST,
+}
+
+fn heartbeat_action(
+    result: &Result<link::remote::LinkStatus, link::remote::RemoteError>,
+) -> HeartbeatAction {
+    use link::remote::{LinkStatus, RemoteError};
+    match result {
+        Ok(LinkStatus::ACTIVE) => HeartbeatAction::NONE,
+        Ok(LinkStatus::EXPIRED) => HeartbeatAction::EXPIRE,
+        Ok(LinkStatus::SUSPENDED) => HeartbeatAction::FORCE_RELOGIN("账号已被停用，请联系管理员"),
+        Ok(LinkStatus::REVOKED) => HeartbeatAction::FORCE_RELOGIN("账号已被吊销"),
+        Err(RemoteError::Status(code)) if code.as_u16() == 401 => {
+            HeartbeatAction::FORCE_RELOGIN("登录已过期，请重新登录")
+        }
+        Err(_) => HeartbeatAction::NETWORK_LOST,
+    }
+}
+
 /// 心跳循环：定期确认用户仍可用。被吊销时网络当场断开，
 /// 但不 kill 用户进程，让 Agent 自己报网络错误，避免丢失正在进行的工作。
 async fn heartbeat_loop(app: AppHandle) {
@@ -147,25 +178,22 @@ async fn heartbeat_loop(app: AppHandle) {
             continue;
         };
 
-        match link::remote::heartbeat(&base_url, &token).await {
-            Ok(link::remote::LinkStatus::ACTIVE) => {}
-            Ok(link::remote::LinkStatus::EXPIRED) => {
+        let result = link::remote::heartbeat(&base_url, &token).await;
+        match heartbeat_action(&result) {
+            HeartbeatAction::NONE => {}
+            HeartbeatAction::EXPIRE => {
                 // 服务到期：断链但保留登录态，前端提示续费；续费后点重连即可
                 reset_kernel(&state).await;
                 advance(&state, LinkEvent::SERVICE_EXPIRED);
             }
-            Ok(link::remote::LinkStatus::SUSPENDED) => {
-                force_relogin(&app, "账号已被停用，请联系管理员").await;
+            HeartbeatAction::FORCE_RELOGIN(reason) => {
+                force_relogin(&app, reason).await;
             }
-            Ok(link::remote::LinkStatus::REVOKED) => {
-                force_relogin(&app, "账号已被吊销").await;
-            }
-            Err(link::remote::RemoteError::Status(code)) if code.as_u16() == 401 => {
-                force_relogin(&app, "登录已过期，请重新登录").await;
-            }
-            Err(e) => {
+            HeartbeatAction::NETWORK_LOST => {
                 // 心跳打不通同样按不可用处理，绝不假定链路仍然有效
-                log_error("心跳失败", &e);
+                if let Err(e) = &result {
+                    log_error("心跳失败", e);
+                }
                 reset_kernel(&state).await;
                 advance(&state, LinkEvent::NETWORK_LOST);
             }
@@ -351,4 +379,71 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use link::remote::{LinkStatus, RemoteError};
+
+    #[test]
+    fn 活跃心跳无操作() {
+        assert_eq!(
+            heartbeat_action(&Ok(LinkStatus::ACTIVE)),
+            HeartbeatAction::NONE
+        );
+    }
+
+    #[test]
+    fn 服务到期只断链保留登录态() {
+        assert_eq!(
+            heartbeat_action(&Ok(LinkStatus::EXPIRED)),
+            HeartbeatAction::EXPIRE
+        );
+    }
+
+    #[test]
+    fn 账号停用强制回登录页且文案含停用() {
+        match heartbeat_action(&Ok(LinkStatus::SUSPENDED)) {
+            HeartbeatAction::FORCE_RELOGIN(reason) => assert!(reason.contains("停用")),
+            other => panic!("应为 FORCE_RELOGIN，实际是 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn 账号吊销强制回登录页() {
+        assert_eq!(
+            heartbeat_action(&Ok(LinkStatus::REVOKED)),
+            HeartbeatAction::FORCE_RELOGIN("账号已被吊销")
+        );
+    }
+
+    #[test]
+    fn 会话过期返回401时强制回登录页() {
+        let err = RemoteError::Status(reqwest::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            heartbeat_action(&Err(err)),
+            HeartbeatAction::FORCE_RELOGIN("登录已过期，请重新登录")
+        );
+    }
+
+    #[test]
+    fn 非401的错误一律按网络失败处理() {
+        // 非 401 的 HTTP 状态错误
+        let status_err = RemoteError::Status(reqwest::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            heartbeat_action(&Err(status_err)),
+            HeartbeatAction::NETWORK_LOST
+        );
+
+        // 业务错误（非会话失效类）同样不应被当成需要强制登出的信号
+        let biz_err = RemoteError::Biz {
+            code: 310003,
+            msg: "该用户的链路已被吊销".to_string(),
+        };
+        assert_eq!(
+            heartbeat_action(&Err(biz_err)),
+            HeartbeatAction::NETWORK_LOST
+        );
+    }
 }
