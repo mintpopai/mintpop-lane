@@ -19,7 +19,7 @@ export function userToForm(user: AdminUserResponse): UserFormModel {
 export function buildUserPayload(form: UserFormModel): UserSaveRequest {
   return {
     status: form.status,
-    // el-select 清空时产出的是 undefined 而非 null，这里统一收成 null，
+    // 下拉清空时可能产出 undefined 而非 null，这里统一收成 null，
     // 让「未分配」在接口上只有一种表示，类型契约才与实际下发的 JSON 一致
     frontNodeId: form.frontNodeId ?? null,
     landNodeId: form.landNodeId ?? null,

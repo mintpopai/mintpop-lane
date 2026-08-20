@@ -1,6 +1,6 @@
-import { ElMessage } from "element-plus";
 import { createRouter, createWebHistory, type Router, type RouterHistory } from "vue-router";
 import { authApi } from "../api";
+import { showToast } from "../toast";
 import type { AuthApi } from "../api/auth";
 import { useAuthStore } from "../stores/auth";
 import { 标记登录跳转, 清除标记, 疑似环路 } from "../utils/loginLoop";
@@ -66,7 +66,7 @@ export function createAppRouter(
     } catch (error) {
       // 网络抖动、服务端 5xx 不该把人赶去登录页或无权限页，
       // 放行进页面由页面自己的加载错误提示，下次导航重试
-      ElMessage.error(`获取登录状态失败：${(error as Error).message}`);
+      showToast("error", `获取登录状态失败：${(error as Error).message}`);
       return true;
     }
     return auth.isAdmin ? true : { name: "FORBIDDEN" };

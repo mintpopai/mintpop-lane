@@ -25,38 +25,42 @@ function 删除(index: number): void {
 
 <template>
   <div class="kv-editor">
-    <div v-for="(row, index) in modelValue" :key="index" class="kv-editor__row">
+    <div v-for="(row, index) in modelValue" :key="index" class="kv-row">
+      <!-- 键是配置名（sni 这类系统事实），走等宽 -->
       <input
-        class="kv-editor__input"
+        class="admin-input fact kv-input"
         :value="row.key"
         placeholder="键，如 sni"
         @input="更新(index, { key: ($event.target as HTMLInputElement).value })"
       />
       <input
-        class="kv-editor__input"
+        class="admin-input kv-input"
         :value="row.value"
         placeholder="值，true / false / 数字会按原类型下发"
         @input="更新(index, { value: ($event.target as HTMLInputElement).value })"
       />
-      <button type="button" :data-test="`remove-row-${index}`" @click="删除(index)">删除</button>
+      <button
+        type="button"
+        class="admin-btn-ghost"
+        :data-test="`remove-row-${index}`"
+        @click="删除(index)"
+      >
+        删除
+      </button>
     </div>
-    <button type="button" data-test="add-row" @click="新增()">新增一行</button>
+    <button type="button" class="admin-btn-ghost" data-test="add-row" @click="新增()">新增一行</button>
   </div>
 </template>
 
 <style scoped>
-.kv-editor__row {
+.kv-row {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-.kv-editor__input {
+.kv-input {
   flex: 1;
-  height: 32px;
-  padding: 0 11px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  font: inherit;
+  min-width: 0;
 }
 </style>

@@ -1,0 +1,811 @@
+/* 管理端设计层「柜台」——移植自 mintpop-shop 管理端（admin/src/styles/layout.css），
+   按「一人小店的收银台后侧」来设计，而不是企业 BI 后台。
+   建在 base.css 的品牌 token 之上，只增不改；lane 专属变量一律以 --counter-* 前缀写在本文件。
+
+   两条贯穿全站的规则：
+   1. 排版即信息——等宽（IBM Plex Mono）只给「系统生成的事实」：邮箱、ID、地址、
+      端口、IP、时间戳、计数；Inter 只给「人写的内容」：姓名、节点名、备注、界面文案。
+   2. 品牌绿的位置由对比度决定——#17D1A7 / #0FB389 对白底只有 2.7:1，达不到 AA，
+      所以白底上它只做「底色」不做「文字」：主按钮是绿底深墨字（9.1:1）、当前导航项
+      是淡薄荷底。词标属 logotype，沿用 --color-brand-deep，不受对比度约束。
+
+   —— 相对 shop 版本的差异（除此之外逐条同源）——
+   · 状态语义色映射到 lane 自己的枚举：用户 ACTIVE/SUSPENDED/REVOKED、
+     节点 ENABLED/DISABLED、凭据 CONFIGURED/MISSING。取值全部沿用 shop
+     校验过对比度的那几个色值，只换键名。
+   · gate（登录引导 / 无权限 / 登录错误）样式放这里共享：lane 的 gate 是独立路由
+     视图而非 App 分支，两个视图共用一套卡片材质。
+   · 新增 .pill 徽标（在期订阅、占用者这类小块事实），shop 用的是散在各视图的
+     role-badge / status-tag，lane 收口成一个通用类。 */
+
+:root {
+  /* 深墨：只给浮层类小面积对象（toast、选中 chip、pill、焦点环），不铺成面 */
+  --counter-deep: #0f1a16;
+  --counter-danger: #b3341f;
+  --counter-danger-deep: #932a19;
+  /* 焦点绿：品牌绿压暗到刚好够 3:1（白 3.53、Cloud 3.30） */
+  --counter-focus: #0a9b73;
+
+  --font-fact: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --rail-width: 208px;
+}
+
+/* 页面底用基线的 Cloud，卡面纯白——两层足够拉开层次 */
+body {
+  background: var(--color-bg-cloud);
+}
+
+/* —— 状态语义色：任何元素带 data-state 都能取到，供状态点与筛选 chip 共用。
+   色值取自 shop 校验过的色板：绿=在跑，灰=没在跑，红=出事/吊销，琥珀=待补齐 —— */
+[data-state='ACTIVE'],
+[data-state='ENABLED'],
+[data-state='CONFIGURED'] {
+  --state-color: #0a8a6a;
+}
+
+[data-state='SUSPENDED'],
+[data-state='DISABLED'] {
+  --state-color: #7a857f;
+}
+
+[data-state='REVOKED'] {
+  --state-color: #b3341f;
+}
+
+[data-state='MISSING'] {
+  --state-color: #b4720b;
+}
+
+/* —— 外壳：全高导航轨常驻左侧，长表格滚动时导航不跟着走。
+   轨道用白面、工作区用 Cloud，靠这层明暗差和一条右边框区分，不靠深色块压 —— */
+.admin-rail {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--rail-width);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px 20px;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
+  z-index: 20;
+}
+
+/* 词标与副题上下两行：「Lane 管控后台」比 shop 的「管理后台」长，
+   横排在 208px 轨道里会折行折在词中间 */
+.rail-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px 24px;
+}
+
+/* 词标是 logotype，对比度豁免；取值与商城 header 一致 */
+.rail-wordmark {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--color-brand-deep);
+}
+
+.rail-kind {
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-link {
+  position: relative;
+  padding: 8px 12px;
+  border-radius: var(--radius-button);
+  font-size: 14px;
+  color: var(--color-ink-secondary);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rail-link:hover {
+  background: var(--color-bg-cloud);
+  color: var(--color-ink);
+}
+
+/* 当前位置三重表达：淡薄荷底、墨色、加粗——不靠颜色单独传达 */
+.rail-link.router-link-active {
+  background: color-mix(in srgb, var(--color-brand) 14%, #ffffff);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+/* 贴在轨道左沿的指示条，是上面三重表达之外的冗余强化 */
+.rail-link.router-link-active::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -16px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-brand-deep);
+}
+
+.rail-foot {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.rail-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  min-width: 0;
+}
+
+.rail-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-brand);
+  color: var(--counter-deep);
+  font-size: 13px;
+  font-weight: 600;
+  object-fit: cover;
+}
+
+.rail-user-name {
+  font-size: 13px;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-signout {
+  margin-top: 8px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.rail-signout:hover {
+  color: var(--color-ink);
+}
+
+.admin-desk {
+  margin-left: var(--rail-width);
+  min-height: 100vh;
+}
+
+.admin-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 40px 72px;
+}
+
+/* —— 页头：标题下面挂的是这一页的真实规模，不是口号 —— */
+.page-head {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.page-facts {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+/* 系统生成的事实：等宽 + 表格数字 */
+.fact {
+  font-family: var(--font-fact);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.admin-toolbar .spacer {
+  flex: 1;
+}
+
+/* —— 卡片与表格 —— */
+.admin-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+/* 表头不铺底色，靠一条下边框和灰字与数据区分就够 */
+.admin-table th {
+  padding: 12px 20px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--color-ink-secondary);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+/* 单元格一律不换行：邮箱、Logto id 这类长 ASCII 串没有断点，auto 布局会把它
+   撑成最宽列，再把能断行的中文列压到一字宽竖排。宽表格改由卡片自身横向滚动兜底 */
+.admin-table td {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr:hover {
+  background: var(--color-bg-cloud);
+}
+
+/* 表格没占满卡片时，把富余宽度全给最后一列，其余列贴着内容——
+   否则空隙会被平摊到每列之间，同一行的数据被拉散、不好横向扫读 */
+.admin-table tr > *:last-child {
+  width: 100%;
+}
+
+/* 操作列钉在右侧：列多的宽表格横向滚动时，操作按钮不会被滚出视野
+   （滚动容器是 .admin-card 自身）。给需要的表加 .sticky-actions 修饰类。
+   富余宽度改给倒数第二列——否则表格没占满卡片时操作列被撑宽，
+   那条分隔线会孤零零落在表格中间 */
+.admin-table.sticky-actions tr > *:last-child {
+  position: sticky;
+  right: 0;
+  width: auto;
+  /* 左侧留出比常规单元格更宽的檐口：底下滚过的数据被硬切在边界上，
+     按钮再紧挨着切口就会跟它读成同一格 */
+  padding-left: 28px;
+  /* 这一列是结构性的浮层，不是一种状态，所以不占色相：底色与表格同白。
+     分层由两件中性的东西表达：一条与表格横线同款的发丝线，加下面伪元素画的投影 */
+  background: var(--color-bg);
+  /* ⚠️ 这条线必须用 border 画，不能用 box-shadow：本表是 border-collapse:
+     collapse，Chrome / Safari 在合并边框的表格里直接忽略单元格上的 box-shadow */
+  border-left: 1px solid var(--color-border);
+}
+
+/* 「数据从这一层底下穿过去」得画出来，否则被硬切的时间戳看着就像跟按钮同处一格。
+   同样因为上面那条 box-shadow 限制，投影改用伪元素。
+   宽度 12px < 单元格 20px 的横向内边距：没内容可藏时它只落在留白上 */
+.admin-table.sticky-actions tr > *:last-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: 12px;
+  background: linear-gradient(to left, rgba(11, 11, 12, 0.1), rgba(11, 11, 12, 0));
+  pointer-events: none;
+}
+
+.admin-table.sticky-actions tr > *:nth-last-child(2) {
+  width: 100%;
+}
+
+/* sticky 单元格有自己的不透明底色，盖住了行 hover 的底色，得原样补一份 */
+.admin-table.sticky-actions tbody tr:hover > *:last-child {
+  background: var(--color-bg-cloud);
+}
+
+/* 数值列右对齐，靠等宽数字自然成列。
+   选择器要盖过 .admin-table th 的 text-align: left，故不能只写 .col-amount */
+.admin-table .col-amount {
+  text-align: right;
+}
+
+.admin-table .muted {
+  color: var(--color-ink-secondary);
+}
+
+/* 紧凑密度：弹窗里的内嵌表格（订阅列表）宽度有限，内边距收一档 */
+.admin-table.dense th,
+.admin-table.dense td {
+  padding: 10px 12px;
+}
+
+.admin-table .actions > * + * {
+  margin-left: 16px;
+}
+
+/* —— 状态：色点带语义，文字保持墨色；只有吊销才连文字一起染。
+   色点从不单独出现，永远配着状态文字，不靠颜色单独传达状态 —— */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.state::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-color, #7a857f);
+}
+
+.state[data-state='REVOKED'] {
+  color: var(--counter-danger);
+}
+
+.state[data-state='SUSPENDED'],
+.state[data-state='DISABLED'] {
+  color: var(--color-ink-secondary);
+}
+
+/* —— 小块事实徽标：在期订阅、占用者这类「一小块带底色的事实」。
+   薄荷底走「绿只做底不做字」那条规则，字保持深墨 —— */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-brand) 14%, #ffffff);
+  color: var(--color-ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pill.muted {
+  background: var(--color-bg-cloud);
+  color: var(--color-ink-secondary);
+}
+
+.pill + .pill {
+  margin-left: 6px;
+}
+
+/* —— 控件 ——
+   按钮、输入框、下拉、chip 并排出现在工具条里，必须严格同高：统一 18px 行高
+   + 8px 纵向内边距 + 1px 描边 = 36px，不靠 min-height 兜 */
+.admin-btn,
+.admin-btn-ghost {
+  line-height: 18px;
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* 主操作用品牌绿：白底上它做底色不做文字，配深墨字 9.1:1 */
+.admin-btn {
+  padding: 8px 20px;
+  /* 透明描边而非 none：与描边款共用同一个盒模型，并排时不差 1px */
+  border: 1px solid transparent;
+  background: var(--color-brand);
+  color: var(--counter-deep);
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+
+/* :not(:disabled) 兜住「禁用元素照样匹配 :hover」的浏览器行为 */
+.admin-btn:hover:not(:disabled) {
+  background: var(--color-brand-deep);
+}
+
+/* 破坏性主操作：只出现在确认弹窗里，页面上不摆。红底白字 6.1:1 */
+.admin-btn.danger {
+  background: var(--counter-danger);
+  color: #ffffff;
+}
+
+.admin-btn.danger:hover:not(:disabled) {
+  background: var(--counter-danger-deep);
+}
+
+.admin-btn-ghost {
+  padding: 8px 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  transition: border-color 0.15s ease;
+}
+
+.admin-btn-ghost:hover:not(:disabled) {
+  border-color: var(--color-ink-secondary);
+}
+
+/* 禁用态两款按钮长一个样——禁用就是禁用。不用 opacity 压（会把仍要读的文字
+   压到 2.5:1）；改用 Cloud 底 + 次要文字色（4.5:1） */
+.admin-btn:disabled,
+.admin-btn-ghost:disabled {
+  border-color: var(--color-border);
+  background: var(--color-bg-cloud);
+  color: var(--color-ink-secondary);
+  font-weight: 500;
+  cursor: not-allowed;
+}
+
+.admin-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-family: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.admin-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.admin-link.danger {
+  color: var(--counter-danger);
+}
+
+.admin-link:disabled {
+  color: var(--color-ink-secondary);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.admin-input,
+.admin-select,
+.admin-textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 18px;
+}
+
+.admin-input:hover,
+.admin-select:hover,
+.admin-textarea:hover {
+  border-color: var(--color-ink-secondary);
+}
+
+/* 原生下拉的系统外观与这套扁平材质冲突，自己画一个 chevron；SVG 内联，不外链 */
+.admin-select {
+  appearance: none;
+  padding-right: 32px;
+  background-color: var(--color-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+}
+
+/* 多行输入回到正常行距，不跟单行控件的 18px 对齐规则走 */
+.admin-textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.6;
+}
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-field > label {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+/* 表单里的说明行：管理员要照着做事的话写在字段旁边，比 placeholder 可靠 */
+.admin-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
+/* 筛选 chip：带状态点的用与表格同一套语义色 */
+.admin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  color: var(--color-ink-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-chip[data-state]::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-color);
+}
+
+.admin-chip:hover {
+  border-color: var(--color-ink-secondary);
+  color: var(--color-ink);
+}
+
+/* 选中的筛选条件用深墨，与主操作的绿区分开：一个是「我要做什么」，一个是「我在看什么」 */
+.admin-chip.active {
+  border-color: var(--counter-deep);
+  background: var(--counter-deep);
+  color: #ffffff;
+}
+
+.admin-pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.admin-pager .info {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+.admin-pager .spacer {
+  flex: 1;
+}
+
+/* —— 加载 / 空 / 错误 —— */
+.admin-hint {
+  padding: 32px 20px;
+  color: var(--color-ink-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.admin-hint.error {
+  color: var(--counter-danger);
+}
+
+/* Select 组件的可选色点（值本身有颜色的选项） */
+.accent-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: -1px;
+}
+
+/* —— gate：登录引导 / 无权限 / 登录错误。与后台同一套浅色材质：
+   Cloud 底 + 一张白卡，不另起一个深色世界 —— */
+.gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--color-bg-cloud);
+}
+
+.gate-box {
+  max-width: 460px;
+  padding: 40px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.gate-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+.gate-brand .wordmark {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-brand-deep);
+}
+
+.gate-title {
+  margin-top: 24px;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.gate-text {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--color-ink-secondary);
+}
+
+.gate-text .fact {
+  color: var(--color-ink);
+  font-size: 13px;
+}
+
+.gate-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 28px;
+}
+
+/* 与后台主按钮同一个语言，只是尺寸放大一档 */
+.gate-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-button);
+  background: var(--color-brand);
+  color: var(--counter-deep);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gate-btn:hover {
+  background: var(--color-brand-deep);
+}
+
+/* —— 质量地板：焦点态 ——
+   压暗到达标的品牌绿，环收到 1px 间隙贴住控件，读起来是「这个控件的边缘亮起来了」。
+   不在这里设 border-radius：不设时 outline 自动贴合各元素本来的圆角。
+   环画在元素外侧，对比度由元素周围的底决定（Cloud 3.30:1） */
+:focus-visible {
+  outline: 2px solid var(--counter-focus);
+  outline-offset: 1px;
+}
+
+/* 表单控件本来就有一圈灰边。焦点时把它一起染绿，并让外环贴着它画（offset 0）：
+   1px 边 + 2px 环拼成一条 3px 的绿边，而不是「灰边外面又套一个环」的双线 */
+.admin-input:focus-visible,
+.admin-select:focus-visible,
+.admin-textarea:focus-visible {
+  border-color: var(--counter-focus);
+  outline-offset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* —— 响应式：窄屏把导航轨放平成顶部横条 —— */
+@media (max-width: 960px) {
+  .admin-rail {
+    position: static;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 20px;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .rail-brand {
+    padding: 0;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .rail-nav {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .rail-link.router-link-active::before {
+    top: auto;
+    bottom: -12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+
+  .rail-foot {
+    margin-top: 0;
+    margin-left: auto;
+    padding-top: 0;
+    border-top: none;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .rail-signout {
+    margin-top: 0;
+  }
+
+  .admin-desk {
+    margin-left: 0;
+    min-height: 0;
+  }
+
+  .admin-page {
+    padding: 28px 24px 56px;
+  }
+}
+
+@media (max-width: 640px) {
+  .rail-user-name {
+    display: none;
+  }
+
+  .admin-page {
+    padding: 20px 16px 48px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .admin-form-row {
+    grid-template-columns: 1fr;
+  }
+}

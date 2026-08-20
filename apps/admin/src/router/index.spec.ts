@@ -7,12 +7,6 @@ import type { MeResponse } from "../api/types";
 import { 标记登录跳转 } from "../utils/loginLoop";
 import { createAppRouter } from "./index";
 
-// ElMessage 在 jsdom 里要挂真实 DOM 组件，这里只关心守卫的导航结果，整体打桩
-vi.mock("element-plus", () => ({
-  ElMessage: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
-  ElMessageBox: { confirm: vi.fn() },
-}));
-
 const 管理员: MeResponse = { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] };
 const 普通成员: MeResponse = { id: 2, email: "m@b.c", name: "乙", role: "MEMBER", subscriptions: [] };
 

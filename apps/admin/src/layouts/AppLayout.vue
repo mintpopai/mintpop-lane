@@ -1,28 +1,38 @@
 <script setup lang="ts">
-import { useRoute } from "vue-router";
+// 后台外壳：全高导航轨（品牌 + 页面 + 当前用户）+ 右侧工作区
+import { computed } from "vue";
 import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
-const route = useRoute();
+
+/** 头像兜底字母：显示名首字（displayName 兜过 email，不会为空串才取） */
+const 首字 = computed(() => (auth.displayName || "?").slice(0, 1));
 </script>
 
 <template>
-  <el-container style="height: 100%">
-    <el-aside width="180px" style="border-right: 1px solid #e4e7ed">
-      <div style="padding: 18px 16px; font-weight: 600">Lane 管控后台</div>
-      <el-menu :default-active="String(route.name)" router>
-        <el-menu-item index="USERS" :route="{ name: 'USERS' }">用户</el-menu-item>
-        <el-menu-item index="NODES" :route="{ name: 'NODES' }">节点池</el-menu-item>
-      </el-menu>
-    </el-aside>
-    <el-container>
-      <el-header style="display: flex; align-items: center; justify-content: flex-end; gap: 12px">
-        <span>{{ auth.displayName }}</span>
-        <el-button link @click="auth.signOut()">退出登录</el-button>
-      </el-header>
-      <el-main>
-        <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+  <nav class="admin-rail" aria-label="管控后台">
+    <p class="rail-brand">
+      <span class="wordmark rail-wordmark">MintPop</span>
+      <span class="rail-kind">Lane 管控后台</span>
+    </p>
+
+    <div class="rail-nav">
+      <RouterLink :to="{ name: 'USERS' }" class="rail-link">用户</RouterLink>
+      <RouterLink :to="{ name: 'NODES' }" class="rail-link">节点池</RouterLink>
+    </div>
+
+    <div class="rail-foot">
+      <div class="rail-user">
+        <span class="rail-avatar">{{ 首字 }}</span>
+        <span class="rail-user-name">{{ auth.displayName }}</span>
+      </div>
+      <button type="button" class="rail-signout" @click="auth.signOut()">退出登录</button>
+    </div>
+  </nav>
+
+  <main class="admin-desk">
+    <div class="admin-page">
+      <router-view />
+    </div>
+  </main>
 </template>

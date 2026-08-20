@@ -1,0 +1,35 @@
+/* MintPop 设计基线 token
+   取自 mintpop-shop 的品牌基线（admin/src/styles/base.css），跨仓同源：
+   品牌层 token 改动需与 shop 仓同步，lane 专属的东西不写在这里。 */
+:root {
+  --color-brand: #17d1a7;
+  --color-brand-deep: #0fb389;
+  --color-ink: #0b0b0c;
+  --color-ink-secondary: #6b7280;
+  --color-bg: #ffffff;
+  --color-bg-cloud: #f4f8f6;
+  --color-bg-page: #f2f4f4;
+  --color-border: #e5e7eb;
+  --radius-card: 8px;
+  --radius-button: 6px;
+  --radius-pill: 999px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--color-ink);
+  background: var(--color-bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 品牌词标专用字体 */
+.wordmark {
+  font-family: "Fredoka", "Inter", sans-serif;
+}

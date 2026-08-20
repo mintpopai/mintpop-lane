@@ -5,7 +5,7 @@ export interface SubscriptionFormModel {
   id: number | null;
   agentType: string;
   name: string;
-  /** el-date-picker 直接绑定 Date（按管理员本地时区取值）；null = 未填 */
+  /** 模型存 Date（绝对时刻）；datetime-local 控件值经 utils/datetimeLocal 换算；null = 未填 */
   startsAt: Date | null;
   endsAt: Date | null;
   /** 留空表示沿用原凭据 */
