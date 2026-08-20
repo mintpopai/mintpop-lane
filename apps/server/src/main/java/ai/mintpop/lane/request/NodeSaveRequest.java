@@ -41,7 +41,7 @@ public class NodeSaveRequest {
 
     /**
      * 敏感键明文。更新时留空表示沿用原值，不清空。
-     * 排除出 toString，与 {@code ProxyNodeDto.secret} / {@code UserDto.claudeCredential}
+     * 排除出 toString，与 {@code ProxyNodeDto.secret} / {@code SubscriptionDto.credential}
      * 保持一致：目前全仓没有任何地方打印这个入参对象，但一旦日后有人加一行
      * {@code log.info("request={}", request)} 或某个异常把它塞进消息，
      * 没有这个注解密码就会原样进日志。

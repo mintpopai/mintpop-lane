@@ -15,21 +15,30 @@ spring:
     password: 填入数据库口令
   security:
     oauth2:
-      resourceserver:
-        jwt:
-          # Logto 租户的 OIDC issuer，形如 https://<tenant>.logto.app/oidc
-          issuer-uri: "https://填入你的租户.logto.app/oidc"
-          # 本服务在 Logto 中注册的 API Resource 标识，会与 JWT 的 aud 比对
-          audiences:
-            - "https://api.lane.mintpop.internal"
+      client:
+        registration:
+          logto:
+            # Logto 里「传统 Web 应用」的凭据
+            client-id: 填入 Logto 传统 Web 应用的 App ID
+            client-secret: 填入 Logto 传统 Web 应用的 App Secret
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/auth/callback"
+            scope: openid,profile,email
+        provider:
+          logto:
+            # Logto 租户的 OIDC issuer，形如 https://<tenant>.logto.app/oidc
+            issuer-uri: "https://填入你的租户.logto.app/oidc"
 
 lane:
   link:
     # 下发给客户端的配置有效期（秒）
     ttl-seconds: 1800
-  client:
-    # Logto 中桌面端那个「原生应用」的 App ID，会随引导配置下发给桌面端
-    logto-client-id: 填入 Logto 里那个原生应用的 App ID
+  auth:
+    # 自签会话 token 的 HS256 密钥，至少 32 字节。生成：openssl rand -base64 32
+    # 换了这个值，所有已登录会话（含桌面端钥匙串里的）全部失效
+    session-secret: 填入生成的密钥
+    # 本地开发时管理端 Vite 的地址
+    admin-frontend-url: "http://localhost:5173"
   crypto:
     # 32 字节密钥的 Base64。生成：openssl rand -base64 32
     # 换了这个值，库里已有的密文全部解不开，必须重录所有凭据与节点密码

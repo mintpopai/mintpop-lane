@@ -25,6 +25,9 @@ public class User {
     /** Logto 中的 user id，即 JWT 的 sub */
     private String subject;
 
+    /** 邮箱，登录时从 id_token 同步 */
+    private String email;
+
     private String name;
 
     private UserRole role;
@@ -35,9 +38,6 @@ public class User {
 
     /** 落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
-
-    /** Claude 席位长效凭据的密文 */
-    private String claudeCredentialCipher;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createdAt;

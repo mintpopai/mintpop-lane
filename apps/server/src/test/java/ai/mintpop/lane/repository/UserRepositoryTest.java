@@ -1,6 +1,7 @@
 package ai.mintpop.lane.repository;
 
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,6 +27,9 @@ class UserRepositoryTest extends MysqlTestBase {
     private ProxyNodeRepository nodeRepository;
 
     @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     private DatabaseFixtures fixtures;
@@ -32,14 +38,14 @@ class UserRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void 准备() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository, subscriptionRepository);
         fixtures.清空();
         frontId = fixtures.建FRONT节点("FRONT-1");
         landId = fixtures.建LAND节点("LAND-1", "203.0.113.10");
     }
 
     @Test
-    @DisplayName("用户存取往返，凭据能原样取回")
+    @DisplayName("用户存取往返，邮箱能原样取回")
     void 用户存取往返() {
         Long id = fixtures.建用户("logto-user-1", frontId, landId);
 
@@ -51,18 +57,8 @@ class UserRepositoryTest extends MysqlTestBase {
         assertThat(loaded.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(loaded.getFrontNodeId()).isEqualTo(frontId);
         assertThat(loaded.getLandNodeId()).isEqualTo(landId);
-        assertThat(loaded.getClaudeCredential()).isEqualTo("sk-ant-logto-user-1");
+        assertThat(loaded.getEmail()).isEqualTo("logto-user-1@test.example");
         assertThat(loaded.getCreatedAt()).isNotNull();
-    }
-
-    @Test
-    @DisplayName("席位凭据在库里是密文")
-    void 席位凭据在库里是密文() {
-        Long id = fixtures.建用户("logto-user-1", frontId, landId);
-
-        String stored = fixtures.读原始密文列("app_user", "claude_credential_cipher", id);
-
-        assertThat(stored).isNotBlank().doesNotContain("sk-ant-logto-user-1");
     }
 
     @Test
@@ -72,7 +68,7 @@ class UserRepositoryTest extends MysqlTestBase {
 
         assertThatThrownBy(() -> fixtures.建用户("logto-user-1", frontId, null))
                 .isInstanceOf(DuplicateKeyException.class);
-        assertThat(repository.existsBySubject("logto-user-1")).isTrue();
+        assertThat(repository.findBySubject("logto-user-1")).isPresent();
     }
 
     @Test
@@ -121,17 +117,48 @@ class UserRepositoryTest extends MysqlTestBase {
         fixtures.建用户("logto-user-2", frontId, null);
         fixtures.建用户("另一个人", frontId, null);
 
-        assertThat(repository.search(null, 1, 10).total()).isEqualTo(3);
-        assertThat(repository.search("logto-user", 1, 10).total()).isEqualTo(2);
-        assertThat(repository.search("另一个", 1, 10).records())
+        assertThat(repository.search(null, null, 1, 10).total()).isEqualTo(3);
+        assertThat(repository.search("logto-user", null, 1, 10).total()).isEqualTo(2);
+        assertThat(repository.search("另一个", null, 1, 10).records())
                 .singleElement()
                 .extracting(UserDto::getSubject)
                 .isEqualTo("另一个人");
 
-        var firstPage = repository.search(null, 1, 2);
+        var firstPage = repository.search(null, null, 1, 2);
         assertThat(firstPage.records()).hasSize(2);
         assertThat(firstPage.total()).isEqualTo(3);
         assertThat(firstPage.pageNo()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("分页搜索：关键字也能命中邮箱")
+    void 分页搜索命中邮箱() {
+        fixtures.建用户("logto-user-1", frontId, landId);
+        fixtures.建用户("logto-user-2", frontId, null);
+
+        assertThat(repository.search("logto-user-1@test.example", null, 1, 10).records())
+                .singleElement()
+                .extracting(UserDto::getSubject)
+                .isEqualTo("logto-user-1");
+    }
+
+    @Test
+    @DisplayName("按有无在期订阅筛选")
+    void 按有无在期订阅筛选() {
+        Long withSub = fixtures.建用户("logto-user-1", frontId, landId);
+        fixtures.建订阅(withSub, AgentType.CLAUDE, "Claude 席位",
+                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(30), null);
+        fixtures.建用户("logto-user-2", frontId, null);
+
+        var activeOnly = repository.search(null, true, 1, 10);
+        assertThat(activeOnly.total()).isEqualTo(1);
+        assertThat(activeOnly.records()).singleElement()
+                .extracting(UserDto::getSubject).isEqualTo("logto-user-1");
+
+        var inactiveOnly = repository.search(null, false, 1, 10);
+        assertThat(inactiveOnly.total()).isEqualTo(1);
+        assertThat(inactiveOnly.records()).singleElement()
+                .extracting(UserDto::getSubject).isEqualTo("logto-user-2");
     }
 
     @Test

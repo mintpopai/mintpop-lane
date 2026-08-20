@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Void> handleNoResourceFound(NoResourceFoundException e) {
         log.warn("路由不存在：{}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    /**
+     * 路径匹配但 HTTP 方法不受支持（如某路径只注册了 GET，却收到 POST）。
+     * 站在调用方视角，这与「路由整体不存在」（见上面的 NoResourceFoundException）没有区别——
+     * 都是「这个操作打不通」，同样统一走原生 404、绕开 ApiResponse 的 200 通道，
+     * 不暴露标准 405 这类框架细节，前端也无需为此单独分支。
+     * 典型场景：删掉某接口的写入端点后，该路径只剩查询方法可用。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("方法不支持：{}", e.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
     }
 
@@ -82,10 +96,12 @@ public class GlobalExceptionHandler {
      * msg 用固定文案，绝不回显 {@code e.getMessage()}：Jackson 的报错里会带上
      * 出错位置附近的原始输入片段，而请求体里恰恰可能装着用户提交的密码/凭据，
      * 原样回显等于把敏感字段吐回响应体。
+     * 日志同样不能带 cause，原因同上：异常栈里同样嵌着原始请求体片段
+     * （登录票据/verifier/凭据等），落进日志文件等于换了个地方泄露。
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ApiResponse<Void> handleBodyNotReadable(HttpMessageNotReadableException e) {
-        log.warn("请求体解析失败", e);
+        log.warn("请求体解析失败：{}", e.getClass().getSimpleName());
         return new ApiResponse<>(BizCodeEnum.PARAM_INVALID.getCode(), null, "请求体格式非法");
     }
 

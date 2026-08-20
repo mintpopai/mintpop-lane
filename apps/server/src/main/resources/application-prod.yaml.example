@@ -1,25 +1,37 @@
 # 生产环境配置模板。
-# 部署时复制为 application-prod.yaml 放在 deploy/ 目录下，由 compose 以只读卷挂进容器，
+# 部署时复制到 deploy/ 目录下改名 application-prod.yaml，由 compose 以只读卷挂进容器，
 # 不打进镜像。已在 .gitignore 中排除，严禁入库。
 #
 # 注意：容器内不要设 server.address，必须绑 0.0.0.0；
 # 不对外由 compose 的宿主端口只绑 127.0.0.1 保证。
+# 反代（nginx/cloudflared）终结 TLS 后，X-Forwarded-Proto 的还原已由主配置
+# application.yaml 的 server.forward-headers-strategy: framework 承担，这里不用重复配置。
 #
-# 数据库连接与加密密钥不写在这里，而是由 compose 从 deploy/.env 注入成环境变量
-# （SPRING_DATASOURCE_* 与 MINTPOP_CRYPTO_KEY），避免口令与配置文件一起被复制传阅。
+# 数据库连接、加密密钥与 Logto 的 client-secret、会话签名密钥不写在这里，
+# 而是由 compose 从 deploy/.env 注入成环境变量
+# （SPRING_DATASOURCE_*、LANE_CRYPTO_KEY、LANE_AUTH_SESSION_SECRET、
+# SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_LOGTO_CLIENT_SECRET），
+# 避免口令与配置文件一起被复制传阅。
 
 spring:
   security:
     oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: "https://填入你的租户.logto.app/oidc"
-          audiences:
-            - "https://api.lane.mintpop.internal"
+      client:
+        registration:
+          logto:
+            # Logto 里「传统 Web 应用」的 App ID；client-secret 由 compose 注入，不写在这里
+            client-id: 填入 Logto 传统 Web 应用的 App ID
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/auth/callback"
+            scope: openid,profile,email
+        provider:
+          logto:
+            # Logto 租户的 OIDC issuer，形如 https://<tenant>.logto.app/oidc
+            issuer-uri: "https://填入你的租户.logto.app/oidc"
 
 lane:
   link:
     ttl-seconds: 1800
-  client:
-    # Logto 中桌面端那个「原生应用」的 App ID，会随引导配置下发给桌面端
-    logto-client-id: 填入 Logto 里那个原生应用的 App ID
+  auth:
+    # 生产管理端地址；session-secret 由 compose 注入，不写在这里
+    admin-frontend-url: "https://填入管理端域名"

@@ -1,18 +1,17 @@
 package ai.mintpop.lane.response;
 
+import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * 管理端的用户视图。
- * 席位凭据只以 credentialConfigured 表达「有没有配」，凭据本身一个字符都不回传。
- */
+/** 管理端的用户视图。 */
 public record AdminUserResponse(
         Long id,
         String subject,
+        String email,
         String name,
         UserRole role,
         UserStatus status,
@@ -22,8 +21,13 @@ public record AdminUserResponse(
         String landNodeName,
         /** 该用户的期望出口 IP，取自其落地节点 */
         List<String> egressIps,
-        boolean credentialConfigured,
+        /** 在期订阅摘要，供列表一眼看出这个人开了什么、到什么时候 */
+        List<ActiveSubscriptionBrief> activeSubscriptions,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
+
+    /** 在期订阅摘要，供列表一眼看出这个人开了什么、到什么时候 */
+    public record ActiveSubscriptionBrief(Long id, String name, AgentType agentType, LocalDateTime endsAt) {
+    }
 }

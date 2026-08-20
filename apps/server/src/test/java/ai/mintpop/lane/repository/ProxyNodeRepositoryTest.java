@@ -26,13 +26,16 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
     private UserRepository userRepository;
 
     @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     private DatabaseFixtures fixtures;
 
     @BeforeEach
     void 准备() {
-        fixtures = new DatabaseFixtures(jdbc, repository, userRepository);
+        fixtures = new DatabaseFixtures(jdbc, repository, userRepository, subscriptionRepository);
         fixtures.清空();
     }
 

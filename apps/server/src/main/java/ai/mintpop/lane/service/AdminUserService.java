@@ -6,11 +6,11 @@ import ai.mintpop.lane.response.AdminUserResponse;
 
 public interface AdminUserService {
 
-    /** 分页搜索用户；keyword 为空时返回全部 */
-    PageResult<AdminUserResponse> page(String keyword, long pageNo, long pageSize);
-
-    /** 新建用户，返回新用户 id。角色固定为 MEMBER */
-    Long create(UserSaveRequest request);
+    /**
+     * 分页搜索用户；keyword 为空时不过滤，hasActiveSubscription 为 null 时不按订阅状态过滤，
+     * 非 null 时只返回「有/没有」在期订阅的用户。
+     */
+    PageResult<AdminUserResponse> page(String keyword, Boolean hasActiveSubscription, long pageNo, long pageSize);
 
     void update(Long id, UserSaveRequest request);
 
