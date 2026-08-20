@@ -5,8 +5,9 @@ export interface SubscriptionFormModel {
   id: number | null;
   agentType: string;
   name: string;
-  startsAt: string;
-  endsAt: string;
+  /** el-date-picker 直接绑定 Date（按管理员本地时区取值）；null = 未填 */
+  startsAt: Date | null;
+  endsAt: Date | null;
   /** 留空表示沿用原凭据 */
   credential: string;
   remark: string;
@@ -17,8 +18,8 @@ export function emptySubscriptionForm(): SubscriptionFormModel {
     id: null,
     agentType: "CLAUDE",
     name: "",
-    startsAt: "",
-    endsAt: "",
+    startsAt: null,
+    endsAt: null,
     credential: "",
     remark: "",
   };
@@ -29,8 +30,9 @@ export function subscriptionToForm(s: AdminSubscriptionResponse): SubscriptionFo
     id: s.id,
     agentType: s.agentType,
     name: s.name,
-    startsAt: s.startsAt,
-    endsAt: s.endsAt,
+    // 服务端给的是带 Z 的 UTC 串，解析成 Date 后由控件按本地时区回显
+    startsAt: new Date(s.startsAt),
+    endsAt: new Date(s.endsAt),
     // 服务端不回传凭据，回填一律为空；提交时空串即表示不修改
     credential: "",
     remark: s.remark ?? "",
@@ -51,19 +53,24 @@ export function validateSubscriptionForm(form: SubscriptionFormModel): string[] 
   if (!form.endsAt) {
     errors.push("止期不能为空");
   }
-  // ISO 字符串可按字典序比较；与服务端「止期必须晚于起期」判定一致
-  if (form.startsAt && form.endsAt && form.endsAt <= form.startsAt) {
+  // 绝对时刻直接比 epoch；与服务端「止期必须晚于起期」判定一致
+  if (form.startsAt && form.endsAt && form.endsAt.getTime() <= form.startsAt.getTime()) {
     errors.push("止期必须晚于起期");
   }
   return errors;
 }
 
 export function buildSubscriptionPayload(form: SubscriptionFormModel): SubscriptionSaveRequest {
+  if (!form.startsAt || !form.endsAt) {
+    // 调用契约：先过 validateSubscriptionForm；走到这里是编程错误
+    throw new Error("起止期未填，先通过表单校验再构造入参");
+  }
   return {
     agentType: form.agentType as SubscriptionSaveRequest["agentType"],
     name: form.name.trim(),
-    startsAt: form.startsAt,
-    endsAt: form.endsAt,
+    // toISOString 天然输出 UTC（带 Z），提交即绝对时刻
+    startsAt: form.startsAt.toISOString(),
+    endsAt: form.endsAt.toISOString(),
     // 空串 = 沿用原值，服务端按空白转 null 处理
     credential: form.credential.trim(),
     remark: form.remark.trim(),

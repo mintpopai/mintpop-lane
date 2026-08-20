@@ -12,32 +12,34 @@ const 样例: AdminSubscriptionResponse = {
   userId: 7,
   agentType: "CLAUDE",
   name: "Claude 席位 1",
-  startsAt: "2026-08-01T00:00:00",
-  endsAt: "2026-09-01T00:00:00",
+  startsAt: "2026-08-01T00:00:00Z",
+  endsAt: "2026-09-01T00:00:00Z",
   hasCredential: true,
   remark: "线下收款",
-  createdAt: "2026-08-01T00:00:00",
-  updatedAt: "2026-08-01T00:00:00",
+  createdAt: "2026-08-01T00:00:00Z",
+  updatedAt: "2026-08-01T00:00:00Z",
 };
 
 describe("subscriptionForm", () => {
-  it("空表单默认 CLAUDE 且凭据为空", () => {
+  it("空表单默认 CLAUDE、起止期为 null、凭据为空", () => {
     const form = emptySubscriptionForm();
     expect(form.id).toBeNull();
     expect(form.agentType).toBe("CLAUDE");
+    expect(form.startsAt).toBeNull();
+    expect(form.endsAt).toBeNull();
     expect(form.credential).toBe("");
   });
 
-  it("回填不含凭据，提交空凭据表示沿用原值", () => {
+  it("回填把 UTC 串解析成 Date，不含凭据", () => {
     const form = subscriptionToForm(样例);
+    expect(form.startsAt?.toISOString()).toBe("2026-08-01T00:00:00.000Z");
     expect(form.credential).toBe("");
-    expect(buildSubscriptionPayload(form).credential).toBe("");
   });
 
-  it("校验：套餐名必填、超长拒绝、止期必须晚于起期", () => {
+  it("校验：套餐名必填、超长拒绝、止期必须晚于起期（相等也拒绝）", () => {
     const form = emptySubscriptionForm();
-    form.startsAt = "2026-09-01T00:00:00";
-    form.endsAt = "2026-09-01T00:00:00";
+    form.startsAt = new Date("2026-09-01T00:00:00Z");
+    form.endsAt = new Date("2026-09-01T00:00:00Z");
     const errors = validateSubscriptionForm(form);
     expect(errors).toContain("套餐名不能为空");
     expect(errors).toContain("止期必须晚于起期");
@@ -46,13 +48,18 @@ describe("subscriptionForm", () => {
     expect(validateSubscriptionForm(form)).toContain("套餐名最长 64 个字符");
   });
 
-  it("合法表单校验通过并生成裁剪后的入参", () => {
+  it("合法表单生成 UTC 串入参——提交往返不漂移", () => {
     const form = subscriptionToForm(样例);
     form.name = "  Claude 席位 1  ";
     expect(validateSubscriptionForm(form)).toEqual([]);
     const payload = buildSubscriptionPayload(form);
     expect(payload.name).toBe("Claude 席位 1");
-    expect(payload.startsAt).toBe("2026-08-01T00:00:00");
+    expect(payload.startsAt).toBe("2026-08-01T00:00:00.000Z");
+    expect(payload.endsAt).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("未通过校验就构造入参是编程错误，直接抛出", () => {
+    expect(() => buildSubscriptionPayload(emptySubscriptionForm())).toThrow();
   });
 
   it("未知 agentType 回填时保留原值以免误改", () => {

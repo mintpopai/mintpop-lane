@@ -24,6 +24,8 @@ const form = ref<SubscriptionFormModel>(emptySubscriptionForm());
 const submitting = ref(false);
 
 const 标题 = computed(() => `订阅管理：${props.user.name}`);
+/** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
+const 本地时区 = Intl.DateTimeFormat().resolvedOptions().timeZone;
 // 编辑的这条如果 agentType 不在已知枚举里（服务端新增了本前端还不认识的类型），
 // 下拉必须额外补一项原值，否则选项列表里找不到当前值，会被 el-select 悄悄清空
 const agent选项 = computed<Array<{ value: string; label: string }>>(() => {
@@ -175,7 +177,6 @@ async function 删除(subscription: AdminSubscriptionResponse): Promise<void> {
         <el-date-picker
           v-model="form.startsAt"
           type="datetime"
-          value-format="YYYY-MM-DDTHH:mm:ss"
           style="width: 100%"
         />
       </el-form-item>
@@ -183,13 +184,12 @@ async function 删除(subscription: AdminSubscriptionResponse): Promise<void> {
         <el-date-picker
           v-model="form.endsAt"
           type="datetime"
-          value-format="YYYY-MM-DDTHH:mm:ss"
           style="width: 100%"
         />
       </el-form-item>
       <el-form-item>
         <span style="color: var(--el-text-color-secondary); font-size: 12px">
-          起止期按服务端时区解释，请与部署环境时区（compose 的 TZ）核对
+          起止期按你的本地时区（{{ 本地时区 }}）填写，保存为绝对时刻，各端按各自时区显示
         </span>
       </el-form-item>
       <el-form-item label="席位凭据">
