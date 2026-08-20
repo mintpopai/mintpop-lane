@@ -21,7 +21,9 @@ import org.testcontainers.mysql.MySQLContainer;
  * {@code @SpringBootTest(webEnvironment = RANDOM_PORT)} 会与父类的定义冲突。
  * 这里选最小可行方案——自带一份 {@code @ServiceConnection} 容器，独立起一份测试上下文。
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// spring.config.location 与 MysqlTestBase 同理：钉死 classpath，隔离开发机的 file:./config/
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "spring.config.location=classpath:/")
 @ActiveProfiles("test")
 class DesktopLoginControllerIT {
 

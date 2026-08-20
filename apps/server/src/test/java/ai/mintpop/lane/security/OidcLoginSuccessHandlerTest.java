@@ -32,6 +32,9 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
     private OidcLoginSuccessHandler handler;
 
     @Autowired
+    private AuthProperties authProperties;
+
+    @Autowired
     private DesktopFlowCookie desktopFlowCookie;
 
     @Autowired
@@ -73,7 +76,8 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
         assertThat(response.getHeaders("Set-Cookie"))
                 .filteredOn(c -> c.startsWith(AuthProperties.SESSION_COOKIE_NAME + "="))
                 .allSatisfy(c -> assertThat(c).contains("SameSite=Lax").contains("HttpOnly"));
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://admin.test.example");
+        // 对照注入的配置值而非写死：本地存在 config/application.yml 时外部配置会盖过测试配置
+        assertThat(response.getRedirectedUrl()).isEqualTo(authProperties.getAdminFrontendUrl());
     }
 
     @Test

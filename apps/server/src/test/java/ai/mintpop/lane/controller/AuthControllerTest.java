@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -176,10 +177,11 @@ class AuthControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("登出（无 end_session_endpoint 时回退）：302 回管理端，会话 Cookie 被置空过期")
     void 登出清会话Cookie并回管理端() throws Exception {
-        // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径
+        // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径。
+        // 断言对照注入的配置值而非写死：本地存在 config/application.yml 时外部配置会盖过测试配置
         mockMvc.perform(get("/auth/logout"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("http://admin.test.example"))
+                .andExpect(redirectedUrl(authProperties.getAdminFrontendUrl()))
                 .andExpect(cookie().value(AuthProperties.SESSION_COOKIE_NAME, ""))
                 .andExpect(cookie().maxAge(AuthProperties.SESSION_COOKIE_NAME, 0));
     }
@@ -212,7 +214,8 @@ class AuthControllerTest extends MysqlTestBase {
                 .startsWith("https://tenant.logto.app/oidc/session/end?")
                 .contains("client_id=test-client-id")
                 // 回跳地址必须整段 URL 编码，否则其中的 :// 会破坏查询串
-                .contains("post_logout_redirect_uri=http%3A%2F%2Fadmin.test.example");
+                .contains("post_logout_redirect_uri="
+                        + URLEncoder.encode(authProperties.getAdminFrontendUrl(), StandardCharsets.UTF_8));
         assertThat(response.getCookie(AuthProperties.SESSION_COOKIE_NAME).getMaxAge()).isZero();
     }
 }

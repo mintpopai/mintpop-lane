@@ -15,7 +15,9 @@ import org.testcontainers.mysql.MySQLContainer;
  * @ServiceConnection 让 Spring Boot 自动把容器的 JDBC 连接信息注入 DataSource，
  * 因此测试配置里不需要写 spring.datasource.*。
  */
-@SpringBootTest
+// 配置来源钉死 classpath：默认位置含 file:./config/，开发机若放了真实 application.yml
+// 会以更高优先级盖过 application-test.yaml，测试值被真实配置污染、甚至触发联网的 OIDC 发现
+@SpringBootTest(properties = "spring.config.location=classpath:/")
 @ActiveProfiles("test")
 public abstract class MysqlTestBase {
 
