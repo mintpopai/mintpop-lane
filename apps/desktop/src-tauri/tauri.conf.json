@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Lane",
+  "productName": "MintPop Lane",
   "version": "0.1.0",
   "identifier": "ai.mintpop.lane",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Lane",
+        "title": "MintPop Lane",
         "width": 1100,
         "height": 720
       }

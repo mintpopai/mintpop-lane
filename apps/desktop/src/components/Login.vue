@@ -38,7 +38,7 @@ async function login() {
 
 <template>
   <div class="login">
-    <h1>Lane</h1>
+    <h1>MintPop Lane</h1>
     <p class="hint">
       登录后终端会自动接入专属链路并配好你购买的 Agent 服务；首次使用会自动完成注册。
     </p>

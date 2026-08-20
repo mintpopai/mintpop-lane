@@ -89,7 +89,7 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Lane desktop v${{ steps.prev.outputs.version }}
+          name: MintPop Lane desktop v${{ steps.prev.outputs.version }}
           body_path: notes.md
 
   bundle:

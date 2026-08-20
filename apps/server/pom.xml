@@ -15,7 +15,7 @@
   <artifactId>lane-server</artifactId>
   <version>0.1.0</version>
   <name>lane-server</name>
-  <description>Lane 受控终端的链路下发服务</description>
+  <description>MintPop Lane 受控终端的链路下发服务</description>
 
   <properties>
     <java.version>25</java.version>
