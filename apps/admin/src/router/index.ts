@@ -1,18 +1,30 @@
 import { ElMessage } from "element-plus";
-import { createRouter, createWebHistory, type Router } from "vue-router";
+import { createRouter, createWebHistory, type Router, type RouterHistory } from "vue-router";
 import { authApi } from "../api";
+import type { AuthApi } from "../api/auth";
 import { useAuthStore } from "../stores/auth";
+import { 标记登录跳转, 清除标记, 疑似环路 } from "../utils/loginLoop";
 import AppLayout from "../layouts/AppLayout.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
+import LoginErrorView from "../views/LoginErrorView.vue";
 import NodesView from "../views/NodesView.vue";
 import UsersView from "../views/UsersView.vue";
 
-export function createAppRouter(): Router {
+/**
+ * 两个依赖都做成可选入参：api 让守卫可被注入假实现，history 让测试用内存历史。
+ * 生产调用处（main.ts）不传参，行为与从前一致。
+ */
+export function createAppRouter(
+  api: AuthApi = authApi(),
+  history: RouterHistory = createWebHistory(),
+): Router {
   const router = createRouter({
-    history: createWebHistory(),
+    history,
     routes: [
       // 无权限页必须在 isAdmin=false 时还能打开，否则会来回跳
       { path: "/forbidden", name: "FORBIDDEN", component: ForbiddenView, meta: { public: true } },
+      // 登录环路的落点：同样必须 public，否则它自己也会被守卫赶去登录
+      { path: "/login-error", name: "LOGIN_ERROR", component: LoginErrorView, meta: { public: true } },
       {
         path: "/",
         component: AppLayout,
@@ -27,17 +39,30 @@ export function createAppRouter(): Router {
   });
 
   router.beforeEach(async (to) => {
+    // 服务端握手失败时会带 ?login_error=1 回到管理端，先于任何探测把人送到能读懂的错误页。
+    // 跳转会丢掉这个查询参数，因此不会自我循环
+    if (to.query.login_error === "1" && to.name !== "LOGIN_ERROR") {
+      return { name: "LOGIN_ERROR" };
+    }
+
     if (to.meta.public) {
       return true;
     }
 
     const auth = useAuthStore();
     try {
-      if (!(await auth.refreshAuthState(authApi()))) {
+      // 每次导航都实探 /api/me 是有意为之——吊销/停用在下一次导航即生效，勿加缓存
+      if (!(await auth.refreshAuthState(api))) {
+        // 刚跳过登录又立刻回到未登录：再跳一次只会继续死循环，改为落错误页说明原因
+        if (疑似环路()) {
+          return { name: "LOGIN_ERROR" };
+        }
         // 未登录：整页跳服务端登录入口，本次导航不再继续
+        标记登录跳转();
         auth.signIn();
         return false;
       }
+      清除标记();
     } catch (error) {
       // 网络抖动、服务端 5xx 不该把人赶去登录页或无权限页，
       // 放行进页面由页面自己的加载错误提示，下次导航重试

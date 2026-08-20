@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
+import { 登录入口 } from "../auth/constants";
 import type { AuthApi } from "../api/auth";
 import { UnauthorizedError } from "../api/http";
 import type { MeResponse } from "../api/types";
@@ -41,7 +42,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   /** 整页跳服务端登录入口，握手由服务端完成，回来时已带会话 Cookie */
   function signIn(): void {
-    window.location.assign("/oauth2/authorization/logto");
+    window.location.assign(登录入口);
   }
 
   /** 整页跳服务端登出端点，清 Cookie 后 302 回管理端首页 */

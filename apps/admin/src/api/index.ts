@@ -1,3 +1,4 @@
+import { 登录入口 } from "../auth/constants";
 import { runtimeConfig } from "../config/runtime";
 import { createAdminApi, type AdminApi } from "./admin";
 import { createAuthApi, type AuthApi } from "./auth";
@@ -16,7 +17,7 @@ function httpClient(): HttpClient {
     http = createHttpClient({
       baseUrl: runtimeConfig().apiBaseUrl,
       // 会话失效就整页跳服务端登录入口。跳转会离开本页，不必等待返回
-      onUnauthorized: () => window.location.assign("/oauth2/authorization/logto"),
+      onUnauthorized: () => window.location.assign(登录入口),
     });
   }
   return http;
