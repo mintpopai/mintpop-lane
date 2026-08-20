@@ -29,6 +29,9 @@ class DesktopLoginControllerIT {
     static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4");
 
     static {
+        // 与生产 JDBC URL 的时区参数一致：编解码与会话时区都钉 UTC
+        MYSQL.withUrlParam("connectionTimeZone", "UTC")
+             .withUrlParam("forceConnectionTimeZoneToSession", "true");
         MYSQL.start();
     }
 

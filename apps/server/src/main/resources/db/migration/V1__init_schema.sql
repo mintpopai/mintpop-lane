@@ -12,8 +12,8 @@ CREATE TABLE proxy_node
     egress_ips    JSON         NULL COMMENT '出口 IP 集合，仅 LAND 节点有值，供客户端做出口校验',
     status        VARCHAR(16)  NOT NULL DEFAULT 'ENABLED' COMMENT '状态：ENABLED 可分配可下发，DISABLED 禁用',
     remark        VARCHAR(255) NULL COMMENT '备注',
-    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_proxy_node_name (name)
 ) ENGINE = InnoDB
@@ -31,8 +31,8 @@ CREATE TABLE app_user
     status        VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT '账号处置态：ACTIVE 正常，SUSPENDED 临时停用，REVOKED 已吊销；「能不能用服务」由订阅决定，不由本列表达',
     front_node_id BIGINT       NULL COMMENT '第一跳节点 id，引用 proxy_node；NULL 表示尚未分配（注册即无资源）',
     land_node_id  BIGINT       NULL COMMENT '第二跳落地节点 id，引用 proxy_node；NULL 表示尚未分配',
-    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（首次登录时间）',
-    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（首次登录时间，UTC）',
+    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_app_user_subject (subject),
     -- 一个落地节点最多绑一个人：唯一索引不约束多个 NULL，故「未分配」可以有很多条
@@ -50,12 +50,12 @@ CREATE TABLE subscription
     user_id           BIGINT       NOT NULL COMMENT '归属用户 id，引用 app_user；删用户级联删订阅',
     agent_type        VARCHAR(16)  NOT NULL COMMENT 'agent 类型：CLAUDE / CODEX',
     name              VARCHAR(64)  NOT NULL COMMENT '用户可见的套餐名，管理员填写，如「Claude Max 席位 1」',
-    starts_at         DATETIME     NOT NULL COMMENT '服务起期（含）',
-    ends_at           DATETIME     NOT NULL COMMENT '服务止期（不含）；在期判定为 starts_at <= now < ends_at，纯查询、无定时任务',
+    starts_at         DATETIME     NOT NULL COMMENT '服务起期（含，UTC）',
+    ends_at           DATETIME     NOT NULL COMMENT '服务止期（不含，UTC）；在期判定为 starts_at <= now < ends_at（now 取 UTC），纯查询、无定时任务',
     credential_cipher TEXT         NULL COMMENT '该 agent 的席位凭据密文（AES-GCM），NULL 表示尚未录入',
     remark            VARCHAR(255) NULL COMMENT '备注',
-    created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
+    updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
     PRIMARY KEY (id),
     KEY idx_subscription_user (user_id),
     CONSTRAINT fk_subscription_user FOREIGN KEY (user_id) REFERENCES app_user (id) ON DELETE CASCADE

@@ -13,7 +13,7 @@
 spring:
   datasource:
     # 本地开发填本机 MySQL，线上填外置 MySQL。库需提前建好，表由 Flyway 自动建
-    url: "jdbc:mysql://127.0.0.1:3306/lane?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+    url: "jdbc:mysql://127.0.0.1:3306/lane?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
     username: 填入数据库用户名
     password: 填入数据库口令
   security:

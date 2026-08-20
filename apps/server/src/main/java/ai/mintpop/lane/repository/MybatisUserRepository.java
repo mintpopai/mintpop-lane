@@ -71,10 +71,10 @@ public class MybatisUserRepository implements UserRepository {
         }
         if (Boolean.TRUE.equals(hasActiveSubscription)) {
             query.exists("SELECT 1 FROM subscription s WHERE s.user_id = app_user.id"
-                    + " AND s.starts_at <= NOW() AND s.ends_at > NOW()");
+                    + " AND s.starts_at <= UTC_TIMESTAMP() AND s.ends_at > UTC_TIMESTAMP()");
         } else if (Boolean.FALSE.equals(hasActiveSubscription)) {
             query.notExists("SELECT 1 FROM subscription s WHERE s.user_id = app_user.id"
-                    + " AND s.starts_at <= NOW() AND s.ends_at > NOW()");
+                    + " AND s.starts_at <= UTC_TIMESTAMP() AND s.ends_at > UTC_TIMESTAMP()");
         }
         Page<User> page = mapper.selectPage(Page.of(safePageNo, safePageSize), query);
         return new PageResult<>(

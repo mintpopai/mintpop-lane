@@ -90,6 +90,18 @@ class SubscriptionRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("落库语义：写入的 Instant 在 DATETIME 列里的字面值就是 UTC 墙钟")
+    void 落库字面值为UTC墙钟() {
+        Long id = fixtures.建订阅(userId, AgentType.CLAUDE, "UTC 落库",
+                Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-09-01T00:00:00Z"), "cred");
+        String literal = jdbc.queryForObject(
+                "SELECT DATE_FORMAT(starts_at, '%Y-%m-%dT%H:%i:%s') FROM subscription WHERE id = ?",
+                String.class, id);
+        // 若 JVM 时区渗入编解码（driver 默认 connectionTimeZone=LOCAL），这里会差出本机时区的偏移
+        assertThat(literal).isEqualTo("2026-08-01T00:00:00");
+    }
+
+    @Test
     @DisplayName("update 可延长止期并换凭据")
     void update可延长止期并换凭据() {
         Long id = fixtures.建订阅(userId, AgentType.CLAUDE, "席位 A",
