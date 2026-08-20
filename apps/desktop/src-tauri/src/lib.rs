@@ -317,6 +317,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
@@ -340,7 +341,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::link_status,
+            commands::list_agent_credentials,
+            commands::pick_workspace,
             commands::open_session,
+            commands::close_session,
             commands::write_session,
             commands::resize_session,
             commands::auth_status,

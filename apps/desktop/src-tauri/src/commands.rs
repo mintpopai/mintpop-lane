@@ -1,7 +1,7 @@
 use crate::app_state::{AppState, PendingLogin};
 use crate::auth::{pkce, storage};
 use crate::link::state::LinkState;
-use crate::pty::session::{default_shell, spawn_agent_pty};
+use crate::pty::session::spawn_agent_pty;
 use std::io::Read;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -65,13 +65,61 @@ pub async fn logout(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 开一个新的终端会话。链路不活跃时返回错误，前端据此提示用户。
+/// 前端可见的席位视图：给会话向导渲染用，凭据本体绝不出现
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCredentialView {
+    pub subscription_id: i64,
+    pub name: String,
+    pub agent_type: String,
+    pub display_name: String,
+    pub ends_at: String,
+}
+
+/// 列出可建会话的席位（只含本客户端认识的 agent 类型）
+#[tauri::command]
+pub fn list_agent_credentials(
+    state: State<'_, AppState>,
+) -> Result<Vec<AgentCredentialView>, String> {
+    let link = state.link.lock().unwrap();
+    let link = link.as_ref().ok_or_else(|| "链路尚未就绪".to_string())?;
+
+    Ok(link
+        .agent_credentials
+        .iter()
+        .filter_map(|c| {
+            crate::pty::agent::spec_of(&c.agent_type).map(|spec| AgentCredentialView {
+                subscription_id: c.subscription_id,
+                name: c.name.clone(),
+                agent_type: c.agent_type.clone(),
+                display_name: spec.display_name.to_string(),
+                ends_at: c.ends_at.clone(),
+            })
+        })
+        .collect())
+}
+
+/// 弹系统目录选择器让用户挑 workspace。取消返回 None。
+#[tauri::command]
+pub async fn pick_workspace(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder);
+    });
+    let folder = rx.await.map_err(|e| e.to_string())?;
+    Ok(folder.map(|p| p.to_string()))
+}
+
+/// 开一个新的 agent 会话：按所选订阅注入对应凭据，在所选 workspace 里直接运行 agent CLI
 #[tauri::command]
 pub fn open_session(
     app: AppHandle,
     state: State<'_, AppState>,
     rows: u16,
     cols: u16,
+    subscription_id: i64,
+    workspace: String,
 ) -> Result<String, String> {
     let link_state = *state.link_state.lock().unwrap();
     let inbound = state
@@ -80,26 +128,28 @@ pub fn open_session(
         .unwrap()
         .clone()
         .ok_or_else(|| "链路尚未就绪".to_string())?;
-    // 过渡逻辑（Task 3 换成会话向导按订阅选择）：取止期最晚的 CLAUDE 凭据
-    let credential = state
-        .link
-        .lock()
-        .unwrap()
-        .as_ref()
-        .and_then(|l| {
-            l.agent_credentials
-                .iter()
-                .filter(|c| c.agent_type == "CLAUDE")
-                .max_by(|a, b| a.ends_at.cmp(&b.ends_at))
-                .map(|c| c.credential.clone())
-        })
-        .ok_or_else(|| "没有可用的 Claude 席位".to_string())?;
+
+    // 按订阅定位凭据与 agent 映射；凭据只在这个作用域内出现，不进前端
+    let (command, credential_env, credential) = {
+        let link = state.link.lock().unwrap();
+        let link = link.as_ref().ok_or_else(|| "链路尚未就绪".to_string())?;
+        let chosen = link
+            .agent_credentials
+            .iter()
+            .find(|c| c.subscription_id == subscription_id)
+            .ok_or_else(|| "所选套餐不存在或已失效，请刷新后重选".to_string())?;
+        let spec = crate::pty::agent::spec_of(&chosen.agent_type)
+            .ok_or_else(|| "本版本暂不支持该 agent，请升级客户端".to_string())?;
+        (spec.command, spec.credential_env, chosen.credential.clone())
+    };
 
     let session = spawn_agent_pty(
         link_state,
         &inbound,
+        command,
+        credential_env,
         &credential,
-        default_shell(),
+        std::path::Path::new(&workspace),
         rows,
         cols,
     )
@@ -108,7 +158,7 @@ pub fn open_session(
     let id = new_session_id();
     let mut reader = session.reader().map_err(|e| e.to_string())?;
 
-    // 把子进程输出泵到前端
+    // 把子进程输出泵到前端；子进程退出时通知前端回到向导
     let emit_id = id.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
@@ -124,10 +174,19 @@ pub fn open_session(
                 }
             }
         }
+        let _ = app.emit("session://exit", serde_json::json!({ "id": emit_id }));
     });
 
     state.sessions.lock().unwrap().insert(id.clone(), session);
     Ok(id)
+}
+
+/// 关闭会话：显式杀子进程并移出会话表
+#[tauri::command]
+pub fn close_session(state: State<'_, AppState>, id: String) {
+    if let Some(session) = state.sessions.lock().unwrap().remove(&id) {
+        session.kill();
+    }
 }
 
 #[tauri::command]
