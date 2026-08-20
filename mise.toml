@@ -1,5 +1,5 @@
 [tools]
-rust = "1.97.1"
+rust = { version = "1.97.1", profile = "minimal", components = ["clippy"] }
 node = "26.7.0"
 pnpm = "11.22.0"
 java = "temurin-25.0.4+7.0.LTS"
