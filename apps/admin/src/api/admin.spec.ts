@@ -12,7 +12,12 @@ describe("createAdminApi", () => {
   it("分页查询把关键字与页码拼成查询串", async () => {
     const { http, request } = 假客户端();
 
-    await createAdminApi(http).pageUsers({ keyword: "张", pageNo: 2, pageSize: 20 });
+    await createAdminApi(http).pageUsers({
+      keyword: "张",
+      hasActiveSubscription: null,
+      pageNo: 2,
+      pageSize: 20,
+    });
 
     expect(request).toHaveBeenCalledWith("/admin/users?keyword=%E5%BC%A0&pageNo=2&pageSize=20");
   });
@@ -20,9 +25,29 @@ describe("createAdminApi", () => {
   it("关键字为空时不发 keyword 参数，避免服务端按空串去 like", async () => {
     const { http, request } = 假客户端();
 
-    await createAdminApi(http).pageUsers({ keyword: "", pageNo: 1, pageSize: 20 });
+    await createAdminApi(http).pageUsers({
+      keyword: "",
+      hasActiveSubscription: null,
+      pageNo: 1,
+      pageSize: 20,
+    });
 
     expect(request).toHaveBeenCalledWith("/admin/users?pageNo=1&pageSize=20");
+  });
+
+  it("pageUsers 带在期订阅筛选，null 时不发该参数", async () => {
+    const paths: string[] = [];
+    const http: HttpClient = {
+      request: async <T>(path: string) => {
+        paths.push(path);
+        return { records: [], total: 0, pageNo: 1, pageSize: 20 } as T;
+      },
+    };
+    const api = createAdminApi(http);
+    await api.pageUsers({ keyword: "", hasActiveSubscription: true, pageNo: 1, pageSize: 20 });
+    await api.pageUsers({ keyword: "", hasActiveSubscription: null, pageNo: 1, pageSize: 20 });
+    expect(paths[0]).toContain("hasActiveSubscription=true");
+    expect(paths[1]).not.toContain("hasActiveSubscription");
   });
 
   it("节点列表按角色过滤；不传角色就取全部", async () => {
@@ -67,5 +92,34 @@ describe("createAdminApi", () => {
       body: JSON.stringify(body),
     });
     expect(request).toHaveBeenNthCalledWith(3, "/admin/nodes/3", { method: "DELETE" });
+  });
+
+  it("订阅四端点路径与方法正确", async () => {
+    const calls: Array<{ path: string; method?: string }> = [];
+    const http: HttpClient = {
+      request: async <T>(path: string, init?: RequestInit) => {
+        calls.push({ path, method: init?.method });
+        return [] as T;
+      },
+    };
+    const api = createAdminApi(http);
+    const body = {
+      agentType: "CLAUDE" as const,
+      name: "Claude 席位 1",
+      startsAt: "2026-08-01T00:00:00",
+      endsAt: "2026-09-01T00:00:00",
+      credential: "sk-ant-x",
+      remark: "",
+    };
+    await api.listSubscriptions(7);
+    await api.createSubscription(7, body);
+    await api.updateSubscription(3, body);
+    await api.deleteSubscription(3);
+    expect(calls).toEqual([
+      { path: "/admin/users/7/subscriptions", method: undefined },
+      { path: "/admin/users/7/subscriptions", method: "POST" },
+      { path: "/admin/subscriptions/3", method: "PUT" },
+      { path: "/admin/subscriptions/3", method: "DELETE" },
+    ]);
   });
 });

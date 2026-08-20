@@ -18,12 +18,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,22 +37,28 @@ import java.util.List;
 @RestController
 public class AuthController {
 
+    /** OIDC 客户端注册 id，与 application.yaml 里 spring.security.oauth2.client.registration 下的键一致 */
+    private static final String LOGTO_REGISTRATION_ID = "logto";
+
     private final TicketStore ticketStore;
     private final SessionTokenService sessionTokenService;
     private final AuthProperties authProperties;
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final ClientRegistrationRepository clientRegistrationRepository;
 
     public AuthController(TicketStore ticketStore,
                           SessionTokenService sessionTokenService,
                           AuthProperties authProperties,
                           UserRepository userRepository,
-                          SubscriptionRepository subscriptionRepository) {
+                          SubscriptionRepository subscriptionRepository,
+                          ClientRegistrationRepository clientRegistrationRepository) {
         this.ticketStore = ticketStore;
         this.sessionTokenService = sessionTokenService;
         this.authProperties = authProperties;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.clientRegistrationRepository = clientRegistrationRepository;
     }
 
     /** 桌面端用一次性 ticket + PKCE verifier 兑换长效会话 token */
@@ -82,7 +92,12 @@ public class AuthController {
                 user.getId(), user.getEmail(), user.getName(), user.getRole(), subscriptions));
     }
 
-    /** 管理端网页登出：清会话 Cookie 后回前端。桌面端登出=删钥匙串，不经过服务端 */
+    /**
+     * 管理端网页登出：先清本站会话 Cookie，再尽量把 Logto 那边的 IdP 会话也结束掉。
+     * 只清 Cookie 是不够的——Logto 侧仍留着登录态，用户下次进受保护页会被静默重登，
+     * 「退出」就成了错觉，所以这里走 OIDC 的 RP-initiated logout。
+     * 桌面端登出=删钥匙串，不经过服务端。
+     */
     @GetMapping("/auth/logout")
     public void logout(HttpServletRequest request, HttpServletResponse response) throws IOException {
         ResponseCookie expired = ResponseCookie.from(AuthProperties.SESSION_COOKIE_NAME, "")
@@ -93,6 +108,31 @@ public class AuthController {
                 .sameSite("Lax")
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, expired.toString());
-        response.sendRedirect(authProperties.getAdminFrontendUrl());
+        response.sendRedirect(登出跳转地址());
+    }
+
+    /**
+     * 登出后该跳去哪，两条路径：
+     * 1. issuer-uri 发现模式下，Spring 会把发现文档整份放进 configurationMetadata，
+     *    其中的 end_session_endpoint 就是 Logto 的结束会话端点——跳它并带上
+     *    client_id 与 post_logout_redirect_uri（须在 Logto 应用里登记），IdP 会话才真正结束；
+     * 2. 显式端点配置（如测试环境）拿不到 metadata，没有可用的结束会话端点，
+     *    只能回退成「只清本站 Cookie 后回管理端」——本站已登出，Logto 侧留待其自然过期。
+     */
+    private String 登出跳转地址() {
+        String adminUrl = authProperties.getAdminFrontendUrl();
+        ClientRegistration registration = clientRegistrationRepository.findByRegistrationId(LOGTO_REGISTRATION_ID);
+        if (registration == null) {
+            return adminUrl;
+        }
+        Object endpoint = registration.getProviderDetails().getConfigurationMetadata().get("end_session_endpoint");
+        if (endpoint == null || endpoint.toString().isBlank()) {
+            return adminUrl;
+        }
+        // 端点自身可能已带查询串，拼接符按需选择；两个参数值都做 URL 编码后再拼
+        String separator = endpoint.toString().contains("?") ? "&" : "?";
+        return endpoint + separator
+                + "client_id=" + URLEncoder.encode(registration.getClientId(), StandardCharsets.UTF_8)
+                + "&post_logout_redirect_uri=" + URLEncoder.encode(adminUrl, StandardCharsets.UTF_8);
     }
 }

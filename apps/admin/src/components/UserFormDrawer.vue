@@ -7,62 +7,47 @@ import { USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
 import {
   buildUserPayload,
-  emptyUserForm,
   selectableFrontNodes,
   selectableLandNodes,
   userToForm,
-  validateUserForm,
   type UserFormModel,
 } from "../utils/userForm";
 
 const props = defineProps<{
   modelValue: boolean;
-  editing: AdminUserResponse | null;
+  user: AdminUserResponse;
   nodes: AdminNodeResponse[];
 }>();
 const emit = defineEmits<{ "update:modelValue": [boolean]; saved: [] }>();
 
-const form = ref<UserFormModel>(emptyUserForm());
+const form = ref<UserFormModel>(userToForm(props.user));
 const submitting = ref(false);
 
-const 标题 = computed(() => (props.editing ? `编辑用户：${props.editing.name}` : "新建用户"));
+const 标题 = computed(() => `编辑用户：${props.user.name}`);
 const 前置可选 = computed(() => selectableFrontNodes(props.nodes));
 // 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
 // 原节点就会从下拉里消失、再也切不回去，只能关掉抽屉丢弃全部改动重来
-const 落地可选 = computed(() => selectableLandNodes(props.nodes, props.editing?.landNodeId ?? null));
-const 凭据提示 = computed(() =>
-  props.editing?.credentialConfigured ? "已配置，留空表示不修改" : "尚未配置",
-);
+const 落地可选 = computed(() => selectableLandNodes(props.nodes, props.user.landNodeId));
 
 watch(
   () => props.modelValue,
   (opened) => {
     if (opened) {
-      form.value = props.editing ? userToForm(props.editing) : emptyUserForm();
+      form.value = userToForm(props.user);
     }
   },
 );
 
 async function 提交(): Promise<void> {
-  const errors = validateUserForm(form.value);
-  if (errors.length > 0) {
-    ElMessage.warning(errors[0]);
-    return;
-  }
-
   submitting.value = true;
   try {
     const payload = buildUserPayload(form.value);
-    if (props.editing) {
-      await adminApi().updateUser(props.editing.id, payload);
-    } else {
-      await adminApi().createUser(payload);
-    }
+    await adminApi().updateUser(props.user.id, payload);
     ElMessage.success("已保存");
     emit("update:modelValue", false);
     emit("saved");
   } catch (error) {
-    // 410002 落地节点被占、410004 Logto 用户已存在，都由服务端给中文提示
+    // 410002 落地节点被占，由服务端给中文提示
     ElMessage.error(error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`);
   } finally {
     submitting.value = false;
@@ -77,20 +62,22 @@ async function 提交(): Promise<void> {
     size="520px"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <el-form label-width="130px">
-      <el-form-item label="Logto user id">
-        <el-input v-model="form.subject" placeholder="JWT 里的 sub" />
-      </el-form-item>
-      <el-form-item label="姓名">
-        <el-input v-model="form.name" />
-      </el-form-item>
+    <el-descriptions :column="2" border style="margin-bottom: 16px">
+      <el-descriptions-item label="邮箱">{{ user.email }}</el-descriptions-item>
+      <el-descriptions-item label="姓名">{{ user.name }}</el-descriptions-item>
+      <el-descriptions-item label="Logto id">{{ user.subject }}</el-descriptions-item>
+      <el-descriptions-item label="角色">{{ USER_ROLE_LABELS[user.role] }}</el-descriptions-item>
+    </el-descriptions>
+    <p style="margin: 0 0 16px; color: #909399">姓名与邮箱随登录自动同步；授予管理员请直接改库。</p>
+
+    <el-form label-width="110px">
       <el-form-item label="状态">
         <el-select v-model="form.status">
           <el-option v-for="(label, value) in USER_STATUS_LABELS" :key="value" :label="label" :value="value" />
         </el-select>
       </el-form-item>
       <el-form-item label="第一跳节点">
-        <el-select v-model="form.frontNodeId" placeholder="必选">
+        <el-select v-model="form.frontNodeId" clearable placeholder="可不分配">
           <el-option v-for="node in 前置可选" :key="node.id" :label="node.name" :value="node.id" />
         </el-select>
       </el-form-item>
@@ -103,22 +90,6 @@ async function 提交(): Promise<void> {
             :value="node.id"
           />
         </el-select>
-      </el-form-item>
-      <el-form-item label="席位凭据">
-        <div style="width: 100%">
-          <p style="margin: 0 0 8px; color: #909399">{{ 凭据提示 }}。加密存储，服务端永不回传。</p>
-          <el-input
-            v-model="form.claudeCredential"
-            type="password"
-            show-password
-            placeholder="claude setup-token 生成的长效凭据"
-          />
-        </div>
-      </el-form-item>
-      <el-form-item label="角色">
-        <span style="color: #909399">
-          {{ editing ? USER_ROLE_LABELS[editing.role] : "新建的用户一律是普通成员" }}——授予管理员请直接改库
-        </span>
       </el-form-item>
     </el-form>
 

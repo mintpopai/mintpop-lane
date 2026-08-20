@@ -1,61 +1,51 @@
 import { createPinia, setActivePinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AdminApi } from "../api/admin";
-import { BizError, ForbiddenError } from "../api/http";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { AuthApi } from "../api/auth";
+import { UnauthorizedError } from "../api/http";
+import type { MeResponse } from "../api/types";
 import { useAuthStore } from "./auth";
 
-function 假api(listNodes: AdminApi["listNodes"]): AdminApi {
-  return { listNodes } as unknown as AdminApi;
+const 管理员: MeResponse = { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] };
+const 普通成员: MeResponse = { id: 2, email: "m@b.c", name: "", role: "MEMBER", subscriptions: [] };
+
+function 假api(result: MeResponse | Error): AuthApi {
+  return {
+    me: async () => {
+      if (result instanceof Error) throw result;
+      return result;
+    },
+  };
 }
 
-describe("useAuthStore.probeAdmin", () => {
-  beforeEach(() => {
-    setActivePinia(createPinia());
-  });
+describe("useAuthStore", () => {
+  beforeEach(() => setActivePinia(createPinia()));
 
-  it("管理接口调得通就认定是管理员", async () => {
+  it("me 成功即已登录，管理员身份由 role 得出", async () => {
     const store = useAuthStore();
-
-    await store.probeAdmin(假api(vi.fn(async () => [])));
-
+    expect(store.isAdmin).toBeNull();
+    expect(await store.refreshAuthState(假api(管理员))).toBe(true);
+    expect(store.authenticated).toBe(true);
     expect(store.isAdmin).toBe(true);
+    expect(store.displayName).toBe("甲");
   });
 
-  it("被 403 就认定没有管理权限——这是唯一的判定依据，不看 JWT 里的任何 claim", async () => {
+  it("401 视为未登录且不抛异常", async () => {
     const store = useAuthStore();
-
-    await store.probeAdmin(
-      假api(
-        vi.fn(async () => {
-          throw new ForbiddenError();
-        }),
-      ),
-    );
-
+    expect(await store.refreshAuthState(假api(new UnauthorizedError()))).toBe(false);
+    expect(store.authenticated).toBe(false);
     expect(store.isAdmin).toBe(false);
   });
 
-  it("其它错误不当成没权限：网络抖动不该把人赶去「无管理权限」页", async () => {
+  it("网络异常原样抛出，不误判成未登录", async () => {
     const store = useAuthStore();
-    const 探测 = store.probeAdmin(
-      假api(
-        vi.fn(async () => {
-          throw new BizError(110002, "服务内部错误");
-        }),
-      ),
-    );
-
-    await expect(探测).rejects.toBeInstanceOf(BizError);
+    await expect(store.refreshAuthState(假api(new Error("网络错误")))).rejects.toThrow("网络错误");
     expect(store.isAdmin).toBeNull();
   });
 
-  it("探过一次就不再重复探", async () => {
+  it("普通成员已登录但非管理员，姓名缺失回退邮箱", async () => {
     const store = useAuthStore();
-    const listNodes = vi.fn(async () => []);
-
-    await store.probeAdmin(假api(listNodes));
-    await store.probeAdmin(假api(listNodes));
-
-    expect(listNodes).toHaveBeenCalledTimes(1);
+    await store.refreshAuthState(假api(普通成员));
+    expect(store.isAdmin).toBe(false);
+    expect(store.displayName).toBe("m@b.c");
   });
 });

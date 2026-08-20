@@ -16,6 +16,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
@@ -23,6 +27,9 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -54,6 +61,9 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Autowired
     private SessionTokenService sessionTokenService;
+
+    @Autowired
+    private AuthProperties authProperties;
 
     private DatabaseFixtures fixtures;
     private Long userId;
@@ -159,12 +169,45 @@ class AuthControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("登出：302 回管理端，会话 Cookie 被置空过期")
+    @DisplayName("登出（无 end_session_endpoint 时回退）：302 回管理端，会话 Cookie 被置空过期")
     void 登出清会话Cookie并回管理端() throws Exception {
+        // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径
         mockMvc.perform(get("/auth/logout"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("http://admin.test.example"))
                 .andExpect(cookie().value(AuthProperties.SESSION_COOKIE_NAME, ""))
                 .andExpect(cookie().maxAge(AuthProperties.SESSION_COOKIE_NAME, 0));
+    }
+
+    @Test
+    @DisplayName("登出（发现文档带 end_session_endpoint）：跳 Logto 结束会话并带 client_id 与回跳地址")
+    void 登出跳Logto结束会话() throws Exception {
+        // 发现模式下 Spring 会把 end_session_endpoint 放进 configurationMetadata，
+        // 这里手工构造一个这样的 registration，模拟生产环境（issuer-uri 发现）的形态
+        ClientRegistration 带发现文档 = ClientRegistration.withRegistrationId("logto")
+                .clientId("test-client-id")
+                .clientSecret("test-client-secret")
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("{baseUrl}/auth/callback")
+                .scope("openid")
+                .authorizationUri("http://127.0.0.1:9/oidc/auth")
+                .tokenUri("http://127.0.0.1:9/oidc/token")
+                .jwkSetUri("http://127.0.0.1:9/oidc/jwks")
+                .userNameAttributeName("sub")
+                .providerConfigurationMetadata(
+                        Map.of("end_session_endpoint", "https://tenant.logto.app/oidc/session/end"))
+                .build();
+        AuthController controller = new AuthController(ticketStore, sessionTokenService, authProperties,
+                userRepository, subscriptionRepository, registrationId -> 带发现文档);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        controller.logout(new MockHttpServletRequest(), response);
+
+        assertThat(response.getRedirectedUrl())
+                .startsWith("https://tenant.logto.app/oidc/session/end?")
+                .contains("client_id=test-client-id")
+                // 回跳地址必须整段 URL 编码，否则其中的 :// 会破坏查询串
+                .contains("post_logout_redirect_uri=http%3A%2F%2Fadmin.test.example");
+        assertThat(response.getCookie(AuthProperties.SESSION_COOKIE_NAME).getMaxAge()).isZero();
     }
 }

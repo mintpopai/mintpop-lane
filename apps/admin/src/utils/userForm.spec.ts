@@ -1,24 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
-import {
-  buildUserPayload,
-  emptyUserForm,
-  selectableFrontNodes,
-  selectableLandNodes,
-  userToForm,
-  validateUserForm,
-  type UserFormModel,
-} from "./userForm";
-
-function 表单(overrides: Partial<UserFormModel> = {}): UserFormModel {
-  return {
-    ...emptyUserForm(),
-    subject: "logto-user-1",
-    name: "张三",
-    frontNodeId: 1,
-    ...overrides,
-  };
-}
+import { buildUserPayload, selectableFrontNodes, selectableLandNodes, userToForm } from "./userForm";
 
 function 节点(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
   return {
@@ -40,51 +22,58 @@ function 节点(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
   };
 }
 
+function 用户(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
+  return {
+    id: 5,
+    subject: "logto-user-1",
+    email: "zhangsan@example.com",
+    name: "张三",
+    role: "MEMBER",
+    status: "ACTIVE",
+    frontNodeId: 1,
+    frontNodeName: "US-01",
+    landNodeId: 11,
+    landNodeName: "LAND-东京-03",
+    egressIps: ["1.2.3.4"],
+    activeSubscriptions: [],
+    createdAt: "2026-08-18T10:00:00",
+    updatedAt: "2026-08-18T10:00:00",
+    ...overrides,
+  };
+}
+
 describe("buildUserPayload", () => {
-  it("凭据留空时提交空串——服务端据此沿用原凭据，绝不因为没重填就被清掉", () => {
-    expect(buildUserPayload(表单({ claudeCredential: "   " })).claudeCredential).toBe("");
+  it("未选落地/第一跳节点提交 null，而不是 0", () => {
+    const payload = buildUserPayload({ id: 5, status: "ACTIVE", frontNodeId: null, landNodeId: null });
+
+    expect(payload.frontNodeId).toBeNull();
+    expect(payload.landNodeId).toBeNull();
   });
 
-  it("凭据填了就整条覆盖，并去掉首尾空白（粘贴时最容易多带）", () => {
-    expect(buildUserPayload(表单({ claudeCredential: " sk-ant-oat01-xxx \n" })).claudeCredential).toBe(
-      "sk-ant-oat01-xxx",
-    );
-  });
-
-  it("未选落地节点提交 null，而不是 0 或空串", () => {
-    expect(buildUserPayload(表单({ landNodeId: null })).landNodeId).toBeNull();
-  });
-
-  it("选了节点就原样直通两个节点 id——它们是整体覆盖式更新的一部分，错一个就改错了链路", () => {
-    const payload = buildUserPayload(表单({ frontNodeId: 3, landNodeId: 11 }));
+  it("选了节点就原样直通两个节点 id", () => {
+    const payload = buildUserPayload({ id: 5, status: "ACTIVE", frontNodeId: 3, landNodeId: 11 });
 
     expect(payload.frontNodeId).toBe(3);
     expect(payload.landNodeId).toBe(11);
   });
 
-  it("姓名与 subject 去首尾空白后提交", () => {
-    const payload = buildUserPayload(表单({ subject: " logto-user-1 ", name: " 张三 " }));
+  it("清空下拉产出的 undefined 也收成 null——接口上「未分配」只有一种表示", () => {
+    const payload = buildUserPayload({
+      id: 5,
+      status: "ACTIVE",
+      // el-select clearable 清空后 v-model 拿到的是 undefined，类型上仍标成 null
+      frontNodeId: undefined as unknown as null,
+      landNodeId: undefined as unknown as null,
+    });
 
-    expect(payload.subject).toBe("logto-user-1");
-    expect(payload.name).toBe("张三");
+    expect(payload.frontNodeId).toBeNull();
+    expect(payload.landNodeId).toBeNull();
   });
 
   it("状态原样带上", () => {
-    expect(buildUserPayload(表单({ status: "SUSPENDED" })).status).toBe("SUSPENDED");
-  });
-});
+    const payload = buildUserPayload({ id: 5, status: "SUSPENDED", frontNodeId: null, landNodeId: null });
 
-describe("validateUserForm", () => {
-  it("合法表单没有错误", () => {
-    expect(validateUserForm(表单())).toEqual([]);
-  });
-
-  it("必填项缺失逐条点名", () => {
-    const errors = validateUserForm(表单({ subject: "", name: "", frontNodeId: null }));
-
-    expect(errors).toContain("Logto user id 不能为空");
-    expect(errors).toContain("姓名不能为空");
-    expect(errors).toContain("必须选择第一跳节点");
+    expect(payload.status).toBe("SUSPENDED");
   });
 });
 
@@ -127,35 +116,14 @@ describe("selectableLandNodes", () => {
 });
 
 describe("userToForm", () => {
-  it("回填时凭据一定是空的——服务端本就不回传，留空即不修改", () => {
-    const user: AdminUserResponse = {
-      id: 5,
-      subject: "logto-user-1",
-      name: "张三",
-      role: "MEMBER",
-      status: "ACTIVE",
-      frontNodeId: 1,
-      frontNodeName: "US-01",
-      landNodeId: 11,
-      landNodeName: "LAND-东京-03",
-      egressIps: ["1.2.3.4"],
-      credentialConfigured: true,
-      createdAt: "2026-08-18T10:00:00",
-      updatedAt: "2026-08-18T10:00:00",
-    };
+  it("按新模型逐字段回填", () => {
+    const form = userToForm(用户());
 
-    const form = userToForm(user);
-
-    // 逐字段断言而不是只看凭据：服务端的更新是整体覆盖式的，
-    // 回填漏掉任何一个字段，用户只改个姓名就会把别的字段一起清掉
     expect(form).toEqual({
       id: 5,
-      subject: "logto-user-1",
-      name: "张三",
       status: "ACTIVE",
       frontNodeId: 1,
       landNodeId: 11,
-      claudeCredential: "",
     });
   });
 });

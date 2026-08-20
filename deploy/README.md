@@ -43,13 +43,18 @@
 
 5. **建 Logto 的传统 Web 应用并放置管理端运行时配置**：
 
-   a. 在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。只填一个地址：
+   a. 在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。要填两个地址：
 
    | 项 | 值 |
    |---|---|
    | Redirect URI | `https://<你的域名>/auth/callback` |
+   | Post sign-out redirect URI | `https://<你的域名>/` |
+
+   > ⚠️ **Post sign-out redirect URI 必须在 Logto 应用里登记为管理端地址**（生产 `https://<你的域名>/`，本地开发再追加一条 `http://localhost:5173/`）。管理端点「退出登录」时，服务端清掉本站会话 Cookie 后会跳 Logto 的结束会话端点（RP-initiated logout）并带上回跳地址；Logto 只接受已登记的地址，没登记这次登出跳转会被 Logto 拒绝、页面停在它的报错页。
 
    把 App ID 和 App Secret 记下来：App ID 填进第 4 步的 `application-prod.yaml`（`spring.security.oauth2.client.registration.logto.client-id`）；App Secret 回到第 3 步，填进 `.env` 的 `LOGTO_CLIENT_SECRET`。
+
+   > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**一条回调地址 `http://localhost:5173/auth/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
 
    b. 把模板复制成部署机上的运行时配置并填真值：
 
@@ -59,20 +64,19 @@
 
    ```json
    {
-     "logtoEndpoint": "https://占位.logto.app",
-     "logtoAppId": "占位",
-     "apiResource": "https://占位",
      "apiBaseUrl": "/api"
    }
    ```
 
-   > 管理端网页现在不再直连 Logto——登录、回调、会话全由服务端承担，管理端只需要知道 API 前缀在哪。`logtoEndpoint`/`logtoAppId`/`apiResource` 这几个字段语义上已不再使用，**但计划三落地前 `apps/admin/src` 仍对它们做强校验（缺失即拒绝加载）**，这里必须先填占位值撑住校验，**不要只留 `apiBaseUrl`**——那会让管理端页面直接加载失败。等计划三把这几个字段从代码里收窄掉之后，再把它们从这里删掉。
+   > 管理端网页不再直连 Logto——登录、回调、会话全由服务端承担，管理端只需要知道 API 前缀在哪，运行时配置因此只剩这一个字段。
    >
    > 这个文件由 compose 以只读卷挂进 nginx 的站点根目录，**镜像里没有它**——因此同一个镜像可以部署到任何环境，改 API 地址不需要重新构建。它已在 `.gitignore` 中，不入库。
    >
    > ⚠️ **必须在 `mise run up` 之前把这个文件建好**：绑定挂载的宿主侧路径不存在时，Docker 会**自作主张建成一个空目录**，nginx 于是把 `/config.json` 当目录处理、返回 404，页面显示「管理端启动失败」。若已经踩到，先 `mise run down`、`rmdir admin-config.json`、建好真文件再起。
 
-   > ⚠️ **部署约束**：管理端与 API 必须部署在**同一注册域名**下（如 `admin.x.com` 与 `api.x.com` 都属于 `x.com`）。服务端签发的会话 Cookie 是 `SameSite=Lax`，跨注册域名（如 `admin.x.com` 与 `api.y.com`）时浏览器不会带上这个 Cookie，登录态传不过去。
+   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署，由同一入口的反代把 `/api`、`/auth`、`/oauth2` 转给服务端，其余给管理端静态站——见下文「对外暴露」里的 nginx 示例。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。
+   >
+   > 因此 `admin-config.json` 里的 `apiBaseUrl` **必须是相对路径**（如 `/api`），不能填绝对 URL（如 `https://api.x.com/api`）。
 
 6. **拉起服务**：
 
@@ -82,7 +86,7 @@
 
 7. **录入初始数据**（首次没有管理员，用「登录一次 + 改库提权」配合完成——**新会话模型下不能再拿 Logto 的 access token 当 Bearer**，服务端只认自签会话 token）：
 
-   a. 浏览器访问 `https://<你的域名>/oauth2/authorization/logto`，用一个已在 Logto 注册的账号登录一次。登录成功即触发服务端唯一的建档入口——库里自动出现一行 `role=MEMBER` 的新用户，浏览器也已经拿到会话 Cookie（`lane_session`）。登录后 302 到管理端地址此时打不开属正常（管理端还没跟进新协议，由计划三接上），不影响建档与 Cookie 已经生效。
+   a. 浏览器访问 `https://<你的域名>/oauth2/authorization/logto`，用一个已在 Logto 注册的账号登录一次。登录成功即触发服务端唯一的建档入口——库里自动出现一行 `role=MEMBER` 的新用户，浏览器也已经拿到会话 Cookie（`lane_session`）。登录后 302 到管理端地址此时会落在 `/forbidden`（角色还是 `MEMBER`，尚未提权）属正常，不影响建档与 Cookie 已经生效。
 
    b. 库里把这个账号提为管理员。**首个管理员只能改库产生**——这是设计决定，管理端本就不提供改角色的入口（见下一节「授予或撤销管理员」）：
 
@@ -186,6 +190,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `LANE_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
 | `LANE_AUTH_SESSION_SECRET` | 无（必填） | 自签会话 token 的 HS256 签名密钥，至少 32 字节 |
 | `LOGTO_CLIENT_SECRET` | 无（必填） | Logto 传统 Web 应用的 App Secret |
+| `TZ` | `UTC` | 服务端容器时区。订阅起止期按服务端时区判定，建议设成管理员所在时区（如 `Asia/Shanghai`），否则管理端填的时间与实际生效时刻会差几个时区 |
 
 ## 备份
 
@@ -236,7 +241,7 @@ server {
 
 ## 发版顺序（桌面端与服务端）
 
-> ⚠️ **登录体系重构的上线配套**：本文档描述的是新协议（服务端自签会话 + Logto 传统 Web 应用）。桌面端已随二期跟进新登录协议；管理端（计划三）尚未跟进，上线前请注意版本配套——服务端与桌面端要一起升，管理端页面在计划三落地前仍走旧字段。旧的 `GET /api/client-config` 端点已随本次重构下线——若线上还有跑旧协议的桌面端，升级服务端会让它们的登录立即失效，升级前请确认桌面端/管理端已同步跟进，不要单独抢先上线服务端。
+> ⚠️ **登录体系重构的上线配套**：本文档描述的是新协议（服务端自签会话 + Logto 传统 Web 应用）。桌面端与管理端均已跟进新登录协议，三期已收官；发版时注意三个组件版本配套。旧的 `GET /api/client-config` 端点已随本次重构下线——若线上还有跑旧协议的桌面端或管理端，升级服务端会让它们的登录立即失效，升级前请确认桌面端/管理端已同步跟进，不要单独抢先上线服务端。
 
 服务端上线前确认 `application-prod.yaml` 里已配：
 

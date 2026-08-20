@@ -1,23 +1,28 @@
 import type { HttpClient } from "./http";
 import type {
   AdminNodeResponse,
+  AdminSubscriptionResponse,
   AdminUserResponse,
   NodeRole,
   NodeSaveRequest,
   PageResult,
+  SubscriptionSaveRequest,
   UserPageQuery,
   UserSaveRequest,
 } from "./types";
 
 export interface AdminApi {
   pageUsers(query: UserPageQuery): Promise<PageResult<AdminUserResponse>>;
-  createUser(body: UserSaveRequest): Promise<number>;
   updateUser(id: number, body: UserSaveRequest): Promise<void>;
   deleteUser(id: number): Promise<void>;
   listNodes(role?: NodeRole): Promise<AdminNodeResponse[]>;
   createNode(body: NodeSaveRequest): Promise<number>;
   updateNode(id: number, body: NodeSaveRequest): Promise<void>;
   deleteNode(id: number): Promise<void>;
+  listSubscriptions(userId: number): Promise<AdminSubscriptionResponse[]>;
+  createSubscription(userId: number, body: SubscriptionSaveRequest): Promise<number>;
+  updateSubscription(id: number, body: SubscriptionSaveRequest): Promise<void>;
+  deleteSubscription(id: number): Promise<void>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -29,13 +34,12 @@ export function createAdminApi(http: HttpClient): AdminApi {
       if (query.keyword) {
         params.set("keyword", query.keyword);
       }
+      if (query.hasActiveSubscription !== null) {
+        params.set("hasActiveSubscription", String(query.hasActiveSubscription));
+      }
       params.set("pageNo", String(query.pageNo));
       params.set("pageSize", String(query.pageSize));
       return http.request(`/admin/users?${params.toString()}`);
-    },
-
-    createUser(body) {
-      return http.request("/admin/users", { method: "POST", body: JSON.stringify(body) });
     },
 
     updateUser(id, body) {
@@ -60,6 +64,25 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deleteNode(id) {
       return http.request(`/admin/nodes/${id}`, { method: "DELETE" });
+    },
+
+    listSubscriptions(userId) {
+      return http.request(`/admin/users/${userId}/subscriptions`);
+    },
+
+    createSubscription(userId, body) {
+      return http.request(`/admin/users/${userId}/subscriptions`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateSubscription(id, body) {
+      return http.request(`/admin/subscriptions/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    deleteSubscription(id) {
+      return http.request(`/admin/subscriptions/${id}`, { method: "DELETE" });
     },
   };
 }

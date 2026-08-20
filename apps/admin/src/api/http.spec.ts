@@ -15,7 +15,6 @@ function 假fetch(status: number, body: unknown) {
 function 建客户端(fetchMock: ReturnType<typeof 假fetch>) {
   return createHttpClient({
     baseUrl: "/api",
-    getToken: async () => "token-abc",
     fetchImpl: fetchMock as unknown as typeof fetch,
   });
 }
@@ -29,7 +28,7 @@ describe("createHttpClient", () => {
     expect(data).toEqual({ id: 7 });
   });
 
-  it("带上 Bearer token 与 JSON 头，并拼上 baseUrl", async () => {
+  it("带上 JSON 头，并拼上 baseUrl", async () => {
     const fetchMock = 假fetch(200, { code: 0, data: null, msg: null });
 
     await 建客户端(fetchMock).request("/admin/nodes");
@@ -37,8 +36,18 @@ describe("createHttpClient", () => {
     // vi.fn 从零参的 假fetch 推断出空元组的调用签名，故先经 unknown 再断言
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/admin/nodes");
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer token-abc");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+  });
+
+  it("请求不携带 Authorization 头（凭据在 Cookie 里）", async () => {
+    let seen: Record<string, string> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seen = init?.headers as Record<string, string>;
+      return new Response(JSON.stringify({ code: 0, data: null, msg: null }), { status: 200 });
+    };
+    const client = createHttpClient({ baseUrl: "/api", fetchImpl });
+    await client.request("/me");
+    expect(seen && "Authorization" in seen).toBe(false);
   });
 
   it("code 非 0 抛 BizError，带上业务码与服务端给的中文提示", async () => {
@@ -69,23 +78,7 @@ describe("createHttpClient", () => {
     const onUnauthorized = vi.fn();
     const client = createHttpClient({
       baseUrl: "/api",
-      getToken: async () => "token-abc",
       fetchImpl: fetchMock as unknown as typeof fetch,
-      onUnauthorized,
-    });
-
-    await expect(client.request("/admin/users")).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
-  });
-
-  it("取 token 就失败时同样通知重新登录——SDK 换不出 token 是会话失效最常见的形态", async () => {
-    const onUnauthorized = vi.fn();
-    const client = createHttpClient({
-      baseUrl: "/api",
-      getToken: async () => {
-        throw new UnauthorizedError();
-      },
-      fetchImpl: 假fetch(200, { code: 0, data: null, msg: null }) as unknown as typeof fetch,
       onUnauthorized,
     });
 

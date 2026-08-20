@@ -10,6 +10,8 @@ services:
       - "127.0.0.1:${SERVER_PORT:-8081}:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # 订阅起止期按服务端时区判定，建议在 .env 设为管理员所在时区（如 Asia/Shanghai）
+      TZ: ${TZ:-UTC}
       # 外置 MySQL：库需提前建好，表由 Flyway 在启动时自动建/升级
       SPRING_DATASOURCE_URL: ${MYSQL_URL:?需要在 .env 中设置 MYSQL_URL}
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:?需要在 .env 中设置 MYSQL_USERNAME}
@@ -39,8 +41,7 @@ services:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
       - "127.0.0.1:${ADMIN_PORT:-8082}:80"
     volumes:
-      # 运行时接入配置：接口前缀。镜像里没有这个文件，缺了页面会明确报启动失败；
-      # 旧的 Logto 字段（logtoEndpoint/logtoAppId/apiResource）计划三移除，过渡期仍需保留占位值
+      # 运行时接入配置：只含接口前缀 apiBaseUrl；镜像里没有这个文件，缺了页面会明确报启动失败
       - ./admin-config.json:/usr/share/nginx/html/config.json:ro
     healthcheck:
       # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事

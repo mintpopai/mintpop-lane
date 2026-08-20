@@ -1,22 +1,18 @@
 /**
  * 运行时接入配置。
  *
- * 这些值刻意**不进构建产物**：镜像由 CI 构建，那里不该知道生产环境的 Logto 租户；
+ * 这些值刻意**不进构建产物**：镜像由 CI 构建，那里不该知道生产环境的部署细节；
  * 而 `docker build` 也不允许依赖外部喂进来的参数。于是配置改由站点根目录的
  * /config.json 提供，部署时用 compose 以只读卷挂进 nginx 的静态目录。
+ *
+ * 管理端不再直连 Logto，唯一需要的运行时配置是接口前缀。
  */
 export interface RuntimeConfig {
-  /** Logto 租户地址，如 https://xxx.logto.app（不带 /oidc 后缀） */
-  logtoEndpoint: string;
-  /** Logto 里那个 SPA 应用的 App ID */
-  logtoAppId: string;
-  /** 服务端在 Logto 注册的 API Resource 标识，决定 access token 的 audience */
-  apiResource: string;
   /** 管理接口前缀。同域分路径部署时是 /api */
   apiBaseUrl: string;
 }
 
-const 必填项: Array<keyof RuntimeConfig> = ["logtoEndpoint", "logtoAppId", "apiResource", "apiBaseUrl"];
+const 必填项: Array<keyof RuntimeConfig> = ["apiBaseUrl"];
 
 let cached: RuntimeConfig | null = null;
 
