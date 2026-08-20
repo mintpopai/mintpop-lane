@@ -57,6 +57,10 @@ watch(
       void 加载列表();
     }
   },
+  // 组件由 v-if 挂载，父组件常常「先设 user 再设 modelValue=true」在同一同步函数里完成，
+  // 首次挂载时 props.modelValue 从创建起就已经是 true，不会再经历一次 false→true 的转换，
+  // 不加 immediate 首次打开就看不到数据；回调内的 if (opened) 挡住了 modelValue 为 false 时的误触发
+  { immediate: true },
 );
 
 function 新建(): void {
