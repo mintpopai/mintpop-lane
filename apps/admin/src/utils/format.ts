@@ -2,16 +2,20 @@
 export const PLACEHOLDER = "—";
 
 /**
- * 服务端的 LocalDateTime 序列化成 `2026-08-18T10:20:30` 这样的 ISO 串。
- * 这里不做时区换算——服务端与部署机同在一个时区，字符串按原样裁到分钟即可，
- * 交给 Date 反而会引入「本地时区解释」的意外偏移。
+ * 服务端时间一律是带 Z 的 UTC 绝对时刻串（如 `2026-08-18T02:20:30Z`）。
+ * 带 Z 的串交给 Date 解析没有歧义，这里换算成浏览器本地时区渲染到分钟——
+ * 谁在看就按谁的时区显示，与部署环境时区无关。
  */
 export function formatDateTime(value?: string | null): string {
   if (!value) {
     return PLACEHOLDER;
   }
-  const [date, time = ""] = value.split("T");
-  return `${date} ${time.slice(0, 5)}`.trim();
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    return PLACEHOLDER;
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** 列表拼接，空列表给占位符 */

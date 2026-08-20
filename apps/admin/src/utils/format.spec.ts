@@ -1,19 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { booleanLabel, formatDateTime, joinOrDash } from "./format";
 
+// 钉死本进程时区，让「按本地时区渲染」可断言（Node 在 POSIX 上支持运行中生效）
+process.env.TZ = "Asia/Shanghai";
+
 describe("formatDateTime", () => {
-  it("把服务端的 ISO 时间串裁成到分钟的可读形式", () => {
-    expect(formatDateTime("2026-08-18T10:20:30")).toBe("2026-08-18 10:20");
+  it("把服务端的 UTC 时间串按本地时区渲染到分钟", () => {
+    // UTC 02:20 = 北京时间 10:20
+    expect(formatDateTime("2026-08-18T02:20:30Z")).toBe("2026-08-18 10:20");
   });
 
-  it("带毫秒也照样裁", () => {
-    expect(formatDateTime("2026-08-18T10:20:30.123")).toBe("2026-08-18 10:20");
+  it("跨日换算正确——UTC 傍晚是北京次日凌晨", () => {
+    expect(formatDateTime("2026-08-18T17:00:00Z")).toBe("2026-08-19 01:00");
   });
 
   it("空值显示占位符，不显示 undefined", () => {
     expect(formatDateTime(null)).toBe("—");
     expect(formatDateTime(undefined)).toBe("—");
     expect(formatDateTime("")).toBe("—");
+  });
+
+  it("解析不了的串显示占位符，不显示 Invalid Date", () => {
+    expect(formatDateTime("不是时间")).toBe("—");
   });
 });
 
