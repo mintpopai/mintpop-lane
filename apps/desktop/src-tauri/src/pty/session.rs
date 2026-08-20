@@ -1,6 +1,7 @@
 use crate::link::model::InboundCredentials;
 use crate::link::state::LinkState;
 use crate::pty::env::build_agent_env;
+use crate::pty::login_path::login_shell_path;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::io::{Read, Write};
 use std::sync::Mutex;
@@ -15,6 +16,31 @@ pub enum SpawnError {
     PTY_FAILED(String),
     #[error("workspace 目录不存在或不可用：{0}")]
     BAD_WORKSPACE(String),
+    #[error("未找到 {0} 命令，请先安装对应的 agent CLI")]
+    AGENT_NOT_FOUND(String),
+}
+
+/// 在给定 PATH 里探测命令是否可执行。
+/// 命令名里已经含路径分隔符时视为具体路径，直接查该文件，不做 PATH 搜索。
+fn command_exists(command: &str, path: &str) -> bool {
+    let has_separator = command.contains('/') || (cfg!(windows) && command.contains('\\'));
+    if has_separator {
+        return std::path::Path::new(command).is_file();
+    }
+
+    // Windows 上的 CLI 常以 .cmd（npm 包装器）或 .exe 落地，裸名字查不到
+    let candidates: Vec<String> = if cfg!(windows) {
+        vec![
+            command.to_string(),
+            format!("{command}.cmd"),
+            format!("{command}.exe"),
+        ]
+    } else {
+        vec![command.to_string()]
+    };
+
+    std::env::split_paths(path)
+        .any(|dir| candidates.iter().any(|name| dir.join(name).is_file()))
 }
 
 pub struct PtySession {
@@ -87,6 +113,19 @@ pub fn spawn_agent_pty(
         return Err(SpawnError::BAD_WORKSPACE(workspace.display().to_string()));
     }
 
+    // 打包后的 .app 只继承 launchd 的精简 PATH，找不到用户装的 agent CLI，
+    // 故先求登录 shell 的 PATH；求不到时退回当前进程的 PATH。
+    let login_path = login_shell_path();
+    let search_path = login_path
+        .clone()
+        .or_else(|| std::env::var("PATH").ok())
+        .unwrap_or_default();
+
+    // 命令不存在就当场给出可读原因，别让用户只看到一个 PTY spawn 的底层报错
+    if !command_exists(command, &search_path) {
+        return Err(SpawnError::AGENT_NOT_FOUND(command.to_string()));
+    }
+
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -97,11 +136,16 @@ pub fn spawn_agent_pty(
         })
         .map_err(|e| SpawnError::PTY_FAILED(e.to_string()))?;
 
-    // 会话载体从裸 shell 变为在 workspace 里直接运行 agent CLI；PATH 等继承自主进程环境
+    // 会话载体从裸 shell 变为在 workspace 里直接运行 agent CLI
     let mut cmd = CommandBuilder::new(command);
     cmd.cwd(workspace);
     for (key, value) in build_agent_env(inbound, credential_env, credential) {
         cmd.env(key, value);
+    }
+    // 把登录 shell 的 PATH 传给子进程：agent CLI 自己还会去调 git、node 等工具，
+    // 只解析出主命令还不够，整条 PATH 都得对齐用户终端里的样子
+    if let Some(path) = login_path {
+        cmd.env("PATH", path);
     }
 
     let child = pair
@@ -174,6 +218,34 @@ mod tests {
             80,
         );
         assert!(matches!(result, Err(SpawnError::BAD_WORKSPACE(_))));
+    }
+
+    #[test]
+    fn 命令不存在时给出可读的未安装提示() {
+        // agent CLI 没装（或不在 PATH 上）时应当明确告知，而不是抛一个 PTY 底层错误
+        let workspace = tempfile::tempdir().unwrap();
+        let result = spawn_agent_pty(
+            LinkState::ACTIVE,
+            &sample_inbound(),
+            "lane-绝不存在的命令-xyz",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "tok",
+            workspace.path(),
+            24,
+            80,
+        );
+        match result {
+            Err(SpawnError::AGENT_NOT_FOUND(name)) => assert_eq!(name, "lane-绝不存在的命令-xyz"),
+            Err(e) => panic!("应为 AGENT_NOT_FOUND，实际是 {e:?}"),
+            Ok(_) => panic!("不存在的命令不应放行"),
+        }
+    }
+
+    #[test]
+    fn 带路径分隔符的命令直接按文件存在性判定() {
+        // /bin/sh 这类绝对路径不该走 PATH 搜索，直接查文件即可
+        assert!(command_exists("/bin/sh", ""));
+        assert!(!command_exists("/绝不存在的目录/sh", ""));
     }
 
     #[test]

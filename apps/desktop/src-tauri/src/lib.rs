@@ -322,6 +322,17 @@ pub fn run() {
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
 
+            // macOS 的 scheme 由打包时写进 Info.plist 声明，装好即生效；
+            // Windows/Linux 靠注册表 / .desktop 文件，dev 模式下没有安装步骤，
+            // 必须在运行时注册一次，否则浏览器根本找不到本程序，深链回调永远回不来。
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("[lane] 注册深链 scheme 失败：{e}");
+                }
+            }
+
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {
