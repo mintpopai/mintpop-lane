@@ -81,8 +81,8 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("桌面登录：建档 + 深链带 ticket 与 state，不发会话 Cookie")
-    void 桌面登录深链带ticket() throws Exception {
+    @DisplayName("桌面登录：建档 + 渲染落地页（深链带 ticket 与 state），不发会话 Cookie")
+    void 桌面登录渲染落地页() throws Exception {
         // 先经 DesktopFlowCookie 写入中间态，再把 Cookie 搬进登录回调请求
         MockHttpServletRequest startRequest = new MockHttpServletRequest();
         MockHttpServletResponse startResponse = new MockHttpServletResponse();
@@ -99,10 +99,40 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
                 new TestingAuthenticationToken(oidc用户("logto-desk", "d@example.com", "桌面用户"), null));
 
         assertThat(userRepository.findBySubject("logto-desk")).isPresent();
-        assertThat(response.getRedirectedUrl())
-                .startsWith("ai.mintpop.lane://callback?ticket=")
+        // 不再裸 302 跳自定义 scheme（浏览器会静默拦截无手势的外部协议跳转），
+        // 而是渲染落地页：深链落在可点击按钮上，点击即手势
+        assertThat(response.getRedirectedUrl()).isNull();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentType()).startsWith("text/html");
+        assertThat(response.getContentAsString())
+                .contains("ai.mintpop.lane://callback?ticket=")
                 .contains("state=desktop-state-01");
         assertThat(response.getHeaders("Set-Cookie"))
                 .noneMatch(c -> c.startsWith(AuthProperties.SESSION_COOKIE_NAME + "="));
+    }
+
+    @Test
+    @DisplayName("登录失败（桌面流）：渲染落地页，深链带 error 与 state")
+    void 桌面登录失败渲染落地页() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler.respondFailure(java.util.Optional.of(
+                new DesktopFlowCookie.DesktopFlow("A".repeat(43), "desktop-state-02")), response);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString())
+                .contains("ai.mintpop.lane://callback?error=login_failed")
+                .contains("state=desktop-state-02");
+    }
+
+    @Test
+    @DisplayName("登录失败（网页流）：302 回管理端带标记")
+    void 网页登录失败回管理端() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler.respondFailure(java.util.Optional.empty(), response);
+
+        assertThat(response.getRedirectedUrl())
+                .isEqualTo(authProperties.getAdminFrontendUrl() + "?login_error=1");
     }
 }

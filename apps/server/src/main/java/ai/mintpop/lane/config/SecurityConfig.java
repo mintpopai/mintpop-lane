@@ -63,12 +63,12 @@ public class SecurityConfig {
                         // 回调路径固定 /auth/callback，与 Logto 应用里注册的 Redirect URI 逐字一致
                         .redirectionEndpoint(re -> re.baseUri("/auth/callback"))
                         .successHandler(successHandler)
-                        // 握手失败（用户取消/state 不符等）：桌面流深链带 error 回桌面端，网页流回管理端带标记
+                        // 握手失败（用户取消/state 不符等）：桌面流渲染落地页深链带 error 回桌面端，网页流回管理端带标记
                         .failureHandler((request, response, exception) -> {
                             log.warn("OIDC 登录失败", exception);
                             var flow = desktopFlowCookie.read(request);
                             desktopFlowCookie.expire(request, response);
-                            response.sendRedirect(successHandler.failureTarget(flow));
+                            successHandler.respondFailure(flow, response);
                         }))
                 // 未登录访问受保护接口：返回 401（鉴权中间件允许用原生状态码），不重定向
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(
