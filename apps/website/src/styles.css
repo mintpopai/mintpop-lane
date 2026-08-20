@@ -1,0 +1,127 @@
+/* 全站设计基线。品牌 token 取自 mintpop-shop 品牌基线（与 apps/admin/src/styles/base.css 同源）。
+   单主题锁定浅色：品牌系是「白底 + 薄荷绿」，官网刻意不做暗色分支。 */
+:root {
+  --brand: #17d1a7;
+  --brand-deep: #0fb389;
+  /* 薄荷绿明度高，白底上直接当文字/按钮底色对比不足（#0fb389 仅 2.7:1）。
+     文字与实心按钮一律用压深后的 4.8:1 档，hover 再深一档 */
+  --brand-text: #0a8265;
+  --brand-strong: #087257;
+  --ink: #0b0b0c;
+  --ink-2: #4b5563;
+  --ink-3: #6b7280;
+  --bg: #ffffff;
+  --bg-mint: #eefaf6;
+  --bg-soft: #f6f8f7;
+  --border: #e5e7eb;
+  --radius: 14px;
+  --radius-button: 10px;
+  --font-display: "Fredoka", "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    sans-serif;
+  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.2;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+/* 版心：全站统一容器 */
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* 按钮体系：主按钮实心品牌色，次按钮描边；圆角统一走 --radius-button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: var(--radius-button);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--brand-text);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: var(--brand-strong);
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  color: var(--ink);
+}
+
+.btn-ghost:hover {
+  border-color: var(--ink-3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* 首屏入场：只动 opacity/transform；用户偏好减少动效时整段关掉 */
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .rise-late {
+    animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

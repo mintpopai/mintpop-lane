@@ -23,6 +23,21 @@ services:
       retries: 3
       start_period: 30s
 
+  website:
+    image: ghcr.io/mintpopai/lane-website:${WEBSITE_TAG:-latest}
+    container_name: lane-website
+    restart: unless-stopped
+    ports:
+      # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
+      - "127.0.0.1:${WEBSITE_PORT:-8083}:80"
+    healthcheck:
+      # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   admin:
     image: ghcr.io/mintpopai/lane-admin:${ADMIN_TAG:-latest}
     container_name: lane-admin

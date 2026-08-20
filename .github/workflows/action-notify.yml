@@ -8,6 +8,7 @@ on:
       - CI Repo
       - Release Server
       - Release Admin
+      - Release Website
     types: [completed]
 
 permissions:

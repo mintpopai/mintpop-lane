@@ -7,7 +7,7 @@ maven = "3.9.16"
 # —— 安装 ——
 [tasks.install]
 description = "安装全部组件依赖"
-depends = ["install-admin", "install-server"]
+depends = ["install-admin", "install-website", "install-server"]
 
 [tasks.install-admin]
 description = "安装管理端前端依赖"
@@ -16,6 +16,14 @@ flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker
 '''
 # 不设 dir：pnpm 工作区的安装动作天然发生在仓库根，用 --filter 限定只装管理端这一个包
 run = "pnpm install --filter @mintpop/lane-admin ${usage_frozen:+--frozen-lockfile}"
+
+[tasks.install-website]
+description = "安装官网前端依赖"
+usage = '''
+flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker 用）"
+'''
+# 不设 dir：pnpm 工作区的安装动作天然发生在仓库根，用 --filter 限定只装官网这一个包
+run = "pnpm install --filter @mintpop/lane-website ${usage_frozen:+--frozen-lockfile}"
 
 [tasks.install-server]
 description = "拉取服务端 Maven 依赖"
@@ -26,6 +34,11 @@ run = "mvn -q dependency:go-offline"
 [tasks.run-admin]
 description = "以开发模式启动管理端"
 dir = "apps/admin"
+run = "pnpm vite"
+
+[tasks.run-website]
+description = "以开发模式启动官网"
+dir = "apps/website"
 run = "pnpm vite"
 
 [tasks.run-server]
@@ -39,6 +52,11 @@ description = "构建管理端静态产物到 apps/admin/dist"
 dir = "apps/admin"
 run = "pnpm vite build"
 
+[tasks.build-website]
+description = "构建官网静态产物到 apps/website/dist"
+dir = "apps/website"
+run = "pnpm vite build"
+
 [tasks.build-server]
 description = "打包服务端可执行 jar"
 dir = "apps/server"
@@ -48,6 +66,11 @@ run = "mvn -q clean package"
 description = "构建管理端镜像（apps/admin/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
 run = "docker build -f apps/admin/Dockerfile -t lane-admin:local ."
+
+[tasks.image-website]
+description = "构建官网镜像（apps/website/Dockerfile，mise 多阶段）"
+# 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
+run = "docker build -f apps/website/Dockerfile -t lane-website:local ."
 
 [tasks.image-server]
 description = "构建服务端镜像（apps/server/Dockerfile，mise 多阶段）"
@@ -60,6 +83,11 @@ description = "跑管理端单元测试"
 dir = "apps/admin"
 run = "pnpm vitest run"
 
+[tasks.test-website]
+description = "跑官网单元测试（下载逻辑纯函数）"
+dir = "apps/website"
+run = "pnpm vitest run"
+
 [tasks.test-server]
 description = "跑服务端测试"
 dir = "apps/server"
@@ -68,6 +96,11 @@ run = "mvn -q test"
 [tasks.lint-admin]
 description = "检查管理端代码风格与类型"
 dir = "apps/admin"
+run = ["pnpm eslint .", "pnpm vue-tsc --noEmit"]
+
+[tasks.lint-website]
+description = "检查官网代码风格与类型"
+dir = "apps/website"
 run = ["pnpm eslint .", "pnpm vue-tsc --noEmit"]
 
 # —— 部署 ——
@@ -95,3 +128,11 @@ arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
 arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
 '''
 run = "./scripts/release.sh admin ${usage_arg1:-} ${usage_arg2:-}"
+
+[tasks.release-website]
+description = "为官网打 tag 并推送，触发发版流水线"
+usage = '''
+arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
+arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
+'''
+run = "./scripts/release.sh website ${usage_arg1:-} ${usage_arg2:-}"

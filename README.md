@@ -1,6 +1,8 @@
 # 部署
 
-拉取 GHCR 上已发布的镜像运行。服务端与管理端是两个独立发版的组件，镜像分别由 `server-v*` 与 `admin-v*` tag 触发的发版流水线构建并推送，部署机不做构建。
+拉取 GHCR 上已发布的镜像运行。服务端、管理端与官网是三个独立发版的组件，镜像分别由 `server-v*`、`admin-v*` 与 `website-v*` tag 触发的发版流水线构建并推送，部署机不做构建。
+
+> 桌面端已拆分为独立仓库 [`mintpopai/mintpop-lane-desktop`](https://github.com/mintpopai/mintpop-lane-desktop)（保留完整 git 历史），安装包由其 GitHub Releases 分发；本仓官网（`apps/website`）的下载页即从那里拉取最新版本直链。
 
 用户与节点数据都在外置 MySQL 里，日常运维（加人、停用、换落地出口、换席位凭据）走 `/api/admin/**` 接口，**不需要改配置文件、不需要重启服务**。
 
@@ -147,10 +149,10 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 | 操作 | 命令 |
 |---|---|
-| 启动（服务端 + 管理端） | `mise run up` |
+| 启动（服务端 + 管理端 + 官网） | `mise run up` |
 | 停止 | `mise run down` |
-| 查看日志（需在仓库根执行） | `docker compose logs -f server` / `docker compose logs -f admin` |
-| 健康检查 | `curl 127.0.0.1:8081/actuator/health` / `curl -I 127.0.0.1:8082/` |
+| 查看日志（需在仓库根执行） | `docker compose logs -f server` / `docker compose logs -f admin` / `docker compose logs -f website` |
+| 健康检查 | `curl 127.0.0.1:8081/actuator/health` / `curl -I 127.0.0.1:8082/` / `curl -I 127.0.0.1:8083/` |
 
 从二期起，下面这些接口日常**不需要手工调**——打开管理端页面点就行。表格保留是为了排查问题时能直接验接口。
 
@@ -188,6 +190,8 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `SERVER_PORT` | `8081` | 宿主监听端口 |
 | `ADMIN_TAG` | `latest` | 管理端镜像版本。回滚时指定具体版本，如 `ADMIN_TAG=0.1.0` |
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
+| `WEBSITE_TAG` | `latest` | 官网镜像版本。回滚时指定具体版本，如 `WEBSITE_TAG=0.1.0` |
+| `WEBSITE_PORT` | `8083` | 官网的宿主监听端口 |
 | `TZ` | `UTC` | 服务端容器时区，仅影响日志时间显示。业务时间全链路按 UTC 存取、按查看者本地时区显示，与本变量无关 |
 
 ## 备份
@@ -234,6 +238,22 @@ server {
 > `spring.security.oauth2.client.registration.logto.redirect-uri` 配的是 `{baseUrl}/auth/callback`，
 > `{baseUrl}` 会按请求实际到达的域名展开，即解析成 `https://<你的域名>/auth/callback`——
 > 与第 5 步在 Logto 控制台登记的 Redirect URI、第 7 步访问的 `/oauth2/authorization/logto` 是同一个域名。
+
+官网是独立站点，用**另一个域名**（或子域名）反代到 `127.0.0.1:8083` 即可，无路径拆分约束：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name <官网域名>;
+
+    location / {
+        proxy_pass http://127.0.0.1:8083;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+> 官网容器内的 nginx 自带 `/api/gh/releases` 反代（上游 GitHub API、带缓存），宿主反代不需要为它做任何额外配置。
 
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
 
