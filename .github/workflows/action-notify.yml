@@ -7,7 +7,6 @@ on:
     workflows:
       - CI Repo
       - Release Server
-      - Release Desktop
       - Release Admin
     types: [completed]
 
