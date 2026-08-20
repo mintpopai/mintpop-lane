@@ -25,7 +25,7 @@
    GRANT ALL PRIVILEGES ON lane.* TO 'lane'@'%';
    ```
 
-3. **（可选）放置 `.env`**：镜像版本、宿主端口、容器时区都有默认值（见下文「可调参数」），要覆盖时在仓库根建 `.env` 写入对应变量即可；全用默认值就跳过这一步。建议至少设 `TZ`（如 `Asia/Shanghai`）——订阅起止期按服务端时区判定。
+3. **（可选）放置 `.env`**：镜像版本、宿主端口、容器时区都有默认值（见下文「可调参数」），要覆盖时在仓库根建 `.env` 写入对应变量即可；全用默认值就跳过这一步。
 
 4. **放置服务端配置**：把 `apps/server/config/application.example.yml` 复制到仓库根改名 `application.yml`，照注释填入全部真实值——外置 MySQL 连接、Logto issuer 与传统 Web 应用的 App ID、管理端域名（`lane.auth.admin-frontend-url`），以及两个本地生成的密钥：
 
@@ -188,7 +188,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `SERVER_PORT` | `8081` | 宿主监听端口 |
 | `ADMIN_TAG` | `latest` | 管理端镜像版本。回滚时指定具体版本，如 `ADMIN_TAG=0.1.0` |
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
-| `TZ` | `UTC` | 服务端容器时区。订阅起止期按服务端时区判定，建议设成管理员所在时区（如 `Asia/Shanghai`），否则管理端填的时间与实际生效时刻会差几个时区 |
+| `TZ` | `UTC` | 服务端容器时区，仅影响日志时间显示。业务时间全链路按 UTC 存取、按查看者本地时区显示，与本变量无关 |
 
 ## 备份
 
