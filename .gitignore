@@ -16,15 +16,14 @@ target/
 link.json
 *.local
 
-# 服务端环境配置（含节点与席位凭据，严禁入库）
-apps/server/src/main/resources/application-*.yaml
-!apps/server/src/main/resources/application-*.yaml.example
+# 服务端配置（含数据库口令与加密密钥，严禁入库；模板见同目录 application.example.yml）
+apps/server/config/application.yml
 
-# 部署机上的生产配置（含凭据）
-deploy/application-prod.yaml
+# 部署机上的服务端配置（含凭据，放仓库根、与 docker-compose.yml 同目录）
+/application.yml
 
-# 部署机上的环境变量文件（含数据库口令与加密密钥）
-deploy/.env
+# 部署机上的环境变量文件（可选，覆盖镜像版本/端口/时区）
+/.env
 
 # mihomo sidecar 二进制，由 mise run fetch-mihomo 下载
 apps/desktop/src-tauri/binaries/
@@ -39,4 +38,4 @@ apps/desktop/src-tauri/gen/schemas/
 apps/admin/public/config.json
 
 # 部署机上的管理端运行时配置
-deploy/admin-config.json
+/admin-config.json

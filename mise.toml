@@ -47,12 +47,9 @@ dir = "apps/admin"
 run = "pnpm vite"
 
 [tasks.run-server]
-description = "以开发模式启动服务端"
-usage = '''
-flag "-e --env <env>" help="运行环境，默认 local"
-'''
+description = "以开发模式启动服务端（配置读 apps/server/config/application.yml）"
 dir = "apps/server"
-run = "mvn spring-boot:run -Dspring-boot.run.profiles=${usage_env:-local}"
+run = "mvn spring-boot:run"
 
 # —— 构建 ——
 [tasks.build-desktop]
@@ -110,12 +107,10 @@ run = ["cargo clippy --all-targets -- -D warnings", "cd .. && pnpm vue-tsc --noE
 # —— 部署 ——
 [tasks.up]
 description = "在部署机上拉起服务端与管理端"
-dir = "deploy"
 run = "docker compose up -d"
 
 [tasks.down]
 description = "在部署机上停止服务端与管理端"
-dir = "deploy"
 run = "docker compose down"
 
 # —— 发版 ——

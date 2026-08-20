@@ -9,22 +9,12 @@ services:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
       - "127.0.0.1:${SERVER_PORT:-8081}:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: prod
       # 订阅起止期按服务端时区判定，建议在 .env 设为管理员所在时区（如 Asia/Shanghai）
       TZ: ${TZ:-UTC}
-      # 外置 MySQL：库需提前建好，表由 Flyway 在启动时自动建/升级
-      SPRING_DATASOURCE_URL: ${MYSQL_URL:?需要在 .env 中设置 MYSQL_URL}
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:?需要在 .env 中设置 MYSQL_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?需要在 .env 中设置 MYSQL_PASSWORD}
-      # 席位凭据与节点密码的加密密钥。丢了等于库里所有密文作废
-      LANE_CRYPTO_KEY: ${LANE_CRYPTO_KEY:?需要在 .env 中设置 LANE_CRYPTO_KEY}
-      # 自签会话 token 的签名密钥。换掉 = 全员下线（应急踢下线手段）
-      LANE_AUTH_SESSION_SECRET: ${LANE_AUTH_SESSION_SECRET:?需要在 .env 中设置 LANE_AUTH_SESSION_SECRET}
-      # Logto 传统 Web 应用的 App Secret
-      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_LOGTO_CLIENT_SECRET: ${LOGTO_CLIENT_SECRET:?需要在 .env 中设置 LOGTO_CLIENT_SECRET}
     volumes:
-      # 只含 OIDC 配置与链路有效期，不含任何凭据；只读挂载，不进镜像
-      - ./application-prod.yaml:/app/config/application-prod.yaml:ro
+      # 服务端全部配置（外置 MySQL 连接、加密与会话密钥、Logto 凭据）都在这一个文件里，
+      # 参照 apps/server/config/application.example.yml 填写；只读挂载，不进镜像
+      - ./application.yml:/app/config/application.yml:ro
     healthcheck:
       # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null 2>&1 || exit 1"]

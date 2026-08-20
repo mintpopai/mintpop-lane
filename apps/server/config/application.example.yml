@@ -1,15 +1,18 @@
-# 本地环境配置模板。复制为 application-local.yaml 并填入真实值。
-# 该文件含数据库口令与加密密钥，已在 .gitignore 中排除，严禁入库。
+# 服务端配置模板。复制为同目录 application.yml 并填入真实值。
+# config/application.yml 已被 .gitignore 排除，且位于 src/main/resources 之外，不会被打进 jar 或镜像。
+# 该文件含数据库口令与加密密钥，严禁入库。
 #
-# 用户与节点数据现在都在数据库里，本文件不再承载任何绑定表。
+# 本地开发：mise run run-server 的工作目录是 apps/server，Spring Boot 启动时自动读取 ./config/application.yml。
+# 线上部署：复制到部署机的仓库根（docker-compose.yml 旁）改名 application.yml，由 compose 以只读卷挂到容器 /app/config/，见根 README.md。
 
-server:
-  # 本地开发只绑回环
-  address: 127.0.0.1
+# 本地开发建议解开下面两行只绑回环；线上（容器内）必须保持注释——容器要绑 0.0.0.0，
+# 不对外由 compose 的宿主端口只绑 127.0.0.1 保证。
+# server:
+#   address: 127.0.0.1
 
 spring:
   datasource:
-    # 本地开发用的 MySQL；库需要提前建好，表由 Flyway 自动建
+    # 本地开发填本机 MySQL，线上填外置 MySQL。库需提前建好，表由 Flyway 自动建
     url: "jdbc:mysql://127.0.0.1:3306/lane?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
     username: 填入数据库用户名
     password: 填入数据库口令
@@ -35,9 +38,9 @@ lane:
     ttl-seconds: 1800
   auth:
     # 自签会话 token 的 HS256 密钥，至少 32 字节。生成：openssl rand -base64 32
-    # 换了这个值，所有已登录会话（含桌面端钥匙串里的）全部失效
+    # 换了这个值，所有已登录会话（含桌面端钥匙串里的）全部失效——也是应急踢下线手段
     session-secret: 填入生成的密钥
-    # 本地开发时管理端 Vite 的地址
+    # 管理端地址：本地开发填 Vite 的 http://localhost:5173，线上填 https://<你的域名>
     admin-frontend-url: "http://localhost:5173"
   crypto:
     # 32 字节密钥的 Base64。生成：openssl rand -base64 32

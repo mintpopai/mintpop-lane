@@ -6,7 +6,7 @@
 
 ## 首次部署
 
-> 以下 1～7 步的命令都在仓库的 `deploy/` 目录下执行——先 `cd deploy`。（`mise run up` / `mise run down` 例外：它们是 mise task，任务定义里已带 `dir`，在仓库任意目录执行都可以。）
+> 以下 1～7 步的命令都在**仓库根目录**执行；部署所需的三个文件（`application.yml`、`admin-config.json`、可选的 `.env`）也都放仓库根、与 `docker-compose.yml` 同目录，均已被 `.gitignore` 排除。
 >
 > **前置条件**：外置 MySQL 需为 **8.0 及以上**（本项目开发与测试用的是 8.4）。建库语句用了 `utf8mb4_0900_ai_ci` 排序规则，表结构里也有 JSON 列，这两者都要求 8.0+；5.x 会在建库这一步直接报错。
 
@@ -25,21 +25,23 @@
    GRANT ALL PRIVILEGES ON lane.* TO 'lane'@'%';
    ```
 
-3. **生成密钥并写入 `.env`**：
+3. **（可选）放置 `.env`**：镜像版本、宿主端口、容器时区都有默认值（见下文「可调参数」），要覆盖时在仓库根建 `.env` 写入对应变量即可；全用默认值就跳过这一步。建议至少设 `TZ`（如 `Asia/Shanghai`）——订阅起止期按服务端时区判定。
+
+4. **放置服务端配置**：把 `apps/server/config/application.example.yml` 复制到仓库根改名 `application.yml`，照注释填入全部真实值——外置 MySQL 连接、Logto issuer 与传统 Web 应用的 App ID、管理端域名（`lane.auth.admin-frontend-url`），以及两个本地生成的密钥：
 
    ```bash
-   cp .env.example .env
-   openssl rand -base64 32   # 把输出填进 .env 的 LANE_CRYPTO_KEY
-   openssl rand -base64 32   # 再生成一个，填进 .env 的 LANE_AUTH_SESSION_SECRET
+   cp apps/server/config/application.example.yml ./application.yml
+   openssl rand -base64 32   # 把输出填进 lane.crypto.key
+   openssl rand -base64 32   # 再生成一个，填进 lane.auth.session-secret
    ```
 
-   > ⚠️ `LANE_CRYPTO_KEY` 用来加密席位凭据与节点密码。**丢失或更换 = 库里所有密文永久解不开**，必须重录全部凭据。请与数据库口令分开备份。
-   >
-   > `LANE_AUTH_SESSION_SECRET` 是自签会话 token 的 HS256 签名密钥（至少 32 字节）。换掉它会让所有已登录会话（含管理端网页与桌面端钥匙串里的）立即失效——这也是一种应急踢下线手段。
-   >
-   > `.env` 里还有一个 `LOGTO_CLIENT_SECRET`，不是本地生成的，而是**第 5 步**在 Logto 控制台建好传统 Web 应用后从控制台复制过来的，先留空，走到那一步再填。
+   由 compose 以只读卷把它挂进容器的 `/app/config/`，不进镜像。该文件**含数据库口令与密钥**，已在 `.gitignore` 中，严禁入库。
 
-4. **放置生产配置**：把 `apps/server/src/main/resources/application-prod.yaml.example` 复制到本目录改名 `application-prod.yaml`，填入 Logto issuer 与传统 Web 应用的 App ID、管理端域名（`lane.auth.admin-frontend-url`）。`client-secret` 与会话签名密钥不写在这个文件里，由 compose 从 `.env` 注入。该文件**不含任何凭据**，但仍在 `.gitignore` 中，不入库。
+   > ⚠️ `lane.crypto.key` 用来加密席位凭据与节点密码。**丢失或更换 = 库里所有密文永久解不开**，必须重录全部凭据。请与数据库口令分开备份。
+   >
+   > `lane.auth.session-secret` 是自签会话 token 的 HS256 签名密钥（至少 32 字节）。换掉它会让所有已登录会话（含管理端网页与桌面端钥匙串里的）立即失效——这也是一种应急踢下线手段。
+   >
+   > 文件里的 `client-secret` 不是本地生成的，而是**第 5 步**在 Logto 控制台建好传统 Web 应用后从控制台复制过来的，先留占位，走到那一步再填。
 
 5. **建 Logto 的传统 Web 应用并放置管理端运行时配置**：
 
@@ -52,14 +54,14 @@
 
    > ⚠️ **Post sign-out redirect URI 必须在 Logto 应用里登记为管理端地址**（生产 `https://<你的域名>/`，本地开发再追加一条 `http://localhost:5173/`）。管理端点「退出登录」时，服务端清掉本站会话 Cookie 后会跳 Logto 的结束会话端点（RP-initiated logout）并带上回跳地址；Logto 只接受已登记的地址，没登记这次登出跳转会被 Logto 拒绝、页面停在它的报错页。
 
-   把 App ID 和 App Secret 记下来：App ID 填进第 4 步的 `application-prod.yaml`（`spring.security.oauth2.client.registration.logto.client-id`）；App Secret 回到第 3 步，填进 `.env` 的 `LOGTO_CLIENT_SECRET`。
+   把 App ID 和 App Secret 记下来，都填进第 4 步的 `application.yml`：App ID 填 `spring.security.oauth2.client.registration.logto.client-id`，App Secret 填同级的 `client-secret`。
 
    > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**一条回调地址 `http://localhost:5173/auth/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
 
    b. 把模板复制成部署机上的运行时配置并填真值：
 
    ```bash
-   cp <仓库>/apps/admin/config.example.json admin-config.json
+   cp apps/admin/config.example.json ./admin-config.json
    ```
 
    ```json
@@ -147,7 +149,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 |---|---|
 | 启动（服务端 + 管理端） | `mise run up` |
 | 停止 | `mise run down` |
-| 查看日志（需在 `deploy/` 目录下执行） | `docker compose logs -f server` / `docker compose logs -f admin` |
+| 查看日志（需在仓库根执行） | `docker compose logs -f server` / `docker compose logs -f admin` |
 | 健康检查 | `curl 127.0.0.1:8081/actuator/health` / `curl -I 127.0.0.1:8082/` |
 
 从二期起，下面这些接口日常**不需要手工调**——打开管理端页面点就行。表格保留是为了排查问题时能直接验接口。
@@ -178,7 +180,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 ## 可调参数
 
-`deploy/.env` 里的覆盖点：
+仓库根 `.env` 里的覆盖点（数据库连接、密钥、Logto 凭据不在这里——都在同目录 `application.yml` 里改，改完 `mise run up` 重建容器生效）：
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
@@ -186,10 +188,6 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `SERVER_PORT` | `8081` | 宿主监听端口 |
 | `ADMIN_TAG` | `latest` | 管理端镜像版本。回滚时指定具体版本，如 `ADMIN_TAG=0.1.0` |
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
-| `MYSQL_URL` / `MYSQL_USERNAME` / `MYSQL_PASSWORD` | 无（必填） | 外置 MySQL 连接信息 |
-| `LANE_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
-| `LANE_AUTH_SESSION_SECRET` | 无（必填） | 自签会话 token 的 HS256 签名密钥，至少 32 字节 |
-| `LOGTO_CLIENT_SECRET` | 无（必填） | Logto 传统 Web 应用的 App Secret |
 | `TZ` | `UTC` | 服务端容器时区。订阅起止期按服务端时区判定，建议设成管理员所在时区（如 `Asia/Shanghai`），否则管理端填的时间与实际生效时刻会差几个时区 |
 
 ## 备份
@@ -197,11 +195,11 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 要备份两样东西，**且必须分开存放**：
 
 1. **数据库**（`mysqldump lane`）——里面的凭据是密文。
-2. **`LANE_CRYPTO_KEY`**——没有它，数据库备份里的凭据无法解开。
+2. **`lane.crypto.key`（在部署机仓库根的 `application.yml` 里）**——没有它，数据库备份里的凭据无法解开。
 
 两者存在同一处等于加密白做。
 
-> `LANE_AUTH_SESSION_SECRET` 不属于上面这两样、也不需要备份：它只签自签会话 token，丢失或更换的后果是**全员下线**（无数据损失，重新登录一次即可拿到新会话），与 `LANE_CRYPTO_KEY` 丢失会让密文永久解不开是两种截然不同的后果，不要混为一谈。
+> `lane.auth.session-secret` 不属于上面这两样、也不需要备份：它只签自签会话 token，丢失或更换的后果是**全员下线**（无数据损失，重新登录一次即可拿到新会话），与 `lane.crypto.key` 丢失会让密文永久解不开是两种截然不同的后果，不要混为一谈。
 
 ## 对外暴露
 
@@ -243,10 +241,10 @@ server {
 
 > ⚠️ **登录体系重构的上线配套**：本文档描述的是新协议（服务端自签会话 + Logto 传统 Web 应用）。桌面端与管理端均已跟进新登录协议，三期已收官；发版时注意三个组件版本配套。旧的 `GET /api/client-config` 端点已随本次重构下线——若线上还有跑旧协议的桌面端或管理端，升级服务端会让它们的登录立即失效，升级前请确认桌面端/管理端已同步跟进，不要单独抢先上线服务端。
 
-服务端上线前确认 `application-prod.yaml` 里已配：
+服务端上线前确认部署机仓库根的 `application.yml` 里已配：
 
-- `spring.security.oauth2.client.registration.logto.client-id`（Logto 传统 Web 应用的 App ID）
+- `spring.security.oauth2.client.registration.logto.client-id` 与 `client-secret`（Logto 传统 Web 应用的凭据）
 - `spring.security.oauth2.client.provider.logto.issuer-uri`（形如 `https://<租户>.logto.app/oidc`）
 - `lane.auth.admin-frontend-url`（管理端网页地址，登录成功/失败后的回跳落点）
-
-`client-secret` 与 `lane.auth.session-secret` 不写在这个文件里，由 compose 从 `.env` 的 `LOGTO_CLIENT_SECRET`、`LANE_AUTH_SESSION_SECRET` 注入。
+- `lane.auth.session-secret` 与 `lane.crypto.key`（两个本地生成的密钥）
+- `spring.datasource.*`（外置 MySQL 连接）

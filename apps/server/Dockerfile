@@ -47,5 +47,6 @@ RUN mise trust && mise install java
 COPY --from=build /app/apps/server/target/lane-server-*.jar ./server.jar
 
 EXPOSE 8080
-# 配置由 compose 以只读卷挂到 /app/config，含凭据的配置文件不进镜像
-CMD ["mise", "exec", "--", "java", "-jar", "server.jar", "--spring.config.additional-location=file:/app/config/"]
+# 配置由 compose 以只读卷挂到 /app/config，含凭据的配置文件不进镜像；
+# 工作目录是 /app，Spring Boot 默认就会读取 ./config/application.yml，无需显式指定
+CMD ["mise", "exec", "--", "java", "-jar", "server.jar"]
