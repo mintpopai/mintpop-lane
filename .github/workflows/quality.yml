@@ -17,6 +17,10 @@ jobs:
       - name: 安装前端依赖
         run: mise run install-desktop --frozen
 
+      # tauri 的 build script 校验 sidecar 资源存在，缺了 mihomo 连 clippy 都编不过
+      - name: 下载 mihomo 内核
+        run: mise run fetch-mihomo
+
       - name: 检查 Rust 代码
         run: mise run lint-desktop
 
