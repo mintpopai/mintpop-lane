@@ -1,4 +1,4 @@
-import { 登录入口 } from "../auth/constants";
+import { 登录页路径 } from "../auth/constants";
 import { runtimeConfig } from "../config/runtime";
 import { createAdminApi, type AdminApi } from "./admin";
 import { createAuthApi, type AuthApi } from "./auth";
@@ -16,8 +16,8 @@ function httpClient(): HttpClient {
   if (!http) {
     http = createHttpClient({
       baseUrl: runtimeConfig().apiBaseUrl,
-      // 会话失效就整页跳服务端登录入口。跳转会离开本页，不必等待返回
-      onUnauthorized: () => window.location.assign(登录入口),
+      // 会话失效就整页落回登录落地页（不静默跳 Logto），由用户主动点「登录」
+      onUnauthorized: () => window.location.assign(登录页路径),
     });
   }
   return http;

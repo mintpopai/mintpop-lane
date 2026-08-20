@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMemoryHistory, isNavigationFailure, NavigationFailureType } from "vue-router";
+import { createMemoryHistory } from "vue-router";
 import type { AuthApi } from "../api/auth";
 import { UnauthorizedError } from "../api/http";
 import type { MeResponse } from "../api/types";
@@ -64,18 +64,18 @@ describe("路由守卫", () => {
     expect(router.currentRoute.value.name).toBe("FORBIDDEN");
   });
 
-  it("未登录（401）时中断导航并整页跳登录入口", async () => {
+  it("未登录（401）时落到登录落地页，不自动跳 Logto", async () => {
     const router = 建路由(new UnauthorizedError());
 
-    const failure = await router.push("/users");
+    await router.push("/users");
 
-    expect(isNavigationFailure(failure, NavigationFailureType.aborted)).toBe(true);
-    expect(assign跳转).toHaveBeenCalledWith("/oauth2/authorization/logto");
-    // 跳转前打了环路标记，下一次再回到未登录才能被熔断认出来
-    expect(sessionStorage.getItem("lane.loginRedirectAt")).not.toBeNull();
+    expect(router.currentRoute.value.name).toBe("LOGIN");
+    expect(assign跳转).not.toHaveBeenCalled();
+    // 只有用户点「登录」才打环路标记，落地页本身不算一次登录尝试
+    expect(sessionStorage.getItem("lane.loginRedirectAt")).toBeNull();
   });
 
-  it("刚跳过登录又回到未登录：熔断到登录失败页，不再跳登录", async () => {
+  it("刚跳过登录又回到未登录：熔断到登录失败页，不落地页循环", async () => {
     标记登录跳转(Date.now());
     const router = 建路由(new UnauthorizedError());
 

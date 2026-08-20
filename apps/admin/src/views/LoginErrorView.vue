@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import { 登录入口 } from "../auth/constants";
-import { 清除标记 } from "../utils/loginLoop";
+import { useAuthStore } from "../stores/auth";
 
-/** 重试前先清掉环路标记，否则这次重试回来会立刻又被熔断判成环路 */
-function 重试登录(): void {
-  清除标记();
-  window.location.assign(登录入口);
-}
+// 重试直接走 signIn：它会重打环路标记再跳登录——重试又失败时守卫据此直接回到本页
+const auth = useAuthStore();
 </script>
 
 <template>
@@ -21,7 +17,7 @@ function 重试登录(): void {
       </p>
       <p class="gate-text">请先确认上述配置，再重试；仍不行请联系系统管理员看服务端日志。</p>
       <div class="gate-actions">
-        <button type="button" class="gate-btn" @click="重试登录()">重试登录</button>
+        <button type="button" class="gate-btn" @click="auth.signIn()">重试登录</button>
       </div>
     </div>
   </div>

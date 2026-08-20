@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from "pinia";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthApi } from "../api/auth";
 import { UnauthorizedError } from "../api/http";
 import type { MeResponse } from "../api/types";
@@ -40,6 +40,31 @@ describe("useAuthStore", () => {
     const store = useAuthStore();
     await expect(store.refreshAuthState(假api(new Error("网络错误")))).rejects.toThrow("网络错误");
     expect(store.isAdmin).toBeNull();
+  });
+
+  it("signIn 先打环路标记再整页跳登录入口", () => {
+    // jsdom 的 location.assign 是 not implemented，会抛错；换成可断言的桩
+    const 原始location = window.location;
+    const assign跳转 = vi.fn();
+    Object.defineProperty(window, "location", {
+      value: { ...原始location, assign: assign跳转 },
+      writable: true,
+      configurable: true,
+    });
+    sessionStorage.clear();
+    try {
+      useAuthStore().signIn();
+
+      expect(assign跳转).toHaveBeenCalledWith("/oauth2/authorization/logto");
+      // 标记在跳转之前落下，回来仍未登录时守卫才能熔断出「会话没生效」
+      expect(sessionStorage.getItem("lane.loginRedirectAt")).not.toBeNull();
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: 原始location,
+        writable: true,
+        configurable: true,
+      });
+    }
   });
 
   it("普通成员已登录但非管理员，姓名缺失回退邮箱", async () => {
