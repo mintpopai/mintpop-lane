@@ -1,64 +1,26 @@
 import type { AdminNodeResponse, AdminUserResponse, UserSaveRequest, UserStatus } from "../api/types";
 
 export interface UserFormModel {
-  id: number | null;
-  subject: string;
-  name: string;
+  id: number;
   status: UserStatus;
   frontNodeId: number | null;
   landNodeId: number | null;
-  /** 留空表示沿用原凭据 */
-  claudeCredential: string;
-}
-
-export function emptyUserForm(): UserFormModel {
-  return {
-    id: null,
-    subject: "",
-    name: "",
-    status: "ACTIVE",
-    frontNodeId: null,
-    landNodeId: null,
-    claudeCredential: "",
-  };
 }
 
 export function userToForm(user: AdminUserResponse): UserFormModel {
   return {
     id: user.id,
-    subject: user.subject,
-    name: user.name,
     status: user.status,
     frontNodeId: user.frontNodeId,
     landNodeId: user.landNodeId,
-    // 服务端不回传凭据，回填一律为空；提交时空串即表示不修改
-    claudeCredential: "",
   };
-}
-
-export function validateUserForm(form: UserFormModel): string[] {
-  const errors: string[] = [];
-  if (!form.subject.trim()) {
-    errors.push("Logto user id 不能为空");
-  }
-  if (!form.name.trim()) {
-    errors.push("姓名不能为空");
-  }
-  if (form.frontNodeId === null) {
-    errors.push("必须选择第一跳节点");
-  }
-  return errors;
 }
 
 export function buildUserPayload(form: UserFormModel): UserSaveRequest {
   return {
-    subject: form.subject.trim(),
-    name: form.name.trim(),
     status: form.status,
-    frontNodeId: form.frontNodeId as number,
+    frontNodeId: form.frontNodeId,
     landNodeId: form.landNodeId,
-    // 空串 = 沿用原值。服务端对空白串按 null 处理，不会覆盖已有凭据
-    claudeCredential: form.claudeCredential.trim(),
   };
 }
 

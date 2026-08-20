@@ -3,15 +3,15 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
+import { AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
-import { booleanLabel, formatDateTime, joinOrDash } from "../utils/format";
-import { selectableFrontNodes } from "../utils/userForm";
+import { formatDateTime, joinOrDash } from "../utils/format";
 import UserFormDrawer from "../components/UserFormDrawer.vue";
 
 const 列表 = ref<AdminUserResponse[]>([]);
 const 节点 = ref<AdminNodeResponse[]>([]);
 const 关键字 = ref("");
+const 订阅筛选 = ref<boolean | null>(null);
 const 页码 = ref(1);
 const 每页 = ref(20);
 const 总数 = ref(0);
@@ -28,6 +28,7 @@ async function 加载列表(): Promise<void> {
   try {
     const page = await adminApi().pageUsers({
       keyword: 关键字.value.trim(),
+      hasActiveSubscription: 订阅筛选.value,
       pageNo: 页码.value,
       pageSize: 每页.value,
     });
@@ -53,14 +54,9 @@ function 搜索(): void {
   void 加载列表();
 }
 
-function 新建(): void {
-  // 第一跳节点非空是数据库层面的硬约束，没有可选节点就不给空表单
-  if (selectableFrontNodes(节点.value).length === 0) {
-    ElMessage.warning("还没有可用的第一跳节点，请先去「节点池」建一个并启用");
-    return;
-  }
-  正在编辑.value = null;
-  抽屉打开.value = true;
+function 筛选变化(): void {
+  页码.value = 1;
+  void 加载列表();
 }
 
 function 编辑(user: AdminUserResponse): void {
@@ -70,9 +66,11 @@ function 编辑(user: AdminUserResponse): void {
 
 async function 删除(user: AdminUserResponse): Promise<void> {
   try {
-    await ElMessageBox.confirm(`确认删除用户「${user.name}」？其落地出口会随之释放。`, "删除确认", {
-      type: "warning",
-    });
+    await ElMessageBox.confirm(
+      `确认删除用户「${user.name}」？其订阅与落地出口会随之释放。`,
+      "删除确认",
+      { type: "warning" },
+    );
   } catch {
     return;
   }
@@ -97,19 +95,24 @@ onMounted(刷新);
     <div class="page-toolbar">
       <el-input
         v-model="关键字"
-        placeholder="按姓名或 Logto user id 搜索"
+        placeholder="按姓名、邮箱或 Logto user id 搜索"
         clearable
         style="width: 280px"
         @keyup.enter="搜索()"
         @clear="搜索()"
       />
       <el-button @click="搜索()">搜索</el-button>
+      <el-select v-model="订阅筛选" style="width: 160px" @change="筛选变化()">
+        <el-option label="全部" :value="null" />
+        <el-option label="有在期订阅" :value="true" />
+        <el-option label="无在期订阅" :value="false" />
+      </el-select>
       <span class="page-toolbar__spacer" />
-      <el-button type="primary" @click="新建()">新建用户</el-button>
     </div>
 
     <el-table v-loading="loading" :data="列表" border>
       <el-table-column prop="name" label="姓名" width="110" />
+      <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
       <el-table-column prop="subject" label="Logto user id" min-width="200" show-overflow-tooltip />
       <el-table-column label="角色" width="100">
         <template #default="{ row }">{{ USER_ROLE_LABELS[row.role as keyof typeof USER_ROLE_LABELS] }}</template>
@@ -130,11 +133,20 @@ onMounted(刷新);
       <el-table-column label="出口 IP" min-width="150">
         <template #default="{ row }">{{ joinOrDash(row.egressIps) }}</template>
       </el-table-column>
-      <el-table-column label="席位凭据" width="100">
+      <el-table-column label="在期订阅" min-width="200">
         <template #default="{ row }">
-          <el-tag :type="row.credentialConfigured ? 'success' : 'warning'">
-            {{ booleanLabel(row.credentialConfigured, "已配置", "未配置") }}
-          </el-tag>
+          <template v-if="row.activeSubscriptions.length">
+            <el-tag
+              v-for="s in row.activeSubscriptions"
+              :key="s.id"
+              style="margin-right: 4px"
+              type="success"
+            >
+              {{ AGENT_TYPE_LABELS[s.agentType as keyof typeof AGENT_TYPE_LABELS] ?? s.agentType }}
+              至 {{ s.endsAt.slice(0, 10) }}
+            </el-tag>
+          </template>
+          <el-tag v-else type="info">无</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="更新时间" width="150">
@@ -159,6 +171,12 @@ onMounted(刷新);
       @size-change="搜索()"
     />
 
-    <UserFormDrawer v-model="抽屉打开" :editing="正在编辑" :nodes="节点" @saved="刷新()" />
+    <UserFormDrawer
+      v-if="正在编辑"
+      v-model="抽屉打开"
+      :user="正在编辑"
+      :nodes="节点"
+      @saved="刷新()"
+    />
   </div>
 </template>

@@ -12,7 +12,12 @@ describe("createAdminApi", () => {
   it("分页查询把关键字与页码拼成查询串", async () => {
     const { http, request } = 假客户端();
 
-    await createAdminApi(http).pageUsers({ keyword: "张", pageNo: 2, pageSize: 20 });
+    await createAdminApi(http).pageUsers({
+      keyword: "张",
+      hasActiveSubscription: null,
+      pageNo: 2,
+      pageSize: 20,
+    });
 
     expect(request).toHaveBeenCalledWith("/admin/users?keyword=%E5%BC%A0&pageNo=2&pageSize=20");
   });
@@ -20,9 +25,29 @@ describe("createAdminApi", () => {
   it("关键字为空时不发 keyword 参数，避免服务端按空串去 like", async () => {
     const { http, request } = 假客户端();
 
-    await createAdminApi(http).pageUsers({ keyword: "", pageNo: 1, pageSize: 20 });
+    await createAdminApi(http).pageUsers({
+      keyword: "",
+      hasActiveSubscription: null,
+      pageNo: 1,
+      pageSize: 20,
+    });
 
     expect(request).toHaveBeenCalledWith("/admin/users?pageNo=1&pageSize=20");
+  });
+
+  it("pageUsers 带在期订阅筛选，null 时不发该参数", async () => {
+    const paths: string[] = [];
+    const http: HttpClient = {
+      request: async <T>(path: string) => {
+        paths.push(path);
+        return { records: [], total: 0, pageNo: 1, pageSize: 20 } as T;
+      },
+    };
+    const api = createAdminApi(http);
+    await api.pageUsers({ keyword: "", hasActiveSubscription: true, pageNo: 1, pageSize: 20 });
+    await api.pageUsers({ keyword: "", hasActiveSubscription: null, pageNo: 1, pageSize: 20 });
+    expect(paths[0]).toContain("hasActiveSubscription=true");
+    expect(paths[1]).not.toContain("hasActiveSubscription");
   });
 
   it("节点列表按角色过滤；不传角色就取全部", async () => {

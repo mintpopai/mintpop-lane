@@ -103,19 +103,29 @@ export interface PageResult<T> {
 export interface AdminUserResponse {
   id: number;
   subject: string;
+  email: string;
   name: string;
   role: UserRole;
   status: UserStatus;
-  frontNodeId: number;
+  /** 注册即无资源，未分配时为 null */
+  frontNodeId: number | null;
   frontNodeName: string | null;
   landNodeId: number | null;
   landNodeName: string | null;
   /** 取自其落地节点，未分配时是空数组 */
   egressIps: string[];
-  /** 服务端不回传凭据本身，只告诉你配没配 */
-  credentialConfigured: boolean;
+  /** 在期订阅摘要，一眼看出这个人开了什么、到什么时候 */
+  activeSubscriptions: ActiveSubscriptionBrief[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ActiveSubscriptionBrief {
+  id: number;
+  name: string;
+  /** 服务端可能新增本前端不认识的类型，故用 string 承载 */
+  agentType: string;
+  endsAt: string;
 }
 
 export interface AdminNodeResponse {
@@ -137,15 +147,14 @@ export interface AdminNodeResponse {
   updatedAt: string;
 }
 
-/** 新建 / 更新用户的入参。刻意没有 role：提权只能改库 */
+/**
+ * 更新用户的入参。用户由登录自动建档，这里只管管理员能动的部分：
+ * 处置态与链路资源分配。subject/email/name 随身份走、role 提权只能改库。
+ */
 export interface UserSaveRequest {
-  subject: string;
-  name: string;
   status: UserStatus;
-  frontNodeId: number;
+  frontNodeId: number | null;
   landNodeId: number | null;
-  /** 空串表示沿用原值，不会把已有凭据清掉 */
-  claudeCredential: string;
 }
 
 export interface NodeSaveRequest {
@@ -164,6 +173,8 @@ export interface NodeSaveRequest {
 
 export interface UserPageQuery {
   keyword: string;
+  /** null = 不按有无在期订阅筛选 */
+  hasActiveSubscription: boolean | null;
   pageNo: number;
   pageSize: number;
 }

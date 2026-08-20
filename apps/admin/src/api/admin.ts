@@ -11,7 +11,6 @@ import type {
 
 export interface AdminApi {
   pageUsers(query: UserPageQuery): Promise<PageResult<AdminUserResponse>>;
-  createUser(body: UserSaveRequest): Promise<number>;
   updateUser(id: number, body: UserSaveRequest): Promise<void>;
   deleteUser(id: number): Promise<void>;
   listNodes(role?: NodeRole): Promise<AdminNodeResponse[]>;
@@ -29,13 +28,12 @@ export function createAdminApi(http: HttpClient): AdminApi {
       if (query.keyword) {
         params.set("keyword", query.keyword);
       }
+      if (query.hasActiveSubscription !== null) {
+        params.set("hasActiveSubscription", String(query.hasActiveSubscription));
+      }
       params.set("pageNo", String(query.pageNo));
       params.set("pageSize", String(query.pageSize));
       return http.request(`/admin/users?${params.toString()}`);
-    },
-
-    createUser(body) {
-      return http.request("/admin/users", { method: "POST", body: JSON.stringify(body) });
     },
 
     updateUser(id, body) {
