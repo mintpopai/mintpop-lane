@@ -5,7 +5,7 @@ import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
-import { formatDateTime, joinOrDash } from "../utils/format";
+import { formatDate, formatDateTime, joinOrDash } from "../utils/format";
 import SubscriptionDrawer from "../components/SubscriptionDrawer.vue";
 import UserFormDrawer from "../components/UserFormDrawer.vue";
 
@@ -152,7 +152,7 @@ onMounted(刷新);
               type="success"
             >
               {{ AGENT_TYPE_LABELS[s.agentType as keyof typeof AGENT_TYPE_LABELS] ?? s.agentType }}
-              至 {{ s.endsAt.slice(0, 10) }}
+              至 {{ formatDate(s.endsAt) }}
             </el-tag>
           </template>
           <el-tag v-else type="info">无</el-tag>
