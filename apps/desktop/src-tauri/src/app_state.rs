@@ -37,6 +37,14 @@ pub enum BootstrapState {
     FAILED(String),
 }
 
+/// 链路不可用的原因通知：业务码 + 服务端文案，供前端渲染购买/续费引导。
+/// 只描述「为什么连不上」，不含任何凭据或节点信息，可以进渲染层。
+#[derive(Debug, Clone, Serialize)]
+pub struct LinkNotice {
+    pub code: i32,
+    pub msg: String,
+}
+
 /// 全局应用状态。凭据只存在于此，绝不下发到渲染层。
 pub struct AppState {
     pub link_state: Mutex<LinkState>,
@@ -57,6 +65,8 @@ pub struct AppState {
     /// 当前 access_token，只存内存；refresh_token 另存 OS 钥匙串
     pub access_token: Mutex<Option<String>>,
     pub pending_login: Mutex<Option<PendingLogin>>,
+    /// 链路不可用的原因通知，establish_link 拉配置失败时写入，成功时清空
+    pub link_notice: Mutex<Option<LinkNotice>>,
 }
 
 impl Default for AppState {
@@ -72,6 +82,7 @@ impl Default for AppState {
             bootstrap_lock: tokio::sync::Mutex::new(()),
             access_token: Mutex::new(None),
             pending_login: Mutex::new(None),
+            link_notice: Mutex::new(None),
         }
     }
 }

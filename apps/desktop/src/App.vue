@@ -5,7 +5,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import LoginView from "./components/Login.vue";
 import TerminalView from "./components/Terminal.vue";
 
-type LinkState = "DISCONNECTED" | "CONNECTING" | "ACTIVE" | "DEGRADED" | "REVOKED";
+type LinkState = "DISCONNECTED" | "CONNECTING" | "ACTIVE" | "DEGRADED" | "EXPIRED" | "REVOKED";
 
 const status = ref<LinkState>("DISCONNECTED");
 const loggedIn = ref(false);
@@ -17,6 +17,7 @@ const label: Record<LinkState, string> = {
   CONNECTING: "正在连接公司链路…",
   ACTIVE: "已接入公司链路",
   DEGRADED: "链路异常，暂不可用",
+  EXPIRED: "服务已到期，请续费后重连",
   REVOKED: "账号已被停用",
 };
 
@@ -76,6 +77,7 @@ body {
   background: #f9a825;
 }
 .bar.DEGRADED,
+.bar.EXPIRED,
 .bar.REVOKED,
 .bar.DISCONNECTED {
   background: #c62828;

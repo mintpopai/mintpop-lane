@@ -59,7 +59,13 @@ fn advance(state: &AppState, event: LinkEvent) -> LinkState {
 
 /// 建立链路：拉配置 → 拉起内核 → 推送配置 → 校验出口。
 /// 任何一步失败都落到非 ACTIVE 状态，从而使 spawn 守卫拒绝启动 Agent。
-pub async fn establish_link(state: &AppState) -> LinkState {
+pub async fn establish_link(app: &AppHandle) -> LinkState {
+    let state = app.state::<AppState>();
+    let state = &*state;
+
+    // 入口先清通知：上一次失败留下的引导文案不该残留到这一轮
+    *state.link_notice.lock().unwrap() = None;
+
     let Some(token) = state.access_token.lock().unwrap().clone() else {
         return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
     };
@@ -68,7 +74,19 @@ pub async fn establish_link(state: &AppState) -> LinkState {
 
     let link = match link::remote::fetch_link(&server_base_url(), &token).await {
         Ok(link) => link,
+        Err(link::remote::RemoteError::Status(code)) if code.as_u16() == 401 => {
+            // 会话失效：清登录态回登录页，绝不带着一个已死的 token 空转
+            force_relogin(app, "登录已过期，请重新登录").await;
+            return LinkState::DISCONNECTED;
+        }
         Err(e) => {
+            // 业务失败（未购买/到期/资源未分配等）记录给前端渲染引导文案
+            if let link::remote::RemoteError::Biz { code, msg } = &e {
+                *state.link_notice.lock().unwrap() = Some(app_state::LinkNotice {
+                    code: *code,
+                    msg: msg.clone(),
+                });
+            }
             log_error("拉取链路配置失败", &e);
             return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
         }
@@ -130,10 +148,20 @@ async fn heartbeat_loop(app: AppHandle) {
         };
 
         match link::remote::heartbeat(&base_url, &token).await {
-            Ok(link::remote::UserStatus::ACTIVE) => {}
-            Ok(_) => {
+            Ok(link::remote::LinkStatus::ACTIVE) => {}
+            Ok(link::remote::LinkStatus::EXPIRED) => {
+                // 服务到期：断链但保留登录态，前端提示续费；续费后点重连即可
                 reset_kernel(&state).await;
-                advance(&state, LinkEvent::REVOKED_BY_SERVER);
+                advance(&state, LinkEvent::SERVICE_EXPIRED);
+            }
+            Ok(link::remote::LinkStatus::SUSPENDED) => {
+                force_relogin(&app, "账号已被停用，请联系管理员").await;
+            }
+            Ok(link::remote::LinkStatus::REVOKED) => {
+                force_relogin(&app, "账号已被吊销").await;
+            }
+            Err(link::remote::RemoteError::Status(code)) if code.as_u16() == 401 => {
+                force_relogin(&app, "登录已过期，请重新登录").await;
             }
             Err(e) => {
                 // 心跳打不通同样按不可用处理，绝不假定链路仍然有效
@@ -152,6 +180,20 @@ async fn reset_kernel(state: &AppState) {
     }
 }
 
+/// 断链并回登录页：会话失效（401）、账号被停用/吊销时的统一出口。
+/// 与 EXPIRED 的区别：这里连登录态一起清掉，用户必须重新走浏览器登录。
+async fn force_relogin(app: &AppHandle, reason: &str) {
+    let state = app.state::<AppState>();
+    reset_kernel(&state).await;
+    set_state(&state, LinkState::DISCONNECTED);
+    *state.access_token.lock().unwrap() = None;
+    let _ = auth::storage::clear_refresh_token();
+    let _ = app.emit(
+        "auth://changed",
+        serde_json::json!({ "logged_in": false, "reason": reason }),
+    );
+}
+
 /// 登录成功后的收尾：存令牌、建链路、通知前端
 async fn on_authenticated(app: &AppHandle, tokens: auth::oidc::TokenSet) {
     let state = app.state::<AppState>();
@@ -165,7 +207,7 @@ async fn on_authenticated(app: &AppHandle, tokens: auth::oidc::TokenSet) {
     }
 
     let _ = app.emit("auth://changed", serde_json::json!({ "logged_in": true }));
-    establish_link(&state).await;
+    establish_link(app).await;
 }
 
 /// 处理 deep link 回调，完成授权码交换
@@ -304,6 +346,8 @@ pub fn run() {
             commands::logout,
             commands::client_config_state,
             commands::reload_client_config,
+            commands::link_notice,
+            commands::reconnect_link,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");

@@ -78,7 +78,7 @@ pub fn render_kernel_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::link::model::{InboundCredentials, LinkConfig};
+    use crate::link::model::{AgentCredential, InboundCredentials, LinkConfig};
     use serde_yaml_ng::{Mapping, Value};
 
     /// 构造一份测试用链路配置
@@ -97,7 +97,13 @@ mod tests {
             front,
             land,
             expected_egress_ips: vec!["77.47.143.6".to_string()],
-            claude_credential: "sk-ant-test".to_string(),
+            agent_credentials: vec![AgentCredential {
+                subscription_id: 1,
+                name: "Claude 席位 1".to_string(),
+                agent_type: "CLAUDE".to_string(),
+                credential: "sk-ant-test".to_string(),
+                ends_at: "2026-09-18T12:00:00".to_string(),
+            }],
             ttl_seconds: 1800,
         }
     }

@@ -31,6 +31,18 @@ pub async fn reload_client_config(app: AppHandle) -> Result<(), String> {
     crate::reload_client_config(app).await
 }
 
+/// 链路不可用的原因（业务码 + 文案），前端据此渲染购买/续费引导
+#[tauri::command]
+pub fn link_notice(state: State<'_, AppState>) -> Option<crate::app_state::LinkNotice> {
+    state.link_notice.lock().unwrap().clone()
+}
+
+/// 手动重连：续费后、网络恢复后由用户主动触发
+#[tauri::command]
+pub async fn reconnect_link(app: AppHandle) -> LinkState {
+    crate::establish_link(&app).await
+}
+
 /// 发起登录：生成 PKCE，打开系统浏览器到 Logto 授权页。
 /// 授权完成后由 deep link 回调继续，见 lib.rs 的 handle_callback。
 #[tauri::command]
@@ -82,13 +94,20 @@ pub fn open_session(
         .unwrap()
         .clone()
         .ok_or_else(|| "链路尚未就绪".to_string())?;
+    // 过渡逻辑（Task 3 换成会话向导按订阅选择）：取止期最晚的 CLAUDE 凭据
     let credential = state
         .link
         .lock()
         .unwrap()
         .as_ref()
-        .map(|l| l.claude_credential.clone())
-        .ok_or_else(|| "链路尚未就绪".to_string())?;
+        .and_then(|l| {
+            l.agent_credentials
+                .iter()
+                .filter(|c| c.agent_type == "CLAUDE")
+                .max_by(|a, b| a.ends_at.cmp(&b.ends_at))
+                .map(|c| c.credential.clone())
+        })
+        .ok_or_else(|| "没有可用的 Claude 席位".to_string())?;
 
     let session = spawn_agent_pty(
         link_state,
