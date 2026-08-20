@@ -100,7 +100,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
         assertThat(userRepository.findBySubject("logto-desk")).isPresent();
         assertThat(response.getRedirectedUrl())
-                .startsWith("lane://callback?ticket=")
+                .startsWith("ai.mintpop.lane://callback?ticket=")
                 .contains("state=desktop-state-01");
         assertThat(response.getHeaders("Set-Cookie"))
                 .noneMatch(c -> c.startsWith(AuthProperties.SESSION_COOKIE_NAME + "="));

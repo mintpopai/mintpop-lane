@@ -28,8 +28,8 @@ import java.util.Optional;
 @Component
 public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
 
-    /** 桌面端深链回调地址，与桌面端 tauri-plugin-deep-link 注册的 scheme 逐字一致 */
-    static final String DESKTOP_CALLBACK = "lane://callback";
+    /** 桌面端深链回调地址，与桌面端 tauri-plugin-deep-link 注册的 scheme 逐字一致（反域名形态，见 RFC 8252） */
+    static final String DESKTOP_CALLBACK = "ai.mintpop.lane://callback";
 
     private final UserSyncService userSyncService;
     private final SessionTokenService sessionTokenService;

@@ -135,26 +135,26 @@ mod tests {
 
     #[test]
     fn 正常回调取出ticket() {
-        let out = extract_ticket("lane://callback?ticket=t-abc&state=st-1", "st-1").unwrap();
+        let out = extract_ticket("ai.mintpop.lane://callback?ticket=t-abc&state=st-1", "st-1").unwrap();
         assert_eq!(out, CallbackOutcome::TICKET("t-abc".to_string()));
     }
 
     #[test]
     fn state不匹配一律拒绝() {
         // 防反向攻击：别人把「攻击者账号的 ticket」塞给你，骗你登进他的会话
-        let r = extract_ticket("lane://callback?ticket=t&state=别人的", "st-1");
+        let r = extract_ticket("ai.mintpop.lane://callback?ticket=t&state=别人的", "st-1");
         assert!(matches!(r, Err(SessionError::StateMismatch)));
     }
 
     #[test]
     fn 服务端明示失败时返回失败结局() {
-        let out = extract_ticket("lane://callback?error=login_failed&state=st-1", "st-1").unwrap();
+        let out = extract_ticket("ai.mintpop.lane://callback?error=login_failed&state=st-1", "st-1").unwrap();
         assert_eq!(out, CallbackOutcome::LOGIN_FAILED);
     }
 
     #[test]
     fn 无ticket无error视为非法回调() {
-        let r = extract_ticket("lane://callback?state=st-1", "st-1");
+        let r = extract_ticket("ai.mintpop.lane://callback?state=st-1", "st-1");
         assert!(matches!(r, Err(SessionError::NoTicket)));
     }
 
