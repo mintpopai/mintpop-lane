@@ -3,7 +3,7 @@ package ai.mintpop.lane.response;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserRole;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /** 当前用户视图：桌面端启动验活与状态页用。凭据一个字符都不出现。 */
@@ -20,8 +20,8 @@ public record MeResponse(
             Long id,
             String name,
             AgentType agentType,
-            LocalDateTime startsAt,
-            LocalDateTime endsAt,
+            Instant startsAt,
+            Instant endsAt,
             boolean active
     ) {
     }

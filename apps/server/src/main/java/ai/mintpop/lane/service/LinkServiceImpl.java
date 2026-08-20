@@ -16,7 +16,8 @@ import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 
 @Service
@@ -26,15 +27,18 @@ public class LinkServiceImpl implements LinkService {
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final Clock clock;
 
     public LinkServiceImpl(LinkProperties linkProperties,
                            UserRepository userRepository,
                            ProxyNodeRepository nodeRepository,
-                           SubscriptionRepository subscriptionRepository) {
+                           SubscriptionRepository subscriptionRepository,
+                           Clock clock) {
         this.linkProperties = linkProperties;
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -51,7 +55,7 @@ public class LinkServiceImpl implements LinkService {
         if (subscriptions.isEmpty()) {
             throw new BizException(BizCodeEnum.SERVICE_NOT_PURCHASED);
         }
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = clock.instant();
         List<SubscriptionDto> active = subscriptions.stream()
                 .filter(s -> s.isActiveAt(now))
                 .toList();
@@ -109,7 +113,7 @@ public class LinkServiceImpl implements LinkService {
                         return new HeartbeatResponse(LinkStatus.REVOKED);
                     }
                     boolean anyActive = subscriptionRepository.findByUserId(user.getId()).stream()
-                            .anyMatch(s -> s.isActiveAt(LocalDateTime.now()));
+                            .anyMatch(s -> s.isActiveAt(clock.instant()));
                     return new HeartbeatResponse(anyActive ? LinkStatus.ACTIVE : LinkStatus.EXPIRED);
                 })
                 .orElse(new HeartbeatResponse(LinkStatus.REVOKED));

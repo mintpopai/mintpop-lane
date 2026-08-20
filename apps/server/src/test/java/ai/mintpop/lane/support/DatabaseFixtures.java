@@ -13,7 +13,8 @@ import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -95,7 +96,7 @@ public class DatabaseFixtures {
 
     /** 给用户建一条订阅；credential 传 null 表示未录入凭据 */
     public Long 建订阅(Long userId, AgentType agentType, String name,
-                    LocalDateTime startsAt, LocalDateTime endsAt, String credential) {
+                    Instant startsAt, Instant endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
         s.setUserId(userId);
         s.setAgentType(agentType);
@@ -110,7 +111,7 @@ public class DatabaseFixtures {
     public Long 建可用用户(String subject, Long frontNodeId, Long landNodeId, String credential) {
         Long userId = 建用户(subject, frontNodeId, landNodeId);
         建订阅(userId, AgentType.CLAUDE, "Claude 席位",
-                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(30), credential);
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), credential);
         return userId;
     }
 }

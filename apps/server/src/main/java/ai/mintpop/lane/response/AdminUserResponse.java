@@ -4,7 +4,7 @@ import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /** 管理端的用户视图。 */
@@ -23,11 +23,11 @@ public record AdminUserResponse(
         List<String> egressIps,
         /** 在期订阅摘要，供列表一眼看出这个人开了什么、到什么时候 */
         List<ActiveSubscriptionBrief> activeSubscriptions,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 
     /** 在期订阅摘要，供列表一眼看出这个人开了什么、到什么时候 */
-    public record ActiveSubscriptionBrief(Long id, String name, AgentType agentType, LocalDateTime endsAt) {
+    public record ActiveSubscriptionBrief(Long id, String name, AgentType agentType, Instant endsAt) {
     }
 }

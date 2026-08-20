@@ -24,13 +24,16 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
@@ -134,9 +137,9 @@ class AuthControllerTest extends MysqlTestBase {
     @DisplayName("/api/me 返回订阅概览且带在期标记")
     void me返回订阅概览() throws Exception {
         fixtures.建订阅(userId, AgentType.CLAUDE, "Claude 席位 1",
-                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(30), "cred");
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
         fixtures.建订阅(userId, AgentType.CODEX, "Codex 过期席位",
-                LocalDateTime.now().minusDays(30), LocalDateTime.now().minusDays(1), null);
+                Instant.now().minus(30, ChronoUnit.DAYS), Instant.now().minus(1, ChronoUnit.DAYS), null);
 
         mockMvc.perform(get("/api/me").header("Authorization",
                         "Bearer " + sessionTokenService.issue(userId, Duration.ofMinutes(10))))
@@ -146,7 +149,9 @@ class AuthControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.subscriptions[0].active").value(true))
                 .andExpect(jsonPath("$.data.subscriptions[1].active").value(false))
                 // 凭据一个字符都不许出现在响应里
-                .andExpect(jsonPath("$.data.subscriptions[0].credential").doesNotExist());
+                .andExpect(jsonPath("$.data.subscriptions[0].credential").doesNotExist())
+                // 时间字段必须是带 Z 的 UTC 绝对时刻串，这是与前端的契约
+                .andExpect(jsonPath("$.data.subscriptions[0].endsAt", matchesPattern(".+Z$")));
     }
 
     @Test
@@ -198,7 +203,7 @@ class AuthControllerTest extends MysqlTestBase {
                         Map.of("end_session_endpoint", "https://tenant.logto.app/oidc/session/end"))
                 .build();
         AuthController controller = new AuthController(ticketStore, sessionTokenService, authProperties,
-                userRepository, subscriptionRepository, registrationId -> 带发现文档);
+                userRepository, subscriptionRepository, registrationId -> 带发现文档, Clock.systemUTC());
 
         MockHttpServletResponse response = new MockHttpServletResponse();
         controller.logout(new MockHttpServletRequest(), response);

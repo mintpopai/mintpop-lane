@@ -9,7 +9,7 @@ import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * app_user 表映射。这是「带密文」的持久化形态，
@@ -40,8 +40,8 @@ public class User {
     private Long landNodeId;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 }

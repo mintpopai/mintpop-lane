@@ -15,7 +15,8 @@ import ai.mintpop.lane.response.AdminUserResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,12 +29,14 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final Clock clock;
 
     public AdminUserServiceImpl(UserRepository userRepository, ProxyNodeRepository nodeRepository,
-                                 SubscriptionRepository subscriptionRepository) {
+                                 SubscriptionRepository subscriptionRepository, Clock clock) {
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -45,7 +48,7 @@ public class AdminUserServiceImpl implements AdminUserService {
 
         // 一次取回本页所有用户的订阅，避免逐行查询
         List<Long> userIds = page.records().stream().map(UserDto::getId).toList();
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = clock.instant();
         Map<Long, List<AdminUserResponse.ActiveSubscriptionBrief>> briefs =
                 subscriptionRepository.findByUserIds(userIds).stream()
                         .filter(s -> s.isActiveAt(now))

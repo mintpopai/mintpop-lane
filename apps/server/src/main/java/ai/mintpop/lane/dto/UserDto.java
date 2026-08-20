@@ -4,7 +4,7 @@ import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * 用户的明文领域对象：身份、链路绑定与账号处置态。
@@ -33,7 +33,7 @@ public class UserDto {
     /** 第二跳落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
 
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 }

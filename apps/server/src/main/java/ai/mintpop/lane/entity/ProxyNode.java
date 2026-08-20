@@ -11,7 +11,7 @@ import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.NodeStatus;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -55,9 +55,9 @@ public class ProxyNode {
 
     /** 由数据库默认值维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     /** 由数据库 ON UPDATE 维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 }

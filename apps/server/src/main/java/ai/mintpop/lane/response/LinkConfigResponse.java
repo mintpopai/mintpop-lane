@@ -2,7 +2,7 @@ package ai.mintpop.lane.response;
 
 import ai.mintpop.lane.enumeration.AgentType;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -25,7 +25,7 @@ public record LinkConfigResponse(
             String name,
             AgentType agentType,
             String credential,
-            LocalDateTime endsAt
+            Instant endsAt
     ) {
     }
 }

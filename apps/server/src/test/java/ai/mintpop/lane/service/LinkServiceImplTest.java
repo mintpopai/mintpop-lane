@@ -19,7 +19,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +38,8 @@ class LinkServiceImplTest {
     private static final Long USER_ID = 1L;
     /** 未使用的 id，代表库里查不到的用户 */
     private static final Long 不存在的用户ID = 999999L;
+    /** 全类统一的「现在」，service 用固定时钟构造，判定完全确定 */
+    private static final Instant NOW = Instant.parse("2026-08-19T12:00:00Z");
 
     private UserRepository userRepository;
     private ProxyNodeRepository nodeRepository;
@@ -70,7 +75,7 @@ class LinkServiceImplTest {
 
     /** 造一条订阅：在期传 now-1d ~ now+30d，过期传 now-30d ~ now-1d */
     private static SubscriptionDto subscription(Long id, AgentType agentType, String name,
-                                                 LocalDateTime startsAt, LocalDateTime endsAt, String credential) {
+                                                 Instant startsAt, Instant endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
         s.setId(id);
         s.setUserId(USER_ID);
@@ -83,13 +88,13 @@ class LinkServiceImplTest {
     }
 
     private static SubscriptionDto 在期订阅(Long id, String credential) {
-        LocalDateTime now = LocalDateTime.now();
-        return subscription(id, AgentType.CLAUDE, "Claude 席位", now.minusDays(1), now.plusDays(30), credential);
+        return subscription(id, AgentType.CLAUDE, "Claude 席位",
+                NOW.minus(1, ChronoUnit.DAYS), NOW.plus(30, ChronoUnit.DAYS), credential);
     }
 
     private static SubscriptionDto 过期订阅(Long id, String credential) {
-        LocalDateTime now = LocalDateTime.now();
-        return subscription(id, AgentType.CLAUDE, "Claude 席位", now.minusDays(30), now.minusDays(1), credential);
+        return subscription(id, AgentType.CLAUDE, "Claude 席位",
+                NOW.minus(30, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS), credential);
     }
 
     @BeforeEach
@@ -100,7 +105,8 @@ class LinkServiceImplTest {
 
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
-        service = new LinkServiceImpl(props, userRepository, nodeRepository, subscriptionRepository);
+        service = new LinkServiceImpl(props, userRepository, nodeRepository, subscriptionRepository,
+                Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
         when(nodeRepository.findById(10L))

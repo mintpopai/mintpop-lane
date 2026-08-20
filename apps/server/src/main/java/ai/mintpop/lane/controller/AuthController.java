@@ -28,8 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /** 会话相关接口：桌面端票据兑换、当前用户视图、管理端登出。 */
@@ -46,19 +47,22 @@ public class AuthController {
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final ClientRegistrationRepository clientRegistrationRepository;
+    private final Clock clock;
 
     public AuthController(TicketStore ticketStore,
                           SessionTokenService sessionTokenService,
                           AuthProperties authProperties,
                           UserRepository userRepository,
                           SubscriptionRepository subscriptionRepository,
-                          ClientRegistrationRepository clientRegistrationRepository) {
+                          ClientRegistrationRepository clientRegistrationRepository,
+                          Clock clock) {
         this.ticketStore = ticketStore;
         this.sessionTokenService = sessionTokenService;
         this.authProperties = authProperties;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.clientRegistrationRepository = clientRegistrationRepository;
+        this.clock = clock;
     }
 
     /** 桌面端用一次性 ticket + PKCE verifier 兑换长效会话 token */
@@ -81,7 +85,7 @@ public class AuthController {
         // filter 已确认用户存在；两次查询间被删的窗口极小，按内部错误兜底即可
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR));
-        LocalDateTime now = LocalDateTime.now();
+        Instant now = clock.instant();
         List<MeResponse.MeSubscription> subscriptions =
                 subscriptionRepository.findByUserId(userId).stream()
                         .map(s -> new MeResponse.MeSubscription(

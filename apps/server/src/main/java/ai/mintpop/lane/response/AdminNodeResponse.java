@@ -4,7 +4,7 @@ import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.NodeStatus;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -26,7 +26,7 @@ public record AdminNodeResponse(
         boolean secretConfigured,
         /** 该落地节点当前的占用者姓名；未分配或非 LAND 时为 null */
         String assignedUserName,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

@@ -19,7 +19,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -95,7 +96,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, frontId, null);
         memberWithSubId = fixtures.建用户("logto-m1", frontId, landId);
         fixtures.建订阅(memberWithSubId, AgentType.CLAUDE, "Claude 席位 1",
-                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(30), "sk-ant-secret");
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "sk-ant-secret");
         memberNoSubId = fixtures.建用户("logto-m2", frontId, null);
     }
 

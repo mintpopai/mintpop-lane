@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.ToString;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /** 新建或更新订阅的入参。更新时 credential 留空表示沿用原值（页面上看不到原凭据）。 */
 @Data
@@ -21,10 +21,10 @@ public class SubscriptionSaveRequest {
     private String name;
 
     @NotNull(message = "起期不能为空")
-    private LocalDateTime startsAt;
+    private Instant startsAt;
 
     @NotNull(message = "止期不能为空")
-    private LocalDateTime endsAt;
+    private Instant endsAt;
 
     /** 席位凭据。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude

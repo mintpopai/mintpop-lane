@@ -6,7 +6,7 @@ import ai.mintpop.lane.enumeration.NodeStatus;
 import lombok.Data;
 import lombok.ToString;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,9 +43,9 @@ public class ProxyNodeDto {
 
     private String remark;
 
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     /**
      * 组装成一个 mihomo 节点配置。

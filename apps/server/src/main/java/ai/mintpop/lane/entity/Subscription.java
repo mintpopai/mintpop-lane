@@ -8,7 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * subscription 表映射。这是「带密文」的持久化形态，
@@ -28,9 +28,9 @@ public class Subscription {
     /** 用户可见的套餐名 */
     private String name;
 
-    private LocalDateTime startsAt;
+    private Instant startsAt;
 
-    private LocalDateTime endsAt;
+    private Instant endsAt;
 
     /** 席位凭据的密文 */
     private String credentialCipher;
@@ -38,8 +38,8 @@ public class Subscription {
     private String remark;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 }

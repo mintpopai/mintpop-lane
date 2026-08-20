@@ -94,7 +94,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("新建订阅并回读：列表里只看得到 hasCredential，看不到凭据本体")
     void 新建订阅并回读() throws Exception {
         String body = json(入参("CLAUDE", "Claude 席位 1",
-                "2026-08-01T00:00:00", "2026-09-01T00:00:00", "sk-ant-x"));
+                "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
@@ -115,7 +115,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("给不存在的用户建订阅报 410006")
     void 给不存在的用户建订阅() throws Exception {
         String body = json(入参("CLAUDE", "Claude 席位 1",
-                "2026-08-01T00:00:00", "2026-09-01T00:00:00", "sk-ant-x"));
+                "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/99999/subscriptions")
                         .header("Authorization", bearer(adminId))
@@ -127,7 +127,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("止期不晚于起期报 110001")
     void 止期不晚于起期() throws Exception {
         String body = json(入参("CLAUDE", "Claude 席位 1",
-                "2026-09-01T00:00:00", "2026-09-01T00:00:00", "sk-ant-x"));
+                "2026-09-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
@@ -139,7 +139,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("更新时留空凭据沿用原值")
     void 更新时留空凭据沿用原值() throws Exception {
         String create = json(入参("CLAUDE", "Claude 席位 1",
-                "2026-08-01T00:00:00", "2026-09-01T00:00:00", "sk-ant-x"));
+                "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
         String response = mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(create))
@@ -147,7 +147,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
         Long id = objectMapper.readTree(response).get("data").asLong();
 
         String update = json(入参("CLAUDE", "Claude 席位 1（改名）",
-                "2026-08-01T00:00:00", "2026-10-01T00:00:00", null));
+                "2026-08-01T00:00:00Z", "2026-10-01T00:00:00Z", null));
         mockMvc.perform(put("/api/admin/subscriptions/" + id).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(update))
                 .andExpect(jsonPath("$.code").value(0));
@@ -162,7 +162,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("更新不存在的订阅报 410008")
     void 更新不存在的订阅() throws Exception {
         String update = json(入参("CLAUDE", "Claude 席位 1",
-                "2026-08-01T00:00:00", "2026-09-01T00:00:00", null));
+                "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", null));
 
         mockMvc.perform(put("/api/admin/subscriptions/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(update))
@@ -180,7 +180,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("删除订阅后列表变空")
     void 删除订阅() throws Exception {
         String create = json(入参("CLAUDE", "Claude 席位 1",
-                "2026-08-01T00:00:00", "2026-09-01T00:00:00", "sk-ant-x"));
+                "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
         String response = mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(create))

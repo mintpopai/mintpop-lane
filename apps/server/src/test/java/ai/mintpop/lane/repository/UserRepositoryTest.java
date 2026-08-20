@@ -13,7 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -147,7 +148,7 @@ class UserRepositoryTest extends MysqlTestBase {
     void 按有无在期订阅筛选() {
         Long withSub = fixtures.建用户("logto-user-1", frontId, landId);
         fixtures.建订阅(withSub, AgentType.CLAUDE, "Claude 席位",
-                LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(30), null);
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), null);
         fixtures.建用户("logto-user-2", frontId, null);
 
         var activeOnly = repository.search(null, true, 1, 10);
