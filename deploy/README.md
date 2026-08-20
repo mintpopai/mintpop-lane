@@ -43,11 +43,14 @@
 
 5. **建 Logto 的传统 Web 应用并放置管理端运行时配置**：
 
-   a. 在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。只填一个地址：
+   a. 在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。要填两个地址：
 
    | 项 | 值 |
    |---|---|
    | Redirect URI | `https://<你的域名>/auth/callback` |
+   | Post sign-out redirect URI | `https://<你的域名>/` |
+
+   > ⚠️ **Post sign-out redirect URI 必须在 Logto 应用里登记为管理端地址**（生产 `https://<你的域名>/`，本地开发再追加一条 `http://localhost:5173/`）。管理端点「退出登录」时，服务端清掉本站会话 Cookie 后会跳 Logto 的结束会话端点（RP-initiated logout）并带上回跳地址；Logto 只接受已登记的地址，没登记这次登出跳转会被 Logto 拒绝、页面停在它的报错页。
 
    把 App ID 和 App Secret 记下来：App ID 填进第 4 步的 `application-prod.yaml`（`spring.security.oauth2.client.registration.logto.client-id`）；App Secret 回到第 3 步，填进 `.env` 的 `LOGTO_CLIENT_SECRET`。
 
