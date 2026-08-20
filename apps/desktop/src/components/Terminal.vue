@@ -48,6 +48,15 @@ onMounted(async () => {
     }),
   );
 
+  // 两个监听都挂好之后才开泵：秒退的 agent 若在挂载前就发完 exit 事件，
+  // Tauri 不会重放，终端会永远停在空白界面等一个永不到来的事件。
+  try {
+    await invoke("start_session_stream", { id: sessionId });
+  } catch (e) {
+    error.value = String(e);
+    return;
+  }
+
   onResize = () => {
     fit.fit();
     invoke("resize_session", { id: sessionId, rows: term.rows, cols: term.cols });

@@ -69,6 +69,11 @@ pub async fn logout(app: AppHandle) -> Result<(), String> {
     crate::reset_kernel_and_disconnect(&app).await;
     {
         let state = app.state::<AppState>();
+        // 登出即结束该用户的全部会话：注入的凭据不能留在还活着的子进程里
+        let sessions: Vec<_> = state.sessions.lock().unwrap().drain().collect();
+        for (_, session) in sessions {
+            session.kill();
+        }
         *state.session_token.lock().unwrap() = None;
     }
     // 与 force_relogin 一致：钥匙串删除失败只记录，不阻断登出
@@ -95,6 +100,11 @@ pub struct AgentCredentialView {
 pub fn list_agent_credentials(
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentCredentialView>, String> {
+    // 与 open_session 同一道闸：链路没就绪就不该让向导列出席位，免得选完才发现开不了
+    if !matches!(*state.link_state.lock().unwrap(), LinkState::ACTIVE) {
+        return Err("链路尚未就绪".to_string());
+    }
+
     let link = state.link.lock().unwrap();
     let link = link.as_ref().ok_or_else(|| "链路尚未就绪".to_string())?;
 
@@ -125,10 +135,11 @@ pub async fn pick_workspace(app: AppHandle) -> Result<Option<String>, String> {
     Ok(folder.map(|p| p.to_string()))
 }
 
-/// 开一个新的 agent 会话：按所选订阅注入对应凭据，在所选 workspace 里直接运行 agent CLI
+/// 开一个新的 agent 会话：按所选订阅注入对应凭据，在所选 workspace 里直接运行 agent CLI。
+/// 只负责 spawn 并登记会话，输出泵由前端挂好监听后再调 start_session_stream 启动——
+/// 否则秒退的 agent 可能在监听挂好之前就发完 session://exit，事件丢失会让终端永久卡死。
 #[tauri::command]
 pub fn open_session(
-    app: AppHandle,
     state: State<'_, AppState>,
     rows: u16,
     cols: u16,
@@ -170,10 +181,26 @@ pub fn open_session(
     .map_err(|e| e.to_string())?;
 
     let id = new_session_id();
-    let mut reader = session.reader().map_err(|e| e.to_string())?;
+    state.sessions.lock().unwrap().insert(id.clone(), session);
+    Ok(id)
+}
+
+/// 启动会话的输出泵。前端挂好 session://output 与 session://exit 两个监听后才调，
+/// 保证即便 agent 立刻退出，退出事件也一定被接住。
+#[tauri::command]
+pub fn start_session_stream(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let mut reader = {
+        let sessions = state.sessions.lock().unwrap();
+        let session = sessions.get(&id).ok_or_else(|| "会话不存在".to_string())?;
+        session.reader().map_err(|e| e.to_string())?
+    };
 
     // 把子进程输出泵到前端；子进程退出时通知前端回到向导
-    let emit_id = id.clone();
+    let emit_id = id;
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
@@ -191,8 +218,7 @@ pub fn open_session(
         let _ = app.emit("session://exit", serde_json::json!({ "id": emit_id }));
     });
 
-    state.sessions.lock().unwrap().insert(id.clone(), session);
-    Ok(id)
+    Ok(())
 }
 
 /// 关闭会话：显式杀子进程并移出会话表

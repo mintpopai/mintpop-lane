@@ -213,6 +213,11 @@ pub(crate) async fn reset_kernel_and_disconnect(app: &AppHandle) {
     let state = app.state::<AppState>();
     reset_kernel(&state).await;
     set_state(&state, LinkState::DISCONNECTED);
+    // 席位凭据是明文，随链路一起清掉，缩短它驻留内存的生命周期；
+    // 顺带清掉入站与上一次的不可用通知，避免断链后还残留旧数据
+    *state.link.lock().unwrap() = None;
+    *state.inbound.lock().unwrap() = None;
+    *state.link_notice.lock().unwrap() = None;
 }
 
 /// 断链并回登录页：会话失效（401）、账号被停用/吊销时的统一出口。
@@ -239,18 +244,35 @@ async fn on_authenticated(app: &AppHandle, token: String) {
 
 /// 处理 deep link 回调：校验 state、用一次性 ticket + verifier 兑换会话
 async fn handle_callback(app: AppHandle, url: String) {
-    let pending = {
+    // 先只读出 state 做校验，不消费 pending_login：伪造或串号的回调若把本次登录的
+    // verifier 吃掉，随后到达的真实回调就再也兑换不出会话，用户只能重走一遍登录。
+    let expected_state = {
         let state = app.state::<AppState>();
-        let mut guard = state.pending_login.lock().unwrap();
-        guard.take()
+        let guard = state.pending_login.lock().unwrap();
+        guard.as_ref().map(|p| p.state.clone())
     };
-    let Some(pending) = pending else {
+    let Some(expected_state) = expected_state else {
         return;
     };
 
     use auth::session::CallbackOutcome;
-    match auth::session::extract_ticket(&url, &pending.state) {
+    let outcome = auth::session::extract_ticket(&url, &expected_state);
+
+    // 校验通过（拿到票或服务端明示失败）才消费掉这次登录尝试；锁在此作用域内释放，不跨 await 持有
+    let pending = match &outcome {
+        Ok(_) => {
+            let state = app.state::<AppState>();
+            let mut guard = state.pending_login.lock().unwrap();
+            guard.take()
+        }
+        Err(_) => None,
+    };
+
+    match outcome {
         Ok(CallbackOutcome::TICKET(ticket)) => {
+            let Some(pending) = pending else {
+                return;
+            };
             match auth::session::exchange_ticket(&server_base_url(), &ticket, &pending.verifier).await {
                 Ok(token) => {
                     // 自签会话 token 是唯一允许落地的凭据，且只能进钥匙串
@@ -274,7 +296,14 @@ async fn handle_callback(app: AppHandle, url: String) {
                 serde_json::json!({ "reason": "登录未完成，请重试" }),
             );
         }
-        Err(e) => log_error("回调校验失败", &e),
+        Err(e) => {
+            log_error("回调校验失败", &e);
+            // pending 原样保留，等真实回调；但要让登录页停止空等，如实给出失败提示
+            let _ = app.emit(
+                "auth://login-failed",
+                serde_json::json!({ "reason": "登录回调校验失败，请重试" }),
+            );
+        }
     }
 }
 
@@ -355,6 +384,7 @@ pub fn run() {
             commands::list_agent_credentials,
             commands::pick_workspace,
             commands::open_session,
+            commands::start_session_stream,
             commands::close_session,
             commands::write_session,
             commands::resize_session,
