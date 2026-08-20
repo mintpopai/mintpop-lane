@@ -12,6 +12,8 @@ pub enum LinkState {
     ACTIVE,
     /// 降级：出口 IP 校验不通过，禁止启动新 Agent
     DEGRADED,
+    /// 服务到期：账号正常但在期订阅归零。断链但保留登录态，续费后可重连
+    EXPIRED,
     /// 已吊销：服务端判定该用户不可用，终态
     REVOKED,
 }
@@ -26,6 +28,7 @@ pub enum LinkEvent {
     REVOKED_BY_SERVER,
     KERNEL_CRASHED,
     NETWORK_LOST,
+    SERVICE_EXPIRED,
 }
 
 impl LinkState {
@@ -49,10 +52,14 @@ pub fn next_state(current: LinkState, event: LinkEvent) -> LinkState {
         LinkEvent::EGRESS_VERIFIED => LinkState::ACTIVE,
         LinkEvent::EGRESS_MISMATCHED => LinkState::DEGRADED,
         LinkEvent::KERNEL_CRASHED | LinkEvent::NETWORK_LOST => LinkState::DISCONNECTED,
+        LinkEvent::SERVICE_EXPIRED => LinkState::EXPIRED,
     }
 }
 
 #[cfg(test)]
+// 测试名嵌入 EXPIRED 等大写缩写以贴合状态机成员名，clippy 的 snake_case 检查按 ASCII 字母判定，
+// 与中文测试名混排时会误判，此处放行
+#[allow(non_snake_case)]
 mod tests {
     use super::*;
 
@@ -135,5 +142,18 @@ mod tests {
     fn 状态序列化为大写下划线字符串() {
         let json = serde_json::to_string(&LinkState::ACTIVE).unwrap();
         assert_eq!(json, "\"ACTIVE\"");
+    }
+
+    #[test]
+    fn 服务到期进入EXPIRED且不允许启动() {
+        let s = next_state(LinkState::ACTIVE, LinkEvent::SERVICE_EXPIRED);
+        assert_eq!(s, LinkState::EXPIRED);
+        assert!(!s.allows_spawn());
+    }
+
+    #[test]
+    fn EXPIRED不是终态续费后可重连() {
+        let s = next_state(LinkState::EXPIRED, LinkEvent::CONFIG_FETCH_STARTED);
+        assert_eq!(s, LinkState::CONNECTING);
     }
 }

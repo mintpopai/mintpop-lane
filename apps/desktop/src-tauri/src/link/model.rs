@@ -6,6 +6,19 @@ pub const FRONT_NAME: &str = "FRONT";
 /// 第二跳节点在内核配置中的固定名称（后置落地代理，决定最终出口 IP）
 pub const LAND_NAME: &str = "LAND";
 
+/// 单条可用席位（在期且已录凭据的订阅）。注入哪份由用户建会话时选择。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentCredential {
+    pub subscription_id: i64,
+    /// 用户可见的套餐名，供会话向导展示
+    pub name: String,
+    /// SCREAMING_SNAKE_CASE 的 agent 类型字符串，未知类型在使用侧忽略
+    pub agent_type: String,
+    pub credential: String,
+    /// 止期的 ISO-8601 字符串，仅展示
+    pub ends_at: String,
+}
+
 /// 链路配置。第一期由本地静态文件提供，计划二改为服务端下发，形状保持一致。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkConfig {
@@ -15,8 +28,8 @@ pub struct LinkConfig {
     pub land: Mapping,
     /// 期望的落地出口 IP 集合，用于出口校验
     pub expected_egress_ips: Vec<String>,
-    /// 该用户席位的 Claude 长效凭据
-    pub claude_credential: String,
+    /// 该用户全部在期且已录凭据的席位
+    pub agent_credentials: Vec<AgentCredential>,
     /// 配置有效期（秒）
     pub ttl_seconds: u64,
 }

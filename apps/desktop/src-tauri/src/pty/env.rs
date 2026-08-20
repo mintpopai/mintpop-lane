@@ -2,9 +2,11 @@ use crate::link::model::InboundCredentials;
 
 /// 构造 Agent 子进程的环境变量。
 /// 大小写两种形式都给：不同工具读的变量名不一致，漏掉一种就可能绕过代理。
+/// 凭据变量名由 agent 映射表决定，故作为参数传入，而非硬编码。
 pub fn build_agent_env(
     inbound: &InboundCredentials,
-    claude_credential: &str,
+    credential_env: &str,
+    credential: &str,
 ) -> Vec<(String, String)> {
     let proxy = inbound.proxy_url();
     let no_proxy = "localhost,127.0.0.1,::1".to_string();
@@ -18,10 +20,7 @@ pub fn build_agent_env(
         ("http_proxy".to_string(), proxy.clone()),
         ("all_proxy".to_string(), proxy),
         ("no_proxy".to_string(), no_proxy),
-        (
-            "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
-            claude_credential.to_string(),
-        ),
+        (credential_env.to_string(), credential.to_string()),
     ]
 }
 
@@ -40,7 +39,7 @@ mod tests {
     }
 
     fn env_map() -> HashMap<String, String> {
-        build_agent_env(&sample_inbound(), "sk-ant-test")
+        build_agent_env(&sample_inbound(), "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-test")
             .into_iter()
             .collect()
     }
@@ -61,9 +60,19 @@ mod tests {
     }
 
     #[test]
-    fn claude凭据被注入() {
+    fn 凭据按指定变量名注入() {
         let env = env_map();
         assert_eq!(env["CLAUDE_CODE_OAUTH_TOKEN"], "sk-ant-test");
+    }
+
+    #[test]
+    fn 不同agent注入不同变量名() {
+        let env: HashMap<String, String> =
+            build_agent_env(&sample_inbound(), "OPENAI_API_KEY", "sk-oai-x")
+                .into_iter()
+                .collect();
+        assert_eq!(env["OPENAI_API_KEY"], "sk-oai-x");
+        assert!(!env.contains_key("CLAUDE_CODE_OAUTH_TOKEN"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ pub mod commands;
 pub mod link;
 pub mod pty;
 
-use app_state::{AppState, BootstrapState};
+use app_state::AppState;
 use link::inbound::allocate_inbound;
 use link::kernel::MihomoKernel;
 use link::probe::{verify_egress, EgressVerdict, DEFAULT_PROBE_URL};
@@ -59,8 +59,14 @@ fn advance(state: &AppState, event: LinkEvent) -> LinkState {
 
 /// 建立链路：拉配置 → 拉起内核 → 推送配置 → 校验出口。
 /// 任何一步失败都落到非 ACTIVE 状态，从而使 spawn 守卫拒绝启动 Agent。
-pub async fn establish_link(state: &AppState) -> LinkState {
-    let Some(token) = state.access_token.lock().unwrap().clone() else {
+pub async fn establish_link(app: &AppHandle) -> LinkState {
+    let state = app.state::<AppState>();
+    let state = &*state;
+
+    // 入口先清通知：上一次失败留下的引导文案不该残留到这一轮
+    *state.link_notice.lock().unwrap() = None;
+
+    let Some(token) = state.session_token.lock().unwrap().clone() else {
         return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
     };
 
@@ -68,7 +74,19 @@ pub async fn establish_link(state: &AppState) -> LinkState {
 
     let link = match link::remote::fetch_link(&server_base_url(), &token).await {
         Ok(link) => link,
+        Err(link::remote::RemoteError::Status(code)) if code.as_u16() == 401 => {
+            // 会话失效：清登录态回登录页，绝不带着一个已死的 token 空转
+            force_relogin(app, "登录已过期，请重新登录").await;
+            return LinkState::DISCONNECTED;
+        }
         Err(e) => {
+            // 业务失败（未购买/到期/资源未分配等）记录给前端渲染引导文案
+            if let link::remote::RemoteError::Biz { code, msg } = &e {
+                *state.link_notice.lock().unwrap() = Some(app_state::LinkNotice {
+                    code: *code,
+                    msg: msg.clone(),
+                });
+            }
             log_error("拉取链路配置失败", &e);
             return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
         }
@@ -117,6 +135,37 @@ pub async fn establish_link(state: &AppState) -> LinkState {
     advance(state, event)
 }
 
+/// 心跳结果应采取的动作。抽成纯函数是为了让安全语义可测：
+/// SUSPENDED/REVOKED/401 必须清登录态回登录页，EXPIRED 只断链保留登录态。
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(Debug, PartialEq, Eq)]
+enum HeartbeatAction {
+    /// 一切正常，无操作
+    NONE,
+    /// 服务到期：断链但保留登录态
+    EXPIRE,
+    /// 清登录态回登录页，携带给用户看的原因
+    FORCE_RELOGIN(&'static str),
+    /// 网络类失败：断链，等下一轮心跳
+    NETWORK_LOST,
+}
+
+fn heartbeat_action(
+    result: &Result<link::remote::LinkStatus, link::remote::RemoteError>,
+) -> HeartbeatAction {
+    use link::remote::{LinkStatus, RemoteError};
+    match result {
+        Ok(LinkStatus::ACTIVE) => HeartbeatAction::NONE,
+        Ok(LinkStatus::EXPIRED) => HeartbeatAction::EXPIRE,
+        Ok(LinkStatus::SUSPENDED) => HeartbeatAction::FORCE_RELOGIN("账号已被停用，请联系管理员"),
+        Ok(LinkStatus::REVOKED) => HeartbeatAction::FORCE_RELOGIN("账号已被吊销"),
+        Err(RemoteError::Status(code)) if code.as_u16() == 401 => {
+            HeartbeatAction::FORCE_RELOGIN("登录已过期，请重新登录")
+        }
+        Err(_) => HeartbeatAction::NETWORK_LOST,
+    }
+}
+
 /// 心跳循环：定期确认用户仍可用。被吊销时网络当场断开，
 /// 但不 kill 用户进程，让 Agent 自己报网络错误，避免丢失正在进行的工作。
 async fn heartbeat_loop(app: AppHandle) {
@@ -125,19 +174,26 @@ async fn heartbeat_loop(app: AppHandle) {
         tokio::time::sleep(HEARTBEAT_INTERVAL).await;
 
         let state = app.state::<AppState>();
-        let Some(token) = state.access_token.lock().unwrap().clone() else {
+        let Some(token) = state.session_token.lock().unwrap().clone() else {
             continue;
         };
 
-        match link::remote::heartbeat(&base_url, &token).await {
-            Ok(link::remote::UserStatus::ACTIVE) => {}
-            Ok(_) => {
+        let result = link::remote::heartbeat(&base_url, &token).await;
+        match heartbeat_action(&result) {
+            HeartbeatAction::NONE => {}
+            HeartbeatAction::EXPIRE => {
+                // 服务到期：断链但保留登录态，前端提示续费；续费后点重连即可
                 reset_kernel(&state).await;
-                advance(&state, LinkEvent::REVOKED_BY_SERVER);
+                advance(&state, LinkEvent::SERVICE_EXPIRED);
             }
-            Err(e) => {
+            HeartbeatAction::FORCE_RELOGIN(reason) => {
+                force_relogin(&app, reason).await;
+            }
+            HeartbeatAction::NETWORK_LOST => {
                 // 心跳打不通同样按不可用处理，绝不假定链路仍然有效
-                log_error("心跳失败", &e);
+                if let Err(e) = &result {
+                    log_error("心跳失败", e);
+                }
                 reset_kernel(&state).await;
                 advance(&state, LinkEvent::NETWORK_LOST);
             }
@@ -152,104 +208,123 @@ async fn reset_kernel(state: &AppState) {
     }
 }
 
-/// 登录成功后的收尾：存令牌、建链路、通知前端
-async fn on_authenticated(app: &AppHandle, tokens: auth::oidc::TokenSet) {
+/// 重置内核并置链路为 DISCONNECTED：force_relogin 与 logout 的共用尾段。
+pub(crate) async fn reset_kernel_and_disconnect(app: &AppHandle) {
     let state = app.state::<AppState>();
+    reset_kernel(&state).await;
+    set_state(&state, LinkState::DISCONNECTED);
+    // 席位凭据是明文，随链路一起清掉，缩短它驻留内存的生命周期；
+    // 顺带清掉入站与上一次的不可用通知，避免断链后还残留旧数据
+    *state.link.lock().unwrap() = None;
+    *state.inbound.lock().unwrap() = None;
+    *state.link_notice.lock().unwrap() = None;
+}
 
-    *state.access_token.lock().unwrap() = Some(tokens.access_token);
-    if let Some(refresh) = tokens.refresh_token {
-        // refresh_token 是唯一允许落地的凭据，且只能进钥匙串
-        if let Err(e) = auth::storage::save_refresh_token(&refresh) {
-            log_error("保存 refresh_token 失败", &e);
-        }
-    }
+/// 断链并回登录页：会话失效（401）、账号被停用/吊销时的统一出口。
+/// 与 EXPIRED 的区别：这里连登录态一起清掉，用户必须重新走浏览器登录。
+async fn force_relogin(app: &AppHandle, reason: &str) {
+    reset_kernel_and_disconnect(app).await;
+    let state = app.state::<AppState>();
+    *state.session_token.lock().unwrap() = None;
+    let _ = auth::storage::clear_session_token();
+    let _ = app.emit(
+        "auth://changed",
+        serde_json::json!({ "logged_in": false, "reason": reason }),
+    );
+}
+
+/// 登录成功后的收尾：存令牌、建链路、通知前端
+async fn on_authenticated(app: &AppHandle, token: String) {
+    let state = app.state::<AppState>();
+    *state.session_token.lock().unwrap() = Some(token);
 
     let _ = app.emit("auth://changed", serde_json::json!({ "logged_in": true }));
-    establish_link(&state).await;
+    establish_link(app).await;
 }
 
-/// 处理 deep link 回调，完成授权码交换
+/// 处理 deep link 回调：校验 state、用一次性 ticket + verifier 兑换会话
 async fn handle_callback(app: AppHandle, url: String) {
-    let pending = {
+    // 先只读出 state 做校验，不消费 pending_login：伪造或串号的回调若把本次登录的
+    // verifier 吃掉，随后到达的真实回调就再也兑换不出会话，用户只能重走一遍登录。
+    let expected_state = {
         let state = app.state::<AppState>();
-        let mut guard = state.pending_login.lock().unwrap();
-        guard.take()
+        let guard = state.pending_login.lock().unwrap();
+        guard.as_ref().map(|p| p.state.clone())
     };
-
-    let Some(pending) = pending else {
+    let Some(expected_state) = expected_state else {
         return;
     };
 
-    let Some(cfg) = app.state::<AppState>().oidc_config.lock().unwrap().clone() else {
-        log_error("回调到达时尚无登录配置", &"引导未完成");
-        return;
+    use auth::session::CallbackOutcome;
+    let outcome = auth::session::extract_ticket(&url, &expected_state);
+
+    // 校验通过（拿到票或服务端明示失败）才消费掉这次登录尝试；锁在此作用域内释放，不跨 await 持有
+    let pending = match &outcome {
+        Ok(_) => {
+            let state = app.state::<AppState>();
+            let mut guard = state.pending_login.lock().unwrap();
+            guard.take()
+        }
+        Err(_) => None,
     };
-    let code = match auth::oidc::extract_code(&url, &pending.state) {
-        Ok(code) => code,
+
+    match outcome {
+        Ok(CallbackOutcome::TICKET(ticket)) => {
+            let Some(pending) = pending else {
+                return;
+            };
+            match auth::session::exchange_ticket(&server_base_url(), &ticket, &pending.verifier).await {
+                Ok(token) => {
+                    // 自签会话 token 是唯一允许落地的凭据，且只能进钥匙串
+                    if let Err(e) = auth::storage::save_session_token(&token) {
+                        log_error("保存会话 token 失败", &e);
+                    }
+                    on_authenticated(&app, token).await;
+                }
+                Err(e) => {
+                    log_error("兑换会话失败", &e);
+                    let _ = app.emit(
+                        "auth://login-failed",
+                        serde_json::json!({ "reason": "登录票据无效或已过期，请重新登录" }),
+                    );
+                }
+            }
+        }
+        Ok(CallbackOutcome::LOGIN_FAILED) => {
+            let _ = app.emit(
+                "auth://login-failed",
+                serde_json::json!({ "reason": "登录未完成，请重试" }),
+            );
+        }
         Err(e) => {
             log_error("回调校验失败", &e);
-            return;
-        }
-    };
-
-    match auth::oidc::exchange_code(&cfg, &code, &pending.verifier).await {
-        Ok(tokens) => on_authenticated(&app, tokens).await,
-        Err(e) => log_error("授权码换令牌失败", &e),
-    }
-}
-
-/// 启动引导：拉取登录接入配置。成功后才谈得上登录，因此静默登录串在它之后。
-///
-/// 用 bootstrap_lock 把整个函数体串行化：启动时的自动引导与用户点重试触发的
-/// 重新引导可能并发发生，两者都会走到 try_silent_login 用同一个 refresh_token
-/// 换新令牌，见 AppState::bootstrap_lock 的注释。持锁跨越下面的 await 是有意为之。
-async fn bootstrap(app: AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let _guard = state.bootstrap_lock.lock().await;
-
-    // 每次引导（含重试）开始时先归零，让 client_config_state 在结果落地前
-    // 如实答"还在飞行中"；重试场景尤其重要——上一轮的 FAILED 不能残留到这一轮。
-    *state.bootstrap_state.lock().unwrap() = BootstrapState::UNKNOWN;
-
-    match auth::bootstrap::fetch_client_config(&server_base_url()).await {
-        Ok(cfg) => {
-            *state.oidc_config.lock().unwrap() = Some(cfg);
-            *state.bootstrap_state.lock().unwrap() = BootstrapState::READY;
-            let _ = app.emit("auth://config-ready", ());
-            try_silent_login(app.clone()).await;
-            Ok(())
-        }
-        Err(e) => {
-            log_error("拉取登录配置失败", &e);
-            let reason = e.to_string();
-            *state.bootstrap_state.lock().unwrap() = BootstrapState::FAILED(reason.clone());
-            let _ = app.emit("auth://config-failed", serde_json::json!({ "reason": reason }));
-            Err(reason)
+            // pending 原样保留，等真实回调；但要让登录页停止空等，如实给出失败提示
+            let _ = app.emit(
+                "auth://login-failed",
+                serde_json::json!({ "reason": "登录回调校验失败，请重试" }),
+            );
         }
     }
 }
 
-/// 供命令层调用的重试入口
-pub async fn reload_client_config(app: AppHandle) -> Result<(), String> {
-    bootstrap(app).await
-}
-
-/// 启动时若钥匙串里已有 refresh_token，尝试静默登录，省掉用户每次授权
-async fn try_silent_login(app: AppHandle) {
-    let Ok(Some(refresh_token)) = auth::storage::load_refresh_token() else {
+/// 启动验活：钥匙串里有会话 token 就拿去调 /api/me 确认还活着。
+/// 401 说明会话已失效（过期/被删），清掉残留留在登录页；
+/// 网络不通时不武断丢弃 token——保留登录态，链路自然是 DISCONNECTED，用户可稍后重连。
+async fn startup_auth(app: AppHandle) {
+    let Ok(Some(token)) = auth::storage::load_session_token() else {
         return;
     };
 
-    let Some(cfg) = app.state::<AppState>().oidc_config.lock().unwrap().clone() else {
-        return;
-    };
-
-    match auth::oidc::refresh(&cfg, &refresh_token).await {
-        Ok(tokens) => on_authenticated(&app, tokens).await,
+    match auth::session::fetch_me(&server_base_url(), &token).await {
+        Ok(_) => on_authenticated(&app, token).await,
+        Err(link::remote::RemoteError::Status(code)) if code.as_u16() == 401 => {
+            log_error("启动验活失败", &"会话已失效");
+            let _ = auth::storage::clear_session_token();
+        }
         Err(e) => {
-            // 刷新失败通常意味着用户已在 Logto 侧被停用，清掉本地残留
-            log_error("静默登录失败", &e);
-            let _ = auth::storage::clear_refresh_token();
+            // 服务端暂时不可达 ≠ 会话失效：保留 token，进主界面但链路断开
+            log_error("启动验活网络失败", &e);
+            on_authenticated(&app, token).await;
         }
     }
 }
@@ -271,9 +346,21 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .setup(|app| {
             use tauri_plugin_deep_link::DeepLinkExt;
+
+            // macOS 的 scheme 由打包时写进 Info.plist 声明，装好即生效；
+            // Windows/Linux 靠注册表 / .desktop 文件，dev 模式下没有安装步骤，
+            // 必须在运行时注册一次，否则浏览器根本找不到本程序，深链回调永远回不来。
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("[lane] 注册深链 scheme 失败：{e}");
+                }
+            }
 
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
@@ -285,9 +372,7 @@ pub fn run() {
             });
 
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = bootstrap(handle).await;
-            });
+            tauri::async_runtime::spawn(startup_auth(handle));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(heartbeat_loop(handle));
@@ -296,15 +381,87 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::link_status,
+            commands::list_agent_credentials,
+            commands::pick_workspace,
             commands::open_session,
+            commands::start_session_stream,
+            commands::close_session,
             commands::write_session,
             commands::resize_session,
             commands::auth_status,
             commands::start_login,
             commands::logout,
-            commands::client_config_state,
-            commands::reload_client_config,
+            commands::link_notice,
+            commands::reconnect_link,
+            commands::me_info,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use link::remote::{LinkStatus, RemoteError};
+
+    #[test]
+    fn 活跃心跳无操作() {
+        assert_eq!(
+            heartbeat_action(&Ok(LinkStatus::ACTIVE)),
+            HeartbeatAction::NONE
+        );
+    }
+
+    #[test]
+    fn 服务到期只断链保留登录态() {
+        assert_eq!(
+            heartbeat_action(&Ok(LinkStatus::EXPIRED)),
+            HeartbeatAction::EXPIRE
+        );
+    }
+
+    #[test]
+    fn 账号停用强制回登录页且文案含停用() {
+        match heartbeat_action(&Ok(LinkStatus::SUSPENDED)) {
+            HeartbeatAction::FORCE_RELOGIN(reason) => assert!(reason.contains("停用")),
+            other => panic!("应为 FORCE_RELOGIN，实际是 {other:?}"),
+        }
+    }
+
+    #[test]
+    fn 账号吊销强制回登录页() {
+        assert_eq!(
+            heartbeat_action(&Ok(LinkStatus::REVOKED)),
+            HeartbeatAction::FORCE_RELOGIN("账号已被吊销")
+        );
+    }
+
+    #[test]
+    fn 会话过期返回401时强制回登录页() {
+        let err = RemoteError::Status(reqwest::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            heartbeat_action(&Err(err)),
+            HeartbeatAction::FORCE_RELOGIN("登录已过期，请重新登录")
+        );
+    }
+
+    #[test]
+    fn 非401的错误一律按网络失败处理() {
+        // 非 401 的 HTTP 状态错误
+        let status_err = RemoteError::Status(reqwest::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            heartbeat_action(&Err(status_err)),
+            HeartbeatAction::NETWORK_LOST
+        );
+
+        // 业务错误（非会话失效类）同样不应被当成需要强制登出的信号
+        let biz_err = RemoteError::Biz {
+            code: 310003,
+            msg: "该用户的链路已被吊销".to_string(),
+        };
+        assert_eq!(
+            heartbeat_action(&Err(biz_err)),
+            HeartbeatAction::NETWORK_LOST
+        );
+    }
 }

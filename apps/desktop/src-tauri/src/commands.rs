@@ -1,9 +1,9 @@
-use crate::app_state::{AppState, BootstrapState, PendingLogin};
-use crate::auth::{oidc, pkce, storage};
+use crate::app_state::{AppState, PendingLogin};
+use crate::auth::{pkce, storage};
 use crate::link::state::LinkState;
-use crate::pty::session::{default_shell, spawn_agent_pty};
+use crate::pty::session::spawn_agent_pty;
 use std::io::Read;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// 前端唯一能拿到的链路信息：只有状态枚举，没有端口、密码与 Claude 凭据
 #[tauri::command]
@@ -11,41 +11,45 @@ pub fn link_status(state: State<'_, AppState>) -> LinkState {
     *state.link_state.lock().unwrap()
 }
 
-/// 是否已登录（内存中是否持有 access_token）
+/// 是否已登录（内存中是否持有 session_token）
 #[tauri::command]
 pub fn auth_status(state: State<'_, AppState>) -> bool {
-    state.access_token.lock().unwrap().is_some()
+    state.session_token.lock().unwrap().is_some()
 }
 
-/// 引导配置的当前状态（三态）。前端挂载可能晚于引导完成或失败，光靠事件会漏掉，
-/// 因此挂载时先查这个，再监听后续事件；查询结果只在事件尚未到达时才采信
-/// （见 Login.vue 里 phase 仍为 UNKNOWN 才应用查询结果的注释）。
+/// 链路不可用的原因（业务码 + 文案），前端据此渲染购买/续费引导
 #[tauri::command]
-pub fn client_config_state(state: State<'_, AppState>) -> BootstrapState {
-    state.bootstrap_state.lock().unwrap().clone()
+pub fn link_notice(state: State<'_, AppState>) -> Option<crate::app_state::LinkNotice> {
+    state.link_notice.lock().unwrap().clone()
 }
 
-/// 重新拉取引导配置，供登录页的重试按钮调用
+/// 手动重连：续费后、网络恢复后由用户主动触发
 #[tauri::command]
-pub async fn reload_client_config(app: AppHandle) -> Result<(), String> {
-    crate::reload_client_config(app).await
+pub async fn reconnect_link(app: AppHandle) -> LinkState {
+    crate::establish_link(&app).await
 }
 
-/// 发起登录：生成 PKCE，打开系统浏览器到 Logto 授权页。
-/// 授权完成后由 deep link 回调继续，见 lib.rs 的 handle_callback。
+/// 当前用户信息与订阅概览（无任何凭据），供状态页渲染
 #[tauri::command]
-pub fn start_login(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    // 配置由服务端在启动时下发，取不到说明引导没跑通
-    let cfg = state
-        .oidc_config
+pub async fn me_info(state: State<'_, AppState>) -> Result<crate::auth::session::MeData, String> {
+    let token = state
+        .session_token
         .lock()
         .unwrap()
         .clone()
-        .ok_or_else(|| "无法连接服务端，请稍后重试".to_string())?;
+        .ok_or_else(|| "未登录".to_string())?;
+    crate::auth::session::fetch_me(&crate::server_base_url(), &token)
+        .await
+        .map_err(|e| e.to_string())
+}
 
+/// 发起登录：生成 PKCE，打开系统浏览器到服务端登录入口。
+/// 服务端完成与 Logto 的全部握手后经 deep link 送回一次性 ticket，见 lib.rs 的 handle_callback。
+#[tauri::command]
+pub fn start_login(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let pair = pkce::generate();
     let st = pkce::random_state();
-    let url = oidc::build_authorize_url(&cfg, &pair, &st);
+    let url = crate::auth::session::build_start_url(&crate::server_base_url(), &pair.challenge, &st);
 
     *state.pending_login.lock().unwrap() = Some(PendingLogin {
         verifier: pair.verifier,
@@ -57,23 +61,90 @@ pub fn start_login(app: AppHandle, state: State<'_, AppState>) -> Result<(), Str
         .map_err(|e| e.to_string())
 }
 
-/// 退出登录：清空内存令牌与钥匙串。链路会在下一次心跳时随之失效。
+/// 退出登录：清空内存令牌与钥匙串，并重置内核回到 DISCONNECTED。
+/// 先断链、清内存令牌，钥匙串删除失败只记录不阻断——不能因为钥匙串报错就
+/// 留下「内存已清、内核未重置、事件未发」的半登出态（否则下次启动会自动登回去）。
 #[tauri::command]
-pub fn logout(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    *state.access_token.lock().unwrap() = None;
-    storage::clear_refresh_token().map_err(|e| e.to_string())?;
-
+pub async fn logout(app: AppHandle) -> Result<(), String> {
+    crate::reset_kernel_and_disconnect(&app).await;
+    {
+        let state = app.state::<AppState>();
+        // 登出即结束该用户的全部会话：注入的凭据不能留在还活着的子进程里
+        let sessions: Vec<_> = state.sessions.lock().unwrap().drain().collect();
+        for (_, session) in sessions {
+            session.kill();
+        }
+        *state.session_token.lock().unwrap() = None;
+    }
+    // 与 force_relogin 一致：钥匙串删除失败只记录，不阻断登出
+    if let Err(e) = storage::clear_session_token() {
+        eprintln!("[lane] 登出时清理钥匙串失败：{e}");
+    }
     let _ = app.emit("auth://changed", serde_json::json!({ "logged_in": false }));
     Ok(())
 }
 
-/// 开一个新的终端会话。链路不活跃时返回错误，前端据此提示用户。
+/// 前端可见的席位视图：给会话向导渲染用，凭据本体绝不出现
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCredentialView {
+    pub subscription_id: i64,
+    pub name: String,
+    pub agent_type: String,
+    pub display_name: String,
+    pub ends_at: String,
+}
+
+/// 列出可建会话的席位（只含本客户端认识的 agent 类型）
+#[tauri::command]
+pub fn list_agent_credentials(
+    state: State<'_, AppState>,
+) -> Result<Vec<AgentCredentialView>, String> {
+    // 与 open_session 同一道闸：链路没就绪就不该让向导列出席位，免得选完才发现开不了
+    if !matches!(*state.link_state.lock().unwrap(), LinkState::ACTIVE) {
+        return Err("链路尚未就绪".to_string());
+    }
+
+    let link = state.link.lock().unwrap();
+    let link = link.as_ref().ok_or_else(|| "链路尚未就绪".to_string())?;
+
+    Ok(link
+        .agent_credentials
+        .iter()
+        .filter_map(|c| {
+            crate::pty::agent::spec_of(&c.agent_type).map(|spec| AgentCredentialView {
+                subscription_id: c.subscription_id,
+                name: c.name.clone(),
+                agent_type: c.agent_type.clone(),
+                display_name: spec.display_name.to_string(),
+                ends_at: c.ends_at.clone(),
+            })
+        })
+        .collect())
+}
+
+/// 弹系统目录选择器让用户挑 workspace。取消返回 None。
+#[tauri::command]
+pub async fn pick_workspace(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder);
+    });
+    let folder = rx.await.map_err(|e| e.to_string())?;
+    Ok(folder.map(|p| p.to_string()))
+}
+
+/// 开一个新的 agent 会话：按所选订阅注入对应凭据，在所选 workspace 里直接运行 agent CLI。
+/// 只负责 spawn 并登记会话，输出泵由前端挂好监听后再调 start_session_stream 启动——
+/// 否则秒退的 agent 可能在监听挂好之前就发完 session://exit，事件丢失会让终端永久卡死。
 #[tauri::command]
 pub fn open_session(
-    app: AppHandle,
     state: State<'_, AppState>,
     rows: u16,
     cols: u16,
+    subscription_id: i64,
+    workspace: String,
 ) -> Result<String, String> {
     let link_state = *state.link_state.lock().unwrap();
     let inbound = state
@@ -82,29 +153,54 @@ pub fn open_session(
         .unwrap()
         .clone()
         .ok_or_else(|| "链路尚未就绪".to_string())?;
-    let credential = state
-        .link
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|l| l.claude_credential.clone())
-        .ok_or_else(|| "链路尚未就绪".to_string())?;
+
+    // 按订阅定位凭据与 agent 映射；凭据只在这个作用域内出现，不进前端
+    let (command, credential_env, credential) = {
+        let link = state.link.lock().unwrap();
+        let link = link.as_ref().ok_or_else(|| "链路尚未就绪".to_string())?;
+        let chosen = link
+            .agent_credentials
+            .iter()
+            .find(|c| c.subscription_id == subscription_id)
+            .ok_or_else(|| "所选套餐不存在或已失效，请刷新后重选".to_string())?;
+        let spec = crate::pty::agent::spec_of(&chosen.agent_type)
+            .ok_or_else(|| "本版本暂不支持该 agent，请升级客户端".to_string())?;
+        (spec.command, spec.credential_env, chosen.credential.clone())
+    };
 
     let session = spawn_agent_pty(
         link_state,
         &inbound,
+        command,
+        credential_env,
         &credential,
-        default_shell(),
+        std::path::Path::new(&workspace),
         rows,
         cols,
     )
     .map_err(|e| e.to_string())?;
 
     let id = new_session_id();
-    let mut reader = session.reader().map_err(|e| e.to_string())?;
+    state.sessions.lock().unwrap().insert(id.clone(), session);
+    Ok(id)
+}
 
-    // 把子进程输出泵到前端
-    let emit_id = id.clone();
+/// 启动会话的输出泵。前端挂好 session://output 与 session://exit 两个监听后才调，
+/// 保证即便 agent 立刻退出，退出事件也一定被接住。
+#[tauri::command]
+pub fn start_session_stream(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let mut reader = {
+        let sessions = state.sessions.lock().unwrap();
+        let session = sessions.get(&id).ok_or_else(|| "会话不存在".to_string())?;
+        session.reader().map_err(|e| e.to_string())?
+    };
+
+    // 把子进程输出泵到前端；子进程退出时通知前端回到向导
+    let emit_id = id;
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
@@ -119,10 +215,18 @@ pub fn open_session(
                 }
             }
         }
+        let _ = app.emit("session://exit", serde_json::json!({ "id": emit_id }));
     });
 
-    state.sessions.lock().unwrap().insert(id.clone(), session);
-    Ok(id)
+    Ok(())
+}
+
+/// 关闭会话：显式杀子进程并移出会话表
+#[tauri::command]
+pub fn close_session(state: State<'_, AppState>, id: String) {
+    if let Some(session) = state.sessions.lock().unwrap().remove(&id) {
+        session.kill();
+    }
 }
 
 #[tauri::command]

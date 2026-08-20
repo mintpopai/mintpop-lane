@@ -2,7 +2,7 @@ use keyring::Entry;
 use thiserror::Error;
 
 const SERVICE: &str = "ai.mintpop.lane";
-const ACCOUNT: &str = "logto-refresh-token";
+const ACCOUNT: &str = "session-token";
 
 #[derive(Debug, Error)]
 pub enum StorageError {
@@ -14,14 +14,14 @@ fn entry() -> Result<Entry, StorageError> {
     Ok(Entry::new(SERVICE, ACCOUNT)?)
 }
 
-/// refresh_token 是唯一允许持久化的凭据，且只能进 OS 钥匙串。
+/// 自签会话 token 是唯一允许持久化的凭据，且只能进 OS 钥匙串。
 /// 链路节点与 Claude 席位凭据一律只存内存。
-pub fn save_refresh_token(token: &str) -> Result<(), StorageError> {
+pub fn save_session_token(token: &str) -> Result<(), StorageError> {
     entry()?.set_password(token)?;
     Ok(())
 }
 
-pub fn load_refresh_token() -> Result<Option<String>, StorageError> {
+pub fn load_session_token() -> Result<Option<String>, StorageError> {
     match entry()?.get_password() {
         Ok(token) => Ok(Some(token)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -29,7 +29,7 @@ pub fn load_refresh_token() -> Result<Option<String>, StorageError> {
     }
 }
 
-pub fn clear_refresh_token() -> Result<(), StorageError> {
+pub fn clear_session_token() -> Result<(), StorageError> {
     match entry()?.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
