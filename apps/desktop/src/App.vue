@@ -85,9 +85,11 @@ async function doLogout() {
   await poll();
 }
 
-/** 止期只展示日期部分 */
+/** 止期按本地时区展示日期部分（服务端给的是带 Z 的 UTC 绝对时刻串） */
 function day(iso: string) {
-  return iso.slice(0, 10);
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 onMounted(async () => {
