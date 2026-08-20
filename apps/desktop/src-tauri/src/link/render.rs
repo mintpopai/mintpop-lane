@@ -102,7 +102,7 @@ mod tests {
                 name: "Claude 席位 1".to_string(),
                 agent_type: "CLAUDE".to_string(),
                 credential: "sk-ant-test".to_string(),
-                ends_at: "2026-09-18T12:00:00".to_string(),
+                ends_at: "2026-09-18T12:00:00Z".to_string(),
             }],
             ttl_seconds: 1800,
         }

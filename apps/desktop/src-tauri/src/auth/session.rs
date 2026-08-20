@@ -169,7 +169,7 @@ mod tests {
     fn me返回体能解析订阅列表() {
         let raw = r#"{"code":0,"data":{"id":7,"email":"a@b.c","name":"甲","role":"MEMBER",
           "subscriptions":[{"id":1,"name":"Claude 席位","agentType":"CLAUDE",
-            "startsAt":"2026-08-01T00:00:00","endsAt":"2026-09-01T00:00:00","active":true}]},"msg":null}"#;
+            "startsAt":"2026-08-01T00:00:00Z","endsAt":"2026-09-01T00:00:00Z","active":true}]},"msg":null}"#;
         let resp: ApiResponse<MeData> = serde_json::from_str(raw).unwrap();
         let me = resp.into_data().unwrap();
         assert_eq!(me.email, "a@b.c");

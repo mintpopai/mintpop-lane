@@ -192,8 +192,8 @@ mod tests {
           "land": {"type":"socks5","server":"77.47.143.6","port":50101},
           "expectedEgressIps": ["77.47.143.6"],
           "agentCredentials": [
-            {"subscriptionId":1,"name":"Claude 席位 1","agentType":"CLAUDE","credential":"sk-ant-a","endsAt":"2026-09-18T12:00:00"},
-            {"subscriptionId":2,"name":"Codex 席位","agentType":"CODEX","credential":"sk-oai-b","endsAt":"2026-10-01T00:00:00"}
+            {"subscriptionId":1,"name":"Claude 席位 1","agentType":"CLAUDE","credential":"sk-ant-a","endsAt":"2026-09-18T12:00:00Z"},
+            {"subscriptionId":2,"name":"Codex 席位","agentType":"CODEX","credential":"sk-oai-b","endsAt":"2026-10-01T00:00:00Z"}
           ],
           "ttlSeconds": 1800
         }"#;
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn 未知agent类型不破坏整体解析() {
         // 服务端将来新增 agent 时，旧客户端必须能解析并在使用侧忽略它
-        let raw = r#"{"subscriptionId":9,"name":"新玩意","agentType":"FUTURE_AGENT","credential":"x","endsAt":"2027-01-01T00:00:00"}"#;
+        let raw = r#"{"subscriptionId":9,"name":"新玩意","agentType":"FUTURE_AGENT","credential":"x","endsAt":"2027-01-01T00:00:00Z"}"#;
         let c: AgentCredentialData = serde_json::from_str(raw).unwrap();
         assert_eq!(c.agent_type, "FUTURE_AGENT");
     }
