@@ -1,57 +1,55 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
-import type { AdminApi } from "../api/admin";
-import { ForbiddenError } from "../api/http";
-import { callbackUri, logtoClient, postSignOutUri } from "../auth/logto";
+import { computed, ref } from "vue";
+import type { AuthApi } from "../api/auth";
+import { UnauthorizedError } from "../api/http";
+import type { MeResponse } from "../api/types";
 
+/**
+ * 登录态完全由服务端会话 Cookie 承载，前端不持有任何 token。
+ * 「我是谁、是不是管理员」都从 /api/me 读；真正的权限强制层是服务端的 403，
+ * 这里的 isAdmin 只用于路由与界面展示。
+ */
 export const useAuthStore = defineStore("auth", () => {
-  const authenticated = ref(false);
-  /** null 表示还没探过。权限只能由服务端的 403 得出，前端不解析 token */
-  const isAdmin = ref<boolean | null>(null);
-  const displayName = ref("");
+  const me = ref<MeResponse | null>(null);
+  const probed = ref(false);
 
-  /** 同步一次 Logto 的登录态与显示名 */
-  async function refreshAuthState(): Promise<boolean> {
-    const client = logtoClient();
-    authenticated.value = await client.isAuthenticated();
-    if (authenticated.value && !displayName.value) {
-      const claims = await client.getIdTokenClaims();
-      displayName.value = claims.name ?? claims.username ?? claims.email ?? claims.sub;
-    }
-    return authenticated.value;
-  }
+  const authenticated = computed(() => me.value !== null);
+  /** null 表示还没探过（探测失败也算没探过，下次导航重试） */
+  const isAdmin = computed<boolean | null>(() =>
+    probed.value ? (me.value ? me.value.role === "ADMIN" : false) : null,
+  );
+  const displayName = computed(() => me.value?.name || me.value?.email || "");
 
   /**
-   * 用一次最便宜的管理接口探权限。
-   * 403 = 库里的 role 不是 ADMIN；其它异常原样抛出，交给调用方提示，
-   * 绝不把网络问题误判成没权限。
+   * 用 /api/me 同步一次登录态。401 = 没登录（返回 false，不抛）；
+   * 其它异常原样抛出——网络抖动不能被误判成没登录，否则会平白把人踢去 Logto。
    */
-  async function probeAdmin(api: AdminApi): Promise<void> {
-    if (isAdmin.value !== null) {
-      return;
-    }
+  async function refreshAuthState(api: AuthApi): Promise<boolean> {
     try {
-      await api.listNodes();
-      isAdmin.value = true;
+      me.value = await api.me();
+      probed.value = true;
+      return true;
     } catch (error) {
-      if (error instanceof ForbiddenError) {
-        isAdmin.value = false;
-        return;
+      if (error instanceof UnauthorizedError) {
+        me.value = null;
+        probed.value = true;
+        return false;
       }
       throw error;
     }
   }
 
-  async function signIn(): Promise<void> {
-    await logtoClient().signIn(callbackUri());
+  /** 整页跳服务端登录入口，握手由服务端完成，回来时已带会话 Cookie */
+  function signIn(): void {
+    window.location.assign("/oauth2/authorization/logto");
   }
 
-  async function signOut(): Promise<void> {
-    authenticated.value = false;
-    isAdmin.value = null;
-    displayName.value = "";
-    await logtoClient().signOut(postSignOutUri());
+  /** 整页跳服务端登出端点，清 Cookie 后 302 回管理端首页 */
+  function signOut(): void {
+    me.value = null;
+    probed.value = false;
+    window.location.assign("/auth/logout");
   }
 
-  return { authenticated, isAdmin, displayName, refreshAuthState, probeAdmin, signIn, signOut };
+  return { me, authenticated, isAdmin, displayName, refreshAuthState, signIn, signOut };
 });

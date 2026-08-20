@@ -1,6 +1,3 @@
 {
-  "logtoEndpoint": "https://填入你的租户.logto.app",
-  "logtoAppId": "填入 Logto 里那个 SPA 应用的 App ID",
-  "apiResource": "https://api.lane.mintpop.internal",
   "apiBaseUrl": "/api"
 }

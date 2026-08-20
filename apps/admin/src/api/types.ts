@@ -56,11 +56,41 @@ export const NODE_STATUS_LABELS: Record<NodeStatus, string> = {
   DISABLED: "禁用",
 };
 
+export const AGENT_TYPE = {
+  CLAUDE: "CLAUDE",
+  CODEX: "CODEX",
+} as const;
+export type AgentType = (typeof AGENT_TYPE)[keyof typeof AGENT_TYPE];
+
+export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
+  CLAUDE: "Claude Code",
+  CODEX: "Codex",
+};
+
 /** 统一返回体。HTTP 一律 200，成败只看 code */
 export interface ApiResponse<T> {
   code: number;
   data: T | null;
   msg: string | null;
+}
+
+/** 当前登录者视图（/api/me）。无任何凭据字段 */
+export interface MeResponse {
+  id: number;
+  email: string;
+  name: string;
+  role: UserRole;
+  subscriptions: MeSubscription[];
+}
+
+export interface MeSubscription {
+  id: number;
+  name: string;
+  /** 服务端可能新增本前端不认识的类型，故用 string 承载 */
+  agentType: string;
+  startsAt: string;
+  endsAt: string;
+  active: boolean;
 }
 
 export interface PageResult<T> {

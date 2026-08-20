@@ -2,9 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { loadRuntimeConfig, resetRuntimeConfig, runtimeConfig } from "./runtime";
 
 const 完整配置 = {
-  logtoEndpoint: "https://tenant.logto.app",
-  logtoAppId: "abc123",
-  apiResource: "https://api.lane.mintpop.internal",
   apiBaseUrl: "/api",
 };
 
@@ -34,9 +31,9 @@ describe("loadRuntimeConfig", () => {
   });
 
   it("缺字段时点名是哪一项缺——部署时漏填是最常见的事故", async () => {
-    const 缺一项 = { ...完整配置, logtoAppId: "" };
+    const 缺一项 = { ...完整配置, apiBaseUrl: "" };
 
-    await expect(loadRuntimeConfig(假fetch(200, 缺一项))).rejects.toThrow("logtoAppId");
+    await expect(loadRuntimeConfig(假fetch(200, 缺一项))).rejects.toThrow("apiBaseUrl");
   });
 
   it("尚未加载就取用会立刻报错，避免拿到半初始化的客户端", () => {

@@ -1,25 +1,37 @@
-import { accessToken, callbackUri, logtoClient } from "../auth/logto";
 import { runtimeConfig } from "../config/runtime";
 import { createAdminApi, type AdminApi } from "./admin";
-import { createHttpClient } from "./http";
+import { createAuthApi, type AuthApi } from "./auth";
+import { createHttpClient, type HttpClient } from "./http";
 
-let api: AdminApi | null = null;
+let http: HttpClient | null = null;
+let admin: AdminApi | null = null;
+let auth: AuthApi | null = null;
 
 /**
- * 组装层：把「取 token」与「接口前缀」这两个运行时依赖接到 HTTP 客户端上。
- * 业务代码只依赖 AdminApi 这个接口，测试里直接传假实现，不碰这里。
+ * 组装层：凭据在 HttpOnly Cookie 里，浏览器自动携带，这里只接「接口前缀」
+ * 与「会话失效跳登录」两个运行时依赖。业务代码只依赖接口，测试直接传假实现。
  */
-export function adminApi(): AdminApi {
-  if (!api) {
-    api = createAdminApi(
-      createHttpClient({
-        baseUrl: runtimeConfig().apiBaseUrl,
-        getToken: accessToken,
-        // 会话失效就直接重走一次 PKCE 登录。signIn 会跳转离开本页，
-        // 故不必等待它返回，也不必处理它的结果
-        onUnauthorized: () => void logtoClient().signIn(callbackUri()),
-      }),
-    );
+function httpClient(): HttpClient {
+  if (!http) {
+    http = createHttpClient({
+      baseUrl: runtimeConfig().apiBaseUrl,
+      // 会话失效就整页跳服务端登录入口。跳转会离开本页，不必等待返回
+      onUnauthorized: () => window.location.assign("/oauth2/authorization/logto"),
+    });
   }
-  return api;
+  return http;
+}
+
+export function adminApi(): AdminApi {
+  if (!admin) {
+    admin = createAdminApi(httpClient());
+  }
+  return admin;
+}
+
+export function authApi(): AuthApi {
+  if (!auth) {
+    auth = createAuthApi(httpClient());
+  }
+  return auth;
 }

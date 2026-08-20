@@ -30,11 +30,9 @@ export class ForbiddenError extends Error {
 export interface HttpClientOptions {
   /** 接口前缀，如 /api */
   baseUrl: string;
-  /** 每次请求前取一次 access token；实现方负责静默刷新 */
-  getToken: () => Promise<string>;
   /** 注入点，测试里换成假的 */
   fetchImpl?: typeof fetch;
-  /** 会话失效时的回调（401 或换不出 token）。注入点：装配层接上「重新登录」 */
+  /** 会话失效时的回调（401）。注入点：装配层接上「重新登录」 */
   onUnauthorized?: () => void;
 }
 
@@ -43,20 +41,19 @@ export interface HttpClient {
 }
 
 /**
- * 建一个只做三件事的 HTTP 客户端：带 token、认 401/403、拆 ApiResponse。
+ * 建一个只做两件事的 HTTP 客户端：认 401/403、拆 ApiResponse。
+ * 凭据在 HttpOnly Cookie 里，同域请求浏览器自动携带，不需要也不能由前端注入。
  * 依赖全部由外部传入，因此单测不需要打模块补丁。
  */
-export function createHttpClient({ baseUrl, getToken, fetchImpl, onUnauthorized }: HttpClientOptions): HttpClient {
+export function createHttpClient({ baseUrl, fetchImpl, onUnauthorized }: HttpClientOptions): HttpClient {
   const doFetch: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
-      const token = await getToken();
       const response = await doFetch(`${baseUrl}${path}`, {
         ...init,
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
           ...(init.headers as Record<string, string> | undefined),
         },
       });
@@ -78,7 +75,7 @@ export function createHttpClient({ baseUrl, getToken, fetchImpl, onUnauthorized 
       }
       return body.data as T;
     } catch (error) {
-      // 会话失效统一在这一处兜住：既包括服务端回的 401，也包括 getToken 本身换不出 token。
+      // 会话失效统一在这一处兜住：服务端回的 401。
       // 仍然把异常抛出去，让调用方该提示提示、该中断中断
       if (error instanceof UnauthorizedError) {
         onUnauthorized?.();
