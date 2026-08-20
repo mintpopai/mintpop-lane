@@ -39,10 +39,12 @@ async function login() {
 <template>
   <div class="login">
     <h1>Lane</h1>
-    <p class="hint">登录后终端会自动接入专属链路并配好你购买的 Agent 服务。</p>
+    <p class="hint">
+      登录后终端会自动接入专属链路并配好你购买的 Agent 服务；首次使用会自动完成注册。
+    </p>
 
     <button :disabled="pending" @click="login">
-      {{ pending ? "正在打开浏览器…" : "用公司账号登录" }}
+      {{ pending ? "正在打开浏览器…" : "登录 / 注册" }}
     </button>
     <p v-if="notice" class="error">{{ notice }}</p>
     <p v-if="error" class="error">{{ error }}</p>

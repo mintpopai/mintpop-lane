@@ -14,13 +14,25 @@ const emit = defineEmits<{ launch: [payload: { subscriptionId: number; workspace
 
 const credentials = ref<AgentCredentialView[]>([]);
 const error = ref("");
+/** 席位拉取是否已有结果；未出结果前不显示「暂无可用订阅」，免得闪一下空态 */
+const loaded = ref(false);
 const agentType = ref("");
 const subscriptionId = ref<number | null>(null);
 const workspace = ref("");
 
 /** 最近使用的 workspace，只是路径字符串，非敏感信息，存 localStorage 即可 */
 const RECENT_KEY = "lane.recentWorkspaces";
-const recent = ref<string[]>(JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]"));
+const recent = ref<string[]>(readRecent());
+
+/** localStorage 里的内容可能被手改坏或被别的版本写脏，解析失败一律退回空列表 */
+function readRecent(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((d) => typeof d === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 const agents = computed(() => {
   const seen = new Map<string, string>();
@@ -36,6 +48,8 @@ onMounted(async () => {
     if (agents.value.length === 1) pickAgent(agents.value[0].type);
   } catch (e) {
     error.value = String(e);
+  } finally {
+    loaded.value = true;
   }
 });
 
@@ -68,7 +82,11 @@ function day(iso: string) {
     <h2>新建会话</h2>
     <p v-if="error" class="error">{{ error }}</p>
 
-    <section v-if="agents.length > 1 || !agentType">
+    <p v-if="loaded && !error && !credentials.length" class="empty">
+      暂无可用订阅：请购买服务，或升级客户端以支持新的 agent 类型。
+    </p>
+
+    <section v-if="credentials.length && (agents.length > 1 || !agentType)">
       <h3>选择 Agent</h3>
       <button
         v-for="a in agents"
@@ -104,7 +122,12 @@ function day(iso: string) {
       </div>
     </section>
 
-    <button class="primary" :disabled="subscriptionId === null || !workspace" @click="launch">
+    <button
+      v-if="credentials.length"
+      class="primary"
+      :disabled="subscriptionId === null || !workspace"
+      @click="launch"
+    >
       启动
     </button>
   </div>
@@ -128,4 +151,5 @@ button.picked { outline: 2px solid #2e7d32; }
 .recent .link { border: none; background: none; color: #1565c0; cursor: pointer; padding: 0 6px; }
 .primary { align-self: flex-start; padding: 10px 28px; }
 .error { color: #c00; }
+.empty { margin: 0; color: #777; line-height: 1.8; }
 </style>

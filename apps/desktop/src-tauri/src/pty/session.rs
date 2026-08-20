@@ -83,8 +83,12 @@ impl PtySession {
     /// 结束子进程。用户关闭会话时调用；不依赖 Drop——portable-pty 的 Child
     /// 被丢弃时不保证杀死子进程，显式 kill 才能避免孤儿进程继续占着注入的凭据。
     pub fn kill(&self) {
-        if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
+        match self.child.lock() {
+            Ok(mut child) => {
+                let _ = child.kill();
+            }
+            // 锁中毒说明持锁线程 panic 过，子进程可能仍活着占着凭据，必须留下痕迹
+            Err(_) => eprintln!("[lane] 会话锁中毒，无法结束子进程"),
         }
     }
 }

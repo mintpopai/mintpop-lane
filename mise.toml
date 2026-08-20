@@ -102,9 +102,10 @@ dir = "apps/admin"
 run = ["pnpm eslint .", "pnpm vue-tsc --noEmit"]
 
 [tasks.lint-desktop]
-description = "检查桌面端 Rust 代码"
+description = "检查桌面端代码风格与类型（Rust + 前端）"
+# dir 停在 src-tauri 是为了让 cargo 找到 Cargo.toml；前端类型检查要在 apps/desktop 跑，故 cd ..
 dir = "apps/desktop/src-tauri"
-run = "cargo clippy --all-targets -- -D warnings"
+run = ["cargo clippy --all-targets -- -D warnings", "cd .. && pnpm vue-tsc --noEmit"]
 
 # —— 部署 ——
 [tasks.up]
