@@ -29,6 +29,20 @@ pub async fn reconnect_link(app: AppHandle) -> LinkState {
     crate::establish_link(&app).await
 }
 
+/// 当前用户信息与订阅概览（无任何凭据），供状态页渲染
+#[tauri::command]
+pub async fn me_info(state: State<'_, AppState>) -> Result<crate::auth::session::MeData, String> {
+    let token = state
+        .session_token
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or_else(|| "未登录".to_string())?;
+    crate::auth::session::fetch_me(&crate::server_base_url(), &token)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 发起登录：生成 PKCE，打开系统浏览器到服务端登录入口。
 /// 服务端完成与 Logto 的全部握手后经 deep link 送回一次性 ticket，见 lib.rs 的 handle_callback。
 #[tauri::command]

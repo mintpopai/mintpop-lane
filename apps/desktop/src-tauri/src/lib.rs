@@ -352,6 +352,7 @@ pub fn run() {
             commands::logout,
             commands::link_notice,
             commands::reconnect_link,
+            commands::me_info,
         ])
         .run(tauri::generate_context!())
         .expect("启动 Tauri 应用失败");
