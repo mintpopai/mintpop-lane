@@ -24,7 +24,6 @@ spring:
             # Logto 里「传统 Web 应用」的凭据
             client-id: 填入 Logto 传统 Web 应用的 App ID
             client-secret: 填入 Logto 传统 Web 应用的 App Secret
-            authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/auth/callback"
             scope: openid,profile,email
         provider:
