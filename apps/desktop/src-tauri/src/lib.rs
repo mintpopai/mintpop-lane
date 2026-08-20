@@ -4,7 +4,7 @@ pub mod commands;
 pub mod link;
 pub mod pty;
 
-use app_state::{AppState, BootstrapState};
+use app_state::AppState;
 use link::inbound::allocate_inbound;
 use link::kernel::MihomoKernel;
 use link::probe::{verify_egress, EgressVerdict, DEFAULT_PROBE_URL};
@@ -66,7 +66,7 @@ pub async fn establish_link(app: &AppHandle) -> LinkState {
     // 入口先清通知：上一次失败留下的引导文案不该残留到这一轮
     *state.link_notice.lock().unwrap() = None;
 
-    let Some(token) = state.access_token.lock().unwrap().clone() else {
+    let Some(token) = state.session_token.lock().unwrap().clone() else {
         return advance(state, LinkEvent::CONFIG_FETCH_FAILED);
     };
 
@@ -174,7 +174,7 @@ async fn heartbeat_loop(app: AppHandle) {
         tokio::time::sleep(HEARTBEAT_INTERVAL).await;
 
         let state = app.state::<AppState>();
-        let Some(token) = state.access_token.lock().unwrap().clone() else {
+        let Some(token) = state.session_token.lock().unwrap().clone() else {
             continue;
         };
 
@@ -208,14 +208,20 @@ async fn reset_kernel(state: &AppState) {
     }
 }
 
-/// 断链并回登录页：会话失效（401）、账号被停用/吊销时的统一出口。
-/// 与 EXPIRED 的区别：这里连登录态一起清掉，用户必须重新走浏览器登录。
-async fn force_relogin(app: &AppHandle, reason: &str) {
+/// 重置内核并置链路为 DISCONNECTED：force_relogin 与 logout 的共用尾段。
+pub(crate) async fn reset_kernel_and_disconnect(app: &AppHandle) {
     let state = app.state::<AppState>();
     reset_kernel(&state).await;
     set_state(&state, LinkState::DISCONNECTED);
-    *state.access_token.lock().unwrap() = None;
-    let _ = auth::storage::clear_refresh_token();
+}
+
+/// 断链并回登录页：会话失效（401）、账号被停用/吊销时的统一出口。
+/// 与 EXPIRED 的区别：这里连登录态一起清掉，用户必须重新走浏览器登录。
+async fn force_relogin(app: &AppHandle, reason: &str) {
+    reset_kernel_and_disconnect(app).await;
+    let state = app.state::<AppState>();
+    *state.session_token.lock().unwrap() = None;
+    let _ = auth::storage::clear_session_token();
     let _ = app.emit(
         "auth://changed",
         serde_json::json!({ "logged_in": false, "reason": reason }),
@@ -223,103 +229,73 @@ async fn force_relogin(app: &AppHandle, reason: &str) {
 }
 
 /// 登录成功后的收尾：存令牌、建链路、通知前端
-async fn on_authenticated(app: &AppHandle, tokens: auth::oidc::TokenSet) {
+async fn on_authenticated(app: &AppHandle, token: String) {
     let state = app.state::<AppState>();
-
-    *state.access_token.lock().unwrap() = Some(tokens.access_token);
-    if let Some(refresh) = tokens.refresh_token {
-        // refresh_token 是唯一允许落地的凭据，且只能进钥匙串
-        if let Err(e) = auth::storage::save_refresh_token(&refresh) {
-            log_error("保存 refresh_token 失败", &e);
-        }
-    }
+    *state.session_token.lock().unwrap() = Some(token);
 
     let _ = app.emit("auth://changed", serde_json::json!({ "logged_in": true }));
     establish_link(app).await;
 }
 
-/// 处理 deep link 回调，完成授权码交换
+/// 处理 deep link 回调：校验 state、用一次性 ticket + verifier 兑换会话
 async fn handle_callback(app: AppHandle, url: String) {
     let pending = {
         let state = app.state::<AppState>();
         let mut guard = state.pending_login.lock().unwrap();
         guard.take()
     };
-
     let Some(pending) = pending else {
         return;
     };
 
-    let Some(cfg) = app.state::<AppState>().oidc_config.lock().unwrap().clone() else {
-        log_error("回调到达时尚无登录配置", &"引导未完成");
-        return;
-    };
-    let code = match auth::oidc::extract_code(&url, &pending.state) {
-        Ok(code) => code,
-        Err(e) => {
-            log_error("回调校验失败", &e);
-            return;
+    use auth::session::CallbackOutcome;
+    match auth::session::extract_ticket(&url, &pending.state) {
+        Ok(CallbackOutcome::TICKET(ticket)) => {
+            match auth::session::exchange_ticket(&server_base_url(), &ticket, &pending.verifier).await {
+                Ok(token) => {
+                    // 自签会话 token 是唯一允许落地的凭据，且只能进钥匙串
+                    if let Err(e) = auth::storage::save_session_token(&token) {
+                        log_error("保存会话 token 失败", &e);
+                    }
+                    on_authenticated(&app, token).await;
+                }
+                Err(e) => {
+                    log_error("兑换会话失败", &e);
+                    let _ = app.emit(
+                        "auth://login-failed",
+                        serde_json::json!({ "reason": "登录票据无效或已过期，请重新登录" }),
+                    );
+                }
+            }
         }
-    };
-
-    match auth::oidc::exchange_code(&cfg, &code, &pending.verifier).await {
-        Ok(tokens) => on_authenticated(&app, tokens).await,
-        Err(e) => log_error("授权码换令牌失败", &e),
+        Ok(CallbackOutcome::LOGIN_FAILED) => {
+            let _ = app.emit(
+                "auth://login-failed",
+                serde_json::json!({ "reason": "登录未完成，请重试" }),
+            );
+        }
+        Err(e) => log_error("回调校验失败", &e),
     }
 }
 
-/// 启动引导：拉取登录接入配置。成功后才谈得上登录，因此静默登录串在它之后。
-///
-/// 用 bootstrap_lock 把整个函数体串行化：启动时的自动引导与用户点重试触发的
-/// 重新引导可能并发发生，两者都会走到 try_silent_login 用同一个 refresh_token
-/// 换新令牌，见 AppState::bootstrap_lock 的注释。持锁跨越下面的 await 是有意为之。
-async fn bootstrap(app: AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let _guard = state.bootstrap_lock.lock().await;
-
-    // 每次引导（含重试）开始时先归零，让 client_config_state 在结果落地前
-    // 如实答"还在飞行中"；重试场景尤其重要——上一轮的 FAILED 不能残留到这一轮。
-    *state.bootstrap_state.lock().unwrap() = BootstrapState::UNKNOWN;
-
-    match auth::bootstrap::fetch_client_config(&server_base_url()).await {
-        Ok(cfg) => {
-            *state.oidc_config.lock().unwrap() = Some(cfg);
-            *state.bootstrap_state.lock().unwrap() = BootstrapState::READY;
-            let _ = app.emit("auth://config-ready", ());
-            try_silent_login(app.clone()).await;
-            Ok(())
-        }
-        Err(e) => {
-            log_error("拉取登录配置失败", &e);
-            let reason = e.to_string();
-            *state.bootstrap_state.lock().unwrap() = BootstrapState::FAILED(reason.clone());
-            let _ = app.emit("auth://config-failed", serde_json::json!({ "reason": reason }));
-            Err(reason)
-        }
-    }
-}
-
-/// 供命令层调用的重试入口
-pub async fn reload_client_config(app: AppHandle) -> Result<(), String> {
-    bootstrap(app).await
-}
-
-/// 启动时若钥匙串里已有 refresh_token，尝试静默登录，省掉用户每次授权
-async fn try_silent_login(app: AppHandle) {
-    let Ok(Some(refresh_token)) = auth::storage::load_refresh_token() else {
+/// 启动验活：钥匙串里有会话 token 就拿去调 /api/me 确认还活着。
+/// 401 说明会话已失效（过期/被删），清掉残留留在登录页；
+/// 网络不通时不武断丢弃 token——保留登录态，链路自然是 DISCONNECTED，用户可稍后重连。
+async fn startup_auth(app: AppHandle) {
+    let Ok(Some(token)) = auth::storage::load_session_token() else {
         return;
     };
 
-    let Some(cfg) = app.state::<AppState>().oidc_config.lock().unwrap().clone() else {
-        return;
-    };
-
-    match auth::oidc::refresh(&cfg, &refresh_token).await {
-        Ok(tokens) => on_authenticated(&app, tokens).await,
+    match auth::session::fetch_me(&server_base_url(), &token).await {
+        Ok(_) => on_authenticated(&app, token).await,
+        Err(link::remote::RemoteError::Status(code)) if code.as_u16() == 401 => {
+            log_error("启动验活失败", &"会话已失效");
+            let _ = auth::storage::clear_session_token();
+        }
         Err(e) => {
-            // 刷新失败通常意味着用户已在 Logto 侧被停用，清掉本地残留
-            log_error("静默登录失败", &e);
-            let _ = auth::storage::clear_refresh_token();
+            // 服务端暂时不可达 ≠ 会话失效：保留 token，进主界面但链路断开
+            log_error("启动验活网络失败", &e);
+            on_authenticated(&app, token).await;
         }
     }
 }
@@ -355,9 +331,7 @@ pub fn run() {
             });
 
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = bootstrap(handle).await;
-            });
+            tauri::async_runtime::spawn(startup_auth(handle));
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(heartbeat_loop(handle));
@@ -372,8 +346,6 @@ pub fn run() {
             commands::auth_status,
             commands::start_login,
             commands::logout,
-            commands::client_config_state,
-            commands::reload_client_config,
             commands::link_notice,
             commands::reconnect_link,
         ])
