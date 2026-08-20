@@ -178,3 +178,27 @@ export interface UserPageQuery {
   pageNo: number;
   pageSize: number;
 }
+
+/** 管理端的订阅视图。凭据只回传有没有录，本体一个字符不出现 */
+export interface AdminSubscriptionResponse {
+  id: number;
+  userId: number;
+  agentType: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  hasCredential: boolean;
+  remark: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 新建/更新订阅的入参。更新时 credential 留空表示沿用原值 */
+export interface SubscriptionSaveRequest {
+  agentType: AgentType;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  credential: string;
+  remark: string;
+}

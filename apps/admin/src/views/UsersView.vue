@@ -6,6 +6,7 @@ import { BizError } from "../api/http";
 import { AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
 import { formatDateTime, joinOrDash } from "../utils/format";
+import SubscriptionDrawer from "../components/SubscriptionDrawer.vue";
 import UserFormDrawer from "../components/UserFormDrawer.vue";
 
 const 列表 = ref<AdminUserResponse[]>([]);
@@ -18,6 +19,8 @@ const 总数 = ref(0);
 const loading = ref(false);
 const 抽屉打开 = ref(false);
 const 正在编辑 = ref<AdminUserResponse | null>(null);
+const 订阅抽屉打开 = ref(false);
+const 订阅目标 = ref<AdminUserResponse | null>(null);
 
 function 报错(error: unknown, 前缀: string): void {
   ElMessage.error(error instanceof BizError ? error.message : `${前缀}：${(error as Error).message}`);
@@ -62,6 +65,11 @@ function 筛选变化(): void {
 function 编辑(user: AdminUserResponse): void {
   正在编辑.value = user;
   抽屉打开.value = true;
+}
+
+function 打开订阅(user: AdminUserResponse): void {
+  订阅目标.value = user;
+  订阅抽屉打开.value = true;
 }
 
 async function 删除(user: AdminUserResponse): Promise<void> {
@@ -152,8 +160,9 @@ onMounted(刷新);
       <el-table-column label="更新时间" width="150">
         <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
+      <el-table-column label="操作" width="190" fixed="right">
         <template #default="{ row }">
+          <el-button link type="primary" @click="打开订阅(row)">订阅</el-button>
           <el-button link type="primary" @click="编辑(row)">编辑</el-button>
           <el-button link type="danger" @click="删除(row)">删除</el-button>
         </template>
@@ -178,5 +187,6 @@ onMounted(刷新);
       :nodes="节点"
       @saved="刷新()"
     />
+    <SubscriptionDrawer v-if="订阅目标" v-model="订阅抽屉打开" :user="订阅目标" @changed="刷新()" />
   </div>
 </template>

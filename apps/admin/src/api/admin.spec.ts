@@ -93,4 +93,33 @@ describe("createAdminApi", () => {
     });
     expect(request).toHaveBeenNthCalledWith(3, "/admin/nodes/3", { method: "DELETE" });
   });
+
+  it("订阅四端点路径与方法正确", async () => {
+    const calls: Array<{ path: string; method?: string }> = [];
+    const http: HttpClient = {
+      request: async <T>(path: string, init?: RequestInit) => {
+        calls.push({ path, method: init?.method });
+        return [] as T;
+      },
+    };
+    const api = createAdminApi(http);
+    const body = {
+      agentType: "CLAUDE" as const,
+      name: "Claude 席位 1",
+      startsAt: "2026-08-01T00:00:00",
+      endsAt: "2026-09-01T00:00:00",
+      credential: "sk-ant-x",
+      remark: "",
+    };
+    await api.listSubscriptions(7);
+    await api.createSubscription(7, body);
+    await api.updateSubscription(3, body);
+    await api.deleteSubscription(3);
+    expect(calls).toEqual([
+      { path: "/admin/users/7/subscriptions", method: undefined },
+      { path: "/admin/users/7/subscriptions", method: "POST" },
+      { path: "/admin/subscriptions/3", method: "PUT" },
+      { path: "/admin/subscriptions/3", method: "DELETE" },
+    ]);
+  });
 });

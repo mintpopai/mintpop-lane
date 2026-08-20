@@ -1,10 +1,12 @@
 import type { HttpClient } from "./http";
 import type {
   AdminNodeResponse,
+  AdminSubscriptionResponse,
   AdminUserResponse,
   NodeRole,
   NodeSaveRequest,
   PageResult,
+  SubscriptionSaveRequest,
   UserPageQuery,
   UserSaveRequest,
 } from "./types";
@@ -17,6 +19,10 @@ export interface AdminApi {
   createNode(body: NodeSaveRequest): Promise<number>;
   updateNode(id: number, body: NodeSaveRequest): Promise<void>;
   deleteNode(id: number): Promise<void>;
+  listSubscriptions(userId: number): Promise<AdminSubscriptionResponse[]>;
+  createSubscription(userId: number, body: SubscriptionSaveRequest): Promise<number>;
+  updateSubscription(id: number, body: SubscriptionSaveRequest): Promise<void>;
+  deleteSubscription(id: number): Promise<void>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -58,6 +64,25 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deleteNode(id) {
       return http.request(`/admin/nodes/${id}`, { method: "DELETE" });
+    },
+
+    listSubscriptions(userId) {
+      return http.request(`/admin/users/${userId}/subscriptions`);
+    },
+
+    createSubscription(userId, body) {
+      return http.request(`/admin/users/${userId}/subscriptions`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+
+    updateSubscription(id, body) {
+      return http.request(`/admin/subscriptions/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    deleteSubscription(id) {
+      return http.request(`/admin/subscriptions/${id}`, { method: "DELETE" });
     },
   };
 }
