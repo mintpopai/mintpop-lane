@@ -3,7 +3,7 @@ use crate::auth::{pkce, storage};
 use crate::link::state::LinkState;
 use crate::pty::session::{default_shell, spawn_agent_pty};
 use std::io::Read;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// 前端唯一能拿到的链路信息：只有状态枚举，没有端口、密码与 Claude 凭据
 #[tauri::command]
@@ -48,13 +48,19 @@ pub fn start_login(app: AppHandle, state: State<'_, AppState>) -> Result<(), Str
 }
 
 /// 退出登录：清空内存令牌与钥匙串，并重置内核回到 DISCONNECTED。
+/// 先断链、清内存令牌，钥匙串删除失败只记录不阻断——不能因为钥匙串报错就
+/// 留下「内存已清、内核未重置、事件未发」的半登出态（否则下次启动会自动登回去）。
 #[tauri::command]
-pub async fn logout(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    *state.session_token.lock().unwrap() = None;
-    storage::clear_session_token().map_err(|e| e.to_string())?;
-
+pub async fn logout(app: AppHandle) -> Result<(), String> {
     crate::reset_kernel_and_disconnect(&app).await;
-
+    {
+        let state = app.state::<AppState>();
+        *state.session_token.lock().unwrap() = None;
+    }
+    // 与 force_relogin 一致：钥匙串删除失败只记录，不阻断登出
+    if let Err(e) = storage::clear_session_token() {
+        eprintln!("[lane] 登出时清理钥匙串失败：{e}");
+    }
     let _ = app.emit("auth://changed", serde_json::json!({ "logged_in": false }));
     Ok(())
 }

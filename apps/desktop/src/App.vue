@@ -9,6 +9,9 @@ type LinkState = "DISCONNECTED" | "CONNECTING" | "ACTIVE" | "DEGRADED" | "EXPIRE
 
 const status = ref<LinkState>("DISCONNECTED");
 const loggedIn = ref(false);
+/** 被强制登出的原因（会话过期/账号停用等）。App.vue 常驻挂载，接住 Login.vue
+ *  尚未挂载时就可能发出的 auth://changed 事件，再以 prop 传给登录页展示。 */
+const logoutReason = ref("");
 let timer: ReturnType<typeof setInterval> | undefined;
 let unlisten: UnlistenFn | undefined;
 
@@ -29,8 +32,13 @@ async function poll() {
 onMounted(async () => {
   await poll();
   timer = setInterval(poll, 3000);
-  unlisten = await listen<{ logged_in: boolean }>("auth://changed", (event) => {
+  unlisten = await listen<{ logged_in: boolean; reason?: string }>("auth://changed", (event) => {
     loggedIn.value = event.payload.logged_in;
+    if (!event.payload.logged_in) {
+      logoutReason.value = event.payload.reason ?? "";
+    } else {
+      logoutReason.value = "";
+    }
   });
 });
 
@@ -41,7 +49,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <LoginView v-if="!loggedIn" />
+  <LoginView v-if="!loggedIn" :notice="logoutReason" />
   <div v-else class="app">
     <header :class="['bar', status]">{{ label[status] }}</header>
     <TerminalView v-if="status === 'ACTIVE'" />
