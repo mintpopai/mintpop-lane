@@ -74,7 +74,9 @@
    >
    > ⚠️ **必须在 `mise run up` 之前把这个文件建好**：绑定挂载的宿主侧路径不存在时，Docker 会**自作主张建成一个空目录**，nginx 于是把 `/config.json` 当目录处理、返回 404，页面显示「管理端启动失败」。若已经踩到，先 `mise run down`、`rmdir admin-config.json`、建好真文件再起。
 
-   > ⚠️ **部署约束**：管理端与 API 必须部署在**同一注册域名**下（如 `admin.x.com` 与 `api.x.com` 都属于 `x.com`）。服务端签发的会话 Cookie 是 `SameSite=Lax`，跨注册域名（如 `admin.x.com` 与 `api.y.com`）时浏览器不会带上这个 Cookie，登录态传不过去。
+   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署，由同一入口的反代把 `/api`、`/auth`、`/oauth2` 转给服务端，其余给管理端静态站——见下文「对外暴露」里的 nginx 示例。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。
+   >
+   > 因此 `admin-config.json` 里的 `apiBaseUrl` **必须是相对路径**（如 `/api`），不能填绝对 URL（如 `https://api.x.com/api`）。
 
 6. **拉起服务**：
 
@@ -188,6 +190,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | `LANE_CRYPTO_KEY` | 无（必填） | 敏感字段加密密钥，Base64 的 32 字节 |
 | `LANE_AUTH_SESSION_SECRET` | 无（必填） | 自签会话 token 的 HS256 签名密钥，至少 32 字节 |
 | `LOGTO_CLIENT_SECRET` | 无（必填） | Logto 传统 Web 应用的 App Secret |
+| `TZ` | `UTC` | 服务端容器时区。订阅起止期按服务端时区判定，建议设成管理员所在时区（如 `Asia/Shanghai`），否则管理端填的时间与实际生效时刻会差几个时区 |
 
 ## 备份
 

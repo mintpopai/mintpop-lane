@@ -57,6 +57,19 @@ describe("buildUserPayload", () => {
     expect(payload.landNodeId).toBe(11);
   });
 
+  it("清空下拉产出的 undefined 也收成 null——接口上「未分配」只有一种表示", () => {
+    const payload = buildUserPayload({
+      id: 5,
+      status: "ACTIVE",
+      // el-select clearable 清空后 v-model 拿到的是 undefined，类型上仍标成 null
+      frontNodeId: undefined as unknown as null,
+      landNodeId: undefined as unknown as null,
+    });
+
+    expect(payload.frontNodeId).toBeNull();
+    expect(payload.landNodeId).toBeNull();
+  });
+
   it("状态原样带上", () => {
     const payload = buildUserPayload({ id: 5, status: "SUSPENDED", frontNodeId: null, landNodeId: null });
 

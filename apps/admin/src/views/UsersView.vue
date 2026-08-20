@@ -110,7 +110,8 @@ onMounted(刷新);
         @clear="搜索()"
       />
       <el-button @click="搜索()">搜索</el-button>
-      <el-select v-model="订阅筛选" style="width: 160px" @change="筛选变化()">
+      <!-- placeholder 兼作「未选＝全部」的说明：值为 null 时 Element Plus 显示占位符 -->
+      <el-select v-model="订阅筛选" placeholder="全部" style="width: 160px" @change="筛选变化()">
         <el-option label="全部" :value="null" />
         <el-option label="有在期订阅" :value="true" />
         <el-option label="无在期订阅" :value="false" />
@@ -180,6 +181,8 @@ onMounted(刷新);
       @size-change="搜索()"
     />
 
+    <!-- v-if 仅为绕开必传 prop 的类型检查（正在编辑 为 null 时组件不该被构造）；
+         组件常驻后由抽屉自身的 v-model 控制可见性 -->
     <UserFormDrawer
       v-if="正在编辑"
       v-model="抽屉打开"
@@ -187,6 +190,7 @@ onMounted(刷新);
       :nodes="节点"
       @saved="刷新()"
     />
+    <!-- 同上：v-if 只为满足必传 prop 的类型约束，显隐仍由抽屉自身控制 -->
     <SubscriptionDrawer v-if="订阅目标" v-model="订阅抽屉打开" :user="订阅目标" @changed="刷新()" />
   </div>
 </template>

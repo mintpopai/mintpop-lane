@@ -8,7 +8,7 @@ import App from "./App.vue";
 import { loadRuntimeConfig } from "./config/runtime";
 import { createAppRouter } from "./router";
 
-/** 配置读不到就没法建 Logto 客户端，直接给一句能照着排查的话，别让页面白屏 */
+/** 配置读不到就没法确定接口前缀，直接给一句能照着排查的话，别让页面白屏 */
 function 显示启动失败(message: string): void {
   const box = document.createElement("main");
   box.style.padding = "24px";

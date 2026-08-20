@@ -187,6 +187,11 @@ async function 删除(subscription: AdminSubscriptionResponse): Promise<void> {
           style="width: 100%"
         />
       </el-form-item>
+      <el-form-item>
+        <span style="color: var(--el-text-color-secondary); font-size: 12px">
+          起止期按服务端时区解释，请与部署环境时区（compose 的 TZ）核对
+        </span>
+      </el-form-item>
       <el-form-item label="席位凭据">
         <el-input
           v-model="form.credential"
