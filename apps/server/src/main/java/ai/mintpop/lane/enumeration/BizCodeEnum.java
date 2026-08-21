@@ -36,6 +36,7 @@ public enum BizCodeEnum {
     USER_NOT_FOUND(410006, "用户不存在"),
     NODE_NAME_DUPLICATED(410007, "节点名已存在"),
     SUBSCRIPTION_NOT_FOUND(410008, "订阅不存在"),
+    SUB_FETCH_FAILED(410011, "订阅拉取失败：链接无法访问或返回错误"),
     SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点");
 
     private final int code;
