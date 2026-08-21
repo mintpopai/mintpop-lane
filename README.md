@@ -160,6 +160,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 | 操作 | 请求 |
 |---|---|
+| 从订阅导入节点 | 管理端节点池页提供『从订阅导入』功能，支持从机场订阅链接批量导入第一跳节点，导入节点按订阅链接自动归组，可重新拉取更新 |
 | 节点列表 | `GET /api/admin/nodes?role=LAND` |
 | 新建节点 | `POST /api/admin/nodes` |
 | 改节点（密码留空即不改） | `PUT /api/admin/nodes/{id}` |
