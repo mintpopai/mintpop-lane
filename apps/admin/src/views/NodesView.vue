@@ -44,6 +44,13 @@ const 当前列表 = computed(() =>
   }),
 );
 
+// 当前选中的分组对象；选中态只可能来自 chips 点击，正常恒能找到，找不到时按钮区整体不渲染
+const 选中分组 = computed(() =>
+  typeof 当前分组.value === "number"
+    ? (分组列表.value.find((g) => g.id === 当前分组.value) ?? null)
+    : null,
+);
+
 async function 加载(): Promise<void> {
   loading.value = true;
   try {
@@ -200,29 +207,11 @@ onMounted(加载);
       {{ group.name }} <span class="fact">{{ group.nodeCount }}</span>
     </button>
     <!-- 选中某个分组时露出它的操作 -->
-    <template v-if="typeof 当前分组 === 'number'">
+    <template v-if="选中分组">
       <span class="spacer" />
-      <button
-        type="button"
-        class="admin-link"
-        @click="打开重拉(分组列表.find((g) => g.id === 当前分组)!)"
-      >
-        重新拉取
-      </button>
-      <button
-        type="button"
-        class="admin-link"
-        @click="打开改名(分组列表.find((g) => g.id === 当前分组)!)"
-      >
-        改名
-      </button>
-      <button
-        type="button"
-        class="admin-link danger"
-        @click="待删除分组 = 分组列表.find((g) => g.id === 当前分组)!"
-      >
-        删除分组
-      </button>
+      <button type="button" class="admin-link" @click="打开重拉(选中分组)">重新拉取</button>
+      <button type="button" class="admin-link" @click="打开改名(选中分组)">改名</button>
+      <button type="button" class="admin-link danger" @click="待删除分组 = 选中分组">删除分组</button>
     </template>
   </div>
 
