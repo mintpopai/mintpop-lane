@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -65,6 +67,21 @@ class RestClientSubFetchClientTest {
     @DisplayName("链接不是合法 URL 时报拉取失败")
     void 坏链接报拉取失败() {
         assertThatThrownBy(() -> client.fetch("不是链接"))
+                .isInstanceOf(BizException.class)
+                .extracting("bizCode").isEqualTo(BizCodeEnum.SUB_FETCH_FAILED);
+    }
+
+    @Test
+    @DisplayName("网络 I/O 异常（超时/DNS/连接拒绝等）时同样报拉取失败——" +
+            "这类异常被 RestClient 包成 ResourceAccessException，message 里内嵌完整原始 URL（含 token），" +
+            "本用例只兜行为，不断言日志内容")
+    void 网络IO异常报拉取失败() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(request -> {
+                    throw new IOException("模拟网络故障");
+                });
+
+        assertThatThrownBy(() -> client.fetch("https://sub.example.com/c?token=t"))
                 .isInstanceOf(BizException.class)
                 .extracting("bizCode").isEqualTo(BizCodeEnum.SUB_FETCH_FAILED);
     }

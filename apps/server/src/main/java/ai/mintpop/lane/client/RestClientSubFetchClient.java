@@ -39,8 +39,12 @@ public class RestClientSubFetchClient implements SubFetchClient {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientException | IllegalArgumentException e) {
-            // 异常原因不能吞：记一条打码后的 URL + 异常类型/消息，便于定位是超时/DNS/4xx 等哪种失败
-            log.warn("订阅拉取失败，url={}，原因={}: {}", 打码(subUrl), e.getClass().getSimpleName(), e.getMessage());
+            // 异常原因不能吞，但 e.getMessage() 不能打：Spring 的 ResourceAccessException
+            // （超时/DNS 失败/连接拒绝——恰恰是最常见的失败路径）message 形如
+            // `I/O error on GET request for "<完整URI>": ...`，内嵌完整原始 URL，
+            // token 若在 path/query 里就会绕开下面的 打码(subUrl) 直接进日志。
+            // 异常类名已足够区分超时/DNS/4xx/5xx 等大类，故日志只记类名，不记 message。
+            log.warn("订阅拉取失败，url={}，原因={}", 打码(subUrl), e.getClass().getSimpleName());
             throw new BizException(BizCodeEnum.SUB_FETCH_FAILED);
         }
         if (body == null || body.isBlank()) {
