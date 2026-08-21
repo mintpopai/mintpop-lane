@@ -22,7 +22,7 @@ public enum BizCodeEnum {
 
     /* 链路 */
     EGRESS_NOT_ASSIGNED(310001, "尚未为该用户分配落地出口"),
-    CREDENTIAL_NOT_ASSIGNED(310002, "尚未为该用户的在期订阅录入席位凭据"),
+    // 310002 曾是 CREDENTIAL_NOT_ASSIGNED（凭据未录入拦建链），已解耦：凭据只影响会话，不再拦链路。号位不复用
     LINK_REVOKED(310003, "该用户的链路已被吊销"),
     NODE_DISABLED(310004, "链路节点已被禁用"),
     SERVICE_NOT_PURCHASED(310005, "尚未购买任何服务"),

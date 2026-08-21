@@ -284,27 +284,27 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("在期订阅全部无凭据时被拒绝")
-    void activeSubscriptionsWithoutCredentialRejected() {
+    @DisplayName("在期订阅全部无凭据时仍下发链路，席位列表为空——凭据只影响会话，不拦建链")
+    void noCredentialStillDeliversLinkWithEmptySeats() {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, null));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
-                .isInstanceOf(BizException.class)
-                .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.CREDENTIAL_NOT_ASSIGNED);
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.agentCredentials()).isEmpty();
+        assertThat(resp.expectedEgressIps()).isNotEmpty();
     }
 
     @Test
-    @DisplayName("在期订阅全部无凭据时被拒绝——空白字符串同样算未录入")
-    void blankCredentialRejected() {
+    @DisplayName("在期订阅全部无凭据时仍下发链路——空白字符串同样算未录入")
+    void blankCredentialStillDeliversLinkWithEmptySeats() {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, "   "));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
-                .isInstanceOf(BizException.class)
-                .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.CREDENTIAL_NOT_ASSIGNED);
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.agentCredentials()).isEmpty();
+        assertThat(resp.expectedEgressIps()).isNotEmpty();
     }
 
     @Test

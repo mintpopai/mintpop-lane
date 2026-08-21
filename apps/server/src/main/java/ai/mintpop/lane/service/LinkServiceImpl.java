@@ -82,15 +82,13 @@ public class LinkServiceImpl implements LinkService {
             throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
 
-        // 只下发已录入凭据的在期订阅；没凭据的 agent 单独不可用，不拖累整条链路
+        // 只下发已录入凭据的在期订阅；凭据缺失只影响对应 agent 的会话，不拦建链——
+        // 全部缺失也照常下发链路，客户端在会话入口单独提示
         List<LinkConfigResponse.AgentCredential> credentials = active.stream()
                 .filter(s -> s.getCredential() != null && !s.getCredential().isBlank())
                 .map(s -> new LinkConfigResponse.AgentCredential(
                         s.getId(), s.getName(), s.getAgentType(), s.getCredential(), s.getEndsAt()))
                 .toList();
-        if (credentials.isEmpty()) {
-            throw new BizException(BizCodeEnum.CREDENTIAL_NOT_ASSIGNED);
-        }
 
         return new LinkConfigResponse(
                 front.toMihomoNode(),
