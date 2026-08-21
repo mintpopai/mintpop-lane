@@ -79,7 +79,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     /** 可变 Map：部分用例要放 null 值，Map.of 不允许。name 不再是入参字段，接口收窄为处置态+节点 */
-    private Map<String, Object> 更新入参(String status, Long front, Long land) {
+    private Map<String, Object> updateRequest(String status, Long front, Long land) {
         Map<String, Object> body = new HashMap<>();
         body.put("status", status);
         body.put("frontNodeId", front);
@@ -88,21 +88,21 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @BeforeEach
-    void 准备() {
+    void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
-        fixtures.清空();
-        frontId = fixtures.建FRONT节点("FRONT-1");
-        landId = fixtures.建LAND节点("LAND-1", "203.0.113.10");
-        adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, frontId, null);
-        memberWithSubId = fixtures.建用户("logto-m1", frontId, landId);
-        fixtures.建订阅(memberWithSubId, AgentType.CLAUDE, "Claude 席位 1",
+        fixtures.clearAll();
+        frontId = fixtures.createFrontNode("FRONT-1");
+        landId = fixtures.createLandNode("LAND-1", "203.0.113.10");
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, frontId, null);
+        memberWithSubId = fixtures.createUser("logto-m1", frontId, landId);
+        fixtures.createSubscription(memberWithSubId, AgentType.CLAUDE, "Claude 席位 1",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "sk-ant-secret");
-        memberNoSubId = fixtures.建用户("logto-m2", frontId, null);
+        memberNoSubId = fixtures.createUser("logto-m2", frontId, null);
     }
 
     @Test
     @DisplayName("列表带 email 与在期订阅摘要")
-    void 列表带邮箱与在期订阅摘要() throws Exception {
+    void listIncludesEmailAndActiveSubscriptionSummary() throws Exception {
         mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].email")
@@ -115,7 +115,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("按有无在期订阅筛选")
-    void 按有无在期订阅筛选() throws Exception {
+    void filterByActiveSubscription() throws Exception {
         mockMvc.perform(get("/api/admin/users").param("hasActiveSubscription", "true")
                         .header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data.total").value(1))
@@ -129,21 +129,21 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("新建用户接口已不存在")
-    void 新建用户接口已不存在() throws Exception {
+    void createUserEndpointNoLongerExists() throws Exception {
         mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("ACTIVE", frontId, null))))
+                        .content(json(updateRequest("ACTIVE", frontId, null))))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     @DisplayName("更新只改处置态与节点，subject/name 不受影响")
-    void 更新只改处置态与节点() throws Exception {
+    void updateOnlyChangesStatusAndNodes() throws Exception {
         var before = userRepository.findById(memberNoSubId).orElseThrow();
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("SUSPENDED", frontId, null))))
+                        .content(json(updateRequest("SUSPENDED", frontId, null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         var user = userRepository.findById(memberNoSubId).orElseThrow();
@@ -155,40 +155,40 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("落地节点已被占用时报 410002")
-    void 落地节点占用时报错() throws Exception {
+    void occupiedLandNodeFails() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("ACTIVE", frontId, landId))))
+                        .content(json(updateRequest("ACTIVE", frontId, landId))))
                 .andExpect(jsonPath("$.code").value(410002));
     }
 
     @Test
     @DisplayName("节点不存在报 410001，节点角色用错报 410005")
-    void 节点校验() throws Exception {
+    void nodeValidation() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("ACTIVE", 99999L, null))))
+                        .content(json(updateRequest("ACTIVE", 99999L, null))))
                 .andExpect(jsonPath("$.code").value(410001));
 
         // 把落地节点当第一跳用
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("ACTIVE", landId, null))))
+                        .content(json(updateRequest("ACTIVE", landId, null))))
                 .andExpect(jsonPath("$.code").value(410005));
 
         // 把第一跳节点当落地用
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("ACTIVE", frontId, frontId))))
+                        .content(json(updateRequest("ACTIVE", frontId, frontId))))
                 .andExpect(jsonPath("$.code").value(410005));
     }
 
     @Test
     @DisplayName("对不存在的用户做更新或删除报 410006")
-    void 用户不存在时报错() throws Exception {
+    void missingUserFails() throws Exception {
         mockMvc.perform(put("/api/admin/users/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参("ACTIVE", frontId, null))))
+                        .content(json(updateRequest("ACTIVE", frontId, null))))
                 .andExpect(jsonPath("$.code").value(410006));
 
         mockMvc.perform(delete("/api/admin/users/99999").header("Authorization", bearer(adminId)))
@@ -197,7 +197,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("删除用户级联删订阅")
-    void 删除用户级联删订阅() throws Exception {
+    void deleteUserCascadesSubscriptions() throws Exception {
         mockMvc.perform(delete("/api/admin/users/" + memberWithSubId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
 
@@ -207,10 +207,10 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("必填项缺失时报参数错误 110001")
-    void 必填项缺失时报参数错误() throws Exception {
+    void missingRequiredFieldReportsParamError() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(更新入参(null, frontId, null))))
+                        .content(json(updateRequest(null, frontId, null))))
                 .andExpect(jsonPath("$.code").value(110001));
     }
 }

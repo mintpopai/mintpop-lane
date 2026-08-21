@@ -4,31 +4,31 @@
  * （典型成因：会话密钥不匹配、Cookie 因跨域/协议种不上）。
  * 用 sessionStorage 而非 localStorage：标记只应活在当前标签页的这一次登录尝试里。
  */
-const 标记键 = "lane.loginRedirectAt";
+const MARK_KEY = "lane.loginRedirectAt";
 
 /** 判定窗口：上次跳登录距今不足这个时长，就认为是「刚跳过又立刻回来」 */
-const 环路窗口毫秒 = 15_000;
+const LOOP_WINDOW_MS = 15_000;
 
 /** 跳登录之前打标记 */
-export function 标记登录跳转(now: number = Date.now()): void {
-  sessionStorage.setItem(标记键, String(now));
+export function markLoginRedirect(now: number = Date.now()): void {
+  sessionStorage.setItem(MARK_KEY, String(now));
 }
 
 /** 是否疑似环路：有标记且在判定窗口内 */
-export function 疑似环路(now: number = Date.now()): boolean {
-  const raw = sessionStorage.getItem(标记键);
+export function isLikelyLoginLoop(now: number = Date.now()): boolean {
+  const raw = sessionStorage.getItem(MARK_KEY);
   if (raw === null) {
     return false;
   }
-  const 上次跳转 = Number(raw);
+  const lastRedirectAt = Number(raw);
   // 标记被人为改坏时按「没标记」处理，宁可再试一次登录也不要误判成环路
-  if (!Number.isFinite(上次跳转)) {
+  if (!Number.isFinite(lastRedirectAt)) {
     return false;
   }
-  return now - 上次跳转 < 环路窗口毫秒;
+  return now - lastRedirectAt < LOOP_WINDOW_MS;
 }
 
 /** 登录成功、或用户主动重试时清掉标记 */
-export function 清除标记(): void {
-  sessionStorage.removeItem(标记键);
+export function clearLoginMark(): void {
+  sessionStorage.removeItem(MARK_KEY);
 }

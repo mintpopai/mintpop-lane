@@ -113,7 +113,7 @@ public class AuthController {
                 .sameSite("Lax")
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, expired.toString());
-        response.sendRedirect(登出跳转地址());
+        response.sendRedirect(logoutRedirectUrl());
     }
 
     /**
@@ -124,7 +124,7 @@ public class AuthController {
      * 2. 显式端点配置（如测试环境）拿不到 metadata，没有可用的结束会话端点，
      *    只能回退成「只清本站 Cookie 后回管理端」——本站已登出，Logto 侧留待其自然过期。
      */
-    private String 登出跳转地址() {
+    private String logoutRedirectUrl() {
         String adminUrl = authProperties.getAdminFrontendUrl();
         ClientRegistration registration = clientRegistrationRepository.findByRegistrationId(LOGTO_REGISTRATION_ID);
         if (registration == null) {

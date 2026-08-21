@@ -38,7 +38,7 @@ public class DatabaseFixtures {
     }
 
     /** 清空全部业务表。外键约束在清库期间临时关掉，顺序因此不敏感。 */
-    public void 清空() {
+    public void clearAll() {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
@@ -48,7 +48,7 @@ public class DatabaseFixtures {
     }
 
     /** 建一个 trojan 协议的第一跳节点 */
-    public Long 建FRONT节点(String name) {
+    public Long createFrontNode(String name) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.FRONT);
@@ -61,7 +61,7 @@ public class DatabaseFixtures {
     }
 
     /** 建一个 socks5 协议的落地节点，出口 IP 由调用方指定 */
-    public Long 建LAND节点(String name, String egressIp) {
+    public Long createLandNode(String name, String egressIp) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.LAND);
@@ -74,16 +74,16 @@ public class DatabaseFixtures {
     }
 
     /** 直接读原始列，用于断言库里存的确实是密文 */
-    public String 读原始密文列(String table, String column, Long id) {
+    public String readRawCipherColumn(String table, String column, Long id) {
         return jdbc.queryForObject("SELECT " + column + " FROM " + table + " WHERE id = ?", String.class, id);
     }
 
     /** 建一个普通用户（无订阅、无凭据） */
-    public Long 建用户(String subject, Long frontNodeId, Long landNodeId) {
-        return 建用户(subject, UserRole.MEMBER, UserStatus.ACTIVE, frontNodeId, landNodeId);
+    public Long createUser(String subject, Long frontNodeId, Long landNodeId) {
+        return createUser(subject, UserRole.MEMBER, UserStatus.ACTIVE, frontNodeId, landNodeId);
     }
 
-    public Long 建用户(String subject, UserRole role, UserStatus status, Long frontNodeId, Long landNodeId) {
+    public Long createUser(String subject, UserRole role, UserStatus status, Long frontNodeId, Long landNodeId) {
         UserDto user = new UserDto();
         user.setSubject(subject);
         user.setEmail(subject + "@test.example");
@@ -96,7 +96,7 @@ public class DatabaseFixtures {
     }
 
     /** 给用户建一条订阅；credential 传 null 表示未录入凭据 */
-    public Long 建订阅(Long userId, AgentType agentType, String name,
+    public Long createSubscription(Long userId, AgentType agentType, String name,
                     Instant startsAt, Instant endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
         s.setUserId(userId);
@@ -109,15 +109,15 @@ public class DatabaseFixtures {
     }
 
     /** 建一个「已开通可用」的用户：有节点、有一条在期 CLAUDE 订阅 */
-    public Long 建可用用户(String subject, Long frontNodeId, Long landNodeId, String credential) {
-        Long userId = 建用户(subject, frontNodeId, landNodeId);
-        建订阅(userId, AgentType.CLAUDE, "Claude 席位",
+    public Long createActiveUser(String subject, Long frontNodeId, Long landNodeId, String credential) {
+        Long userId = createUser(subject, frontNodeId, landNodeId);
+        createSubscription(userId, AgentType.CLAUDE, "Claude 席位",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), credential);
         return userId;
     }
 
     /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；groupId 可为 null */
-    public Long 建MIHOMO节点(String name, Long groupId) {
+    public Long createMihomoNode(String name, Long groupId) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.FRONT);

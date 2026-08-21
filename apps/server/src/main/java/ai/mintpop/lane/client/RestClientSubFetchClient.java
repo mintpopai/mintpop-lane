@@ -42,20 +42,20 @@ public class RestClientSubFetchClient implements SubFetchClient {
             // 异常原因不能吞，但 e.getMessage() 不能打：Spring 的 ResourceAccessException
             // （超时/DNS 失败/连接拒绝——恰恰是最常见的失败路径）message 形如
             // `I/O error on GET request for "<完整URI>": ...`，内嵌完整原始 URL，
-            // token 若在 path/query 里就会绕开下面的 打码(subUrl) 直接进日志。
+            // token 若在 path/query 里就会绕开下面的 maskUrl(subUrl) 直接进日志。
             // 异常类名已足够区分超时/DNS/4xx/5xx 等大类，故日志只记类名，不记 message。
-            log.warn("订阅拉取失败，url={}，原因={}", 打码(subUrl), e.getClass().getSimpleName());
+            log.warn("订阅拉取失败，url={}，原因={}", maskUrl(subUrl), e.getClass().getSimpleName());
             throw new BizException(BizCodeEnum.SUB_FETCH_FAILED);
         }
         if (body == null || body.isBlank()) {
-            log.warn("订阅拉取返回空响应体，url={}", 打码(subUrl));
+            log.warn("订阅拉取返回空响应体，url={}", maskUrl(subUrl));
             throw new BizException(BizCodeEnum.SUB_FETCH_FAILED);
         }
         return body;
     }
 
     /** 日志用打码链接：只留 scheme 与 host，token 一律不写日志 */
-    private String 打码(String subUrl) {
+    private String maskUrl(String subUrl) {
         try {
             URI uri = URI.create(subUrl);
             return uri.getScheme() + "://" + uri.getHost() + "/…";

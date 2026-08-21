@@ -11,7 +11,7 @@ import {
 } from "./nodeForm";
 import type { AdminNodeResponse } from "../api/types";
 
-function 表单(overrides: Partial<NodeFormModel> = {}): NodeFormModel {
+function makeForm(overrides: Partial<NodeFormModel> = {}): NodeFormModel {
   return {
     ...emptyNodeForm("LAND"),
     name: "LAND-东京-03",
@@ -39,11 +39,11 @@ describe("parseScalar", () => {
 
 describe("validateNodeForm", () => {
   it("合法表单没有错误", () => {
-    expect(validateNodeForm(表单())).toEqual([]);
+    expect(validateNodeForm(makeForm())).toEqual([]);
   });
 
   it("敏感键混进透传键要当场拦下——服务端会回 110001，但那时用户已经不知道错在哪了", () => {
-    const form = 表单({
+    const form = makeForm({
       protocol: "TROJAN",
       extraConfig: [{ key: "password", value: "偷偷写在这里" }],
     });
@@ -52,7 +52,7 @@ describe("validateNodeForm", () => {
   });
 
   it("透传键重复要拦下，否则后一条会静默覆盖前一条", () => {
-    const form = 表单({
+    const form = makeForm({
       extraConfig: [
         { key: "sni", value: "a.com" },
         { key: "sni", value: "b.com" },
@@ -63,7 +63,7 @@ describe("validateNodeForm", () => {
   });
 
   it("必填项缺失逐条点名", () => {
-    const form = 表单({ name: "", serverAddr: "", port: null });
+    const form = makeForm({ name: "", serverAddr: "", port: null });
     const errors = validateNodeForm(form);
 
     expect(errors).toContain("节点名不能为空");
@@ -72,29 +72,29 @@ describe("validateNodeForm", () => {
   });
 
   it("端口越界也拦", () => {
-    expect(validateNodeForm(表单({ port: 70000 }))).toContain("端口必须在 1 到 65535 之间");
+    expect(validateNodeForm(makeForm({ port: 70000 }))).toContain("端口必须在 1 到 65535 之间");
   });
 
   it("编辑时切换了协议、敏感键却留空要拦下——服务端会把留空当成沿用旧协议的密钥", () => {
-    const form = 表单({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "" } });
+    const form = makeForm({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "" } });
 
     expect(validateNodeForm(form)).toContain("切换协议后必须重新填写敏感配置：uuid");
   });
 
   it("切换协议并重填了敏感键就放行", () => {
-    const form = 表单({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "新的uuid" } });
+    const form = makeForm({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "新的uuid" } });
 
     expect(validateNodeForm(form)).toEqual([]);
   });
 
   it("新建时没有原协议，敏感键留空仍然允许——先建节点、随后补密码是正常流程", () => {
-    const form = 表单({ originalProtocol: null, protocol: "VMESS", secret: { uuid: "" } });
+    const form = makeForm({ originalProtocol: null, protocol: "VMESS", secret: { uuid: "" } });
 
     expect(validateNodeForm(form)).toEqual([]);
   });
 
   it("出口 IP 不允许含空白字符", () => {
-    expect(validateNodeForm(表单({ egressIpsText: "1.2.3.4 5.6.7.8" }))).toContain(
+    expect(validateNodeForm(makeForm({ egressIpsText: "1.2.3.4 5.6.7.8" }))).toContain(
       "出口 IP「1.2.3.4 5.6.7.8」格式不对，一行填一个",
     );
   });
@@ -102,14 +102,14 @@ describe("validateNodeForm", () => {
 
 describe("applyProtocol", () => {
   it("切协议时把敏感键整组换成新协议的那一组", () => {
-    const form = applyProtocol(表单({ protocol: "TROJAN" }), "VMESS");
+    const form = applyProtocol(makeForm({ protocol: "TROJAN" }), "VMESS");
 
     expect(Object.keys(form.secret)).toEqual(["uuid"]);
   });
 
   it("已填的透传键保留，空行按新协议的常用键重铺", () => {
     const form = applyProtocol(
-      表单({
+      makeForm({
         protocol: "TROJAN",
         extraConfig: [
           { key: "sni", value: "a.com" },
@@ -124,7 +124,7 @@ describe("applyProtocol", () => {
   });
 
   it("不动 originalProtocol——它记的是库里那条记录的协议，正是判断要不要重填敏感键的依据", () => {
-    const form = applyProtocol(表单({ originalProtocol: "TROJAN", protocol: "TROJAN" }), "VMESS");
+    const form = applyProtocol(makeForm({ originalProtocol: "TROJAN", protocol: "TROJAN" }), "VMESS");
 
     expect(form.originalProtocol).toBe("TROJAN");
   });
@@ -132,19 +132,19 @@ describe("applyProtocol", () => {
 
 describe("buildNodePayload", () => {
   it("敏感键全部留空时提交空对象——服务端据此沿用原密码，不会被清掉", () => {
-    const form = 表单({ protocol: "TROJAN", secret: { password: "" } });
+    const form = makeForm({ protocol: "TROJAN", secret: { password: "" } });
 
     expect(buildNodePayload(form).secret).toEqual({});
   });
 
   it("敏感键填了才提交，且只提交填了的那些", () => {
-    const form = 表单({ protocol: "SOCKS5", secret: { username: "lane", password: "" } });
+    const form = makeForm({ protocol: "SOCKS5", secret: { username: "lane", password: "" } });
 
     expect(buildNodePayload(form).secret).toEqual({ username: "lane" });
   });
 
   it("透传键按标量还原类型后提交，空 key 的行丢弃", () => {
-    const form = 表单({
+    const form = makeForm({
       extraConfig: [
         { key: "sni", value: "tokyo.example.com" },
         { key: "skip-cert-verify", value: "true" },
@@ -159,7 +159,7 @@ describe("buildNodePayload", () => {
   });
 
   it("只填了键没填值的行也丢弃——新建表单默认铺了几行常用键的空行，不能把 sni:\"\" 下发给 mihomo", () => {
-    const form = 表单({
+    const form = makeForm({
       extraConfig: [
         { key: "sni", value: "" },
         { key: "skip-cert-verify", value: "  " },
@@ -170,19 +170,19 @@ describe("buildNodePayload", () => {
   });
 
   it("落地节点的出口 IP 按行拆分并去掉空行与首尾空白", () => {
-    const form = 表单({ egressIpsText: " 1.2.3.4 \n\n5.6.7.8\n" });
+    const form = makeForm({ egressIpsText: " 1.2.3.4 \n\n5.6.7.8\n" });
 
     expect(buildNodePayload(form).egressIps).toEqual(["1.2.3.4", "5.6.7.8"]);
   });
 
   it("第一跳节点不提交出口 IP——出口 IP 是落地节点的属性", () => {
-    const form = 表单({ role: "FRONT", egressIpsText: "1.2.3.4" });
+    const form = makeForm({ role: "FRONT", egressIpsText: "1.2.3.4" });
 
     expect(buildNodePayload(form).egressIps).toEqual([]);
   });
 
   it("备注为空时提交空串而不是 undefined，避免 JSON 里整个键消失", () => {
-    expect(buildNodePayload(表单()).remark).toBe("");
+    expect(buildNodePayload(makeForm()).remark).toBe("");
   });
 });
 
@@ -245,7 +245,7 @@ describe("nodeToForm", () => {
 });
 
 describe("nodeForm 对 MIHOMO 的处理", () => {
-  const MIHOMO节点 = {
+  const mihomoNode = {
     id: 1,
     name: "香港-01",
     role: "FRONT",
@@ -267,11 +267,11 @@ describe("nodeForm 对 MIHOMO 的处理", () => {
 
   it("MIHOMO 没有分键敏感配置，表单敏感键区为空", () => {
     expect(PROTOCOL_SECRET_KEYS.MIHOMO).toEqual([]);
-    expect(nodeToForm(MIHOMO节点).secret).toEqual({});
+    expect(nodeToForm(mihomoNode).secret).toEqual({});
   });
 
   it("MIHOMO 表单提交的 payload 敏感键为空对象（服务端语义：沿用原值）", () => {
-    const form = nodeToForm(MIHOMO节点);
+    const form = nodeToForm(mihomoNode);
     form.name = "香港-01-改名";
     const payload = buildNodePayload(form);
     expect(payload.protocol).toBe("MIHOMO");

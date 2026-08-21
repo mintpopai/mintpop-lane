@@ -20,7 +20,7 @@ import java.util.Map;
 public class SubYamlParser {
 
     /** 名称含这些关键词的多半是机场塞的「信息条目」（剩余流量/到期时间），前端默认不勾选但仍展示 */
-    private static final List<String> 信息条目关键词 =
+    private static final List<String> INFO_ENTRY_KEYWORDS =
             List.of("流量", "重置", "到期", "过期", "剩余", "套餐", "官网");
 
     public List<SubNode> parse(String yamlText) {
@@ -37,7 +37,7 @@ public class SubYamlParser {
         List<SubNode> nodes = new ArrayList<>();
         for (Object item : proxies) {
             if (item instanceof Map<?, ?> raw) {
-                SubNode node = 转节点(raw);
+                SubNode node = toNode(raw);
                 if (node != null) {
                     nodes.add(node);
                 }
@@ -50,7 +50,7 @@ public class SubYamlParser {
     }
 
     /** 缺 name/type/server/port 任一关键字段的条目返回 null（跳过），不让一条坏数据毁掉整次导入 */
-    private SubNode 转节点(Map<?, ?> raw) {
+    private SubNode toNode(Map<?, ?> raw) {
         if (!(raw.get("name") instanceof String name) || name.isBlank()
                 || !(raw.get("type") instanceof String type)
                 || !(raw.get("server") instanceof String server)
@@ -63,7 +63,7 @@ public class SubYamlParser {
                 params.put(key, v);
             }
         });
-        boolean suspectedInfo = 信息条目关键词.stream().anyMatch(name::contains);
+        boolean suspectedInfo = INFO_ENTRY_KEYWORDS.stream().anyMatch(name::contains);
         return new SubNode(name, type, server, port.intValue(), params, suspectedInfo);
     }
 }

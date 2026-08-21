@@ -33,7 +33,7 @@ import java.util.function.Supplier;
 public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
     /** proxy_node.name 列的长度上限，撞名加后缀时的截断依据 */
-    private static final int 节点名上限 = 64;
+    private static final int NODE_NAME_MAX_CODE_POINTS = 64;
 
     private final NodeGroupRepository groupRepository;
     private final ProxyNodeRepository nodeRepository;
@@ -55,7 +55,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
     @Override
     public List<SubPreviewNodeResponse> preview(String subUrl) {
-        return 拉取解析(subUrl).stream()
+        return fetchAndParse(subUrl).stream()
                 .map(node -> toPreview(node, false))
                 .toList();
     }
@@ -68,7 +68,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         // 先拉订阅再建分组：拉取失败时不留下空分组；
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建分组 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
-        List<SubNode> nodes = 拉取解析(request.getSubUrl());
+        List<SubNode> nodes = fetchAndParse(request.getSubUrl());
 
         NodeGroupDto group = new NodeGroupDto();
         group.setName(request.getName());
@@ -76,8 +76,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         group.setRemark(request.getRemark());
 
         return transactionTemplate.execute(status -> {
-            Long groupId = 兜住唯一约束(() -> groupRepository.create(group));
-            导入(groupId, nodes, request.getSelectedNames());
+            Long groupId = wrapUniqueViolation(() -> groupRepository.create(group));
+            importNodes(groupId, nodes, request.getSelectedNames());
             return groupId;
         });
     }
@@ -88,7 +88,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                 .map(group -> new NodeGroupResponse(
                         group.getId(),
                         group.getName(),
-                        打码(group.getSubUrl()),
+                        maskUrl(group.getSubUrl()),
                         nodeRepository.countByGroupId(group.getId()),
                         group.getRemark(),
                         group.getCreatedAt(),
@@ -98,13 +98,13 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
     @Override
     public void rename(Long id, NodeGroupRenameRequest request) {
-        NodeGroupDto group = 取分组(id);
+        NodeGroupDto group = getGroup(id);
         if (!group.getName().equals(request.getName()) && groupRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_GROUP_NAME_DUPLICATED);
         }
         group.setName(request.getName());
         group.setRemark(request.getRemark());
-        兜住唯一约束(() -> {
+        wrapUniqueViolation(() -> {
             groupRepository.update(group);
             return null;
         });
@@ -112,8 +112,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
     @Override
     public List<SubPreviewNodeResponse> refreshPreview(Long id) {
-        NodeGroupDto group = 取分组(id);
-        return 拉取解析(group.getSubUrl()).stream()
+        NodeGroupDto group = getGroup(id);
+        return fetchAndParse(group.getSubUrl()).stream()
                 .map(node -> toPreview(node,
                         nodeRepository.findByGroupIdAndSourceName(id, node.sourceName()).isPresent()))
                 .toList();
@@ -123,15 +123,15 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     public void importNodes(Long id, NodeGroupImportRequest request) {
         // 取分组、拉取解析都是只读操作，同样挪到事务外，避免外呼期间占用数据库连接；
         // 只有真正落库的「导入」交给 transactionTemplate 包事务
-        NodeGroupDto group = 取分组(id);
-        List<SubNode> nodes = 拉取解析(group.getSubUrl());
-        transactionTemplate.executeWithoutResult(status -> 导入(id, nodes, request.getSelectedNames()));
+        NodeGroupDto group = getGroup(id);
+        List<SubNode> nodes = fetchAndParse(group.getSubUrl());
+        transactionTemplate.executeWithoutResult(status -> importNodes(id, nodes, request.getSelectedNames()));
     }
 
     @Override
     @Transactional
     public void delete(Long id) {
-        取分组(id);
+        getGroup(id);
         List<ProxyNodeDto> nodes = nodeRepository.findByGroupId(id);
         // 先整体校验再删：不做「删到一半发现被引用」的部分删除
         for (ProxyNodeDto node : nodes) {
@@ -146,9 +146,9 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
     /**
      * 唯一约束的兜底：上面的预检查（existsByName）给的是可读错误，但两个管理员同时提交仍可能撞车，
-     * 那时靠数据库的唯一索引挡住。与 {@code AdminNodeServiceImpl.兜住唯一约束} 同一模式。
+     * 那时靠数据库的唯一索引挡住。与 {@code AdminNodeServiceImpl.wrapUniqueViolation} 同一模式。
      */
-    private <T> T 兜住唯一约束(Supplier<T> action) {
+    private <T> T wrapUniqueViolation(Supplier<T> action) {
         try {
             return action.get();
         } catch (DuplicateKeyException e) {
@@ -156,12 +156,12 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         }
     }
 
-    private NodeGroupDto 取分组(Long id) {
+    private NodeGroupDto getGroup(Long id) {
         return groupRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.NODE_GROUP_NOT_FOUND));
     }
 
-    private List<SubNode> 拉取解析(String subUrl) {
+    private List<SubNode> fetchAndParse(String subUrl) {
         return subYamlParser.parse(subFetchClient.fetch(subUrl));
     }
 
@@ -174,12 +174,12 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
      * 按勾选把订阅节点写进分组：同组内 sourceName 已存在的原地更新参数
      * （名称/状态/备注是管理员的手工痕迹，不动），不存在的新建入库。
      */
-    private void 导入(Long groupId, List<SubNode> nodes, List<String> selectedNames) {
-        Map<String, SubNode> 按名 = new LinkedHashMap<>();
-        nodes.forEach(node -> 按名.putIfAbsent(node.sourceName(), node));
+    private void importNodes(Long groupId, List<SubNode> nodes, List<String> selectedNames) {
+        Map<String, SubNode> nodesByName = new LinkedHashMap<>();
+        nodes.forEach(node -> nodesByName.putIfAbsent(node.sourceName(), node));
 
         for (String selected : selectedNames) {
-            SubNode sub = 按名.get(selected);
+            SubNode sub = nodesByName.get(selected);
             if (sub == null) {
                 throw new BizException(BizCodeEnum.SELECTED_NODE_MISSING);
             }
@@ -193,7 +193,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                 nodeRepository.update(node);
             } else {
                 ProxyNodeDto node = new ProxyNodeDto();
-                node.setName(唯一节点名(selected));
+                node.setName(uniqueNodeName(selected));
                 node.setRole(NodeRole.FRONT);
                 node.setProtocol(NodeProtocol.MIHOMO);
                 node.setServerAddr(sub.serverAddr());
@@ -209,21 +209,21 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     }
 
     /** 撞全局唯一名时加「 (2)」「 (3)」后缀；按码点截断，不把 emoji 劈成半个代理对 */
-    private String 唯一节点名(String sourceName) {
-        String base = 按码点截断(sourceName, 节点名上限);
+    private String uniqueNodeName(String sourceName) {
+        String base = truncateByCodePoints(sourceName, NODE_NAME_MAX_CODE_POINTS);
         if (!nodeRepository.existsByName(base)) {
             return base;
         }
         for (int i = 2; ; i++) {
             String suffix = " (" + i + ")";
-            String candidate = 按码点截断(base, 节点名上限 - suffix.length()) + suffix;
+            String candidate = truncateByCodePoints(base, NODE_NAME_MAX_CODE_POINTS - suffix.length()) + suffix;
             if (!nodeRepository.existsByName(candidate)) {
                 return candidate;
             }
         }
     }
 
-    private String 按码点截断(String s, int maxCodePoints) {
+    private String truncateByCodePoints(String s, int maxCodePoints) {
         if (s.codePointCount(0, s.length()) <= maxCodePoints) {
             return s;
         }
@@ -231,7 +231,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     }
 
     /** 回显用的打码链接：只留 scheme 与 host，token 一律不回传 */
-    private String 打码(String subUrl) {
+    private String maskUrl(String subUrl) {
         try {
             URI uri = URI.create(subUrl);
             return uri.getScheme() + "://" + uri.getHost() + "/…";

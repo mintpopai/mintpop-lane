@@ -7,7 +7,7 @@ import {
   validateSubscriptionForm,
 } from "./subscriptionForm";
 
-const 样例: AdminSubscriptionResponse = {
+const sample: AdminSubscriptionResponse = {
   id: 3,
   userId: 7,
   agentType: "CLAUDE",
@@ -31,7 +31,7 @@ describe("subscriptionForm", () => {
   });
 
   it("回填把 UTC 串解析成 Date，不含凭据", () => {
-    const form = subscriptionToForm(样例);
+    const form = subscriptionToForm(sample);
     expect(form.startsAt?.toISOString()).toBe("2026-08-01T00:00:00.000Z");
     expect(form.credential).toBe("");
   });
@@ -49,7 +49,7 @@ describe("subscriptionForm", () => {
   });
 
   it("合法表单生成 UTC 串入参——提交往返不漂移", () => {
-    const form = subscriptionToForm(样例);
+    const form = subscriptionToForm(sample);
     form.name = "  Claude 席位 1  ";
     expect(validateSubscriptionForm(form)).toEqual([]);
     const payload = buildSubscriptionPayload(form);
@@ -63,7 +63,7 @@ describe("subscriptionForm", () => {
   });
 
   it("未知 agentType 回填时保留原值以免误改", () => {
-    const form = subscriptionToForm({ ...样例, agentType: "FUTURE_AGENT" });
+    const form = subscriptionToForm({ ...sample, agentType: "FUTURE_AGENT" });
     expect(form.agentType).toBe("FUTURE_AGENT");
   });
 });

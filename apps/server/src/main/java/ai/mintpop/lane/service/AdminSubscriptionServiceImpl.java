@@ -32,7 +32,7 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     @Override
     public Long create(Long userId, SubscriptionSaveRequest request) {
         userRepository.findById(userId).orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
-        校验时段(request);
+        validatePeriod(request);
 
         SubscriptionDto s = new SubscriptionDto();
         s.setUserId(userId);
@@ -40,7 +40,7 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         s.setName(request.getName());
         s.setStartsAt(request.getStartsAt());
         s.setEndsAt(request.getEndsAt());
-        s.setCredential(空白转null(request.getCredential()));
+        s.setCredential(blankToNull(request.getCredential()));
         s.setRemark(request.getRemark());
         return subscriptionRepository.create(s);
     }
@@ -49,14 +49,14 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     public void update(Long id, SubscriptionSaveRequest request) {
         SubscriptionDto s = subscriptionRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
-        校验时段(request);
+        validatePeriod(request);
 
         s.setAgentType(request.getAgentType());
         s.setName(request.getName());
         s.setStartsAt(request.getStartsAt());
         s.setEndsAt(request.getEndsAt());
         // 凭据留空表示沿用原值：页面上看不到原凭据，不能因为没重填就把它清掉
-        String credential = 空白转null(request.getCredential());
+        String credential = blankToNull(request.getCredential());
         if (credential != null) {
             s.setCredential(credential);
         }
@@ -72,13 +72,13 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     }
 
     /** 止期必须晚于起期；相等的「零时长订阅」没有意义，一并拒绝 */
-    private static void 校验时段(SubscriptionSaveRequest request) {
+    private static void validatePeriod(SubscriptionSaveRequest request) {
         if (!request.getEndsAt().isAfter(request.getStartsAt())) {
             throw new BizException(BizCodeEnum.PARAM_INVALID);
         }
     }
 
-    private static String 空白转null(String value) {
+    private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }
 

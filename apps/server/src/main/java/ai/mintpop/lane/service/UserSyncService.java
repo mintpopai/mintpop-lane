@@ -25,14 +25,14 @@ public class UserSyncService {
 
     public UserDto syncOnLogin(String subject, String email, String name) {
         String rawName = name == null || name.isBlank() ? email.split("@")[0] : name;
-        String safeName = 截断(rawName);
+        String safeName = truncate(rawName);
 
         return userRepository.findBySubject(subject)
-                .map(user -> 刷新资料(user, email, safeName))
-                .orElseGet(() -> 建档(subject, email, safeName));
+                .map(user -> refreshProfile(user, email, safeName))
+                .orElseGet(() -> createProfile(subject, email, safeName));
     }
 
-    private UserDto 刷新资料(UserDto user, String email, String name) {
+    private UserDto refreshProfile(UserDto user, String email, String name) {
         if (Objects.equals(user.getEmail(), email) && Objects.equals(user.getName(), name)) {
             return user;
         }
@@ -43,7 +43,7 @@ public class UserSyncService {
         return user;
     }
 
-    private UserDto 建档(String subject, String email, String name) {
+    private UserDto createProfile(String subject, String email, String name) {
         UserDto user = new UserDto();
         user.setSubject(subject);
         user.setEmail(email);
@@ -58,7 +58,7 @@ public class UserSyncService {
         }
     }
 
-    private static String 截断(String name) {
+    private static String truncate(String name) {
         return name.length() > NAME_MAX_LENGTH ? name.substring(0, NAME_MAX_LENGTH) : name;
     }
 }

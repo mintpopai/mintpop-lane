@@ -85,7 +85,7 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
         return objectMapper.writeValueAsString(body);
     }
 
-    private String 样例订阅() {
+    private String sampleSubscription() {
         try (InputStream in = getClass().getResourceAsStream("/sub/sample.yaml")) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -94,15 +94,15 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
     }
 
     @BeforeEach
-    void 准备() {
+    void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
-        fixtures.清空();
-        adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, null, null);
-        when(subFetchClient.fetch(anyString())).thenReturn(样例订阅());
+        fixtures.clearAll();
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        when(subFetchClient.fetch(anyString())).thenReturn(sampleSubscription());
     }
 
     /** 建分组并勾选导入两个真节点，返回分组 id */
-    private Long 建组导入两节点() throws Exception {
+    private Long createGroupImportingTwoNodes() throws Exception {
         var body = Map.of("name", "机场A", "subUrl", SUB_URL,
                 "selectedNames", List.of("香港 IEPL-01", "[境外用户专用]GPT01"));
         var result = mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
@@ -114,7 +114,7 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("preview 返回全部解析条目并标记疑似信息条目，不落库、不回传敏感参数")
-    void 预览订阅() throws Exception {
+    void previewSubscription() throws Exception {
         mockMvc.perform(post("/api/admin/node-groups/preview").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("subUrl", SUB_URL))))
                 .andExpect(status().isOk())
@@ -135,8 +135,8 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("创建分组：按勾选导入为 FRONT+MIHOMO 节点，整份参数加密，链接与来源字段落库")
-    void 创建分组并导入() throws Exception {
-        Long groupId = 建组导入两节点();
+    void createGroupAndImport() throws Exception {
+        Long groupId = createGroupImportingTwoNodes();
 
         // 只导入勾选的 2 个，信息条目没进来
         List<ProxyNodeDto> nodes = nodeRepository.findByGroupId(groupId);
@@ -167,9 +167,9 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("导入撞上已有的全局节点名时自动加后缀")
-    void 撞名自动加后缀() throws Exception {
-        fixtures.建FRONT节点("香港 IEPL-01");
-        Long groupId = 建组导入两节点();
+    void nameCollisionGetsSuffix() throws Exception {
+        fixtures.createFrontNode("香港 IEPL-01");
+        Long groupId = createGroupImportingTwoNodes();
 
         assertThat(nodeRepository.findByGroupId(groupId))
                 .extracting(ProxyNodeDto::getName)
@@ -178,31 +178,31 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("分组重名报 410010；勾选了订阅里不存在的节点名报 410014 且整组不落库")
-    void 创建分组的失败形态() throws Exception {
-        建组导入两节点();
-        var 重名 = Map.of("name", "机场A", "subUrl", SUB_URL, "selectedNames", List.of("香港 IEPL-01"));
+    void createGroupFailureModes() throws Exception {
+        createGroupImportingTwoNodes();
+        var duplicateName = Map.of("name", "机场A", "subUrl", SUB_URL, "selectedNames", List.of("香港 IEPL-01"));
         mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(重名)))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(duplicateName)))
                 .andExpect(jsonPath("$.code").value(410010));
 
-        var 幽灵 = Map.of("name", "机场B", "subUrl", SUB_URL, "selectedNames", List.of("订阅里没有的名字"));
+        var ghostSelection = Map.of("name", "机场B", "subUrl", SUB_URL, "selectedNames", List.of("订阅里没有的名字"));
         mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(幽灵)))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(ghostSelection)))
                 .andExpect(jsonPath("$.code").value(410014));
         assertThat(groupRepository.existsByName("机场B")).isFalse();
     }
 
     @Test
     @DisplayName("refresh-preview 标出已入池节点；import 对已存在的更新参数、新勾选的入库")
-    void 重新拉取与增量导入() throws Exception {
-        Long groupId = 建组导入两节点();
+    void refreshAndIncrementalImport() throws Exception {
+        Long groupId = createGroupImportingTwoNodes();
 
         // 第二次拉取订阅内容有变化：香港节点换了端口，多了个新节点
-        String 更新后 = 样例订阅().replace("port: 35356", "port: 40000")
+        String updatedYaml = sampleSubscription().replace("port: 35356", "port: 40000")
                 + "\n"; // 保持 YAML 合法
-        更新后 = 更新后.replace("proxy-groups:",
+        updatedYaml = updatedYaml.replace("proxy-groups:",
                 "    - { name: '新加坡-01', type: anytls, server: sg01.example.com, port: 35357, password: uuid-秘密-1 }\nproxy-groups:");
-        when(subFetchClient.fetch(anyString())).thenReturn(更新后);
+        when(subFetchClient.fetch(anyString())).thenReturn(updatedYaml);
 
         mockMvc.perform(post("/api/admin/node-groups/" + groupId + "/refresh-preview")
                         .header("Authorization", bearer(adminId)))
@@ -233,8 +233,8 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("改名生效且重名报 410010；分组不存在报 410009")
-    void 改名() throws Exception {
-        Long groupId = 建组导入两节点();
+    void renameGroup() throws Exception {
+        Long groupId = createGroupImportingTwoNodes();
         mockMvc.perform(put("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A-新名"))))
                 .andExpect(jsonPath("$.code").value(0));
@@ -247,8 +247,8 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("改名撞上另一个已存在的分组名时报 410010，且该分组名字不变")
-    void 改名撞已有分组名报错() throws Exception {
-        Long groupA = 建组导入两节点();
+    void renameToExistingGroupNameFails() throws Exception {
+        Long groupA = createGroupImportingTwoNodes();
         var bodyB = Map.of("name", "机场B", "subUrl", SUB_URL, "selectedNames", List.of("香港 IEPL-01"));
         var resultB = mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(bodyB)))
@@ -265,10 +265,10 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("删除分组连带删除组内节点；组内有节点被用户绑定时报 410013 且一个都不删")
-    void 删除分组() throws Exception {
-        Long groupId = 建组导入两节点();
+    void deleteGroup() throws Exception {
+        Long groupId = createGroupImportingTwoNodes();
         Long nodeId = nodeRepository.findByGroupId(groupId).get(0).getId();
-        fixtures.建用户("logto-user-1", nodeId, null);
+        fixtures.createUser("logto-user-1", nodeId, null);
 
         mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410013));

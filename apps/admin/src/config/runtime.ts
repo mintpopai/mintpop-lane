@@ -12,7 +12,7 @@ export interface RuntimeConfig {
   apiBaseUrl: string;
 }
 
-const 必填项: Array<keyof RuntimeConfig> = ["apiBaseUrl"];
+const requiredKeys: Array<keyof RuntimeConfig> = ["apiBaseUrl"];
 
 let cached: RuntimeConfig | null = null;
 
@@ -26,7 +26,7 @@ export async function loadRuntimeConfig(
   }
 
   const raw = (await response.json()) as Partial<RuntimeConfig> | null;
-  for (const key of 必填项) {
+  for (const key of requiredKeys) {
     if (!raw?.[key]) {
       throw new Error(`/config.json 缺少必填项 ${key}`);
     }

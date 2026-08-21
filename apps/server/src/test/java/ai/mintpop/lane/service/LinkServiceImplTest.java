@@ -37,7 +37,7 @@ class LinkServiceImplTest {
 
     private static final Long USER_ID = 1L;
     /** 未使用的 id，代表库里查不到的用户 */
-    private static final Long 不存在的用户ID = 999999L;
+    private static final Long MISSING_USER_ID = 999999L;
     /** 全类统一的「现在」，service 用固定时钟构造，判定完全确定 */
     private static final Instant NOW = Instant.parse("2026-08-19T12:00:00Z");
 
@@ -87,18 +87,18 @@ class LinkServiceImplTest {
         return s;
     }
 
-    private static SubscriptionDto 在期订阅(Long id, String credential) {
+    private static SubscriptionDto activeSubscription(Long id, String credential) {
         return subscription(id, AgentType.CLAUDE, "Claude 席位",
                 NOW.minus(1, ChronoUnit.DAYS), NOW.plus(30, ChronoUnit.DAYS), credential);
     }
 
-    private static SubscriptionDto 过期订阅(Long id, String credential) {
+    private static SubscriptionDto expiredSubscription(Long id, String credential) {
         return subscription(id, AgentType.CLAUDE, "Claude 席位",
                 NOW.minus(30, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS), credential);
     }
 
     @BeforeEach
-    void 准备() {
+    void setUp() {
         userRepository = mock(UserRepository.class);
         nodeRepository = mock(ProxyNodeRepository.class);
         subscriptionRepository = mock(SubscriptionRepository.class);
@@ -116,19 +116,19 @@ class LinkServiceImplTest {
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of());
     }
 
-    private void 库里有(UserDto user) {
+    private void givenUser(UserDto user) {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
     }
 
-    private void 订阅有(SubscriptionDto... subscriptions) {
+    private void givenSubscriptions(SubscriptionDto... subscriptions) {
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(subscriptions));
     }
 
     @Test
     @DisplayName("正常用户能拿到两跳链路与在期订阅的凭据")
-    void 正常用户能拿到两跳链路() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-test"));
+    void activeUserGetsTwoHopLink() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
 
         var resp = service.resolveLink(USER_ID);
 
@@ -143,8 +143,8 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("未录入的账号被拒绝，按吊销处理")
-    void 未录入的账号被拒绝() {
-        assertThatThrownBy(() -> service.resolveLink(不存在的用户ID))
+    void unknownAccountRejected() {
+        assertThatThrownBy(() -> service.resolveLink(MISSING_USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -152,8 +152,8 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("已吊销的用户拿不到链路")
-    void 已吊销的用户拿不到链路() {
-        库里有(user(UserStatus.REVOKED));
+    void revokedUserRejected() {
+        givenUser(user(UserStatus.REVOKED));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -163,8 +163,8 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("已暂停的用户同样拿不到链路，判断条件是「非 ACTIVE」而不是只挡 REVOKED")
-    void 已暂停的用户拿不到链路() {
-        库里有(user(UserStatus.SUSPENDED));
+    void suspendedUserRejected() {
+        givenUser(user(UserStatus.SUSPENDED));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -174,8 +174,8 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("从未购买过服务的用户被拒绝")
-    void 从未购买过服务的用户被拒绝() {
-        库里有(user(UserStatus.ACTIVE));
+    void neverPurchasedUserRejected() {
+        givenUser(user(UserStatus.ACTIVE));
         // 订阅列表默认空，无需额外造数
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
@@ -186,9 +186,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("买过但订阅全部过期的用户被拒绝，文案区别于「从未购买」")
-    void 订阅全部过期的用户被拒绝() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(过期订阅(100L, "sk-ant-test"));
+    void allSubscriptionsExpiredRejected() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(expiredSubscription(100L, "sk-ant-test"));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -198,12 +198,12 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("有在期订阅但未分配链路资源时被拒绝")
-    void 有在期订阅但未分配链路资源时被拒绝() {
+    void activeSubscriptionButNoNodesRejected() {
         UserDto u = user(UserStatus.ACTIVE);
         u.setFrontNodeId(null);
         u.setLandNodeId(null);
-        库里有(u);
-        订阅有(在期订阅(100L, "sk-ant-test"));
+        givenUser(u);
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -213,11 +213,11 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("只分配了第一跳、没分配落地节点时同样被拒绝")
-    void 只分配第一跳未分配落地时被拒绝() {
+    void frontOnlyWithoutLandRejected() {
         UserDto u = user(UserStatus.ACTIVE);
         u.setLandNodeId(null);
-        库里有(u);
-        订阅有(在期订阅(100L, "sk-ant-test"));
+        givenUser(u);
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -227,9 +227,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("第一跳节点查不到（外键被绕过约束改坏）时按内部错误拒绝，不下发残缺链路")
-    void 第一跳节点查不到时按内部错误拒绝() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-test"));
+    void missingFrontNodeRejectedAsInternalError() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
         when(nodeRepository.findById(10L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
@@ -240,9 +240,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("落地节点被禁用时不下发链路")
-    void 落地节点被禁用时不下发链路() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-test"));
+    void disabledLandNodeRejected() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
         ProxyNodeDto disabled = node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10");
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(disabled));
@@ -255,9 +255,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("第一跳节点被禁用时同样不下发链路，避免只守住半条 fail-closed 保障")
-    void 第一跳节点被禁用时不下发链路() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-test"));
+    void disabledFrontNodeRejected() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
         ProxyNodeDto disabled = node(10L, NodeRole.FRONT, NodeProtocol.TROJAN, "us.example.com");
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(10L)).thenReturn(Optional.of(disabled));
@@ -270,9 +270,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("落地节点没有出口 IP 时被拒绝")
-    void 落地节点没有出口ip时被拒绝() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-test"));
+    void landNodeWithoutEgressIpRejected() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
         ProxyNodeDto noIp = node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10");
         noIp.setEgressIps(List.of());
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(noIp));
@@ -285,9 +285,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("在期订阅全部无凭据时被拒绝")
-    void 在期订阅全部无凭据时被拒绝() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, null));
+    void activeSubscriptionsWithoutCredentialRejected() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, null));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -297,9 +297,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("在期订阅全部无凭据时被拒绝——空白字符串同样算未录入")
-    void 在期订阅凭据为空白时被拒绝() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "   "));
+    void blankCredentialRejected() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "   "));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
@@ -309,9 +309,9 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("两条在期订阅中一条无凭据，只下发有凭据的那一条")
-    void 两条在期一条无凭据时只下发一条() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-有凭据"), 在期订阅(101L, null));
+    void onlyCredentialedSubscriptionDelivered() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-有凭据"), activeSubscription(101L, null));
 
         var resp = service.resolveLink(USER_ID);
 
@@ -322,41 +322,41 @@ class LinkServiceImplTest {
 
     @Test
     @DisplayName("心跳：正常用户返回 ACTIVE")
-    void 心跳正常用户返回ACTIVE() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(在期订阅(100L, "sk-ant-test"));
+    void heartbeatActiveUserReturnsActive() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
 
         assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.ACTIVE);
     }
 
     @Test
     @DisplayName("心跳：已暂停用户返回 SUSPENDED")
-    void 心跳已暂停用户返回SUSPENDED() {
-        库里有(user(UserStatus.SUSPENDED));
+    void heartbeatSuspendedUserReturnsSuspended() {
+        givenUser(user(UserStatus.SUSPENDED));
 
         assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.SUSPENDED);
     }
 
     @Test
     @DisplayName("心跳：已吊销用户返回 REVOKED")
-    void 心跳已吊销用户返回REVOKED() {
-        库里有(user(UserStatus.REVOKED));
+    void heartbeatRevokedUserReturnsRevoked() {
+        givenUser(user(UserStatus.REVOKED));
 
         assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.REVOKED);
     }
 
     @Test
     @DisplayName("心跳：处置态正常但在期订阅归零时返回 EXPIRED，保留登录态")
-    void 心跳订阅全过期返回EXPIRED() {
-        库里有(user(UserStatus.ACTIVE));
-        订阅有(过期订阅(100L, "sk-ant-test"));
+    void heartbeatAllExpiredReturnsExpired() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenSubscriptions(expiredSubscription(100L, "sk-ant-test"));
 
         assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.EXPIRED);
     }
 
     @Test
     @DisplayName("心跳：未录入账号按吊销处理，客户端据此断链")
-    void 心跳未录入账号按吊销处理() {
-        assertThat(service.heartbeat(不存在的用户ID).status()).isEqualTo(LinkStatus.REVOKED);
+    void heartbeatUnknownAccountTreatedAsRevoked() {
+        assertThat(service.heartbeat(MISSING_USER_ID).status()).isEqualTo(LinkStatus.REVOKED);
     }
 }

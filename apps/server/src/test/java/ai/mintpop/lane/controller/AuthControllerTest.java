@@ -78,15 +78,15 @@ class AuthControllerTest extends MysqlTestBase {
     }
 
     @BeforeEach
-    void 准备数据() {
+    void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
-        fixtures.清空();
-        userId = fixtures.建用户("logto-u1", null, null);
+        fixtures.clearAll();
+        userId = fixtures.createUser("logto-u1", null, null);
     }
 
     @Test
     @DisplayName("正确 verifier 兑换出可用的会话 token")
-    void 兑换成功且token可用() throws Exception {
+    void exchangeSucceedsAndTokenUsable() throws Exception {
         String verifier = "desktop-verifier-0123456789-0123456789-012345";
         String ticket = ticketStore.create(s256(verifier), userId);
 
@@ -109,7 +109,7 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("错误 verifier 兑换得 TICKET_INVALID")
-    void 错误verifier得业务错误() throws Exception {
+    void wrongVerifierGetsBizError() throws Exception {
         String ticket = ticketStore.create(s256("real-verifier-0123456789-0123456789-0123"), userId);
         mockMvc.perform(post("/api/auth/desktop/exchange")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -121,7 +121,7 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("同一张票第二次兑换失败")
-    void 同票二兑失败() throws Exception {
+    void secondExchangeWithSameTicketFails() throws Exception {
         String verifier = "desktop-verifier-0123456789-0123456789-012345";
         String ticket = ticketStore.create(s256(verifier), userId);
         String payload = "{\"ticket\":\"%s\",\"verifier\":\"%s\"}".formatted(ticket, verifier);
@@ -136,10 +136,10 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("/api/me 返回订阅概览且带在期标记")
-    void me返回订阅概览() throws Exception {
-        fixtures.建订阅(userId, AgentType.CLAUDE, "Claude 席位 1",
+    void meReturnsSubscriptionOverview() throws Exception {
+        fixtures.createSubscription(userId, AgentType.CLAUDE, "Claude 席位 1",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
-        fixtures.建订阅(userId, AgentType.CODEX, "Codex 过期席位",
+        fixtures.createSubscription(userId, AgentType.CODEX, "Codex 过期席位",
                 Instant.now().minus(30, ChronoUnit.DAYS), Instant.now().minus(1, ChronoUnit.DAYS), null);
 
         mockMvc.perform(get("/api/me").header("Authorization",
@@ -157,7 +157,7 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("桌面登录入口校验参数并 302 进 OIDC 握手")
-    void 桌面登录入口跳转握手() throws Exception {
+    void desktopLoginEntryRedirectsToOidcHandshake() throws Exception {
         mockMvc.perform(get("/auth/desktop/start")
                         .param("code_challenge", "A".repeat(43))
                         .param("state", "desktop-state-01"))
@@ -176,7 +176,7 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("桌面流授权请求带 prompt=login 强制重新认证，网页流不带保留 SSO")
-    void 桌面流强制重新认证网页流保留SSO() throws Exception {
+    void desktopFlowForcesReauthWhileWebFlowKeepsSso() throws Exception {
         // 桌面端登出只清本地钥匙串，浏览器里 Logto 的 IdP 会话仍在；若不强制重新认证，
         // 重新登录会被 Logto 静默放行，用户根本见不到用户名密码页，「退出」就成了错觉
         jakarta.servlet.http.Cookie flowCookie = mockMvc.perform(get("/auth/desktop/start")
@@ -199,7 +199,7 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("登出（无 end_session_endpoint 时回退）：302 回管理端，会话 Cookie 被置空过期")
-    void 登出清会话Cookie并回管理端() throws Exception {
+    void logoutClearsSessionCookieAndRedirectsToAdmin() throws Exception {
         // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径。
         // 断言对照注入的配置值而非写死：本地存在 config/application.yml 时外部配置会盖过测试配置
         mockMvc.perform(get("/auth/logout"))
@@ -211,10 +211,10 @@ class AuthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("登出（发现文档带 end_session_endpoint）：跳 Logto 结束会话并带 client_id 与回跳地址")
-    void 登出跳Logto结束会话() throws Exception {
+    void logoutRedirectsToLogtoEndSession() throws Exception {
         // 发现模式下 Spring 会把 end_session_endpoint 放进 configurationMetadata，
         // 这里手工构造一个这样的 registration，模拟生产环境（issuer-uri 发现）的形态
-        ClientRegistration 带发现文档 = ClientRegistration.withRegistrationId("logto")
+        ClientRegistration withDiscoveryMetadata = ClientRegistration.withRegistrationId("logto")
                 .clientId("test-client-id")
                 .clientSecret("test-client-secret")
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
@@ -228,7 +228,7 @@ class AuthControllerTest extends MysqlTestBase {
                         Map.of("end_session_endpoint", "https://tenant.logto.app/oidc/session/end"))
                 .build();
         AuthController controller = new AuthController(ticketStore, sessionTokenService, authProperties,
-                userRepository, subscriptionRepository, registrationId -> 带发现文档, Clock.systemUTC());
+                userRepository, subscriptionRepository, registrationId -> withDiscoveryMetadata, Clock.systemUTC());
 
         MockHttpServletResponse response = new MockHttpServletResponse();
         controller.logout(new MockHttpServletRequest(), response);

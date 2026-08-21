@@ -17,7 +17,7 @@ class SchemaMigrationTest extends MysqlTestBase {
     private JdbcTemplate jdbc;
 
     @BeforeEach
-    void 清空数据() {
+    void setUp() {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
@@ -26,7 +26,7 @@ class SchemaMigrationTest extends MysqlTestBase {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
-    private long 建节点(String name, String role) {
+    private long createNode(String name, String role) {
         jdbc.update("""
                 INSERT INTO proxy_node (name, role, protocol, server_addr, port)
                 VALUES (?, ?, 'SOCKS5', '203.0.113.10', 50101)
@@ -34,7 +34,7 @@ class SchemaMigrationTest extends MysqlTestBase {
         return jdbc.queryForObject("SELECT id FROM proxy_node WHERE name = ?", Long.class, name);
     }
 
-    private void 建用户(String subject, long frontNodeId, Long landNodeId) {
+    private void createUser(String subject, long frontNodeId, Long landNodeId) {
         jdbc.update("""
                 INSERT INTO app_user (subject, email, name, front_node_id, land_node_id)
                 VALUES (?, ?, ?, ?, ?)
@@ -43,7 +43,7 @@ class SchemaMigrationTest extends MysqlTestBase {
 
     @Test
     @DisplayName("Flyway 迁移建出三张表，且列注释落到了数据库元数据上")
-    void 迁移建出三张表并带中文注释() {
+    void migrationCreatesThreeTablesWithComments() {
         Integer tables = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_name IN ('proxy_node', 'app_user', 'subscription')
@@ -59,7 +59,7 @@ class SchemaMigrationTest extends MysqlTestBase {
 
     @Test
     @DisplayName("subscription 表的列注释落到了数据库元数据上")
-    void 订阅表带中文注释() {
+    void subscriptionTableHasComments() {
         String comment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
                 WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'ends_at'
@@ -69,30 +69,30 @@ class SchemaMigrationTest extends MysqlTestBase {
 
     @Test
     @DisplayName("多个用户可以同时处于「未分配落地」状态")
-    void 多个未分配落地的用户可以共存() {
-        long front = 建节点("FRONT-1", "FRONT");
+    void multipleUsersWithoutLandCanCoexist() {
+        long front = createNode("FRONT-1", "FRONT");
 
-        建用户("u1", front, null);
-        建用户("u2", front, null);
+        createUser("u1", front, null);
+        createUser("u2", front, null);
 
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM app_user", Integer.class)).isEqualTo(2);
     }
 
     @Test
     @DisplayName("同一个落地节点绑给第二个人时被数据库拒绝")
-    void 同一落地节点不能绑两个人() {
-        long front = 建节点("FRONT-1", "FRONT");
-        long land = 建节点("LAND-1", "LAND");
+    void sameLandNodeCannotBindTwoUsers() {
+        long front = createNode("FRONT-1", "FRONT");
+        long land = createNode("LAND-1", "LAND");
 
-        建用户("u1", front, land);
+        createUser("u1", front, land);
 
-        assertThatThrownBy(() -> 建用户("u2", front, land))
+        assertThatThrownBy(() -> createUser("u2", front, land))
                 .isInstanceOf(DuplicateKeyException.class);
     }
 
     @Test
     @DisplayName("V2 迁移建出 node_group 表并带中文注释，proxy_node 挂上分组外键列")
-    void V2迁移建出分组表() {
+    void v2MigrationCreatesNodeGroupTable() {
         String comment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
                 WHERE table_schema = DATABASE() AND table_name = 'node_group' AND column_name = 'sub_url_cipher'

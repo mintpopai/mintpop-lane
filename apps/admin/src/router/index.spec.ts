@@ -4,13 +4,13 @@ import { createMemoryHistory } from "vue-router";
 import type { AuthApi } from "../api/auth";
 import { UnauthorizedError } from "../api/http";
 import type { MeResponse } from "../api/types";
-import { 标记登录跳转 } from "../utils/loginLoop";
+import { markLoginRedirect } from "../utils/loginLoop";
 import { createAppRouter } from "./index";
 
-const 管理员: MeResponse = { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] };
-const 普通成员: MeResponse = { id: 2, email: "m@b.c", name: "乙", role: "MEMBER", subscriptions: [] };
+const adminUser: MeResponse = { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] };
+const memberUser: MeResponse = { id: 2, email: "m@b.c", name: "乙", role: "MEMBER", subscriptions: [] };
 
-function 假api(result: MeResponse | Error): AuthApi {
+function fakeApi(result: MeResponse | Error): AuthApi {
   return {
     me: async () => {
       if (result instanceof Error) throw result;
@@ -19,21 +19,21 @@ function 假api(result: MeResponse | Error): AuthApi {
   };
 }
 
-function 建路由(result: MeResponse | Error) {
-  return createAppRouter(假api(result), createMemoryHistory());
+function createRouter(result: MeResponse | Error) {
+  return createAppRouter(fakeApi(result), createMemoryHistory());
 }
 
-let 原始location: Location;
-let assign跳转: ReturnType<typeof vi.fn>;
+let originalLocation: Location;
+let assignMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   setActivePinia(createPinia());
   sessionStorage.clear();
   // jsdom 的 location.assign 是 not implemented，会抛错；换成可断言的桩
-  原始location = window.location;
-  assign跳转 = vi.fn();
+  originalLocation = window.location;
+  assignMock = vi.fn();
   Object.defineProperty(window, "location", {
-    value: { ...原始location, assign: assign跳转 },
+    value: { ...originalLocation, assign: assignMock },
     writable: true,
     configurable: true,
   });
@@ -41,7 +41,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Object.defineProperty(window, "location", {
-    value: 原始location,
+    value: originalLocation,
     writable: true,
     configurable: true,
   });
@@ -49,7 +49,7 @@ afterEach(() => {
 
 describe("路由守卫", () => {
   it("管理员放行进目标页", async () => {
-    const router = 建路由(管理员);
+    const router = createRouter(adminUser);
 
     await router.push("/users");
 
@@ -57,7 +57,7 @@ describe("路由守卫", () => {
   });
 
   it("已登录但不是管理员落到无权限页", async () => {
-    const router = 建路由(普通成员);
+    const router = createRouter(memberUser);
 
     await router.push("/users");
 
@@ -65,37 +65,37 @@ describe("路由守卫", () => {
   });
 
   it("未登录（401）时落到登录落地页，不自动跳 Logto", async () => {
-    const router = 建路由(new UnauthorizedError());
+    const router = createRouter(new UnauthorizedError());
 
     await router.push("/users");
 
     expect(router.currentRoute.value.name).toBe("LOGIN");
-    expect(assign跳转).not.toHaveBeenCalled();
+    expect(assignMock).not.toHaveBeenCalled();
     // 只有用户点「登录」才打环路标记，落地页本身不算一次登录尝试
     expect(sessionStorage.getItem("lane.loginRedirectAt")).toBeNull();
   });
 
   it("刚跳过登录又回到未登录：熔断到登录失败页，不落地页循环", async () => {
-    标记登录跳转(Date.now());
-    const router = 建路由(new UnauthorizedError());
+    markLoginRedirect(Date.now());
+    const router = createRouter(new UnauthorizedError());
 
     await router.push("/users");
 
     expect(router.currentRoute.value.name).toBe("LOGIN_ERROR");
-    expect(assign跳转).not.toHaveBeenCalled();
+    expect(assignMock).not.toHaveBeenCalled();
   });
 
   it("探测抛普通异常时放行，不把人赶去登录页或无权限页", async () => {
-    const router = 建路由(new Error("网络错误"));
+    const router = createRouter(new Error("网络错误"));
 
     await router.push("/users");
 
     expect(router.currentRoute.value.name).toBe("USERS");
-    expect(assign跳转).not.toHaveBeenCalled();
+    expect(assignMock).not.toHaveBeenCalled();
   });
 
   it("服务端带 ?login_error=1 回来时直接落登录失败页", async () => {
-    const router = 建路由(管理员);
+    const router = createRouter(adminUser);
 
     await router.push("/users?login_error=1");
 
@@ -103,8 +103,8 @@ describe("路由守卫", () => {
   });
 
   it("登录成功会清掉环路标记，避免下次登录被误判", async () => {
-    标记登录跳转(Date.now());
-    const router = 建路由(管理员);
+    markLoginRedirect(Date.now());
+    const router = createRouter(adminUser);
 
     await router.push("/users");
 

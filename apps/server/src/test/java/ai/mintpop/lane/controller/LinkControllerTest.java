@@ -52,26 +52,26 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @BeforeEach
-    void 准备数据() {
+    void setUp() {
         DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
-        fixtures.清空();
-        Long front = fixtures.建FRONT节点("FRONT-1");
-        Long land1 = fixtures.建LAND节点("LAND-1", "77.47.143.6");
-        Long land2 = fixtures.建LAND节点("LAND-2", "8.8.8.8");
-        user1Id = fixtures.建可用用户("logto-user-1", front, land1, "sk-ant-test-1");
-        user2Id = fixtures.建用户("logto-user-2", MEMBER, REVOKED, front, land2);
+        fixtures.clearAll();
+        Long front = fixtures.createFrontNode("FRONT-1");
+        Long land1 = fixtures.createLandNode("LAND-1", "77.47.143.6");
+        Long land2 = fixtures.createLandNode("LAND-2", "8.8.8.8");
+        user1Id = fixtures.createActiveUser("logto-user-1", front, land1, "sk-ant-test-1");
+        user2Id = fixtures.createUser("logto-user-2", MEMBER, REVOKED, front, land2);
     }
 
     @Test
     @DisplayName("无令牌访问接口被拒")
-    void 无令牌访问接口被拒() throws Exception {
+    void requestWithoutTokenRejected() throws Exception {
         mockMvc.perform(get("/api/link/config"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("正常用户拿到链路配置，业务码为 0")
-    void 正常用户拿到链路配置() throws Exception {
+    void activeUserGetsLinkConfig() throws Exception {
         mockMvc.perform(get("/api/link/config")
                         .header("Authorization", bearer(user1Id)))
                 .andExpect(status().isOk())
@@ -85,7 +85,7 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("已吊销用户拿不到链路，HTTP 仍为 200 但业务码非 0")
-    void 已吊销用户拿不到链路() throws Exception {
+    void revokedUserCannotGetLink() throws Exception {
         mockMvc.perform(get("/api/link/config")
                         .header("Authorization", bearer(user2Id)))
                 .andExpect(status().isOk())
@@ -95,7 +95,7 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("心跳返回链路状态")
-    void 心跳返回链路状态() throws Exception {
+    void heartbeatReturnsLinkStatus() throws Exception {
         mockMvc.perform(post("/api/link/heartbeat")
                         .header("Authorization", bearer(user1Id)))
                 .andExpect(status().isOk())
@@ -105,7 +105,7 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("已吊销用户的心跳返回 REVOKED")
-    void 已吊销用户的心跳返回吊销() throws Exception {
+    void revokedUserHeartbeatReturnsRevoked() throws Exception {
         mockMvc.perform(post("/api/link/heartbeat")
                         .header("Authorization", bearer(user2Id)))
                 .andExpect(status().isOk())

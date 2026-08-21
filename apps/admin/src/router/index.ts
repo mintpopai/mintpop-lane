@@ -3,8 +3,8 @@ import { authApi } from "../api";
 import { showToast } from "../toast";
 import type { AuthApi } from "../api/auth";
 import { useAuthStore } from "../stores/auth";
-import { 登录页路径 } from "../auth/constants";
-import { 清除标记, 疑似环路 } from "../utils/loginLoop";
+import { loginPagePath } from "../auth/constants";
+import { clearLoginMark, isLikelyLoginLoop } from "../utils/loginLoop";
 import AppLayout from "../layouts/AppLayout.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
 import LoginErrorView from "../views/LoginErrorView.vue";
@@ -24,7 +24,7 @@ export function createAppRouter(
     history,
     routes: [
       // 登录落地页：未登录的落点，必须 public，否则会被守卫送回自己
-      { path: 登录页路径, name: "LOGIN", component: LoginView, meta: { public: true } },
+      { path: loginPagePath, name: "LOGIN", component: LoginView, meta: { public: true } },
       // 无权限页必须在 isAdmin=false 时还能打开，否则会来回跳
       { path: "/forbidden", name: "FORBIDDEN", component: ForbiddenView, meta: { public: true } },
       // 登录环路的落点：同样必须 public，否则它自己也会被守卫赶去登录
@@ -58,13 +58,13 @@ export function createAppRouter(
       // 每次导航都实探 /api/me 是有意为之——吊销/停用在下一次导航即生效，勿加缓存
       if (!(await auth.refreshAuthState(api))) {
         // 刚点过登录又立刻回到未登录：会话没生效，落错误页说明原因，别再送落地页绕圈
-        if (疑似环路()) {
+        if (isLikelyLoginLoop()) {
           return { name: "LOGIN_ERROR" };
         }
         // 未登录：落到登录落地页，由用户主动点「登录」再去 Logto，不做静默跳转
         return { name: "LOGIN" };
       }
-      清除标记();
+      clearLoginMark();
     } catch (error) {
       // 网络抖动、服务端 5xx 不该把人赶去登录页或无权限页，
       // 放行进页面由页面自己的加载错误提示，下次导航重试

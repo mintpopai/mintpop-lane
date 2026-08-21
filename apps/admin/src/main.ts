@@ -16,7 +16,7 @@ import { loadRuntimeConfig } from "./config/runtime";
 import { createAppRouter } from "./router";
 
 /** 配置读不到就没法确定接口前缀，直接给一句能照着排查的话，别让页面白屏 */
-function 显示启动失败(message: string): void {
+function showBootFailure(message: string): void {
   const box = document.createElement("main");
   box.style.padding = "24px";
   box.style.color = "#b3341f";
@@ -28,7 +28,7 @@ async function bootstrap(): Promise<void> {
   try {
     await loadRuntimeConfig();
   } catch (error) {
-    显示启动失败((error as Error).message);
+    showBootFailure((error as Error).message);
     return;
   }
 

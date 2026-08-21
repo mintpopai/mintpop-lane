@@ -22,14 +22,14 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const form = ref<UserFormModel>(userToForm(props.user));
 const submitting = ref(false);
 
-const 状态选项 = Object.entries(USER_STATUS_LABELS).map(([value, label]) => ({ value, label }));
-const 前置选项 = computed(() => [
+const statusOptions = Object.entries(USER_STATUS_LABELS).map(([value, label]) => ({ value, label }));
+const frontOptions = computed(() => [
   { value: null, label: "不分配" },
   ...selectableFrontNodes(props.nodes).map((node) => ({ value: node.id, label: node.name })),
 ]);
 // 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
 // 原节点就会从下拉里消失、再也切不回去，只能关掉弹窗丢弃全部改动重来
-const 落地选项 = computed(() => [
+const landOptions = computed(() => [
   { value: null, label: "暂不分配" },
   ...selectableLandNodes(props.nodes, props.user.landNodeId).map((node) => ({
     value: node.id,
@@ -37,7 +37,7 @@ const 落地选项 = computed(() => [
   })),
 ]);
 
-async function 提交(): Promise<void> {
+async function submit(): Promise<void> {
   submitting.value = true;
   try {
     const payload = buildUserPayload(form.value);
@@ -68,21 +68,21 @@ async function 提交(): Promise<void> {
     <div class="admin-form form-block">
       <div class="admin-field">
         <label :for="`user-status-${user.id}`">状态</label>
-        <Select :id="`user-status-${user.id}`" v-model="form.status" :options="状态选项" aria-label="状态" />
+        <Select :id="`user-status-${user.id}`" v-model="form.status" :options="statusOptions" aria-label="状态" />
       </div>
       <div class="admin-field">
         <label :for="`user-front-${user.id}`">第一跳节点</label>
-        <Select :id="`user-front-${user.id}`" v-model="form.frontNodeId" :options="前置选项" aria-label="第一跳节点" />
+        <Select :id="`user-front-${user.id}`" v-model="form.frontNodeId" :options="frontOptions" aria-label="第一跳节点" />
       </div>
       <div class="admin-field">
         <label :for="`user-land-${user.id}`">落地节点</label>
-        <Select :id="`user-land-${user.id}`" v-model="form.landNodeId" :options="落地选项" aria-label="落地节点" />
+        <Select :id="`user-land-${user.id}`" v-model="form.landNodeId" :options="landOptions" aria-label="落地节点" />
       </div>
     </div>
 
     <template #footer>
       <button type="button" class="admin-btn-ghost" @click="emit('close')">取消</button>
-      <button type="button" class="admin-btn" :disabled="submitting" @click="提交()">
+      <button type="button" class="admin-btn" :disabled="submitting" @click="submit()">
         {{ submitting ? "保存中…" : "保存" }}
       </button>
     </template>

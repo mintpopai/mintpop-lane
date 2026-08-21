@@ -4,18 +4,18 @@ import type { KeyValueRow } from "../utils/nodeForm";
 const props = defineProps<{ modelValue: KeyValueRow[] }>();
 const emit = defineEmits<{ "update:modelValue": [KeyValueRow[]] }>();
 
-function 更新(index: number, patch: Partial<KeyValueRow>): void {
+function update(index: number, patch: Partial<KeyValueRow>): void {
   emit(
     "update:modelValue",
     props.modelValue.map((row, i) => (i === index ? { ...row, ...patch } : row)),
   );
 }
 
-function 新增(): void {
+function add(): void {
   emit("update:modelValue", [...props.modelValue, { key: "", value: "" }]);
 }
 
-function 删除(index: number): void {
+function remove(index: number): void {
   emit(
     "update:modelValue",
     props.modelValue.filter((_, i) => i !== index),
@@ -31,24 +31,24 @@ function 删除(index: number): void {
         class="admin-input fact kv-input"
         :value="row.key"
         placeholder="键，如 sni"
-        @input="更新(index, { key: ($event.target as HTMLInputElement).value })"
+        @input="update(index, { key: ($event.target as HTMLInputElement).value })"
       />
       <input
         class="admin-input kv-input"
         :value="row.value"
         placeholder="值，true / false / 数字会按原类型下发"
-        @input="更新(index, { value: ($event.target as HTMLInputElement).value })"
+        @input="update(index, { value: ($event.target as HTMLInputElement).value })"
       />
       <button
         type="button"
         class="admin-btn-ghost"
         :data-test="`remove-row-${index}`"
-        @click="删除(index)"
+        @click="remove(index)"
       >
         删除
       </button>
     </div>
-    <button type="button" class="admin-btn-ghost" data-test="add-row" @click="新增()">新增一行</button>
+    <button type="button" class="admin-btn-ghost" data-test="add-row" @click="add()">新增一行</button>
   </div>
 </template>
 

@@ -3,14 +3,14 @@ import { createAdminApi } from "./admin";
 import type { HttpClient } from "./http";
 import type { NodeSaveRequest } from "./types";
 
-function 假客户端() {
+function fakeClient() {
   const request = vi.fn(async () => null as never);
   return { http: { request } as unknown as HttpClient, request };
 }
 
 describe("createAdminApi", () => {
   it("分页查询把关键字与页码拼成查询串", async () => {
-    const { http, request } = 假客户端();
+    const { http, request } = fakeClient();
 
     await createAdminApi(http).pageUsers({
       keyword: "张",
@@ -23,7 +23,7 @@ describe("createAdminApi", () => {
   });
 
   it("关键字为空时不发 keyword 参数，避免服务端按空串去 like", async () => {
-    const { http, request } = 假客户端();
+    const { http, request } = fakeClient();
 
     await createAdminApi(http).pageUsers({
       keyword: "",
@@ -51,7 +51,7 @@ describe("createAdminApi", () => {
   });
 
   it("节点列表按角色过滤；不传角色就取全部", async () => {
-    const { http, request } = 假客户端();
+    const { http, request } = fakeClient();
     const api = createAdminApi(http);
 
     await api.listNodes("LAND");
@@ -62,7 +62,7 @@ describe("createAdminApi", () => {
   });
 
   it("新增与更新用 POST / PUT 并把 body 序列化成 JSON", async () => {
-    const { http, request } = 假客户端();
+    const { http, request } = fakeClient();
     const api = createAdminApi(http);
     // 显式标注成 NodeSaveRequest 而不是 as const：as const 会把 egressIps 变成
     // readonly []，展开后与 string[] 不兼容；标注类型还顺带让这条测试校验载荷形状
@@ -124,7 +124,7 @@ describe("createAdminApi", () => {
   });
 
   it("分组接口逐个打到正确的路径与方法", async () => {
-    const { http, request } = 假客户端();
+    const { http, request } = fakeClient();
     const api = createAdminApi(http);
 
     await api.previewSub({ subUrl: "https://sub.example.com/c?token=t" });

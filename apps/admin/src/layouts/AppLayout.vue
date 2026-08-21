@@ -6,7 +6,7 @@ import { useAuthStore } from "../stores/auth";
 const auth = useAuthStore();
 
 /** 头像兜底字母：显示名首字（displayName 兜过 email，不会为空串才取） */
-const 首字 = computed(() => (auth.displayName || "?").slice(0, 1));
+const initial = computed(() => (auth.displayName || "?").slice(0, 1));
 </script>
 
 <template>
@@ -23,7 +23,7 @@ const 首字 = computed(() => (auth.displayName || "?").slice(0, 1));
 
     <div class="rail-foot">
       <div class="rail-user">
-        <span class="rail-avatar">{{ 首字 }}</span>
+        <span class="rail-avatar">{{ initial }}</span>
         <span class="rail-user-name">{{ auth.displayName }}</span>
       </div>
       <button type="button" class="rail-signout" @click="auth.signOut()">退出登录</button>

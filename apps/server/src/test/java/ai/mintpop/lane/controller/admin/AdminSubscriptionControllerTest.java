@@ -70,7 +70,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     }
 
     /** 可变 Map：部分用例要留空某字段，Map.of 不允许放 null */
-    private Map<String, Object> 入参(String agentType, String name, String startsAt, String endsAt,
+    private Map<String, Object> request(String agentType, String name, String startsAt, String endsAt,
                                    String credential) {
         Map<String, Object> body = new HashMap<>();
         body.put("agentType", agentType);
@@ -82,18 +82,18 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     }
 
     @BeforeEach
-    void 准备() {
+    void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
-        fixtures.清空();
-        Long frontId = fixtures.建FRONT节点("FRONT-1");
-        adminId = fixtures.建用户("logto-admin", ADMIN, ACTIVE, frontId, null);
-        memberId = fixtures.建用户("logto-member", MEMBER, ACTIVE, frontId, null);
+        fixtures.clearAll();
+        Long frontId = fixtures.createFrontNode("FRONT-1");
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, frontId, null);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, frontId, null);
     }
 
     @Test
     @DisplayName("新建订阅并回读：列表里只看得到 hasCredential，看不到凭据本体")
-    void 新建订阅并回读() throws Exception {
-        String body = json(入参("CLAUDE", "Claude 席位 1",
+    void createSubscriptionAndReadBack() throws Exception {
+        String body = json(request("CLAUDE", "Claude 席位 1",
                 "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
@@ -113,8 +113,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("给不存在的用户建订阅报 410006")
-    void 给不存在的用户建订阅() throws Exception {
-        String body = json(入参("CLAUDE", "Claude 席位 1",
+    void createSubscriptionForMissingUser() throws Exception {
+        String body = json(request("CLAUDE", "Claude 席位 1",
                 "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/99999/subscriptions")
@@ -125,8 +125,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("止期不晚于起期报 110001")
-    void 止期不晚于起期() throws Exception {
-        String body = json(入参("CLAUDE", "Claude 席位 1",
+    void endNotAfterStartFails() throws Exception {
+        String body = json(request("CLAUDE", "Claude 席位 1",
                 "2026-09-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
@@ -137,8 +137,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("更新时留空凭据沿用原值")
-    void 更新时留空凭据沿用原值() throws Exception {
-        String create = json(入参("CLAUDE", "Claude 席位 1",
+    void updateKeepsCredentialWhenOmitted() throws Exception {
+        String create = json(request("CLAUDE", "Claude 席位 1",
                 "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
         String response = mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
@@ -146,7 +146,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
                 .andReturn().getResponse().getContentAsString();
         Long id = objectMapper.readTree(response).get("data").asLong();
 
-        String update = json(入参("CLAUDE", "Claude 席位 1（改名）",
+        String update = json(request("CLAUDE", "Claude 席位 1（改名）",
                 "2026-08-01T00:00:00Z", "2026-10-01T00:00:00Z", null));
         mockMvc.perform(put("/api/admin/subscriptions/" + id).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(update))
@@ -160,8 +160,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("更新不存在的订阅报 410008")
-    void 更新不存在的订阅() throws Exception {
-        String update = json(入参("CLAUDE", "Claude 席位 1",
+    void updateMissingSubscription() throws Exception {
+        String update = json(request("CLAUDE", "Claude 席位 1",
                 "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", null));
 
         mockMvc.perform(put("/api/admin/subscriptions/99999").header("Authorization", bearer(adminId))
@@ -171,15 +171,15 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("删除不存在的订阅报 410008")
-    void 删除不存在的订阅() throws Exception {
+    void deleteMissingSubscription() throws Exception {
         mockMvc.perform(delete("/api/admin/subscriptions/99999").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410008));
     }
 
     @Test
     @DisplayName("删除订阅后列表变空")
-    void 删除订阅() throws Exception {
-        String create = json(入参("CLAUDE", "Claude 席位 1",
+    void deleteSubscription() throws Exception {
+        String create = json(request("CLAUDE", "Claude 席位 1",
                 "2026-08-01T00:00:00Z", "2026-09-01T00:00:00Z", "sk-ant-x"));
         String response = mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
@@ -198,7 +198,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("MEMBER 访问订阅接口得 403")
-    void member访问订阅接口得403() throws Exception {
+    void memberAccessGets403() throws Exception {
         mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(memberId)))
                 .andExpect(status().isForbidden());

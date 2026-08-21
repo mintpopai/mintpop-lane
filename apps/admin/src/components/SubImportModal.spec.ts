@@ -13,7 +13,7 @@ vi.mock("../api", () => ({
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
-const 预览: SubPreviewNode[] = [
+const previewNodes: SubPreviewNode[] = [
   { sourceName: "剩余流量：10 GB", sourceType: "anytls", serverAddr: "a.example.com", port: 1, suspectedInfo: true, existed: false },
   { sourceName: "香港-01", sourceType: "anytls", serverAddr: "hk.example.com", port: 2, suspectedInfo: false, existed: false },
   { sourceName: "已入池的", sourceType: "vless", serverAddr: "b.example.com", port: 3, suspectedInfo: false, existed: true },
@@ -21,8 +21,8 @@ const 预览: SubPreviewNode[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  previewSub.mockResolvedValue(预览);
-  refreshPreviewNodeGroup.mockResolvedValue(预览);
+  previewSub.mockResolvedValue(previewNodes);
+  refreshPreviewNodeGroup.mockResolvedValue(previewNodes);
 });
 
 afterEach(() => {
@@ -43,7 +43,7 @@ function queryAll(selector: string): DOMWrapper<Element>[] {
   return Array.from(document.querySelectorAll(selector)).map((el) => new DOMWrapper(el));
 }
 
-async function 拉出预览列表(group: null | { id: number } = null) {
+async function openPreviewList(group: null | { id: number } = null) {
   const wrapper = mount(SubImportModal, {
     attachTo: document.body,
     props: { group: group as never },
@@ -58,7 +58,7 @@ async function 拉出预览列表(group: null | { id: number } = null) {
 
 describe("SubImportModal", () => {
   it("拉取预览后展示全部条目，疑似信息条目与已入池的默认不勾", async () => {
-    await 拉出预览列表();
+    await openPreviewList();
 
     expect(previewSub).toHaveBeenCalledWith({ subUrl: "https://sub.example.com/c?token=t" });
     const checkboxes = queryAll("tbody input[type=checkbox]");
@@ -70,11 +70,11 @@ describe("SubImportModal", () => {
   });
 
   it("创建模式：填分组名提交后按勾选调用 createNodeGroup", async () => {
-    const wrapper = await 拉出预览列表();
+    const wrapper = await openPreviewList();
     await query("#group-name").setValue("机场A");
     // 底部提交按钮是 footer 里的最后一个 admin-btn
-    const 提交按钮 = queryAll("button.admin-btn").at(-1)!;
-    await 提交按钮.trigger("click");
+    const submitButton = queryAll("button.admin-btn").at(-1)!;
+    await submitButton.trigger("click");
 
     await vi.waitFor(() =>
       expect(createNodeGroup).toHaveBeenCalledWith({
@@ -88,25 +88,25 @@ describe("SubImportModal", () => {
   });
 
   it("重新拉取模式：不出现链接与分组名输入框，提交调用 importNodeGroup", async () => {
-    await 拉出预览列表({ id: 7 });
+    await openPreviewList({ id: 7 });
 
     expect(document.querySelector("#sub-url")).toBeNull();
     expect(document.querySelector("#group-name")).toBeNull();
     expect(refreshPreviewNodeGroup).toHaveBeenCalledWith(7);
 
-    const 提交按钮 = queryAll("button.admin-btn").at(-1)!;
-    await 提交按钮.trigger("click");
+    const submitButton = queryAll("button.admin-btn").at(-1)!;
+    await submitButton.trigger("click");
     await vi.waitFor(() =>
       expect(importNodeGroup).toHaveBeenCalledWith(7, { selectedNames: ["香港-01"] }),
     );
   });
 
   it("全选/清空切换", async () => {
-    await 拉出预览列表();
-    const 全选 = query("input[aria-label=全选]");
-    await 全选.setValue(true);
+    await openPreviewList();
+    const checkAllInput = query("input[aria-label=全选]");
+    await checkAllInput.setValue(true);
     expect(document.body.textContent).toContain("已选 3 / 3");
-    await 全选.setValue(false);
+    await checkAllInput.setValue(false);
     expect(document.body.textContent).toContain("已选 0 / 3");
   });
 });

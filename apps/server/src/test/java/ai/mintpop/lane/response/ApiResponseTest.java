@@ -12,7 +12,7 @@ class ApiResponseTest {
 
     @Test
     @DisplayName("成功响应的业务码为 0")
-    void 成功响应的业务码为零() {
+    void successResponseHasZeroCode() {
         ApiResponse<String> resp = ApiResponse.success("载荷");
 
         assertThat(resp.getCode()).isZero();
@@ -23,7 +23,7 @@ class ApiResponseTest {
 
     @Test
     @DisplayName("按枚举构造的失败响应带上枚举的码与文案")
-    void 失败响应带上枚举的码与文案() {
+    void failResponseCarriesEnumCodeAndMessage() {
         ApiResponse<Void> resp = ApiResponse.fail(BizCodeEnum.TOKEN_INVALID);
 
         assertThat(resp.getCode()).isEqualTo(210001);
@@ -34,7 +34,7 @@ class ApiResponseTest {
 
     @Test
     @DisplayName("所有业务错误码都是 6 位且按模块分段")
-    void 业务错误码都是六位且按模块分段() {
+    void bizCodesAreSixDigitsAndSegmented() {
         for (BizCodeEnum code : BizCodeEnum.values()) {
             assertThat(code.getCode())
                     .as("错误码 %s 必须是 6 位", code.name())
@@ -45,7 +45,7 @@ class ApiResponseTest {
 
     @Test
     @DisplayName("业务错误码不重复")
-    void 业务错误码不重复() {
+    void bizCodesAreUnique() {
         long distinct = Arrays.stream(BizCodeEnum.values())
                 .map(BizCodeEnum::getCode)
                 .distinct()

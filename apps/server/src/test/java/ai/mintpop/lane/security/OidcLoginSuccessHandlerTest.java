@@ -50,11 +50,11 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
     private SubscriptionRepository subscriptionRepository;
 
     @BeforeEach
-    void 清库() {
-        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).清空();
+    void setUp() {
+        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).clearAll();
     }
 
-    private static OidcUser oidc用户(String subject, String email, String name) {
+    private static OidcUser oidcUser(String subject, String email, String name) {
         OidcIdToken idToken = new OidcIdToken("token-value", Instant.now(), Instant.now().plusSeconds(300),
                 Map.of("sub", subject, "email", email, "name", name));
         return new DefaultOidcUser(java.util.List.of(), idToken);
@@ -62,12 +62,12 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("网页登录：建档 + 会话 Cookie + 302 管理端")
-    void 网页登录发会话Cookie() throws Exception {
+    void webLoginIssuesSessionCookie() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(request, response,
-                new TestingAuthenticationToken(oidc用户("logto-web", "web@example.com", "网页用户"), null));
+                new TestingAuthenticationToken(oidcUser("logto-web", "web@example.com", "网页用户"), null));
 
         assertThat(userRepository.findBySubject("logto-web")).isPresent();
         assertThat(response.getHeaders("Set-Cookie"))
@@ -82,7 +82,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("桌面登录：建档 + 渲染落地页（深链带 ticket 与 state），不发会话 Cookie")
-    void 桌面登录渲染落地页() throws Exception {
+    void desktopLoginRendersReturnPage() throws Exception {
         // 先经 DesktopFlowCookie 写入中间态，再把 Cookie 搬进登录回调请求
         MockHttpServletRequest startRequest = new MockHttpServletRequest();
         MockHttpServletResponse startResponse = new MockHttpServletResponse();
@@ -96,7 +96,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(request, response,
-                new TestingAuthenticationToken(oidc用户("logto-desk", "d@example.com", "桌面用户"), null));
+                new TestingAuthenticationToken(oidcUser("logto-desk", "d@example.com", "桌面用户"), null));
 
         assertThat(userRepository.findBySubject("logto-desk")).isPresent();
         // 不再裸 302 跳自定义 scheme（浏览器会静默拦截无手势的外部协议跳转），
@@ -113,7 +113,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("登录失败（桌面流）：渲染落地页，深链带 error 与 state")
-    void 桌面登录失败渲染落地页() throws Exception {
+    void desktopLoginFailureRendersReturnPage() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.respondFailure(java.util.Optional.of(
@@ -127,7 +127,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("登录失败（网页流）：302 回管理端带标记")
-    void 网页登录失败回管理端() throws Exception {
+    void webLoginFailureRedirectsToAdmin() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.respondFailure(java.util.Optional.empty(), response);

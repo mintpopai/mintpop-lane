@@ -11,7 +11,7 @@ class SubscriptionDtoTest {
 
     @Test
     @DisplayName("在期判定：起含止不含，按 UTC 绝对时刻比较")
-    void 起含止不含() {
+    void startInclusiveEndExclusive() {
         SubscriptionDto s = new SubscriptionDto();
         s.setStartsAt(Instant.parse("2026-08-01T00:00:00Z"));
         s.setEndsAt(Instant.parse("2026-09-01T00:00:00Z"));

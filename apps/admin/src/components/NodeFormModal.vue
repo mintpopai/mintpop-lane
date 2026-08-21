@@ -24,36 +24,36 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const form = ref<NodeFormModel>(props.editing ? nodeToForm(props.editing) : emptyNodeForm(props.role));
 const submitting = ref(false);
 
-const 标题 = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
-const 角色选项 = Object.entries(NODE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
+const title = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
+const roleOptions = Object.entries(NODE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
 // 订阅导入的节点：参数由「重新拉取」统一更新，表单只放行名称/状态/备注
-const 订阅节点 = computed(() => props.editing?.protocol === "MIHOMO");
+const isSubscriptionNode = computed(() => props.editing?.protocol === "MIHOMO");
 // MIHOMO 只能经订阅导入产生，协议下拉不提供
-const 协议选项 = Object.values(NODE_PROTOCOL)
+const protocolOptions = Object.values(NODE_PROTOCOL)
   .filter((value) => value !== "MIHOMO")
   .map((value) => ({ value, label: value }));
-const 状态选项 = Object.entries(NODE_STATUS_LABELS).map(([value, label]) => ({ value, label }));
+const statusOptions = Object.entries(NODE_STATUS_LABELS).map(([value, label]) => ({ value, label }));
 
-const 协议已变更 = computed(
+const protocolChanged = computed(
   () => props.editing !== null && props.editing.protocol !== form.value.protocol,
 );
-const 敏感键提示 = computed(() => {
+const secretKeyHint = computed(() => {
   // 协议一变，旧密钥就不再适用；此时若还显示「留空表示不修改」，管理员会以为留空是安全的
-  if (协议已变更.value) {
+  if (protocolChanged.value) {
     return "协议已变更，必须重新填写——留空会让服务端继续沿用旧协议的密钥";
   }
   return props.editing?.secretConfigured ? "已配置，留空表示不修改" : "尚未配置";
 });
 
-function 切协议(protocol: NodeProtocol): void {
+function switchProtocol(protocol: NodeProtocol): void {
   form.value = applyProtocol(form.value, protocol);
 }
 
-function 改端口(raw: string): void {
+function changePort(raw: string): void {
   form.value.port = raw === "" ? null : Number(raw);
 }
 
-async function 提交(): Promise<void> {
+async function submit(): Promise<void> {
   const errors = validateNodeForm(form.value);
   if (errors.length > 0) {
     showToast("error", errors[0]);
@@ -80,37 +80,37 @@ async function 提交(): Promise<void> {
 </script>
 
 <template>
-  <Modal :title="标题" @close="emit('close')">
+  <Modal :title="title" @close="emit('close')">
     <div class="admin-form">
       <div class="admin-field">
         <label for="node-name">节点名</label>
         <input id="node-name" v-model="form.name" class="admin-input" placeholder="运维可读，如 LAND-东京-03" />
       </div>
 
-      <p v-if="订阅节点" class="admin-note">
+      <p v-if="isSubscriptionNode" class="admin-note">
         订阅导入的节点（{{ props.editing?.sourceType }}，来自分组「{{ props.editing?.groupName }}」）。
         连接参数以订阅为准，改动请到分组上「重新拉取」；这里只能改名称、状态与备注。
       </p>
 
-      <div v-if="!订阅节点" class="admin-form-row">
+      <div v-if="!isSubscriptionNode" class="admin-form-row">
         <div class="admin-field">
           <label for="node-role">角色</label>
-          <Select id="node-role" v-model="form.role" :options="角色选项" aria-label="角色" />
+          <Select id="node-role" v-model="form.role" :options="roleOptions" aria-label="角色" />
         </div>
         <div class="admin-field">
           <label for="node-protocol">协议</label>
           <Select
             id="node-protocol"
             :model-value="form.protocol"
-            :options="协议选项"
+            :options="protocolOptions"
             aria-label="协议"
             mono
-            @update:model-value="切协议($event as NodeProtocol)"
+            @update:model-value="switchProtocol($event as NodeProtocol)"
           />
         </div>
       </div>
 
-      <div v-if="!订阅节点" class="admin-form-row">
+      <div v-if="!isSubscriptionNode" class="admin-form-row">
         <div class="admin-field">
           <label for="node-addr">地址</label>
           <input id="node-addr" v-model="form.serverAddr" class="admin-input fact" placeholder="tokyo.example.com" />
@@ -124,14 +124,14 @@ async function 提交(): Promise<void> {
             min="1"
             max="65535"
             :value="form.port ?? ''"
-            @input="改端口(($event.target as HTMLInputElement).value)"
+            @input="changePort(($event.target as HTMLInputElement).value)"
           />
         </div>
       </div>
 
-      <div v-if="!订阅节点" class="admin-field">
+      <div v-if="!isSubscriptionNode" class="admin-field">
         <label>敏感配置</label>
-        <p class="admin-note">{{ 敏感键提示 }}。这些值加密存储，服务端永不回传。</p>
+        <p class="admin-note">{{ secretKeyHint }}。这些值加密存储，服务端永不回传。</p>
         <input
           v-for="(_, key) in form.secret"
           :key="key"
@@ -143,13 +143,13 @@ async function 提交(): Promise<void> {
         />
       </div>
 
-      <div v-if="!订阅节点" class="admin-field">
+      <div v-if="!isSubscriptionNode" class="admin-field">
         <label>透传键</label>
         <p class="admin-note">明文存储并原样下发给 mihomo，不要在这里填密码。</p>
         <KeyValueEditor v-model="form.extraConfig" />
       </div>
 
-      <div v-if="!订阅节点 && form.role === 'LAND'" class="admin-field">
+      <div v-if="!isSubscriptionNode && form.role === 'LAND'" class="admin-field">
         <label for="node-egress">出口 IP</label>
         <textarea
           id="node-egress"
@@ -163,7 +163,7 @@ async function 提交(): Promise<void> {
       <div class="admin-form-row">
         <div class="admin-field">
           <label for="node-status">状态</label>
-          <Select id="node-status" v-model="form.status" :options="状态选项" aria-label="状态" />
+          <Select id="node-status" v-model="form.status" :options="statusOptions" aria-label="状态" />
         </div>
         <div class="admin-field">
           <label for="node-remark">备注</label>
@@ -174,7 +174,7 @@ async function 提交(): Promise<void> {
 
     <template #footer>
       <button type="button" class="admin-btn-ghost" @click="emit('close')">取消</button>
-      <button type="button" class="admin-btn" :disabled="submitting" @click="提交()">
+      <button type="button" class="admin-btn" :disabled="submitting" @click="submit()">
         {{ submitting ? "保存中…" : "保存" }}
       </button>
     </template>

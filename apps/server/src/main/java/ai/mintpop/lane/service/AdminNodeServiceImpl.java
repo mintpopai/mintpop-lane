@@ -37,9 +37,9 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     @Override
     public List<AdminNodeResponse> list(NodeRole role) {
-        Map<Long, String> 分组名 = groupRepository.findAll().stream()
+        Map<Long, String> groupNames = groupRepository.findAll().stream()
                 .collect(Collectors.toMap(NodeGroupDto::getId, NodeGroupDto::getName));
-        return nodeRepository.findAll(role).stream().map(node -> toResponse(node, 分组名)).toList();
+        return nodeRepository.findAll(role).stream().map(node -> toResponse(node, groupNames)).toList();
     }
 
     @Override
@@ -52,12 +52,12 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         if (nodeRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_NAME_DUPLICATED);
         }
-        校验敏感键不与extraConfig重叠(request);
+        validateSecretKeysNotInExtraConfig(request);
 
         ProxyNodeDto node = new ProxyNodeDto();
         apply(node, request);
         node.setSecret(request.getSecret());
-        return 兜住唯一约束(() -> nodeRepository.create(node));
+        return wrapUniqueViolation(() -> nodeRepository.create(node));
     }
 
     @Override
@@ -78,7 +78,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
             node.setName(request.getName());
             node.setStatus(request.getStatus());
             node.setRemark(request.getRemark());
-            兜住唯一约束(() -> {
+            wrapUniqueViolation(() -> {
                 nodeRepository.update(node);
                 return null;
             });
@@ -89,7 +89,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
             throw new BizException(BizCodeEnum.PARAM_INVALID);
         }
 
-        校验敏感键不与extraConfig重叠(request);
+        validateSecretKeysNotInExtraConfig(request);
 
         // 角色变更前先查它是否正被用户引用：已被当前端/落地出口使用的节点悄悄改角色，
         // 会让分配它的用户在无人复查的情况下跑到一个用途不符的节点上
@@ -103,7 +103,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         if (request.getSecret() != null && !request.getSecret().isEmpty()) {
             node.setSecret(request.getSecret());
         }
-        兜住唯一约束(() -> {
+        wrapUniqueViolation(() -> {
             nodeRepository.update(node);
             return null;
         });
@@ -125,7 +125,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
      * 定义了每种协议下哪些键属于敏感键，这里是它唯一的调用点——没有这道校验，
      * 调用方随手把密码塞进 extraConfig，密码就会明文存库并被 GET 接口吐回去。
      */
-    private void 校验敏感键不与extraConfig重叠(NodeSaveRequest request) {
+    private void validateSecretKeysNotInExtraConfig(NodeSaveRequest request) {
         Map<String, Object> extraConfig = request.getExtraConfig();
         if (extraConfig == null || extraConfig.isEmpty()) {
             return;
@@ -140,7 +140,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
      * 那时靠数据库的唯一索引挡住。节点表只有一个唯一索引（name），
      * 因此不像 {@code AdminUserServiceImpl} 那样需要按消息内容分支。
      */
-    private <T> T 兜住唯一约束(Supplier<T> action) {
+    private <T> T wrapUniqueViolation(Supplier<T> action) {
         try {
             return action.get();
         } catch (DuplicateKeyException e) {
@@ -160,7 +160,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         node.setRemark(request.getRemark());
     }
 
-    private AdminNodeResponse toResponse(ProxyNodeDto node, Map<Long, String> 分组名) {
+    private AdminNodeResponse toResponse(ProxyNodeDto node, Map<Long, String> groupNames) {
         String assignedUserName = node.getRole() == NodeRole.LAND
                 ? userRepository.findByLandNodeId(node.getId()).map(UserDto::getName).orElse(null)
                 : null;
@@ -179,7 +179,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getSecret() != null && !node.getSecret().isEmpty(),
                 assignedUserName,
                 node.getGroupId(),
-                node.getGroupId() == null ? null : 分组名.get(node.getGroupId()),
+                node.getGroupId() == null ? null : groupNames.get(node.getGroupId()),
                 node.getSourceType(),
                 node.getCreatedAt(),
                 node.getUpdatedAt());

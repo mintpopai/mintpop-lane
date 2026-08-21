@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { 登录入口 } from "../auth/constants";
-import { 标记登录跳转 } from "../utils/loginLoop";
+import { loginEntryUrl } from "../auth/constants";
+import { markLoginRedirect } from "../utils/loginLoop";
 import type { AuthApi } from "../api/auth";
 import { UnauthorizedError } from "../api/http";
 import type { MeResponse } from "../api/types";
@@ -46,8 +46,8 @@ export const useAuthStore = defineStore("auth", () => {
    * 跳转前打环路标记：回来若仍未登录，守卫据此熔断出「会话没生效」而非再送落地页
    */
   function signIn(): void {
-    标记登录跳转();
-    window.location.assign(登录入口);
+    markLoginRedirect();
+    window.location.assign(loginEntryUrl);
   }
 
   /** 整页跳服务端登出端点，清 Cookie 后 302 回管理端首页 */

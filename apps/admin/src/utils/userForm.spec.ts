@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
 import { buildUserPayload, selectableFrontNodes, selectableLandNodes, userToForm } from "./userForm";
 
-function 节点(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
+function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
   return {
     id: 1,
     name: "US-01",
@@ -25,7 +25,7 @@ function 节点(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
   };
 }
 
-function 用户(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
+function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
   return {
     id: 5,
     subject: "logto-user-1",
@@ -83,9 +83,9 @@ describe("buildUserPayload", () => {
 describe("selectableFrontNodes", () => {
   it("只留启用的第一跳节点——禁用节点选了也下发不了", () => {
     const nodes = [
-      节点({ id: 1, role: "FRONT", status: "ENABLED" }),
-      节点({ id: 2, role: "FRONT", status: "DISABLED" }),
-      节点({ id: 3, role: "LAND", status: "ENABLED" }),
+      makeNode({ id: 1, role: "FRONT", status: "ENABLED" }),
+      makeNode({ id: 2, role: "FRONT", status: "DISABLED" }),
+      makeNode({ id: 3, role: "LAND", status: "ENABLED" }),
     ];
 
     expect(selectableFrontNodes(nodes).map((n) => n.id)).toEqual([1]);
@@ -95,8 +95,8 @@ describe("selectableFrontNodes", () => {
 describe("selectableLandNodes", () => {
   it("已被别人占用的落地节点不可选——一人一个出口是硬约束", () => {
     const nodes = [
-      节点({ id: 10, role: "LAND", assignedUserName: null }),
-      节点({ id: 11, role: "LAND", assignedUserName: "李四" }),
+      makeNode({ id: 10, role: "LAND", assignedUserName: null }),
+      makeNode({ id: 11, role: "LAND", assignedUserName: "李四" }),
     ];
 
     expect(selectableLandNodes(nodes, null).map((n) => n.id)).toEqual([10]);
@@ -104,15 +104,15 @@ describe("selectableLandNodes", () => {
 
   it("自己当前占着的那个仍可选，否则编辑自己时选项会凭空消失", () => {
     const nodes = [
-      节点({ id: 10, role: "LAND", assignedUserName: null }),
-      节点({ id: 11, role: "LAND", assignedUserName: "张三" }),
+      makeNode({ id: 10, role: "LAND", assignedUserName: null }),
+      makeNode({ id: 11, role: "LAND", assignedUserName: "张三" }),
     ];
 
     expect(selectableLandNodes(nodes, 11).map((n) => n.id)).toEqual([10, 11]);
   });
 
   it("禁用的落地节点不可选", () => {
-    const nodes = [节点({ id: 12, role: "LAND", status: "DISABLED", assignedUserName: null })];
+    const nodes = [makeNode({ id: 12, role: "LAND", status: "DISABLED", assignedUserName: null })];
 
     expect(selectableLandNodes(nodes, null)).toEqual([]);
   });
@@ -120,7 +120,7 @@ describe("selectableLandNodes", () => {
 
 describe("userToForm", () => {
   it("按新模型逐字段回填", () => {
-    const form = userToForm(用户());
+    const form = userToForm(makeUser());
 
     expect(form).toEqual({
       id: 5,

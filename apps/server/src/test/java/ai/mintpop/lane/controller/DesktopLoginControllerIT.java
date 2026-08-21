@@ -1,5 +1,6 @@
 package ai.mintpop.lane.controller;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -41,7 +42,8 @@ class DesktopLoginControllerIT {
     private int port;
 
     @Test
-    void 非法登录参数保留原生400而非被安全链拦成401() {
+    @DisplayName("非法登录参数保留原生400而非被安全链拦成401")
+    void invalidLoginParamsKeepNative400InsteadOf401() {
         RestTestClient client = RestTestClient.bindToServer()
                 .baseUrl("http://localhost:" + port)
                 .build();

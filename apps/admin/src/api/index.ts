@@ -1,4 +1,4 @@
-import { 登录页路径 } from "../auth/constants";
+import { loginPagePath } from "../auth/constants";
 import { runtimeConfig } from "../config/runtime";
 import { createAdminApi, type AdminApi } from "./admin";
 import { createAuthApi, type AuthApi } from "./auth";
@@ -17,7 +17,7 @@ function httpClient(): HttpClient {
     http = createHttpClient({
       baseUrl: runtimeConfig().apiBaseUrl,
       // 会话失效就整页落回登录落地页（不静默跳 Logto），由用户主动点「登录」
-      onUnauthorized: () => window.location.assign(登录页路径),
+      onUnauthorized: () => window.location.assign(loginPagePath),
     });
   }
   return http;

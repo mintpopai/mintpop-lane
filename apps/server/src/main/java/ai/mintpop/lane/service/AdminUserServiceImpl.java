@@ -69,16 +69,16 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
 
         if (request.getFrontNodeId() != null) {
-            校验节点(request.getFrontNodeId(), NodeRole.FRONT);
+            validateNode(request.getFrontNodeId(), NodeRole.FRONT);
         }
-        校验落地可用(request.getLandNodeId(), id);
+        validateLandAvailable(request.getLandNodeId(), id);
 
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
         user.setLandNodeId(request.getLandNodeId());
         // subject/email/role/name 不从入参取，沿用库里的值（name 由登录同步维护，管理端不提供改名入口）
 
-        兜住唯一约束(() -> {
+        wrapUniqueViolation(() -> {
             userRepository.update(user);
             return null;
         });
@@ -90,7 +90,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         userRepository.deleteById(id);
     }
 
-    private void 校验节点(Long nodeId, NodeRole expectedRole) {
+    private void validateNode(Long nodeId, NodeRole expectedRole) {
         ProxyNodeDto node = nodeRepository.findById(nodeId)
                 .orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
         if (node.getRole() != expectedRole) {
@@ -99,11 +99,11 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     /** 落地节点必须存在、角色正确，且没有被别人占用（selfId 为当前用户，允许保留自己的） */
-    private void 校验落地可用(Long landNodeId, Long selfId) {
+    private void validateLandAvailable(Long landNodeId, Long selfId) {
         if (landNodeId == null) {
             return;
         }
-        校验节点(landNodeId, NodeRole.LAND);
+        validateNode(landNodeId, NodeRole.LAND);
 
         userRepository.findByLandNodeId(landNodeId)
                 .filter(occupied -> !Objects.equals(occupied.getId(), selfId))
@@ -117,7 +117,7 @@ public class AdminUserServiceImpl implements AdminUserService {
      * 那时靠数据库的唯一索引挡住，这里把它翻译成对应的业务错误码。
      * 用户表现存的唯一索引只剩 uk_app_user_land_node（subject 不再从接口改，不会冲突到这里）。
      */
-    private <T> T 兜住唯一约束(java.util.function.Supplier<T> action) {
+    private <T> T wrapUniqueViolation(java.util.function.Supplier<T> action) {
         try {
             return action.get();
         } catch (DuplicateKeyException e) {

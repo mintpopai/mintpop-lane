@@ -37,7 +37,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
 
     @Test
     @DisplayName("写出 Cookie 后搬进新请求读回：state/attributes/scopes/authorizationUri/clientId/redirectUri 往返保真")
-    void 写读往返保真() {
+    void saveLoadRoundTripPreservesFidelity() {
         OAuth2AuthorizationRequest original = sampleRequest();
 
         MockHttpServletRequest saveRequest = new MockHttpServletRequest();
@@ -65,7 +65,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
 
     @Test
     @DisplayName("removeAuthorizationRequest 读回原值并使 Cookie 过期")
-    void 移除时读回原值并过期Cookie() {
+    void removeReturnsOriginalAndExpiresCookie() {
         OAuth2AuthorizationRequest original = sampleRequest();
 
         MockHttpServletRequest saveRequest = new MockHttpServletRequest();
@@ -89,7 +89,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
 
     @Test
     @DisplayName("Cookie 损坏时 loadAuthorizationRequest 返回 null 而不抛异常")
-    void cookie损坏返回null不抛异常() {
+    void corruptedCookieReturnsNullWithoutThrowing() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setCookies(new jakarta.servlet.http.Cookie(
                 CookieOAuth2AuthorizationRequestRepository.COOKIE_NAME, "not-a-valid-base64url-json!!"));
@@ -99,7 +99,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
 
     @Test
     @DisplayName("无 Cookie 时 loadAuthorizationRequest 返回 null")
-    void 无cookie返回null() {
+    void noCookieReturnsNull() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         assertThat(repository.loadAuthorizationRequest(request)).isNull();
     }

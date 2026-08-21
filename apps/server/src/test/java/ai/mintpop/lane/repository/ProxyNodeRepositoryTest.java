@@ -34,14 +34,14 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
     private DatabaseFixtures fixtures;
 
     @BeforeEach
-    void 准备() {
+    void setUp() {
         fixtures = new DatabaseFixtures(jdbc, repository, userRepository, subscriptionRepository);
-        fixtures.清空();
+        fixtures.clearAll();
     }
 
     @Test
     @DisplayName("节点存取往返：JSON 列与敏感键都能原样取回")
-    void 节点存取往返() {
+    void nodeRoundTrip() {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName("LAND-东京-03");
         node.setRole(NodeRole.LAND);
@@ -69,10 +69,10 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Test
     @DisplayName("敏感键在库里是密文，明文一个字符都不落库")
-    void 敏感键在库里是密文() {
-        Long id = fixtures.建LAND节点("LAND-1", "203.0.113.10");
+    void secretKeysStoredAsCipher() {
+        Long id = fixtures.createLandNode("LAND-1", "203.0.113.10");
 
-        String stored = fixtures.读原始密文列("proxy_node", "secret_cipher", id);
+        String stored = fixtures.readRawCipherColumn("proxy_node", "secret_cipher", id);
 
         // 断言用的明文必须含中文：stored 是 AES-GCM 密文的 Base64，字母表只有 ASCII，
         // 若拿纯 ASCII 短串（如曾经的 "u1"）去断言「不包含」，会有一定概率在随机密文里
@@ -83,10 +83,10 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Test
     @DisplayName("按角色过滤节点，传 null 时返回全部")
-    void 按角色过滤节点() {
-        fixtures.建FRONT节点("FRONT-1");
-        fixtures.建LAND节点("LAND-1", "203.0.113.10");
-        fixtures.建LAND节点("LAND-2", "203.0.113.11");
+    void filterNodesByRole() {
+        fixtures.createFrontNode("FRONT-1");
+        fixtures.createLandNode("LAND-1", "203.0.113.10");
+        fixtures.createLandNode("LAND-2", "203.0.113.11");
 
         assertThat(repository.findAll(NodeRole.FRONT)).hasSize(1);
         assertThat(repository.findAll(NodeRole.LAND)).hasSize(2);
@@ -95,8 +95,8 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Test
     @DisplayName("更新节点：改敏感键与出口 IP 都能生效")
-    void 更新节点() {
-        Long id = fixtures.建LAND节点("LAND-1", "203.0.113.10");
+    void updateNode() {
+        Long id = fixtures.createLandNode("LAND-1", "203.0.113.10");
         ProxyNodeDto node = repository.findById(id).orElseThrow();
         node.setSecret(Map.of("username", "u2", "password", "换过的密码"));
         node.setEgressIps(List.of("198.51.100.7"));
@@ -112,8 +112,8 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Test
     @DisplayName("节点名重复能被查出来，且删除后即释放")
-    void 节点名重复与删除() {
-        Long id = fixtures.建FRONT节点("FRONT-1");
+    void duplicateNameAndDelete() {
+        Long id = fixtures.createFrontNode("FRONT-1");
 
         assertThat(repository.existsByName("FRONT-1")).isTrue();
         assertThat(repository.existsByName("不存在的名字")).isFalse();
@@ -126,8 +126,8 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Test
     @DisplayName("组装成 mihomo 节点：type 取小写协议名，敏感键并入同一层")
-    void 组装成mihomo节点() {
-        Long id = fixtures.建FRONT节点("FRONT-1");
+    void assembleMihomoNode() {
+        Long id = fixtures.createFrontNode("FRONT-1");
 
         Map<String, Object> mihomo = repository.findById(id).orElseThrow().toMihomoNode();
 
@@ -143,8 +143,8 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Test
     @DisplayName("MIHOMO 节点整份参数加密落库，读回明文一致，来源三字段原样往返")
-    void MIHOMO节点整份参数加密往返() {
-        Long groupId = 建分组();   // 直接 jdbc 插一条 node_group，见下
+    void mihomoNodeFullParamsCipherRoundTrip() {
+        Long groupId = createGroup();   // 直接 jdbc 插一条 node_group，见下
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName("香港 IEPL-01");
         node.setRole(NodeRole.FRONT);
@@ -164,12 +164,12 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         assertThat(loaded.getSourceName()).isEqualTo("香港 IEPL-01");
         assertThat(loaded.getSourceType()).isEqualTo("anytls");
         // 库里存的是密文，不是明文参数
-        assertThat(fixtures.读原始密文列("proxy_node", "secret_cipher", id)).doesNotContain("uuid-秘密");
+        assertThat(fixtures.readRawCipherColumn("proxy_node", "secret_cipher", id)).doesNotContain("uuid-秘密");
         // 下发形态：整份 secret 原样返回，不混入列上的字段
         assertThat(loaded.toMihomoNode()).isEqualTo(loaded.getSecret());
     }
 
-    private Long 建分组() {
+    private Long createGroup() {
         jdbc.update("INSERT INTO node_group (name, sub_url_cipher) VALUES ('测试组', '密文占位')");
         return jdbc.queryForObject("SELECT id FROM node_group WHERE name = '测试组'", Long.class);
     }

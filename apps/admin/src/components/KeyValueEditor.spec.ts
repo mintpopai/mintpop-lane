@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import KeyValueEditor from "./KeyValueEditor.vue";
 import type { KeyValueRow } from "../utils/nodeForm";
 
-const 初始行: KeyValueRow[] = [{ key: "sni", value: "a.com" }];
+const initialRows: KeyValueRow[] = [{ key: "sni", value: "a.com" }];
 
 describe("KeyValueEditor", () => {
   it("点新增会追加一行空的键值对", async () => {
-    const wrapper = mount(KeyValueEditor, { props: { modelValue: 初始行 } });
+    const wrapper = mount(KeyValueEditor, { props: { modelValue: initialRows } });
 
     await wrapper.get("[data-test=add-row]").trigger("click");
 
@@ -35,7 +35,7 @@ describe("KeyValueEditor", () => {
   });
 
   it("点删除会移除对应行", async () => {
-    const wrapper = mount(KeyValueEditor, { props: { modelValue: 初始行 } });
+    const wrapper = mount(KeyValueEditor, { props: { modelValue: initialRows } });
 
     await wrapper.get("[data-test=remove-row-0]").trigger("click");
 

@@ -17,7 +17,7 @@ class DesktopReturnPageTest {
 
     @Test
     @DisplayName("成功页：200 HTML，含深链按钮与自动跳转脚本")
-    void 成功页含深链按钮与自动跳转脚本() throws Exception {
+    void successPageHasDeepLinkButtonAndAutoRedirectScript() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         page.renderSuccess(response, "t-abc", "st-1");
@@ -37,7 +37,7 @@ class DesktopReturnPageTest {
 
     @Test
     @DisplayName("失败页：深链带 error=login_failed 与 state")
-    void 失败页深链带error标记() throws Exception {
+    void failurePageDeepLinkCarriesErrorFlag() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         page.renderFailure(response, "st-2");
@@ -51,7 +51,7 @@ class DesktopReturnPageTest {
 
     @Test
     @DisplayName("ticket 与 state 经查询串编码，特殊字符不会破坏 HTML")
-    void 特殊字符经编码不破坏页面() throws Exception {
+    void specialCharsEncodedWithoutBreakingPage() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         page.renderSuccess(response, "t\"><script>", "st&x=1");
