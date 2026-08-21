@@ -246,6 +246,24 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("改名撞上另一个已存在的分组名时报 410010，且该分组名字不变")
+    void 改名撞已有分组名报错() throws Exception {
+        Long groupA = 建组导入两节点();
+        var bodyB = Map.of("name", "机场B", "subUrl", SUB_URL, "selectedNames", List.of("香港 IEPL-01"));
+        var resultB = mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(bodyB)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn();
+        Long groupB = objectMapper.readTree(resultB.getResponse().getContentAsString()).get("data").asLong();
+
+        mockMvc.perform(put("/api/admin/node-groups/" + groupB).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A"))))
+                .andExpect(jsonPath("$.code").value(410010));
+        assertThat(groupRepository.findById(groupB).orElseThrow().getName()).isEqualTo("机场B");
+        assertThat(groupRepository.findById(groupA).orElseThrow().getName()).isEqualTo("机场A");
+    }
+
+    @Test
     @DisplayName("删除分组连带删除组内节点；组内有节点被用户绑定时报 410013 且一个都不删")
     void 删除分组() throws Exception {
         Long groupId = 建组导入两节点();

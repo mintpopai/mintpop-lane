@@ -17,6 +17,7 @@ import ai.mintpop.lane.request.NodeGroupImportRequest;
 import ai.mintpop.lane.request.NodeGroupRenameRequest;
 import ai.mintpop.lane.response.NodeGroupResponse;
 import ai.mintpop.lane.response.SubPreviewNodeResponse;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @Service
 public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
@@ -68,7 +70,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         group.setName(request.getName());
         group.setSubUrl(request.getSubUrl());
         group.setRemark(request.getRemark());
-        Long groupId = groupRepository.create(group);
+        Long groupId = 兜住唯一约束(() -> groupRepository.create(group));
 
         导入(groupId, nodes, request.getSelectedNames());
         return groupId;
@@ -96,7 +98,10 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         }
         group.setName(request.getName());
         group.setRemark(request.getRemark());
-        groupRepository.update(group);
+        兜住唯一约束(() -> {
+            groupRepository.update(group);
+            return null;
+        });
     }
 
     @Override
@@ -129,6 +134,18 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         }
         nodes.forEach(node -> nodeRepository.deleteById(node.getId()));
         groupRepository.deleteById(id);
+    }
+
+    /**
+     * 唯一约束的兜底：上面的预检查（existsByName）给的是可读错误，但两个管理员同时提交仍可能撞车，
+     * 那时靠数据库的唯一索引挡住。与 {@code AdminNodeServiceImpl.兜住唯一约束} 同一模式。
+     */
+    private <T> T 兜住唯一约束(Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (DuplicateKeyException e) {
+            throw new BizException(BizCodeEnum.NODE_GROUP_NAME_DUPLICATED);
+        }
     }
 
     private NodeGroupDto 取分组(Long id) {
