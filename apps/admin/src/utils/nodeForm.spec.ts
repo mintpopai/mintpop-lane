@@ -6,6 +6,7 @@ import {
   nodeToForm,
   parseScalar,
   validateNodeForm,
+  PROTOCOL_SECRET_KEYS,
   type NodeFormModel,
 } from "./nodeForm";
 import type { AdminNodeResponse } from "../api/types";
@@ -200,6 +201,9 @@ describe("nodeToForm", () => {
       remark: "备注",
       secretConfigured: true,
       assignedUserName: "张三",
+      groupId: null,
+      groupName: null,
+      sourceType: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     };
@@ -229,10 +233,49 @@ describe("nodeToForm", () => {
       remark: "备注",
       secretConfigured: true,
       assignedUserName: "张三",
+      groupId: null,
+      groupName: null,
+      sourceType: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     } as AdminNodeResponse;
 
     expect(nodeToForm(node).extraConfig).toEqual([{ key: "sni", value: "tokyo.example.com" }]);
+  });
+});
+
+describe("nodeForm 对 MIHOMO 的处理", () => {
+  const MIHOMO节点 = {
+    id: 1,
+    name: "香港-01",
+    role: "FRONT",
+    protocol: "MIHOMO",
+    serverAddr: "hk.example.com",
+    port: 35355,
+    extraConfig: {},
+    egressIps: [],
+    status: "ENABLED",
+    remark: "",
+    secretConfigured: true,
+    assignedUserName: null,
+    groupId: 3,
+    groupName: "机场A",
+    sourceType: "anytls",
+    createdAt: "2026-08-21T00:00:00Z",
+    updatedAt: "2026-08-21T00:00:00Z",
+  } as AdminNodeResponse;
+
+  it("MIHOMO 没有分键敏感配置，表单敏感键区为空", () => {
+    expect(PROTOCOL_SECRET_KEYS.MIHOMO).toEqual([]);
+    expect(nodeToForm(MIHOMO节点).secret).toEqual({});
+  });
+
+  it("MIHOMO 表单提交的 payload 敏感键为空对象（服务端语义：沿用原值）", () => {
+    const form = nodeToForm(MIHOMO节点);
+    form.name = "香港-01-改名";
+    const payload = buildNodePayload(form);
+    expect(payload.protocol).toBe("MIHOMO");
+    expect(payload.secret).toEqual({});
+    expect(payload.name).toBe("香港-01-改名");
   });
 });

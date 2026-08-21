@@ -41,6 +41,9 @@ public class ProxyNodeConverter {
         dto.setEgressIps(entity.getEgressIps() == null ? List.of() : entity.getEgressIps());
         dto.setStatus(entity.getStatus());
         dto.setRemark(entity.getRemark());
+        dto.setGroupId(entity.getGroupId());
+        dto.setSourceName(entity.getSourceName());
+        dto.setSourceType(entity.getSourceType());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
@@ -59,6 +62,9 @@ public class ProxyNodeConverter {
         entity.setEgressIps(dto.getEgressIps() == null ? List.of() : dto.getEgressIps());
         entity.setStatus(dto.getStatus());
         entity.setRemark(dto.getRemark());
+        entity.setGroupId(dto.getGroupId());
+        entity.setSourceName(dto.getSourceName());
+        entity.setSourceType(dto.getSourceType());
         return entity;
     }
 

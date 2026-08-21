@@ -26,6 +26,11 @@ public record AdminNodeResponse(
         boolean secretConfigured,
         /** 该落地节点当前的占用者姓名；未分配或非 LAND 时为 null */
         String assignedUserName,
+        /** 所属分组；手工节点为 null */
+        Long groupId,
+        String groupName,
+        /** 订阅节点的真实 mihomo type（如 anytls）；手工节点为 null */
+        String sourceType,
         Instant createdAt,
         Instant updatedAt
 ) {

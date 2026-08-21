@@ -35,7 +35,13 @@ public enum BizCodeEnum {
     NODE_ROLE_MISMATCH(410005, "节点角色与用途不符"),
     USER_NOT_FOUND(410006, "用户不存在"),
     NODE_NAME_DUPLICATED(410007, "节点名已存在"),
-    SUBSCRIPTION_NOT_FOUND(410008, "订阅不存在");
+    SUBSCRIPTION_NOT_FOUND(410008, "订阅不存在"),
+    NODE_GROUP_NOT_FOUND(410009, "分组不存在"),
+    NODE_GROUP_NAME_DUPLICATED(410010, "分组名已存在"),
+    SUB_FETCH_FAILED(410011, "订阅拉取失败：链接无法访问或返回错误"),
+    SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点"),
+    NODE_GROUP_IN_USE(410013, "分组内有节点被用户引用，无法删除"),
+    SELECTED_NODE_MISSING(410014, "勾选的节点在订阅中已不存在，请重新预览");
 
     private final int code;
     private final String message;

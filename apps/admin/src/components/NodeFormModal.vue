@@ -26,8 +26,12 @@ const submitting = ref(false);
 
 const 标题 = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
 const 角色选项 = Object.entries(NODE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
-// 协议名是系统枚举值，下拉走等宽（mono），与表格里同一个值的排版对齐
-const 协议选项 = Object.values(NODE_PROTOCOL).map((value) => ({ value, label: value }));
+// 订阅导入的节点：参数由「重新拉取」统一更新，表单只放行名称/状态/备注
+const 订阅节点 = computed(() => props.editing?.protocol === "MIHOMO");
+// MIHOMO 只能经订阅导入产生，协议下拉不提供
+const 协议选项 = Object.values(NODE_PROTOCOL)
+  .filter((value) => value !== "MIHOMO")
+  .map((value) => ({ value, label: value }));
 const 状态选项 = Object.entries(NODE_STATUS_LABELS).map(([value, label]) => ({ value, label }));
 
 const 协议已变更 = computed(
@@ -83,7 +87,12 @@ async function 提交(): Promise<void> {
         <input id="node-name" v-model="form.name" class="admin-input" placeholder="运维可读，如 LAND-东京-03" />
       </div>
 
-      <div class="admin-form-row">
+      <p v-if="订阅节点" class="admin-note">
+        订阅导入的节点（{{ props.editing?.sourceType }}，来自分组「{{ props.editing?.groupName }}」）。
+        连接参数以订阅为准，改动请到分组上「重新拉取」；这里只能改名称、状态与备注。
+      </p>
+
+      <div v-if="!订阅节点" class="admin-form-row">
         <div class="admin-field">
           <label for="node-role">角色</label>
           <Select id="node-role" v-model="form.role" :options="角色选项" aria-label="角色" />
@@ -101,7 +110,7 @@ async function 提交(): Promise<void> {
         </div>
       </div>
 
-      <div class="admin-form-row">
+      <div v-if="!订阅节点" class="admin-form-row">
         <div class="admin-field">
           <label for="node-addr">地址</label>
           <input id="node-addr" v-model="form.serverAddr" class="admin-input fact" placeholder="tokyo.example.com" />
@@ -120,7 +129,7 @@ async function 提交(): Promise<void> {
         </div>
       </div>
 
-      <div class="admin-field">
+      <div v-if="!订阅节点" class="admin-field">
         <label>敏感配置</label>
         <p class="admin-note">{{ 敏感键提示 }}。这些值加密存储，服务端永不回传。</p>
         <input
@@ -134,13 +143,13 @@ async function 提交(): Promise<void> {
         />
       </div>
 
-      <div class="admin-field">
+      <div v-if="!订阅节点" class="admin-field">
         <label>透传键</label>
         <p class="admin-note">明文存储并原样下发给 mihomo，不要在这里填密码。</p>
         <KeyValueEditor v-model="form.extraConfig" />
       </div>
 
-      <div v-if="form.role === 'LAND'" class="admin-field">
+      <div v-if="!订阅节点 && form.role === 'LAND'" class="admin-field">
         <label for="node-egress">出口 IP</label>
         <textarea
           id="node-egress"

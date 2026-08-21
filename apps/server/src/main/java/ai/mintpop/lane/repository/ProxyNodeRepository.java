@@ -40,4 +40,13 @@ public interface ProxyNodeRepository {
     void deleteById(Long id);
 
     boolean existsByName(String name);
+
+    /** 同一分组内按订阅原始节点名取节点，重新拉取时的匹配键 */
+    Optional<ProxyNodeDto> findByGroupIdAndSourceName(Long groupId, String sourceName);
+
+    /** 某分组下的全部节点，按 id 升序 */
+    List<ProxyNodeDto> findByGroupId(Long groupId);
+
+    /** 某分组下的节点数，分组列表展示用 */
+    long countByGroupId(Long groupId);
 }

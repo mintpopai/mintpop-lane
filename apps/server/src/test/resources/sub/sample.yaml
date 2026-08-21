@@ -1,0 +1,14 @@
+mixed-port: 7890
+mode: rule
+dns:
+    enable: true
+proxies:
+    - { name: '剩余流量：121.54 GB', type: anytls, server: hk01a.example.com, port: 35355, password: uuid-秘密-1, udp: true }
+    - { name: '套餐到期：2027-04-30', type: anytls, server: hk01a.example.com, port: 35355, password: uuid-秘密-1 }
+    - { name: '香港 IEPL-01', type: anytls, server: hk02a.example.com, port: 35356, password: uuid-秘密-1, udp: true, alpn: [h2, http/1.1], client-fingerprint: chrome }
+    - { name: '[境外用户专用]GPT01', type: vless, server: hw01v.example.com, port: 19279, uuid: uuid-秘密-2, flow: xtls-rprx-vision, tls: true, servername: www.cloudflare.com, reality-opts: { public-key: pk-value } }
+    - { name: '坏条目没有端口', type: anytls, server: bad.example.com }
+proxy-groups:
+    - { name: 自动选择, type: url-test, url: 'http://www.gstatic.com/generate_204', interval: 300, proxies: ['香港 IEPL-01'] }
+rules:
+    - MATCH,DIRECT

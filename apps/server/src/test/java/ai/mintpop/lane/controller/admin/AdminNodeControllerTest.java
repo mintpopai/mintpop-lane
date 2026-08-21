@@ -1,6 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -24,6 +25,7 @@ import java.util.Map;
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -315,5 +317,76 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(nodeRepository.findById(id)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MIHOMO 协议不可手工新建，报参数错误 110001")
+    void MIHOMO不可手工新建() throws Exception {
+        var body = Map.of("name", "X", "role", "FRONT", "protocol", "MIHOMO",
+                "serverAddr", "hk.example.com", "port", 443, "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110001));
+        assertThat(nodeRepository.findAll(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("编辑 MIHOMO 节点只有名称/状态/备注生效，地址端口等参数改不动")
+    void 编辑MIHOMO节点只放行三个字段() throws Exception {
+        Long id = fixtures.建MIHOMO节点("香港-01", null);
+        var body = Map.of(
+                "name", "香港-01-改名",
+                "role", "FRONT",
+                "protocol", "MIHOMO",
+                "serverAddr", "evil.example.com",
+                "port", 9999,
+                "extraConfig", Map.of("sni", "evil"),
+                "status", "DISABLED",
+                "remark", "改了备注");
+
+        mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        var node = nodeRepository.findById(id).orElseThrow();
+        assertThat(node.getName()).isEqualTo("香港-01-改名");
+        assertThat(node.getStatus()).isEqualTo(NodeStatus.DISABLED);
+        assertThat(node.getRemark()).isEqualTo("改了备注");
+        // 参数纹丝不动：展示列与加密参数都还是原值
+        assertThat(node.getServerAddr()).isEqualTo("hk01.example.com");
+        assertThat(node.getPort()).isEqualTo(35355);
+        assertThat(node.getSecret()).containsEntry("password", "mihomo-密码");
+        assertThat(node.getExtraConfig()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("把 MIHOMO 节点的协议改成别的协议，报参数错误 110001")
+    void MIHOMO节点不可改协议() throws Exception {
+        Long id = fixtures.建MIHOMO节点("香港-01", null);
+        var body = Map.of("name", "香港-01", "role", "FRONT", "protocol", "TROJAN",
+                "serverAddr", "hk01.example.com", "port", 35355, "status", "ENABLED");
+
+        mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("非 MIHOMO 节点禁止改成 MIHOMO 协议，报参数错误 110001")
+    void 非MIHOMO节点禁止改成MIHOMO() throws Exception {
+        Long id = fixtures.建FRONT节点("FRONT-1");
+        var body = Map.of("name", "FRONT-1", "role", "FRONT", "protocol", "MIHOMO",
+                "serverAddr", "us.example.com", "port", 443, "status", "ENABLED");
+
+        mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110001));
+
+        assertThat(nodeRepository.findById(id).orElseThrow().getProtocol()).isEqualTo(NodeProtocol.TROJAN);
     }
 }

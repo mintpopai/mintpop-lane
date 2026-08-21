@@ -3,9 +3,11 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
-import type { AdminNodeResponse, NodeRole } from "../api/types";
+import type { AdminNodeResponse, NodeGroupResponse, NodeRole } from "../api/types";
+import AdminModal from "../components/AdminModal.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
+import SubImportModal from "../components/SubImportModal.vue";
 import { showToast } from "../toast";
 import { booleanLabel, formatDateTime, joinOrDash } from "../utils/format";
 
@@ -18,12 +20,47 @@ const 正在编辑 = ref<AdminNodeResponse | null>(null);
 const 待删除 = ref<AdminNodeResponse | null>(null);
 const deleting = ref(false);
 
-const 当前列表 = computed(() => 全部节点.value.filter((node) => node.role === 当前角色.value));
+// —— 分组 ——
+const 分组列表 = ref<NodeGroupResponse[]>([]);
+// "ALL"=全部；"NONE"=未分组；数字=某分组 id
+const 当前分组 = ref<"ALL" | "NONE" | number>("ALL");
+const 导入弹窗打开 = ref(false);
+const 重拉分组 = ref<NodeGroupResponse | null>(null);
+const 改名分组 = ref<NodeGroupResponse | null>(null);
+const 改名输入 = ref("");
+const renaming = ref(false);
+const 待删除分组 = ref<NodeGroupResponse | null>(null);
+const deletingGroup = ref(false);
+
+const 当前列表 = computed(() =>
+  全部节点.value.filter((node) => {
+    if (node.role !== 当前角色.value) {
+      return false;
+    }
+    if (当前角色.value !== "FRONT" || 当前分组.value === "ALL") {
+      return true;
+    }
+    return 当前分组.value === "NONE" ? node.groupId === null : node.groupId === 当前分组.value;
+  }),
+);
+
+// 当前选中的分组对象；选中态只可能来自 chips 点击，正常恒能找到，找不到时按钮区整体不渲染
+const 选中分组 = computed(() =>
+  typeof 当前分组.value === "number"
+    ? (分组列表.value.find((g) => g.id === 当前分组.value) ?? null)
+    : null,
+);
 
 async function 加载(): Promise<void> {
   loading.value = true;
   try {
-    全部节点.value = await adminApi().listNodes();
+    const [nodes, groups] = await Promise.all([adminApi().listNodes(), adminApi().listNodeGroups()]);
+    全部节点.value = nodes;
+    分组列表.value = groups;
+    // 当前选中的分组被删掉后回落到「全部」
+    if (typeof 当前分组.value === "number" && !groups.some((g) => g.id === 当前分组.value)) {
+      当前分组.value = "ALL";
+    }
     loadError.value = "";
   } catch (error) {
     loadError.value = error instanceof BizError ? error.message : (error as Error).message;
@@ -60,6 +97,57 @@ async function 确认删除(): Promise<void> {
   }
 }
 
+function 打开重拉(group: NodeGroupResponse): void {
+  重拉分组.value = group;
+}
+
+function 打开改名(group: NodeGroupResponse): void {
+  改名分组.value = group;
+  改名输入.value = group.name;
+}
+
+async function 确认改名(): Promise<void> {
+  if (!改名分组.value) {
+    return;
+  }
+  if (!改名输入.value.trim()) {
+    showToast("error", "分组名不能为空");
+    return;
+  }
+  renaming.value = true;
+  try {
+    await adminApi().renameNodeGroup(改名分组.value.id, {
+      name: 改名输入.value.trim(),
+      remark: 改名分组.value.remark ?? "",
+    });
+    showToast("success", "已改名");
+    改名分组.value = null;
+    await 加载();
+  } catch (error) {
+    showToast("error", error instanceof BizError ? error.message : `改名失败：${(error as Error).message}`);
+  } finally {
+    renaming.value = false;
+  }
+}
+
+async function 确认删除分组(): Promise<void> {
+  if (!待删除分组.value) {
+    return;
+  }
+  deletingGroup.value = true;
+  try {
+    await adminApi().deleteNodeGroup(待删除分组.value.id);
+    showToast("success", "已删除分组及其节点");
+    待删除分组.value = null;
+    await 加载();
+  } catch (error) {
+    // 410013：组内有节点被用户绑定。服务端中文提示直接用
+    showToast("error", error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`);
+  } finally {
+    deletingGroup.value = false;
+  }
+}
+
 onMounted(加载);
 </script>
 
@@ -85,7 +173,46 @@ onMounted(加载);
       {{ label }}
     </button>
     <span class="spacer" />
+    <button v-if="当前角色 === 'FRONT'" type="button" class="admin-btn-ghost" @click="导入弹窗打开 = true">
+      从订阅导入
+    </button>
     <button type="button" class="admin-btn" @click="新建()">新建节点</button>
+  </div>
+
+  <div v-if="当前角色 === 'FRONT'" class="admin-toolbar">
+    <button
+      type="button"
+      class="admin-chip"
+      :class="{ active: 当前分组 === 'ALL' }"
+      @click="当前分组 = 'ALL'"
+    >
+      全部
+    </button>
+    <button
+      type="button"
+      class="admin-chip"
+      :class="{ active: 当前分组 === 'NONE' }"
+      @click="当前分组 = 'NONE'"
+    >
+      未分组
+    </button>
+    <button
+      v-for="group in 分组列表"
+      :key="group.id"
+      type="button"
+      class="admin-chip"
+      :class="{ active: 当前分组 === group.id }"
+      @click="当前分组 = group.id"
+    >
+      {{ group.name }} <span class="fact">{{ group.nodeCount }}</span>
+    </button>
+    <!-- 选中某个分组时露出它的操作 -->
+    <template v-if="选中分组">
+      <span class="spacer" />
+      <button type="button" class="admin-link" @click="打开重拉(选中分组)">重新拉取</button>
+      <button type="button" class="admin-link" @click="打开改名(选中分组)">改名</button>
+      <button type="button" class="admin-link danger" @click="待删除分组 = 选中分组">删除分组</button>
+    </template>
   </div>
 
   <p v-if="loading" class="admin-hint">加载中……</p>
@@ -98,6 +225,7 @@ onMounted(加载);
         <tr>
           <th>节点名</th>
           <th>协议</th>
+          <th v-if="当前角色 === 'FRONT'">分组</th>
           <th>地址</th>
           <template v-if="当前角色 === 'LAND'">
             <th>出口 IP</th>
@@ -112,7 +240,11 @@ onMounted(加载);
       <tbody>
         <tr v-for="row in 当前列表" :key="row.id">
           <td>{{ row.name }}</td>
-          <td class="fact">{{ row.protocol }}</td>
+          <td class="fact">{{ row.sourceType ?? row.protocol }}</td>
+          <td v-if="当前角色 === 'FRONT'">
+            <span v-if="row.groupName" class="pill">{{ row.groupName }}</span>
+            <span v-else class="muted">—</span>
+          </td>
           <td class="fact">{{ row.serverAddr }}:{{ row.port }}</td>
           <template v-if="当前角色 === 'LAND'">
             <td class="fact muted">{{ joinOrDash(row.egressIps) }}</td>
@@ -153,5 +285,39 @@ onMounted(加载);
     :busy="deleting"
     @confirm="确认删除()"
     @cancel="待删除 = null"
+  />
+  <SubImportModal
+    v-if="导入弹窗打开"
+    :group="null"
+    @saved="加载()"
+    @close="导入弹窗打开 = false"
+  />
+  <SubImportModal
+    v-if="重拉分组"
+    :group="重拉分组"
+    @saved="加载()"
+    @close="重拉分组 = null"
+  />
+  <AdminModal v-if="改名分组" :title="`分组改名：${改名分组.name}`" @close="改名分组 = null">
+    <div class="admin-form">
+      <div class="admin-field">
+        <label for="group-rename">分组名</label>
+        <input id="group-rename" v-model="改名输入" class="admin-input" />
+      </div>
+    </div>
+    <template #footer>
+      <button type="button" class="admin-btn-ghost" @click="改名分组 = null">取消</button>
+      <button type="button" class="admin-btn" :disabled="renaming" @click="确认改名()">
+        {{ renaming ? "保存中…" : "保存" }}
+      </button>
+    </template>
+  </AdminModal>
+  <ConfirmDialog
+    v-if="待删除分组"
+    title="删除分组确认"
+    :message="`确认删除分组「${待删除分组.name}」？组内 ${待删除分组.nodeCount} 个节点会一并删除。`"
+    :busy="deletingGroup"
+    @confirm="确认删除分组()"
+    @cancel="待删除分组 = null"
   />
 </template>

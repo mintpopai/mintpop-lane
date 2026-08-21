@@ -3,9 +3,15 @@ import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
   AdminUserResponse,
+  NodeGroupCreateRequest,
+  NodeGroupImportRequest,
+  NodeGroupRenameRequest,
+  NodeGroupResponse,
   NodeRole,
   NodeSaveRequest,
   PageResult,
+  SubPreviewNode,
+  SubPreviewRequest,
   SubscriptionSaveRequest,
   UserPageQuery,
   UserSaveRequest,
@@ -23,6 +29,13 @@ export interface AdminApi {
   createSubscription(userId: number, body: SubscriptionSaveRequest): Promise<number>;
   updateSubscription(id: number, body: SubscriptionSaveRequest): Promise<void>;
   deleteSubscription(id: number): Promise<void>;
+  previewSub(body: SubPreviewRequest): Promise<SubPreviewNode[]>;
+  createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;
+  listNodeGroups(): Promise<NodeGroupResponse[]>;
+  renameNodeGroup(id: number, body: NodeGroupRenameRequest): Promise<void>;
+  refreshPreviewNodeGroup(id: number): Promise<SubPreviewNode[]>;
+  importNodeGroup(id: number, body: NodeGroupImportRequest): Promise<void>;
+  deleteNodeGroup(id: number): Promise<void>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -83,6 +96,34 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deleteSubscription(id) {
       return http.request(`/admin/subscriptions/${id}`, { method: "DELETE" });
+    },
+
+    previewSub(body) {
+      return http.request("/admin/node-groups/preview", { method: "POST", body: JSON.stringify(body) });
+    },
+
+    createNodeGroup(body) {
+      return http.request("/admin/node-groups", { method: "POST", body: JSON.stringify(body) });
+    },
+
+    listNodeGroups() {
+      return http.request("/admin/node-groups");
+    },
+
+    renameNodeGroup(id, body) {
+      return http.request(`/admin/node-groups/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    refreshPreviewNodeGroup(id) {
+      return http.request(`/admin/node-groups/${id}/refresh-preview`, { method: "POST" });
+    },
+
+    importNodeGroup(id, body) {
+      return http.request(`/admin/node-groups/${id}/import`, { method: "POST", body: JSON.stringify(body) });
+    },
+
+    deleteNodeGroup(id) {
+      return http.request(`/admin/node-groups/${id}`, { method: "DELETE" });
     },
   };
 }

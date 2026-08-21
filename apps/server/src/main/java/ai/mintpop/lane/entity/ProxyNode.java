@@ -53,6 +53,15 @@ public class ProxyNode {
 
     private String remark;
 
+    /** 所属分组 id；NULL 表示手工节点 */
+    private Long groupId;
+
+    /** 订阅里的原始节点名，重新拉取时据此匹配；手工节点为 NULL */
+    private String sourceName;
+
+    /** 订阅节点的真实 mihomo type（如 anytls），仅供展示；手工节点为 NULL */
+    private String sourceType;
+
     /** 由数据库默认值维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant createdAt;

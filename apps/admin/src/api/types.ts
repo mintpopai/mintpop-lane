@@ -25,6 +25,8 @@ export const NODE_PROTOCOL = {
   TROJAN: "TROJAN",
   SOCKS5: "SOCKS5",
   VMESS: "VMESS",
+  /** 订阅导入的通用透传协议：整份 mihomo 参数加密存储，不能手工新建 */
+  MIHOMO: "MIHOMO",
 } as const;
 export type NodeProtocol = (typeof NODE_PROTOCOL)[keyof typeof NODE_PROTOCOL];
 
@@ -143,6 +145,11 @@ export interface AdminNodeResponse {
   secretConfigured: boolean;
   /** 该落地节点当前的占用者姓名；未分配或非 LAND 时为 null */
   assignedUserName: string | null;
+  /** 所属分组；手工节点为 null */
+  groupId: number | null;
+  groupName: string | null;
+  /** 订阅节点的真实 mihomo type（如 anytls）；手工节点为 null */
+  sourceType: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -201,4 +208,48 @@ export interface SubscriptionSaveRequest {
   endsAt: string;
   credential: string;
   remark: string;
+}
+
+/** 管理端的分组视图。订阅链接只回显打码形态，token 不出现 */
+export interface NodeGroupResponse {
+  id: number;
+  name: string;
+  subUrlMasked: string;
+  nodeCount: number;
+  remark: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 订阅预览里的一个条目，只有展示字段 */
+export interface SubPreviewNode {
+  sourceName: string;
+  sourceType: string;
+  serverAddr: string;
+  port: number;
+  /** 名称像「剩余流量/到期时间」的信息假条目，默认不勾选 */
+  suspectedInfo: boolean;
+  /** 该分组内是否已入池；新链接预览恒为 false */
+  existed: boolean;
+}
+
+export interface SubPreviewRequest {
+  subUrl: string;
+}
+
+export interface NodeGroupCreateRequest {
+  name: string;
+  subUrl: string;
+  selectedNames: string[];
+  remark: string;
+}
+
+/** 改名入参。不支持改订阅链接——换链接等于建新分组 */
+export interface NodeGroupRenameRequest {
+  name: string;
+  remark: string;
+}
+
+export interface NodeGroupImportRequest {
+  selectedNames: string[];
 }

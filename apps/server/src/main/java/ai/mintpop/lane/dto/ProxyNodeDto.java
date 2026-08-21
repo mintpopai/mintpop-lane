@@ -43,6 +43,15 @@ public class ProxyNodeDto {
 
     private String remark;
 
+    /** 所属分组 id；NULL 表示手工节点 */
+    private Long groupId;
+
+    /** 订阅里的原始节点名，重新拉取时据此匹配；手工节点为 NULL */
+    private String sourceName;
+
+    /** 订阅节点的真实 mihomo type（如 anytls），仅供展示；手工节点为 NULL */
+    private String sourceType;
+
     private Instant createdAt;
 
     private Instant updatedAt;
@@ -52,6 +61,11 @@ public class ProxyNodeDto {
      * 不含 name 与 dialer-proxy：这两项由客户端强制覆盖，服务端下发了也会被改掉。
      */
     public Map<String, Object> toMihomoNode() {
+        // MIHOMO（订阅导入）节点：整份参数都在 secret 里（含 type/server/port），原样透传；
+        // 列上的 serverAddr/port 只是展示用副本，这里不读，避免两处数据不一致时下发错值
+        if (protocol == NodeProtocol.MIHOMO) {
+            return new LinkedHashMap<>(secret == null ? Map.of() : secret);
+        }
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("type", protocol.mihomoType());
         node.put("server", serverAddr);
