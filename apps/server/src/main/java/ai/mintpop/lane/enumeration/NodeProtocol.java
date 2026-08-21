@@ -11,7 +11,13 @@ public enum NodeProtocol {
 
     TROJAN(Set.of("password")),
     SOCKS5(Set.of("username", "password")),
-    VMESS(Set.of("uuid"));
+    VMESS(Set.of("uuid")),
+    /**
+     * 订阅导入的通用透传协议：整份 mihomo 参数（含 type/server/port）作为敏感配置整体加密，
+     * 不存在「按键区分敏感」的概念，故 secretKeys 为空集。只能经订阅导入产生，不可手工新建。
+     * 注意它的 mihomoType() 没有意义——下发时 ProxyNodeDto.toMihomoNode() 走专门分支，不会调用它。
+     */
+    MIHOMO(Set.of());
 
     private final Set<String> secretKeys;
 

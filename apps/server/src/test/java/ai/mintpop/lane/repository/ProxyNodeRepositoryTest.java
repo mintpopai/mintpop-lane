@@ -140,4 +140,37 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         // 节点名与 dialer-proxy 由客户端强制覆盖，服务端不下发
         assertThat(mihomo).doesNotContainKeys("name", "dialer-proxy");
     }
+
+    @Test
+    @DisplayName("MIHOMO 节点整份参数加密落库，读回明文一致，来源三字段原样往返")
+    void MIHOMO节点整份参数加密往返() {
+        Long groupId = 建分组();   // 直接 jdbc 插一条 node_group，见下
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName("香港 IEPL-01");
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.MIHOMO);
+        node.setServerAddr("hk02a.example.com");
+        node.setPort(35356);
+        node.setSecret(Map.of("type", "anytls", "server", "hk02a.example.com",
+                "port", 35356, "password", "uuid-秘密"));
+        node.setGroupId(groupId);
+        node.setSourceName("香港 IEPL-01");
+        node.setSourceType("anytls");
+        Long id = repository.create(node);
+
+        ProxyNodeDto loaded = repository.findById(id).orElseThrow();
+        assertThat(loaded.getSecret()).containsEntry("password", "uuid-秘密").containsEntry("type", "anytls");
+        assertThat(loaded.getGroupId()).isEqualTo(groupId);
+        assertThat(loaded.getSourceName()).isEqualTo("香港 IEPL-01");
+        assertThat(loaded.getSourceType()).isEqualTo("anytls");
+        // 库里存的是密文，不是明文参数
+        assertThat(fixtures.读原始密文列("proxy_node", "secret_cipher", id)).doesNotContain("uuid-秘密");
+        // 下发形态：整份 secret 原样返回，不混入列上的字段
+        assertThat(loaded.toMihomoNode()).isEqualTo(loaded.getSecret());
+    }
+
+    private Long 建分组() {
+        jdbc.update("INSERT INTO node_group (name, sub_url_cipher) VALUES ('测试组', '密文占位')");
+        return jdbc.queryForObject("SELECT id FROM node_group WHERE name = '测试组'", Long.class);
+    }
 }

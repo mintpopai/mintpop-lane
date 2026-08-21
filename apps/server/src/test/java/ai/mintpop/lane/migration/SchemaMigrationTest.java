@@ -22,6 +22,7 @@ class SchemaMigrationTest extends MysqlTestBase {
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
+        jdbc.execute("TRUNCATE TABLE node_group");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
@@ -87,5 +88,22 @@ class SchemaMigrationTest extends MysqlTestBase {
 
         assertThatThrownBy(() -> 建用户("u2", front, land))
                 .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
+    @DisplayName("V2 迁移建出 node_group 表并带中文注释，proxy_node 挂上分组外键列")
+    void V2迁移建出分组表() {
+        String comment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'node_group' AND column_name = 'sub_url_cipher'
+                """, String.class);
+        assertThat(comment).contains("AES-GCM");
+
+        Integer cols = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'proxy_node'
+                  AND column_name IN ('group_id', 'source_name', 'source_type')
+                """, Integer.class);
+        assertThat(cols).isEqualTo(3);
     }
 }
