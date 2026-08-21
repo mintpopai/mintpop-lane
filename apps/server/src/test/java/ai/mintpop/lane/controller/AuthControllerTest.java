@@ -175,6 +175,29 @@ class AuthControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("桌面流授权请求带 prompt=login 强制重新认证，网页流不带保留 SSO")
+    void 桌面流强制重新认证网页流保留SSO() throws Exception {
+        // 桌面端登出只清本地钥匙串，浏览器里 Logto 的 IdP 会话仍在；若不强制重新认证，
+        // 重新登录会被 Logto 静默放行，用户根本见不到用户名密码页，「退出」就成了错觉
+        jakarta.servlet.http.Cookie flowCookie = mockMvc.perform(get("/auth/desktop/start")
+                        .param("code_challenge", "A".repeat(43))
+                        .param("state", "desktop-state-01"))
+                .andReturn().getResponse().getCookie(AuthProperties.DESKTOP_FLOW_COOKIE_NAME);
+        assertThat(flowCookie).isNotNull();
+
+        mockMvc.perform(get("/oauth2/authorization/logto").cookie(flowCookie))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
+                        .contains("prompt=login"));
+
+        // 网页流（无桌面中间态 Cookie）不加 prompt，管理端登录保留 IdP 的 SSO 便利
+        mockMvc.perform(get("/oauth2/authorization/logto"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
+                        .doesNotContain("prompt=login"));
+    }
+
+    @Test
     @DisplayName("登出（无 end_session_endpoint 时回退）：302 回管理端，会话 Cookie 被置空过期")
     void 登出清会话Cookie并回管理端() throws Exception {
         // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径。

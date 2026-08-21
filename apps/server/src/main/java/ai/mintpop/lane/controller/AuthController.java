@@ -100,7 +100,8 @@ public class AuthController {
      * 管理端网页登出：先清本站会话 Cookie，再尽量把 Logto 那边的 IdP 会话也结束掉。
      * 只清 Cookie 是不够的——Logto 侧仍留着登录态，用户下次进受保护页会被静默重登，
      * 「退出」就成了错觉，所以这里走 OIDC 的 RP-initiated logout。
-     * 桌面端登出=删钥匙串，不经过服务端。
+     * 桌面端登出=删钥匙串，不经过服务端；IdP 侧残留的会话由桌面流授权请求的
+     * prompt=login 兜底（见 DesktopAwareAuthorizationRequestResolver），重登必须重输凭据。
      */
     @GetMapping("/auth/logout")
     public void logout(HttpServletRequest request, HttpServletResponse response) throws IOException {

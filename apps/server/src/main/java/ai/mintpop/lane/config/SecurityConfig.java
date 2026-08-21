@@ -2,6 +2,7 @@ package ai.mintpop.lane.config;
 
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.security.CookieOAuth2AuthorizationRequestRepository;
+import ai.mintpop.lane.security.DesktopAwareAuthorizationRequestResolver;
 import ai.mintpop.lane.security.DesktopFlowCookie;
 import ai.mintpop.lane.security.NoOpAuthorizedClientRepository;
 import ai.mintpop.lane.security.OidcLoginSuccessHandler;
@@ -16,6 +17,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.client.oidc.authentication.OidcIdTokenDecoderFactory;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.web.SecurityFilterChain;
@@ -36,7 +38,9 @@ public class SecurityConfig {
                                                    SessionTokenService sessionTokenService,
                                                    UserRepository userRepository,
                                                    OidcLoginSuccessHandler successHandler,
-                                                   DesktopFlowCookie desktopFlowCookie) throws Exception {
+                                                   DesktopFlowCookie desktopFlowCookie,
+                                                   ClientRegistrationRepository clientRegistrationRepository)
+            throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -54,9 +58,13 @@ public class SecurityConfig {
                         // 未显式放行的路径一律拒绝，避免将来新增端点时忘记加规则
                         .anyRequest().denyAll())
                 .oauth2Login(login -> login
-                        // 握手中间态存 Cookie（只对本浏览器有效），不落服务端 session
-                        .authorizationEndpoint(ae -> ae.authorizationRequestRepository(
-                                new CookieOAuth2AuthorizationRequestRepository()))
+                        // 握手中间态存 Cookie（只对本浏览器有效），不落服务端 session；
+                        // 桌面流的授权请求带 prompt=login 强制重新认证（登出后不被 IdP 静默放行）
+                        .authorizationEndpoint(ae -> ae
+                                .authorizationRequestResolver(new DesktopAwareAuthorizationRequestResolver(
+                                        clientRegistrationRepository, desktopFlowCookie))
+                                .authorizationRequestRepository(
+                                        new CookieOAuth2AuthorizationRequestRepository()))
                         // Logto 的 access/refresh token 用完即弃：不让框架默认存进 HttpSession
                         // （否则会话即状态，且会顺带下发 JSESSIONID，与自签会话、后端无状态相悖）
                         .authorizedClientRepository(new NoOpAuthorizedClientRepository())
