@@ -1,11 +1,13 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
+import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
@@ -17,21 +19,27 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @Service
 public class AdminNodeServiceImpl implements AdminNodeService {
 
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
+    private final NodeGroupRepository groupRepository;
 
-    public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository) {
+    public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
+                                 NodeGroupRepository groupRepository) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
+        this.groupRepository = groupRepository;
     }
 
     @Override
     public List<AdminNodeResponse> list(NodeRole role) {
-        return nodeRepository.findAll(role).stream().map(this::toResponse).toList();
+        Map<Long, String> 分组名 = groupRepository.findAll().stream()
+                .collect(Collectors.toMap(NodeGroupDto::getId, NodeGroupDto::getName));
+        return nodeRepository.findAll(role).stream().map(node -> toResponse(node, 分组名)).toList();
     }
 
     @Override
@@ -152,7 +160,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         node.setRemark(request.getRemark());
     }
 
-    private AdminNodeResponse toResponse(ProxyNodeDto node) {
+    private AdminNodeResponse toResponse(ProxyNodeDto node, Map<Long, String> 分组名) {
         String assignedUserName = node.getRole() == NodeRole.LAND
                 ? userRepository.findByLandNodeId(node.getId()).map(UserDto::getName).orElse(null)
                 : null;
@@ -170,6 +178,9 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getRemark(),
                 node.getSecret() != null && !node.getSecret().isEmpty(),
                 assignedUserName,
+                node.getGroupId(),
+                node.getGroupId() == null ? null : 分组名.get(node.getGroupId()),
+                node.getSourceType(),
                 node.getCreatedAt(),
                 node.getUpdatedAt());
     }

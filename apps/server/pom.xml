@@ -39,6 +39,13 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
+    <!-- 与 flyway/webmvc-test 同理：Spring Boot 4 把 RestClient.Builder 的自动配置
+         （RestClientAutoConfiguration）也拆到了独立模块，starter-web 不会传递它；
+         订阅拉取（SubHttpConfig）注入 RestClient.Builder 需要显式引入 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-restclient</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
