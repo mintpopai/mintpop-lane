@@ -20,6 +20,7 @@ import ai.mintpop.lane.response.SubPreviewNodeResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
 import java.util.LinkedHashMap;
@@ -39,15 +40,17 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     private final UserRepository userRepository;
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
+    private final TransactionTemplate transactionTemplate;
 
     public AdminNodeGroupServiceImpl(NodeGroupRepository groupRepository, ProxyNodeRepository nodeRepository,
                                      UserRepository userRepository, SubFetchClient subFetchClient,
-                                     SubYamlParser subYamlParser) {
+                                     SubYamlParser subYamlParser, TransactionTemplate transactionTemplate) {
         this.groupRepository = groupRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Override
@@ -58,22 +61,25 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     }
 
     @Override
-    @Transactional
     public Long create(NodeGroupCreateRequest request) {
         if (groupRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_GROUP_NAME_DUPLICATED);
         }
-        // 先拉订阅再建分组：拉取失败时不留下空分组
+        // 先拉订阅再建分组：拉取失败时不留下空分组；
+        // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
+        // 故只把「建分组 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
         List<SubNode> nodes = 拉取解析(request.getSubUrl());
 
         NodeGroupDto group = new NodeGroupDto();
         group.setName(request.getName());
         group.setSubUrl(request.getSubUrl());
         group.setRemark(request.getRemark());
-        Long groupId = 兜住唯一约束(() -> groupRepository.create(group));
 
-        导入(groupId, nodes, request.getSelectedNames());
-        return groupId;
+        return transactionTemplate.execute(status -> {
+            Long groupId = 兜住唯一约束(() -> groupRepository.create(group));
+            导入(groupId, nodes, request.getSelectedNames());
+            return groupId;
+        });
     }
 
     @Override
@@ -114,10 +120,12 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     }
 
     @Override
-    @Transactional
     public void importNodes(Long id, NodeGroupImportRequest request) {
+        // 取分组、拉取解析都是只读操作，同样挪到事务外，避免外呼期间占用数据库连接；
+        // 只有真正落库的「导入」交给 transactionTemplate 包事务
         NodeGroupDto group = 取分组(id);
-        导入(id, 拉取解析(group.getSubUrl()), request.getSelectedNames());
+        List<SubNode> nodes = 拉取解析(group.getSubUrl());
+        transactionTemplate.executeWithoutResult(status -> 导入(id, nodes, request.getSelectedNames()));
     }
 
     @Override

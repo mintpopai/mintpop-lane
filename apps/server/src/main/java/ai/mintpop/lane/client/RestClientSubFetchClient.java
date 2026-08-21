@@ -2,6 +2,7 @@ package ai.mintpop.lane.client;
 
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.exception.BizException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -10,6 +11,7 @@ import org.springframework.web.client.RestClientException;
 import java.net.URI;
 
 /** 订阅拉取的 RestClient 实现。 */
+@Slf4j
 @Component
 public class RestClientSubFetchClient implements SubFetchClient {
 
@@ -37,11 +39,24 @@ public class RestClientSubFetchClient implements SubFetchClient {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientException | IllegalArgumentException e) {
+            // 异常原因不能吞：记一条打码后的 URL + 异常类型/消息，便于定位是超时/DNS/4xx 等哪种失败
+            log.warn("订阅拉取失败，url={}，原因={}: {}", 打码(subUrl), e.getClass().getSimpleName(), e.getMessage());
             throw new BizException(BizCodeEnum.SUB_FETCH_FAILED);
         }
         if (body == null || body.isBlank()) {
+            log.warn("订阅拉取返回空响应体，url={}", 打码(subUrl));
             throw new BizException(BizCodeEnum.SUB_FETCH_FAILED);
         }
         return body;
+    }
+
+    /** 日志用打码链接：只留 scheme 与 host，token 一律不写日志 */
+    private String 打码(String subUrl) {
+        try {
+            URI uri = URI.create(subUrl);
+            return uri.getScheme() + "://" + uri.getHost() + "/…";
+        } catch (Exception e) {
+            return "（无法解析的链接）";
+        }
     }
 }
