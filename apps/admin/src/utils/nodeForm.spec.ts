@@ -200,6 +200,9 @@ describe("nodeToForm", () => {
       remark: "备注",
       secretConfigured: true,
       assignedUserName: "张三",
+      groupId: null,
+      groupName: null,
+      sourceType: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     };
@@ -229,6 +232,9 @@ describe("nodeToForm", () => {
       remark: "备注",
       secretConfigured: true,
       assignedUserName: "张三",
+      groupId: null,
+      groupName: null,
+      sourceType: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     } as AdminNodeResponse;

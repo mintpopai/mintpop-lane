@@ -9,6 +9,8 @@ export const PROTOCOL_SECRET_KEYS: Record<NodeProtocol, string[]> = {
   TROJAN: ["password"],
   SOCKS5: ["username", "password"],
   VMESS: ["uuid"],
+  // MIHOMO 整份参数都是敏感配置，不存在「按键区分」，表单也不允许选它
+  MIHOMO: [],
 };
 
 /** 各协议常用的非敏感透传键，只作为新建表单的默认空行，用户可以随意增删 */
@@ -16,6 +18,7 @@ export const PROTOCOL_EXTRA_HINTS: Record<NodeProtocol, string[]> = {
   TROJAN: ["sni", "skip-cert-verify"],
   SOCKS5: ["tls", "udp"],
   VMESS: ["alterId", "cipher", "network"],
+  MIHOMO: [],
 };
 
 export interface KeyValueRow {
