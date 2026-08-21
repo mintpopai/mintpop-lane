@@ -35,7 +35,8 @@ public enum BizCodeEnum {
     NODE_ROLE_MISMATCH(410005, "节点角色与用途不符"),
     USER_NOT_FOUND(410006, "用户不存在"),
     NODE_NAME_DUPLICATED(410007, "节点名已存在"),
-    SUBSCRIPTION_NOT_FOUND(410008, "订阅不存在");
+    SUBSCRIPTION_NOT_FOUND(410008, "订阅不存在"),
+    SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点");
 
     private final int code;
     private final String message;
