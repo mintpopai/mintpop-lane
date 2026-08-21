@@ -64,4 +64,23 @@ public class MybatisProxyNodeRepository implements ProxyNodeRepository {
     public boolean existsByName(String name) {
         return mapper.selectCount(Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getName, name)) > 0;
     }
+
+    @Override
+    public Optional<ProxyNodeDto> findByGroupIdAndSourceName(Long groupId, String sourceName) {
+        return mapper.selectList(Wrappers.<ProxyNode>lambdaQuery()
+                        .eq(ProxyNode::getGroupId, groupId).eq(ProxyNode::getSourceName, sourceName))
+                .stream().findFirst().map(converter::toDto);
+    }
+
+    @Override
+    public List<ProxyNodeDto> findByGroupId(Long groupId) {
+        return mapper.selectList(Wrappers.<ProxyNode>lambdaQuery()
+                        .eq(ProxyNode::getGroupId, groupId).orderByAsc(ProxyNode::getId))
+                .stream().map(converter::toDto).toList();
+    }
+
+    @Override
+    public long countByGroupId(Long groupId) {
+        return mapper.selectCount(Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getGroupId, groupId));
+    }
 }
