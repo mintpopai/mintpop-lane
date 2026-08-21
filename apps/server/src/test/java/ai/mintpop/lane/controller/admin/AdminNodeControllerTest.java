@@ -1,6 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -372,5 +373,20 @@ class AdminNodeControllerTest extends MysqlTestBase {
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("非 MIHOMO 节点禁止改成 MIHOMO 协议，报参数错误 110001")
+    void 非MIHOMO节点禁止改成MIHOMO() throws Exception {
+        Long id = fixtures.建FRONT节点("FRONT-1");
+        var body = Map.of("name", "FRONT-1", "role", "FRONT", "protocol", "MIHOMO",
+                "serverAddr", "us.example.com", "port", 443, "status", "ENABLED");
+
+        mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110001));
+
+        assertThat(nodeRepository.findById(id).orElseThrow().getProtocol()).isEqualTo(NodeProtocol.TROJAN);
     }
 }
