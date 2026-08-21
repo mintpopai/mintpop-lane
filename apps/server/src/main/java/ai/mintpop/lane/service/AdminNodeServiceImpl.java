@@ -3,6 +3,7 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -35,6 +36,11 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     @Override
     public Long create(NodeSaveRequest request) {
+        // MIHOMO 是订阅导入专用形态：整份参数加密、不能手填。手工新建一律拒绝
+        if (request.getProtocol() == NodeProtocol.MIHOMO) {
+            throw new BizException(BizCodeEnum.PARAM_INVALID);
+        }
+
         if (nodeRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_NAME_DUPLICATED);
         }
@@ -54,6 +60,27 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         if (!node.getName().equals(request.getName()) && nodeRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_NAME_DUPLICATED);
         }
+
+        // 订阅导入的节点参数由「重新拉取」统一更新，编辑接口只放行名称/状态/备注；
+        // 协议也不许改——它的参数形态（整份加密）与其它协议（分键加密）互不兼容
+        if (node.getProtocol() == NodeProtocol.MIHOMO) {
+            if (request.getProtocol() != NodeProtocol.MIHOMO) {
+                throw new BizException(BizCodeEnum.PARAM_INVALID);
+            }
+            node.setName(request.getName());
+            node.setStatus(request.getStatus());
+            node.setRemark(request.getRemark());
+            兜住唯一约束(() -> {
+                nodeRepository.update(node);
+                return null;
+            });
+            return;
+        }
+        // 反向同理：其它协议的节点也不许改成 MIHOMO
+        if (request.getProtocol() == NodeProtocol.MIHOMO) {
+            throw new BizException(BizCodeEnum.PARAM_INVALID);
+        }
+
         校验敏感键不与extraConfig重叠(request);
 
         // 角色变更前先查它是否正被用户引用：已被当前端/落地出口使用的节点悄悄改角色，

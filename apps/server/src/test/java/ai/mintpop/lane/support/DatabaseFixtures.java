@@ -115,4 +115,20 @@ public class DatabaseFixtures {
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), credential);
         return userId;
     }
+
+    /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；groupId 可为 null */
+    public Long 建MIHOMO节点(String name, Long groupId) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName(name);
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.MIHOMO);
+        node.setServerAddr("hk01.example.com");
+        node.setPort(35355);
+        node.setSecret(Map.of("type", "anytls", "server", "hk01.example.com",
+                "port", 35355, "password", "mihomo-密码"));
+        node.setGroupId(groupId);
+        node.setSourceName(name);
+        node.setSourceType("anytls");
+        return nodeRepository.create(node);
+    }
 }
