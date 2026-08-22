@@ -61,7 +61,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("网页登录：建档 + 会话 Cookie + 302 管理端")
+    @DisplayName("网页登录：建档 + 会话 Cookie + 302 回当前域名首页")
     void webLoginIssuesSessionCookie() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -77,7 +77,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
                 .filteredOn(c -> c.startsWith(AuthProperties.SESSION_COOKIE_NAME + "="))
                 .allSatisfy(c -> assertThat(c).contains("SameSite=Lax").contains("HttpOnly"));
         // 对照注入的配置值而非写死：本地存在 config/application.yml 时外部配置会盖过测试配置
-        assertThat(response.getRedirectedUrl()).isEqualTo(authProperties.getAdminFrontendUrl());
+        assertThat(response.getRedirectedUrl()).isEqualTo("/");
     }
 
     @Test
@@ -126,13 +126,12 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("登录失败（网页流）：302 回管理端带标记")
+    @DisplayName("登录失败（网页流）：302 回当前域名首页带标记")
     void webLoginFailureRedirectsToAdmin() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.respondFailure(java.util.Optional.empty(), response);
 
-        assertThat(response.getRedirectedUrl())
-                .isEqualTo(authProperties.getAdminFrontendUrl() + "?login_error=1");
+        assertThat(response.getRedirectedUrl()).isEqualTo("/?login_error=1");
     }
 }

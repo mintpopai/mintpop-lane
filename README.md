@@ -29,7 +29,7 @@
 
 3. **（可选）放置 `.env`**：镜像版本、宿主端口、容器时区都有默认值（见下文「可调参数」），要覆盖时在仓库根建 `.env` 写入对应变量即可；全用默认值就跳过这一步。
 
-4. **放置服务端配置**：把 `apps/server/config/application.example.yml` 复制到仓库根改名 `application.yml`，照注释填入全部真实值——外置 MySQL 连接、Logto issuer 与传统 Web 应用的 App ID、管理端域名（`lane.auth.admin-frontend-url`），以及两个本地生成的密钥：
+4. **放置服务端配置**：把 `apps/server/config/application.example.yml` 复制到仓库根改名 `application.yml`，照注释填入全部真实值——外置 MySQL 连接、Logto issuer 与传统 Web 应用的 App ID，以及两个本地生成的密钥：
 
    ```bash
    cp apps/server/config/application.example.yml ./application.yml
@@ -51,14 +51,14 @@
 
    | 项 | 值 |
    |---|---|
-   | Redirect URI | `https://<你的域名>/auth/callback` |
-   | Post sign-out redirect URI | `https://<你的域名>/` |
+   | Redirect URI | `https://<管理端域名>/auth/callback`、`https://<主站域名>/auth/callback` |
+   | Post sign-out redirect URI | `https://<管理端域名>/auth/logout/callback` |
 
-   > ⚠️ **Post sign-out redirect URI 必须在 Logto 应用里登记为管理端地址**（生产 `https://<你的域名>/`，本地开发再追加一条 `http://localhost:5173/`）。管理端点「退出登录」时，服务端清掉本站会话 Cookie 后会跳 Logto 的结束会话端点（RP-initiated logout）并带上回跳地址；Logto 只接受已登记的地址，没登记这次登出跳转会被 Logto 拒绝、页面停在它的报错页。
+   > 两类地址都按「请求实际到达的域名」动态展开：登录回调 `{baseUrl}/auth/callback` 管理端与主站（桌面端登录流走主站域名）各一条；登出回跳指向服务端的 `/auth/logout/callback` 中转端点（Logto 清完 IdP 会话回到它，再回当前域名首页），目前只有管理端网页有登出入口，登记管理端域名这一条即可。Logto 只接受已登记的地址，没登记对应跳转会被 Logto 拒绝、页面停在它的报错页。
 
    把 App ID 和 App Secret 记下来，都填进第 4 步的 `application.yml`：App ID 填 `spring.security.oauth2.client.registration.logto.client-id`，App Secret 填同级的 `client-secret`。
 
-   > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**一条回调地址 `http://localhost:5173/auth/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
+   > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**回调地址 `http://localhost:5173/auth/callback` 与登出回跳 `http://localhost:5173/auth/logout/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
 
    > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署。这件事由**管理端容器内的 nginx** 完成：它把 `/api`、`/auth`、`/oauth2` 反代到 server 容器（compose 内网），其余路径服务管理端静态站——宿主入口只需按 Host 把整个域名转给管理端容器即可，见下文「对外暴露」。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端代码里，部署侧无需、也没有地方配置它。
 
@@ -203,10 +203,10 @@ server {
 }
 ```
 
-> 单域名同源模型下，`lane.auth.admin-frontend-url` 就是这里的站点根地址（如 `https://<你的域名>`）；
+> 登录/登出完成后的回跳不需要任何配置：服务端一律用相对路径 `/` 回「当前请求所在的域名」，
+> 登出的 `post_logout_redirect_uri` 也按当前请求域名动态拼出（指向 `/auth/logout/callback` 中转端点）。
 > `spring.security.oauth2.client.registration.logto.redirect-uri` 配的是 `{baseUrl}/auth/callback`，
-> `{baseUrl}` 会按请求实际到达的域名展开，即解析成 `https://<你的域名>/auth/callback`——
-> 与第 5 步在 Logto 控制台登记的 Redirect URI、第 7 步访问的 `/oauth2/authorization/logto` 是同一个域名。
+> `{baseUrl}` 同样按请求实际到达的域名展开——与第 5 步在 Logto 控制台登记的地址一一对应。
 
 官网是**主站域名**（如 `lane.mintpop.ai`），用另一个域名（或子域名）反代到 `127.0.0.1:8083`。**桌面端 app 的 API 与登录流都打主站域名**（`/api/link/**`、`/api/auth/desktop/exchange`、`/auth/desktop/start`、`/oauth2/**`），官网容器内的 nginx 已把这三段前缀反代到 server——与管理端一样，宿主反代仍只需一条 `location /`：
 
@@ -238,6 +238,5 @@ server {
 
 - `spring.security.oauth2.client.registration.logto.client-id` 与 `client-secret`（Logto 传统 Web 应用的凭据）
 - `spring.security.oauth2.client.provider.logto.issuer-uri`（形如 `https://<租户>.logto.app/oidc`）
-- `lane.auth.admin-frontend-url`（管理端网页地址，登录成功/失败后的回跳落点）
 - `lane.auth.session-secret` 与 `lane.crypto.key`（两个本地生成的密钥）
 - `spring.datasource.*`（外置 MySQL 连接）

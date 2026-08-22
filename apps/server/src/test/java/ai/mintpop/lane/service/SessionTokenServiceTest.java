@@ -15,7 +15,6 @@ class SessionTokenServiceTest {
     private static AuthProperties config(String secret) {
         AuthProperties properties = new AuthProperties();
         properties.setSessionSecret(secret);
-        properties.setAdminFrontendUrl("http://admin.test.example");
         return properties;
     }
 

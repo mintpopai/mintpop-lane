@@ -198,13 +198,12 @@ class AuthControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("登出（无 end_session_endpoint 时回退）：302 回管理端，会话 Cookie 被置空过期")
-    void logoutClearsSessionCookieAndRedirectsToAdmin() throws Exception {
-        // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径。
-        // 断言对照注入的配置值而非写死：本地存在 config/application.yml 时外部配置会盖过测试配置
+    @DisplayName("登出（无 end_session_endpoint 时回退）：302 回当前域名首页，会话 Cookie 被置空过期")
+    void logoutClearsSessionCookieAndRedirectsToRoot() throws Exception {
+        // 测试环境的 provider 是显式端点配置，拿不到发现文档 metadata，走回退路径
         mockMvc.perform(get("/auth/logout"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl(authProperties.getAdminFrontendUrl()))
+                .andExpect(redirectedUrl("/"))
                 .andExpect(cookie().value(AuthProperties.SESSION_COOKIE_NAME, ""))
                 .andExpect(cookie().maxAge(AuthProperties.SESSION_COOKIE_NAME, 0));
     }
@@ -237,8 +236,18 @@ class AuthControllerTest extends MysqlTestBase {
                 .startsWith("https://tenant.logto.app/oidc/session/end?")
                 .contains("client_id=test-client-id")
                 // 回跳地址必须整段 URL 编码，否则其中的 :// 会破坏查询串
+                // 回跳地址由当前请求动态拼出（MockHttpServletRequest 默认 http://localhost），
+                // 指向本服务的登出回调中转端点，多域部署下谁发起登出就回谁
                 .contains("post_logout_redirect_uri="
-                        + URLEncoder.encode(authProperties.getAdminFrontendUrl(), StandardCharsets.UTF_8));
+                        + URLEncoder.encode("http://localhost/auth/logout/callback", StandardCharsets.UTF_8));
         assertThat(response.getCookie(AuthProperties.SESSION_COOKIE_NAME).getMaxAge()).isZero();
+    }
+
+    @Test
+    @DisplayName("登出回调：Logto 清完会话回到这里，302 回当前域名首页")
+    void logoutCallbackRedirectsToRoot() throws Exception {
+        mockMvc.perform(get("/auth/logout/callback"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/"));
     }
 }

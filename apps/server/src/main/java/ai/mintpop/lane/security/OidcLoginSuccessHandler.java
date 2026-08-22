@@ -73,7 +73,8 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
             return;
         }
 
-        // 管理端网页：直接发会话 Cookie 回首页
+        // 管理端网页：直接发会话 Cookie 回首页。相对路径回跳「当前请求所在的 host」——
+        // 容器会按当前请求域名补全 Location，多域部署下谁发起登录就回谁，无需配置落点
         ResponseCookie cookie = ResponseCookie.from(
                         AuthProperties.SESSION_COOKIE_NAME,
                         sessionTokenService.issue(user.getId(), authProperties.getWebSessionTtl()))
@@ -84,12 +85,12 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
                 .sameSite("Lax")
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-        response.sendRedirect(authProperties.getAdminFrontendUrl());
+        response.sendRedirect("/");
     }
 
     /**
      * 登录失败的落点：桌面流渲染落地页（深链带 error 回桌面端，让登录页停止空等），
-     * 网页流 302 回管理端带标记。public 供 SecurityConfig 的失败处理器复用。
+     * 网页流 302 回当前域名首页带标记。public 供 SecurityConfig 的失败处理器复用。
      */
     public void respondFailure(Optional<DesktopFlowCookie.DesktopFlow> flow, HttpServletResponse response)
             throws IOException {
@@ -97,6 +98,6 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
             desktopReturnPage.renderFailure(response, flow.get().state());
             return;
         }
-        response.sendRedirect(authProperties.getAdminFrontendUrl() + "?login_error=1");
+        response.sendRedirect("/?login_error=1");
     }
 }

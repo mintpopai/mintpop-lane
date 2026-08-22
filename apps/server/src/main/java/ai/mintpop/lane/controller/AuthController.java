@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -113,31 +114,39 @@ public class AuthController {
                 .sameSite("Lax")
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, expired.toString());
-        response.sendRedirect(logoutRedirectUrl());
+        response.sendRedirect(logoutRedirectUrl(request));
+    }
+
+    /** 登出回调：Logto 清完 IdP 会话回到这里，再回当前域名的前端首页 */
+    @GetMapping("/auth/logout/callback")
+    public void logoutCallback(HttpServletResponse response) throws IOException {
+        response.sendRedirect("/");
     }
 
     /**
      * 登出后该跳去哪，两条路径：
      * 1. issuer-uri 发现模式下，Spring 会把发现文档整份放进 configurationMetadata，
-     *    其中的 end_session_endpoint 就是 Logto 的结束会话端点——跳它并带上
-     *    client_id 与 post_logout_redirect_uri（须在 Logto 应用里登记），IdP 会话才真正结束；
+     *    其中的 end_session_endpoint 就是 Logto 的结束会话端点——跳它并带上 client_id 与
+     *    post_logout_redirect_uri（指向本服务的 /auth/logout/callback，按当前请求域名动态拼出，
+     *    多域部署下谁发起登出就回谁；各域名的该地址都须在 Logto 应用里登记），IdP 会话才真正结束；
      * 2. 显式端点配置（如测试环境）拿不到 metadata，没有可用的结束会话端点，
-     *    只能回退成「只清本站 Cookie 后回管理端」——本站已登出，Logto 侧留待其自然过期。
+     *    只能回退成「只清本站 Cookie 后回当前域名首页」——本站已登出，Logto 侧留待其自然过期。
      */
-    private String logoutRedirectUrl() {
-        String adminUrl = authProperties.getAdminFrontendUrl();
+    private String logoutRedirectUrl(HttpServletRequest request) {
         ClientRegistration registration = clientRegistrationRepository.findByRegistrationId(LOGTO_REGISTRATION_ID);
         if (registration == null) {
-            return adminUrl;
+            return "/";
         }
         Object endpoint = registration.getProviderDetails().getConfigurationMetadata().get("end_session_endpoint");
         if (endpoint == null || endpoint.toString().isBlank()) {
-            return adminUrl;
+            return "/";
         }
+        String postLogoutRedirect = ServletUriComponentsBuilder.fromContextPath(request)
+                .path("/auth/logout/callback").build().toUriString();
         // 端点自身可能已带查询串，拼接符按需选择；两个参数值都做 URL 编码后再拼
         String separator = endpoint.toString().contains("?") ? "&" : "?";
         return endpoint + separator
                 + "client_id=" + URLEncoder.encode(registration.getClientId(), StandardCharsets.UTF_8)
-                + "&post_logout_redirect_uri=" + URLEncoder.encode(adminUrl, StandardCharsets.UTF_8);
+                + "&post_logout_redirect_uri=" + URLEncoder.encode(postLogoutRedirect, StandardCharsets.UTF_8);
     }
 }

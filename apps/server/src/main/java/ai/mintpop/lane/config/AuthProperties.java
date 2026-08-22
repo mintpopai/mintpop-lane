@@ -33,8 +33,4 @@ public class AuthProperties {
 
     /** 桌面端会话有效期（存 OS 钥匙串） */
     private Duration desktopSessionTtl = Duration.ofDays(30);
-
-    /** 管理端前端地址：网页登录成功/失败后的回跳落点 */
-    @NotBlank
-    private String adminFrontendUrl;
 }
