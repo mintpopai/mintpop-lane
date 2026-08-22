@@ -92,7 +92,8 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <Modal :title="title" @close="emit('close')">
+  <!-- 贴链接那步内容只有一个输入框，窄款正合适；拉到节点列表后表格有五列，切成宽款 -->
+  <Modal :title="title" :wide="nodeList !== null" @close="emit('close')">
     <div class="admin-form">
       <div v-if="!props.group" class="admin-field">
         <label for="sub-url">订阅链接</label>
@@ -105,45 +106,58 @@ async function submit(): Promise<void> {
           :disabled="nodeList !== null"
         />
       </div>
+      <p v-else-if="nodeList === null" class="admin-note">将用保存的订阅链接重新拉取该分组的节点列表。</p>
 
-      <button
-        v-if="nodeList === null"
-        type="button"
-        class="admin-btn"
-        :disabled="loadingPreview"
-        @click="fetchPreview()"
-      >
-        {{ loadingPreview ? "拉取中…" : "拉取节点列表" }}
-      </button>
-
-      <template v-else>
+      <template v-if="nodeList !== null">
         <div class="admin-field">
-          <label>
-            <input type="checkbox" :checked="allChecked" aria-label="全选" @change="toggleCheckAll()" />
-            节点（已选 {{ checked.size }} / {{ nodeList.length }}）
-          </label>
           <p class="admin-note">「疑似信息条目」与「已入池」默认不勾；勾选已入池的节点表示用订阅里的参数更新它。</p>
-          <table class="admin-table">
-            <tbody>
-              <tr v-for="row in nodeList" :key="row.sourceName" :class="{ muted: row.suspectedInfo }">
-                <td>
-                  <input
-                    type="checkbox"
-                    :checked="checked.has(row.sourceName)"
-                    :aria-label="`勾选 ${row.sourceName}`"
-                    @change="toggleCheck(row.sourceName)"
-                  />
-                </td>
-                <td>{{ row.sourceName }}</td>
-                <td class="fact">{{ row.sourceType }}</td>
-                <td class="fact muted">{{ row.serverAddr }}:{{ row.port }}</td>
-                <td>
-                  <span v-if="row.existed" class="pill">已入池</span>
-                  <span v-else-if="row.suspectedInfo" class="muted">疑似信息条目</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="node-panel">
+            <div class="node-panel-bar">
+              <label class="node-check-all">
+                <input type="checkbox" :checked="allChecked" @change="toggleCheckAll()" />
+                全选
+              </label>
+              <span class="node-count">已选 <span class="fact">{{ checked.size }} / {{ nodeList.length }}</span></span>
+            </div>
+            <div class="node-panel-body">
+              <table class="admin-table dense node-table">
+                <thead>
+                  <tr>
+                    <th class="col-check"></th>
+                    <th>名称</th>
+                    <th>类型</th>
+                    <th>服务器</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in nodeList"
+                    :key="row.sourceName"
+                    :class="{ dim: row.suspectedInfo }"
+                    @click="toggleCheck(row.sourceName)"
+                  >
+                    <td class="col-check">
+                      <input
+                        type="checkbox"
+                        :checked="checked.has(row.sourceName)"
+                        :aria-label="`勾选 ${row.sourceName}`"
+                        @click.stop
+                        @change="toggleCheck(row.sourceName)"
+                      />
+                    </td>
+                    <td class="col-name" :title="row.sourceName">{{ row.sourceName }}</td>
+                    <td class="fact">{{ row.sourceType }}</td>
+                    <td class="fact muted">{{ row.serverAddr }}:{{ row.port }}</td>
+                    <td>
+                      <span v-if="row.existed" class="pill">已入池</span>
+                      <span v-else-if="row.suspectedInfo" class="pill muted">疑似信息条目</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div v-if="!props.group" class="admin-form-row">
@@ -162,7 +176,16 @@ async function submit(): Promise<void> {
     <template #footer>
       <button type="button" class="admin-btn-ghost" @click="emit('close')">取消</button>
       <button
-        v-if="nodeList !== null"
+        v-if="nodeList === null"
+        type="button"
+        class="admin-btn"
+        :disabled="loadingPreview"
+        @click="fetchPreview()"
+      >
+        {{ loadingPreview ? "拉取中…" : "拉取节点列表" }}
+      </button>
+      <button
+        v-else
         type="button"
         class="admin-btn"
         :disabled="submitting"
@@ -173,3 +196,90 @@ async function submit(): Promise<void> {
     </template>
   </Modal>
 </template>
+
+<style scoped>
+/* —— 节点勾选面板：工具条 + 限高滚动的表格区。
+   节点动辄几十上百个，列表自己滚，别把全选和下方的分组表单挤出弹窗视野 —— */
+.node-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  overflow: hidden;
+}
+
+.node-panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--color-bg-cloud);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.node-check-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.node-count {
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
+.node-count .fact {
+  color: var(--color-ink);
+}
+
+.node-panel-body {
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+/* 合并边框的表格里 sticky 表头的边框不跟着钉住（Chrome/Safari），改用分离边框 */
+.node-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.node-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg);
+}
+
+/* 整行都是勾选的点击区 */
+.node-table tbody tr {
+  cursor: pointer;
+}
+
+.node-table input[type='checkbox'] {
+  accent-color: var(--counter-focus);
+  cursor: pointer;
+}
+
+.node-table .col-check {
+  width: 1%;
+  padding-right: 0;
+}
+
+/* 富余宽度给名称列而不是默认的最后一列；width:100% + max-width:0 让超长名称按省略号截断 */
+.node-table tr > *:last-child {
+  width: auto;
+}
+
+.node-table .col-name {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 疑似信息条目整行淡化：它多半不是节点，视觉上先降一档 */
+.node-table tr.dim td {
+  color: var(--color-ink-secondary);
+}
+</style>

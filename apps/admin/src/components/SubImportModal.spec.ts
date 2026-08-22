@@ -103,7 +103,7 @@ describe("SubImportModal", () => {
 
   it("全选/清空切换", async () => {
     await openPreviewList();
-    const checkAllInput = query("input[aria-label=全选]");
+    const checkAllInput = query(".node-check-all input[type=checkbox]");
     await checkAllInput.setValue(true);
     expect(document.body.textContent).toContain("已选 3 / 3");
     await checkAllInput.setValue(false);
