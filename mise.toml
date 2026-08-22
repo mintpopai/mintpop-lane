@@ -58,9 +58,9 @@ dir = "apps/website"
 run = "pnpm vite build"
 
 [tasks.build-server]
-description = "打包服务端可执行 jar"
+description = "打包服务端可执行 jar（测试由 test-server 单独承担，镜像构建环境无 Docker 跑不了 Testcontainers）"
 dir = "apps/server"
-run = "mvn -q clean package"
+run = "mvn -q clean package -DskipTests"
 
 [tasks.image-admin]
 description = "构建管理端镜像（apps/admin/Dockerfile，mise 多阶段）"
