@@ -229,6 +229,7 @@ onMounted(load);
           <th>地址</th>
           <template v-if="currentRole === 'LAND'">
             <th>出口 IP</th>
+            <th>出口时区</th>
             <th>占用者</th>
           </template>
           <th>密码</th>
@@ -248,6 +249,7 @@ onMounted(load);
           <td class="fact">{{ row.serverAddr }}:{{ row.port }}</td>
           <template v-if="currentRole === 'LAND'">
             <td class="fact muted">{{ row.egressIp ?? "—" }}</td>
+            <td class="fact muted">{{ row.egressTimezone ?? "—" }}</td>
             <td>
               <span v-if="row.assignedUserName" class="pill">{{ row.assignedUserName }}</span>
               <span v-else class="muted">未分配</span>

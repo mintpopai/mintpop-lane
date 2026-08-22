@@ -108,6 +108,72 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("新建落地节点带出口时区，列表回显该时区")
+    void createLandNodeWithEgressTimezone() throws Exception {
+        var body = Map.of(
+                "name", "LAND-东京-03",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10",
+                "port", 50101,
+                "secret", Map.of("username", "u1", "password", "落地密码"),
+                "egressIp", "203.0.113.10",
+                "egressTimezone", "Asia/Tokyo",
+                "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/nodes").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].egressTimezone").value("Asia/Tokyo"));
+    }
+
+    @Test
+    @DisplayName("出口时区不是合法 IANA 时区名时报 410015，节点不落库")
+    void invalidEgressTimezoneFails() throws Exception {
+        var body = Map.of(
+                "name", "LAND-东京-03",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10",
+                "port", 50101,
+                "secret", Map.of("username", "u1", "password", "落地密码"),
+                "egressIp", "203.0.113.10",
+                "egressTimezone", "东京时间",
+                "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(410015));
+        assertThat(nodeRepository.findAll(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("非落地节点提交的出口时区被忽略，落库为 null")
+    void egressTimezoneIgnoredForFrontNode() throws Exception {
+        var body = Map.of(
+                "name", "FRONT-1",
+                "role", "FRONT",
+                "protocol", "TROJAN",
+                "serverAddr", "us.example.com",
+                "port", 443,
+                "secret", Map.of("password", "p1"),
+                "egressTimezone", "Asia/Tokyo",
+                "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(nodeRepository.findAll(null).get(0).getEgressTimezone()).isNull();
+    }
+
+    @Test
     @DisplayName("按角色过滤节点列表")
     void filterNodesByRole() throws Exception {
         fixtures.createFrontNode("FRONT-1");

@@ -52,6 +52,10 @@ public class NodeSaveRequest {
     @Size(max = 64, message = "出口 IP 最长 64 个字符")
     private String egressIp;
 
+    /** 落地出口时区（IANA 时区名），仅 LAND 需要；null 或空白表示未填 */
+    @Size(max = 64, message = "出口时区最长 64 个字符")
+    private String egressTimezone;
+
     @NotNull(message = "状态不能为空")
     private NodeStatus status = NodeStatus.ENABLED;
 

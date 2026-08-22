@@ -21,6 +21,8 @@ public record AdminNodeResponse(
         Map<String, Object> extraConfig,
         /** 出口 IP，仅 LAND 节点有值；未填为 null */
         String egressIp,
+        /** 落地出口 IP 对应的 IANA 时区名，仅 LAND 节点有值；未填为 null */
+        String egressTimezone,
         NodeStatus status,
         String remark,
         boolean secretConfigured,

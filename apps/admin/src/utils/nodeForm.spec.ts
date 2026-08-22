@@ -7,6 +7,7 @@ import {
   nodeToForm,
   parseScalar,
   syncEgressIpFromServerAddr,
+  syncEgressTimezoneFromLookup,
   validateNodeForm,
   PROTOCOL_SECRET_KEYS,
   type NodeFormModel,
@@ -112,6 +113,17 @@ describe("validateNodeForm", () => {
     expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10" }))).toEqual([]);
     expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1" }))).toEqual([]);
   });
+
+  it("出口时区填了就必须是合法的 IANA 时区名——坏值会被服务端 410015 挡回来，这里先给能看懂的话", () => {
+    expect(validateNodeForm(makeForm({ egressTimezone: "东京时间" }))).toContain(
+      "出口时区「东京时间」不是合法的 IANA 时区名",
+    );
+  });
+
+  it("出口时区留空或填合法时区名都放行", () => {
+    expect(validateNodeForm(makeForm({ egressTimezone: "" }))).toEqual([]);
+    expect(validateNodeForm(makeForm({ egressTimezone: "Asia/Tokyo" }))).toEqual([]);
+  });
 });
 
 describe("isIpLiteral", () => {
@@ -170,6 +182,42 @@ describe("syncEgressIpFromServerAddr", () => {
     const form = makeForm({ role: "FRONT", serverAddr: "203.0.113.10", egressIp: "" });
 
     expect(syncEgressIpFromServerAddr(form, "").egressIp).toBe("");
+  });
+});
+
+describe("syncEgressTimezoneFromLookup", () => {
+  it("落地节点时区为空时，用查询结果预填", () => {
+    const form = makeForm({ egressTimezone: "" });
+
+    expect(syncEgressTimezoneFromLookup(form, "Asia/Tokyo", "").egressTimezone).toBe("Asia/Tokyo");
+  });
+
+  it("时区若还等于上一次的预填值，跟随新查询结果更新", () => {
+    const form = makeForm({ egressTimezone: "Asia/Tokyo" });
+
+    expect(syncEgressTimezoneFromLookup(form, "America/Los_Angeles", "Asia/Tokyo").egressTimezone).toBe(
+      "America/Los_Angeles",
+    );
+  });
+
+  it("时区已被手工改过（与上一次预填值不同）就不动它", () => {
+    const form = makeForm({ egressTimezone: "Asia/Shanghai" });
+
+    expect(syncEgressTimezoneFromLookup(form, "America/Los_Angeles", "Asia/Tokyo").egressTimezone).toBe(
+      "Asia/Shanghai",
+    );
+  });
+
+  it("第一跳节点不预填——出口时区是落地节点的属性", () => {
+    const form = makeForm({ role: "FRONT", egressTimezone: "" });
+
+    expect(syncEgressTimezoneFromLookup(form, "Asia/Tokyo", "").egressTimezone).toBe("");
+  });
+
+  it("查询结果为空（GeoIP 查不到）时不动表单", () => {
+    const form = makeForm({ egressTimezone: "" });
+
+    expect(syncEgressTimezoneFromLookup(form, null, "").egressTimezone).toBe("");
   });
 });
 
@@ -253,6 +301,17 @@ describe("buildNodePayload", () => {
     expect(buildNodePayload(form).egressIp).toBeNull();
   });
 
+  it("落地节点的出口时区去掉首尾空白后提交，留空提交 null", () => {
+    expect(buildNodePayload(makeForm({ egressTimezone: " Asia/Tokyo " })).egressTimezone).toBe("Asia/Tokyo");
+    expect(buildNodePayload(makeForm({ egressTimezone: "  " })).egressTimezone).toBeNull();
+  });
+
+  it("第一跳节点不提交出口时区——出口时区是落地节点的属性", () => {
+    const form = makeForm({ role: "FRONT", egressTimezone: "Asia/Tokyo" });
+
+    expect(buildNodePayload(form).egressTimezone).toBeNull();
+  });
+
   it("备注为空时提交空串而不是 undefined，避免 JSON 里整个键消失", () => {
     expect(buildNodePayload(makeForm()).remark).toBe("");
   });
@@ -269,6 +328,7 @@ describe("nodeToForm", () => {
       port: 443,
       extraConfig: { sni: "tokyo.example.com", "skip-cert-verify": true },
       egressIp: "1.2.3.4",
+      egressTimezone: "Asia/Tokyo",
       status: "ENABLED",
       remark: "备注",
       secretConfigured: true,
@@ -289,6 +349,7 @@ describe("nodeToForm", () => {
       { key: "skip-cert-verify", value: "true" },
     ]);
     expect(form.egressIp).toBe("1.2.3.4");
+    expect(form.egressTimezone).toBe("Asia/Tokyo");
   });
 
   it("库里出口 IP 为 null 时回填成空串，表单输入框不显示「null」", () => {
@@ -301,6 +362,7 @@ describe("nodeToForm", () => {
       port: 443,
       extraConfig: {},
       egressIp: null,
+      egressTimezone: null,
       status: "ENABLED",
       remark: null,
       secretConfigured: false,
@@ -313,6 +375,7 @@ describe("nodeToForm", () => {
     } as AdminNodeResponse;
 
     expect(nodeToForm(node).egressIp).toBe("");
+    expect(nodeToForm(node).egressTimezone).toBe("");
   });
 
   it('库里的 null 值不铺成表单行——String(null) 会变成字符串 "null" 再被当真值写回去', () => {
@@ -325,6 +388,7 @@ describe("nodeToForm", () => {
       port: 443,
       extraConfig: { sni: "tokyo.example.com", "skip-cert-verify": null },
       egressIp: "1.2.3.4",
+      egressTimezone: null,
       status: "ENABLED",
       remark: "备注",
       secretConfigured: true,

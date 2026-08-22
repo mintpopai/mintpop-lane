@@ -12,6 +12,7 @@ function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
     port: 443,
     extraConfig: {},
     egressIp: null,
+    egressTimezone: null,
     status: "ENABLED",
     remark: null,
     secretConfigured: true,

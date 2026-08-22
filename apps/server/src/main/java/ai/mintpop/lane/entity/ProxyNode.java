@@ -52,6 +52,13 @@ public class ProxyNode {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String egressIp;
 
+    /**
+     * 落地出口 IP 对应的 IANA 时区名，仅 LAND 有值；NULL 表示未填。
+     * updateStrategy 同 egressIp：不加 ALWAYS，「清空时区」的更新会被静默忽略。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String egressTimezone;
+
     private NodeStatus status;
 
     private String remark;

@@ -38,6 +38,9 @@ public class ProxyNodeDto {
     /** 出口 IP，仅 LAND 有值；null 表示未填 */
     private String egressIp;
 
+    /** 落地出口 IP 对应的 IANA 时区名，仅 LAND 有值；null 表示未填 */
+    private String egressTimezone;
+
     private NodeStatus status = NodeStatus.ENABLED;
 
     private String remark;

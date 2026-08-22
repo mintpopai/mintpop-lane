@@ -15,6 +15,9 @@ import ai.mintpop.lane.response.AdminNodeResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -159,8 +162,27 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         String egressIp = request.getEgressIp() == null ? null : request.getEgressIp().trim();
         node.setEgressIp(request.getRole() == NodeRole.LAND && egressIp != null && !egressIp.isEmpty()
                 ? egressIp : null);
+        String egressTimezone = request.getEgressTimezone() == null ? null : request.getEgressTimezone().trim();
+        if (request.getRole() == NodeRole.LAND && egressTimezone != null && !egressTimezone.isEmpty()) {
+            validateTimezone(egressTimezone);
+            node.setEgressTimezone(egressTimezone);
+        } else {
+            node.setEgressTimezone(null);
+        }
         node.setStatus(request.getStatus());
         node.setRemark(request.getRemark());
+    }
+
+    /**
+     * 时区存的是给后续业务直接消费的 IANA 名，坏值会把错误推迟到消费点才爆，
+     * 这里在入口就挡掉。ZoneId.of 接受区域名（Asia/Tokyo）与偏移量写法，与前端校验同宽。
+     */
+    private void validateTimezone(String timezone) {
+        try {
+            ZoneId.of(timezone);
+        } catch (DateTimeException e) {
+            throw new BizException(BizCodeEnum.NODE_TIMEZONE_INVALID);
+        }
     }
 
     private AdminNodeResponse toResponse(ProxyNodeDto node, Map<Long, String> groupNames) {
@@ -177,6 +199,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getPort(),
                 node.getExtraConfig(),
                 node.getEgressIp(),
+                node.getEgressTimezone(),
                 node.getStatus(),
                 node.getRemark(),
                 node.getSecret() != null && !node.getSecret().isEmpty(),

@@ -140,6 +140,8 @@ export interface AdminNodeResponse {
   extraConfig: Record<string, unknown>;
   /** 出口 IP，仅 LAND 节点有值；未填为 null */
   egressIp: string | null;
+  /** 落地出口 IP 对应的 IANA 时区名，仅 LAND 节点有值；未填为 null */
+  egressTimezone: string | null;
   status: NodeStatus;
   remark: string | null;
   /** 同上，密码不回传，只告诉你配没配 */
@@ -176,6 +178,8 @@ export interface NodeSaveRequest {
   secret: Record<string, string>;
   /** 出口 IP，仅 LAND 需要；null 表示未填 */
   egressIp: string | null;
+  /** 落地出口时区（IANA 时区名），仅 LAND 需要；null 表示未填 */
+  egressTimezone: string | null;
   status: NodeStatus;
   remark: string;
 }

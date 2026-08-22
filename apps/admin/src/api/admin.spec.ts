@@ -73,6 +73,7 @@ describe("createAdminApi", () => {
       port: 443,
       extraConfig: {},
       secret: {},
+      egressTimezone: null,
       egressIp: null,
       status: "ENABLED",
       remark: "",

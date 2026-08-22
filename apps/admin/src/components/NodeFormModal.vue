@@ -9,11 +9,14 @@ import {
   applyProtocol,
   buildNodePayload,
   emptyNodeForm,
+  isIpLiteral,
   nodeToForm,
   syncEgressIpFromServerAddr,
+  syncEgressTimezoneFromLookup,
   validateNodeForm,
   type NodeFormModel,
 } from "../utils/nodeForm";
+import { lookupIpTimezone } from "../utils/ipTimezone";
 import KeyValueEditor from "./KeyValueEditor.vue";
 import Modal from "./AdminModal.vue";
 import Select from "./AdminSelect.vue";
@@ -32,6 +35,32 @@ watch(
     form.value = syncEgressIpFromServerAddr(form.value, previousServerAddr);
   },
 );
+
+// 上一次预填进表单的时区值；据此区分「还是预填的」与「管理员手工改过」
+const lastPrefilledTimezone = ref("");
+
+// 出口 IP 变成合法 IP 字面量时查 GeoIP 预填时区；查询失败静默降级为人工填写
+watch(
+  () => form.value.egressIp,
+  async (egressIp) => {
+    const ip = egressIp.trim();
+    if (form.value.role !== "LAND" || !isIpLiteral(ip)) {
+      return;
+    }
+    const timezone = await lookupIpTimezone(ip);
+    // 等待期间出口 IP 又改了：这份结果已过期，丢弃（后一次改动自有它自己的查询）
+    if (form.value.egressIp.trim() !== ip) {
+      return;
+    }
+    form.value = syncEgressTimezoneFromLookup(form.value, timezone, lastPrefilledTimezone.value);
+    if (timezone !== null && form.value.egressTimezone === timezone) {
+      lastPrefilledTimezone.value = timezone;
+    }
+  },
+);
+
+// IANA 时区名的补全候选；datalist 只是提示，不限制手工输入
+const timeZoneOptions = Intl.supportedValuesOf("timeZone");
 
 const title = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
 const roleOptions = Object.entries(NODE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
@@ -158,14 +187,29 @@ async function submit(): Promise<void> {
         <KeyValueEditor v-model="form.extraConfig" />
       </div>
 
-      <div v-if="!isSubscriptionNode && form.role === 'LAND'" class="admin-field">
-        <label for="node-egress">出口 IP</label>
-        <input
-          id="node-egress"
-          v-model="form.egressIp"
-          class="admin-input fact"
-          placeholder="地址填 IP 时自动带入，可改"
-        />
+      <div v-if="!isSubscriptionNode && form.role === 'LAND'" class="admin-form-row">
+        <div class="admin-field">
+          <label for="node-egress">出口 IP</label>
+          <input
+            id="node-egress"
+            v-model="form.egressIp"
+            class="admin-input fact"
+            placeholder="地址填 IP 时自动带入，可改"
+          />
+        </div>
+        <div class="admin-field">
+          <label for="node-egress-tz">出口时区</label>
+          <input
+            id="node-egress-tz"
+            v-model="form.egressTimezone"
+            class="admin-input fact"
+            list="iana-timezones"
+            placeholder="出口 IP 填好后自动识别，可改"
+          />
+          <datalist id="iana-timezones">
+            <option v-for="tz in timeZoneOptions" :key="tz" :value="tz" />
+          </datalist>
+        </div>
       </div>
 
       <div class="admin-form-row">

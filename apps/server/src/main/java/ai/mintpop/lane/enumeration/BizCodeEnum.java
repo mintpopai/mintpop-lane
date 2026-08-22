@@ -41,7 +41,8 @@ public enum BizCodeEnum {
     SUB_FETCH_FAILED(410011, "订阅拉取失败：链接无法访问或返回错误"),
     SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点"),
     NODE_GROUP_IN_USE(410013, "分组内有节点被用户引用，无法删除"),
-    SELECTED_NODE_MISSING(410014, "勾选的节点在订阅中已不存在，请重新预览");
+    SELECTED_NODE_MISSING(410014, "勾选的节点在订阅中已不存在，请重新预览"),
+    NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名");
 
     private final int code;
     private final String message;

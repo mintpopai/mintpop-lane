@@ -41,6 +41,8 @@ export interface NodeFormModel {
   secret: Record<string, string>;
   /** 出口 IP，单条；留空提交 null 表示未填 */
   egressIp: string;
+  /** 落地出口时区（IANA 时区名）；留空提交 null 表示未填 */
+  egressTimezone: string;
   status: NodeStatus;
   remark: string;
 }
@@ -63,6 +65,7 @@ export function emptyNodeForm(role: NodeRole): NodeFormModel {
     extraConfig: PROTOCOL_EXTRA_HINTS[protocol].map((key) => ({ key, value: "" })),
     secret: emptySecretKeys(protocol),
     egressIp: "",
+    egressTimezone: "",
     status: "ENABLED",
     remark: "",
   };
@@ -94,6 +97,7 @@ export function nodeToForm(node: AdminNodeResponse): NodeFormModel {
     // 服务端不回传密码，回填时一律是空的；留空提交即沿用原值
     secret: emptySecretKeys(node.protocol),
     egressIp: node.egressIp ?? "",
+    egressTimezone: node.egressTimezone ?? "",
     status: node.status,
     remark: node.remark ?? "",
   };
@@ -161,7 +165,23 @@ export function validateNodeForm(form: NodeFormModel): string[] {
     errors.push(`出口 IP「${egressIp}」不是合法的 IP 地址`);
   }
 
+  // 时区存的是给后续业务直接消费的 IANA 名，坏值服务端也会 410015 挡回来，这里先给能看懂的话
+  const egressTimezone = form.egressTimezone.trim();
+  if (egressTimezone && !isIanaTimeZone(egressTimezone)) {
+    errors.push(`出口时区「${egressTimezone}」不是合法的 IANA 时区名`);
+  }
+
   return errors;
+}
+
+/** 是否为运行时认可的 IANA 时区名（含 UTC 等别名），与服务端 ZoneId.of 的校验同宽 */
+export function isIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 是否为 IPv4/IPv6 字面量。IPv6 只做形态校验，不含 zone id 与 v4 内嵌写法 */
@@ -201,6 +221,26 @@ export function syncEgressIpFromServerAddr(form: NodeFormModel, previousServerAd
   return { ...form, egressIp: serverAddr };
 }
 
+/**
+ * GeoIP 查询返回后同步出口时区的预填：只在时区为空、或仍等于上一次预填值
+ * （说明此前也是预填的）时写入；管理员手工改过的值绝不覆盖。
+ * 查询失败（fetchedTimezone 为 null）不动表单，降级为人工填写。
+ */
+export function syncEgressTimezoneFromLookup(
+  form: NodeFormModel,
+  fetchedTimezone: string | null,
+  previousPrefill: string,
+): NodeFormModel {
+  if (form.role !== "LAND" || !fetchedTimezone) {
+    return form;
+  }
+  const egressTimezone = form.egressTimezone.trim();
+  if (egressTimezone !== "" && egressTimezone !== previousPrefill) {
+    return form;
+  }
+  return { ...form, egressTimezone: fetchedTimezone };
+}
+
 export function buildNodePayload(form: NodeFormModel): NodeSaveRequest {
   const extraConfig: Record<string, unknown> = {};
   for (const row of form.extraConfig) {
@@ -229,8 +269,9 @@ export function buildNodePayload(form: NodeFormModel): NodeSaveRequest {
     port: form.port as number,
     extraConfig,
     secret,
-    // 出口 IP 是落地节点的属性，第一跳节点一律不带；留空提交 null 表示未填
+    // 出口 IP 与出口时区都是落地节点的属性，第一跳节点一律不带；留空提交 null 表示未填
     egressIp: form.role === "LAND" ? form.egressIp.trim() || null : null,
+    egressTimezone: form.role === "LAND" ? form.egressTimezone.trim() || null : null,
     status: form.status,
     remark: form.remark.trim(),
   };
