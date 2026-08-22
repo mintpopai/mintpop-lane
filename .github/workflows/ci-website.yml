@@ -1,0 +1,24 @@
+name: CI Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/website/**"
+      - "mise.toml"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci-website.yml"
+      - ".github/workflows/quality-website.yml"
+  pull_request:
+    paths:
+      - "apps/website/**"
+      - "mise.toml"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci-website.yml"
+      - ".github/workflows/quality-website.yml"
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality-website.yml

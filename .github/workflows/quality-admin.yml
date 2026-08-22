@@ -1,0 +1,22 @@
+# 复用型质量门禁（workflow_call）：CI 与发版 workflow 共用，改一处两边生效
+name: Quality Admin
+
+on:
+  workflow_call:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+      - name: 安装 mise 工具链
+        uses: jdx/mise-action@v4
+        with:
+          install_args: node pnpm
+      - name: 安装前端依赖（按 lockfile 精确安装）
+        run: mise run install-admin --frozen
+      - name: 检查代码风格与类型
+        run: mise run lint-admin
+      - name: 运行管理端单元测试
+        run: mise run test-admin
