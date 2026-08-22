@@ -7,8 +7,8 @@
 # nginx 上游 IP（proxy_pass 用主机名且未配 resolver，会在配置加载时永久缓存旧 IP，否则升级后 502）
 services:
   server:
-    image: ghcr.io/mintpopai/lane-server:${SERVER_TAG:-latest}
-    container_name: lane-server
+    image: ghcr.io/mintpopai/mintpop-lane/server:${SERVER_TAG:-latest}
+    container_name: mintpop-lane-server
     restart: unless-stopped
     environment:
       # 仅影响容器日志时间戳；业务时间全链路 UTC 存取，与本变量无关
@@ -18,16 +18,17 @@ services:
       # 参照 apps/server/config/application.example.yml 填写；只读挂载，不进镜像
       - ./application.yml:/app/config/application.yml:ro
     healthcheck:
-      # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null 2>&1 || exit 1"]
+      # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事；
+      # 探活用 curl——运行镜像是 eclipse-temurin JRE 底座，装的是 curl、没有 wget
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
 
   website:
-    image: ghcr.io/mintpopai/lane-website:${WEBSITE_TAG:-latest}
-    container_name: lane-website
+    image: ghcr.io/mintpopai/mintpop-lane/website:${WEBSITE_TAG:-latest}
+    container_name: mintpop-lane-website
     restart: unless-stopped
     ports:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
@@ -45,8 +46,8 @@ services:
       start_period: 5s
 
   admin:
-    image: ghcr.io/mintpopai/lane-admin:${ADMIN_TAG:-latest}
-    container_name: lane-admin
+    image: ghcr.io/mintpopai/mintpop-lane/admin:${ADMIN_TAG:-latest}
+    container_name: mintpop-lane-admin
     restart: unless-stopped
     ports:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定

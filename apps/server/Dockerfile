@@ -23,30 +23,20 @@ RUN mise trust && mise install java maven
 COPY apps/server/pom.xml ./apps/server/
 RUN mise run install-server
 
-COPY apps/server/ ./apps/server/
+COPY apps/server/src ./apps/server/src
 # 构建命令走 mise task，与本地/CI 单一来源，不在 Dockerfile 里重抄 mvn 命令
 RUN mise run build-server
 
-# ---- 运行阶段：同样用 mise 提供 JRE，保持版本单一来源 ----
-FROM debian:13-slim AS runtime
-
-ENV MISE_VERSION=v2026.6.0
-ENV MISE_DATA_DIR=/mise MISE_CONFIG_DIR=/mise MISE_CACHE_DIR=/mise/cache \
-    MISE_INSTALL_PATH=/usr/local/bin/mise PATH=/mise/shims:$PATH
-
+# ---- 运行阶段：JRE 底座只装 jar；curl 供 compose healthcheck ----
+# 运行期不进 mise：mise exec 会在容器启动时自动安装 mise.toml [tools] 里没装的
+# node/pnpm/maven（node 在 slim 底座缺 libatomic 直接装不上，容器启动即崩）。
+# JRE 大版本与根 mise.toml 的 java 保持一致，升级 java 时两处同步改
+FROM eclipse-temurin:25-jre AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates wget \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl https://mise.run | sh
-
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-# 运行期只需要 java，不装 maven
-COPY mise.toml ./
-RUN mise trust && mise install java
-
-COPY --from=build /app/apps/server/target/lane-server-*.jar ./server.jar
-
+# 部署时把外置 application.yml 挂到 /app/config/，Spring 启动自动读取（凭据不进镜像）
+COPY --from=build /app/apps/server/target/lane-server-*.jar app.jar
 EXPOSE 8080
-# 配置由 compose 以只读卷挂到 /app/config，含凭据的配置文件不进镜像；
-# 工作目录是 /app，Spring Boot 默认就会读取 ./config/application.yml，无需显式指定
-CMD ["mise", "exec", "--", "java", "-jar", "server.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
