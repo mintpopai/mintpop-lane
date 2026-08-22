@@ -15,6 +15,8 @@ public record LinkConfigResponse(
         Map<String, Object> front,
         Map<String, Object> land,
         String expectedEgressIp,
+        /** 落地出口 IP 对应的 IANA 时区名；未录为 null，客户端据此给终端注入 TZ */
+        String egressTimezone,
         List<AgentCredential> agentCredentials,
         long ttlSeconds
 ) {

@@ -57,6 +57,7 @@ class LinkServiceImplTest {
         n.setStatus(NodeStatus.ENABLED);
         if (role == NodeRole.LAND) {
             n.setEgressIp("203.0.113.10");
+            n.setEgressTimezone("Asia/Tokyo");
         }
         return n;
     }
@@ -139,6 +140,28 @@ class LinkServiceImplTest {
         assertThat(resp.agentCredentials().getFirst().credential()).isEqualTo("sk-ant-test");
         assertThat(resp.agentCredentials().getFirst().agentType()).isEqualTo(AgentType.CLAUDE);
         assertThat(resp.ttlSeconds()).isEqualTo(1800);
+    }
+
+    @Test
+    @DisplayName("落地节点录了出口时区就随链路配置下发")
+    void egressTimezoneDeliveredWithLink() {
+        givenUser(user(UserStatus.ACTIVE));
+
+        assertThat(service.resolveLink(USER_ID).egressTimezone()).isEqualTo("Asia/Tokyo");
+    }
+
+    @Test
+    @DisplayName("落地节点没录时区时下发 null，不拦建链——时区是增强信息不是前置条件")
+    void missingEgressTimezoneDeliversNullWithoutBlocking() {
+        ProxyNodeDto land = node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10");
+        land.setEgressTimezone(null);
+        when(nodeRepository.findById(20L)).thenReturn(Optional.of(land));
+        givenUser(user(UserStatus.ACTIVE));
+
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.egressTimezone()).isNull();
+        assertThat(resp.expectedEgressIp()).isNotBlank();
     }
 
     @Test

@@ -84,6 +84,7 @@ public class LinkServiceImpl implements LinkService {
                 front.toMihomoNode(),
                 land.toMihomoNode(),
                 land.getEgressIp(),
+                land.getEgressTimezone(),
                 credentials,
                 linkProperties.getTtlSeconds()
         );
