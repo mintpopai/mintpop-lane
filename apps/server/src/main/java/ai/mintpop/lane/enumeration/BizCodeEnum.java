@@ -25,8 +25,8 @@ public enum BizCodeEnum {
     // 310002 曾是 CREDENTIAL_NOT_ASSIGNED（凭据未录入拦建链），已解耦：凭据只影响会话，不再拦链路。号位不复用
     LINK_REVOKED(310003, "该用户的链路已被吊销"),
     NODE_DISABLED(310004, "链路节点已被禁用"),
-    SERVICE_NOT_PURCHASED(310005, "尚未购买任何服务"),
-    SERVICE_EXPIRED(310006, "服务已到期，请续费"),
+    // 310005 曾是 SERVICE_NOT_PURCHASED、310006 曾是 SERVICE_EXPIRED（套餐拦建链），
+    // 已解耦：套餐只影响席位凭据，不再拦链路。号位不复用
 
     /* 管理端 */
     NODE_NOT_FOUND(410001, "节点不存在"),

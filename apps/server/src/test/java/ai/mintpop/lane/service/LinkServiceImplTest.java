@@ -173,27 +173,41 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("从未购买过服务的用户被拒绝")
-    void neverPurchasedUserRejected() {
+    @DisplayName("从未购买过服务但配好网络的用户仍下发链路，席位为空——套餐与网络配置解耦")
+    void neverPurchasedStillDeliversLinkWithEmptySeats() {
         givenUser(user(UserStatus.ACTIVE));
         // 订阅列表默认空，无需额外造数
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
-                .isInstanceOf(BizException.class)
-                .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.SERVICE_NOT_PURCHASED);
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.agentCredentials()).isEmpty();
+        assertThat(resp.expectedEgressIps()).isNotEmpty();
     }
 
     @Test
-    @DisplayName("买过但订阅全部过期的用户被拒绝，文案区别于「从未购买」")
-    void allSubscriptionsExpiredRejected() {
+    @DisplayName("订阅全部过期时仍下发链路，过期订阅的凭据不下发")
+    void allSubscriptionsExpiredStillDeliversLinkWithEmptySeats() {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(expiredSubscription(100L, "sk-ant-test"));
+
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.agentCredentials()).isEmpty();
+        assertThat(resp.expectedEgressIps()).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("没买过服务且未分配链路资源时，按「资源未分配」拒绝——缺的是网络配置，不是套餐")
+    void neverPurchasedWithoutNodesRejectedAsEgressNotAssigned() {
+        UserDto u = user(UserStatus.ACTIVE);
+        u.setFrontNodeId(null);
+        u.setLandNodeId(null);
+        givenUser(u);
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.SERVICE_EXPIRED);
+                .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
     }
 
     @Test
@@ -346,12 +360,12 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("心跳：处置态正常但在期订阅归零时返回 EXPIRED，保留登录态")
-    void heartbeatAllExpiredReturnsExpired() {
+    @DisplayName("心跳：订阅全部过期不影响链路，仍返回 ACTIVE——套餐只影响席位，不拦网络")
+    void heartbeatAllExpiredStillReturnsActive() {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(expiredSubscription(100L, "sk-ant-test"));
 
-        assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.EXPIRED);
+        assertThat(service.heartbeat(USER_ID).status()).isEqualTo(LinkStatus.ACTIVE);
     }
 
     @Test
