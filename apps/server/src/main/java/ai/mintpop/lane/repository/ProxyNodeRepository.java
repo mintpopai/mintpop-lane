@@ -13,6 +13,14 @@ public interface ProxyNodeRepository {
 
     Optional<ProxyNodeDto> findById(Long id);
 
+    /**
+     * 按 id 的锁定读（SELECT ... FOR UPDATE），把该节点行锁到当前事务提交为止。
+     * 供落地分配的容量校验用：同一节点的并发分配在这行锁上串行化，
+     * 否则两个管理员同时抢最后一个名额会双双通过校验而超卖。
+     * 必须在事务内调用，否则锁随语句立即释放、形同虚设。
+     */
+    Optional<ProxyNodeDto> findByIdForUpdate(Long id);
+
     /** 按角色列出节点；role 为 null 时返回全部。按 id 升序。 */
     List<ProxyNodeDto> findAll(NodeRole role);
 
@@ -28,7 +36,9 @@ public interface ProxyNodeRepository {
      *       updateStrategy = ALWAYS，传 null 即清空；</li>
      *   <li>{@code secret} 传 null 或空 Map 都表示「沿用原有敏感键」，**无法通过 update
      *       清空**——这与管理端「敏感键留空即不改」的语义一致（页面上看不到原密码，
-     *       没重填就不该被清掉）。</li>
+     *       没重填就不该被清掉）；</li>
+     *   <li>{@code capacity} 传 null 表示「不改容量」（列 NOT NULL DEFAULT 10，
+     *       不存在「清空」语义）。</li>
      * </ul>
      * <p>
      * 调用前提：入参必须是先 {@link #findById(Long)} 拿到的完整 DTO，改动要改的字段后

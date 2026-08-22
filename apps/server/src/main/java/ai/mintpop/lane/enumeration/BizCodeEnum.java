@@ -30,7 +30,7 @@ public enum BizCodeEnum {
 
     /* 管理端 */
     NODE_NOT_FOUND(410001, "节点不存在"),
-    LAND_NODE_OCCUPIED(410002, "该落地节点已被其他用户占用"),
+    // 410002 曾是 LAND_NODE_OCCUPIED（一人一座时代），已改为容量制（见 410016）。号位不复用
     NODE_IN_USE(410003, "该节点仍被用户引用，无法删除"),
     NODE_ROLE_MISMATCH(410005, "节点角色与用途不符"),
     USER_NOT_FOUND(410006, "用户不存在"),
@@ -42,7 +42,8 @@ public enum BizCodeEnum {
     SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点"),
     NODE_GROUP_IN_USE(410013, "分组内有节点被用户引用，无法删除"),
     SELECTED_NODE_MISSING(410014, "勾选的节点在订阅中已不存在，请重新预览"),
-    NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名");
+    NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名"),
+    LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配");
 
     private final int code;
     private final String message;

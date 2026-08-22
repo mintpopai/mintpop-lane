@@ -75,6 +75,7 @@ describe("createAdminApi", () => {
       secret: {},
       egressTimezone: null,
       egressIp: null,
+      capacity: null,
       status: "ENABLED",
       remark: "",
     };

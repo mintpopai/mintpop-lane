@@ -60,8 +60,13 @@ public class DatabaseFixtures {
         return nodeRepository.create(node);
     }
 
-    /** 建一个 socks5 协议的落地节点，出口 IP 由调用方指定 */
+    /** 建一个 socks5 协议的落地节点，出口 IP 由调用方指定，容量走数据库默认值 10 */
     public Long createLandNode(String name, String egressIp) {
+        return createLandNode(name, egressIp, null);
+    }
+
+    /** 建一个 socks5 协议的落地节点；capacity 传 null 表示走数据库默认值 10 */
+    public Long createLandNode(String name, String egressIp, Integer capacity) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.LAND);
@@ -70,6 +75,7 @@ public class DatabaseFixtures {
         node.setPort(50101);
         node.setSecret(Map.of("username", "land-用户名", "password", "land-密码"));
         node.setEgressIp(egressIp);
+        node.setCapacity(capacity);
         return nodeRepository.create(node);
     }
 

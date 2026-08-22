@@ -2,7 +2,6 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
-import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
@@ -97,7 +96,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         // 角色变更前先查它是否正被用户引用：已被当前端/落地出口使用的节点悄悄改角色，
         // 会让分配它的用户在无人复查的情况下跑到一个用途不符的节点上
         if (request.getRole() != node.getRole()
-                && (userRepository.existsByFrontNodeId(id) || userRepository.findByLandNodeId(id).isPresent())) {
+                && (userRepository.existsByFrontNodeId(id) || userRepository.countByLandNodeId(id) > 0)) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
 
@@ -116,7 +115,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     public void delete(Long id) {
         nodeRepository.findById(id).orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
 
-        if (userRepository.existsByFrontNodeId(id) || userRepository.findByLandNodeId(id).isPresent()) {
+        if (userRepository.existsByFrontNodeId(id) || userRepository.countByLandNodeId(id) > 0) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
         nodeRepository.deleteById(id);
@@ -169,6 +168,9 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         } else {
             node.setEgressTimezone(null);
         }
+        // 容量只对 LAND 有意义；置 null 时列上无 ALWAYS 策略，新建走数据库默认值 10、更新保留原值。
+        // 允许把容量改到低于当前已绑人数：只影响后续分配，不踢已绑定的用户
+        node.setCapacity(request.getRole() == NodeRole.LAND ? request.getCapacity() : null);
         node.setStatus(request.getStatus());
         node.setRemark(request.getRemark());
     }
@@ -186,9 +188,9 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     }
 
     private AdminNodeResponse toResponse(ProxyNodeDto node, Map<Long, String> groupNames) {
-        String assignedUserName = node.getRole() == NodeRole.LAND
-                ? userRepository.findByLandNodeId(node.getId()).map(UserDto::getName).orElse(null)
-                : null;
+        // 已绑人数实时统计、不落库，取消分配自然回补；容量是落地专属概念，非 LAND 两者都回 null
+        boolean isLand = node.getRole() == NodeRole.LAND;
+        Long assignedUserCount = isLand ? userRepository.countByLandNodeId(node.getId()) : null;
 
         return new AdminNodeResponse(
                 node.getId(),
@@ -203,7 +205,8 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getStatus(),
                 node.getRemark(),
                 node.getSecret() != null && !node.getSecret().isEmpty(),
-                assignedUserName,
+                isLand ? node.getCapacity() : null,
+                assignedUserCount,
                 node.getGroupId(),
                 node.getGroupId() == null ? null : groupNames.get(node.getGroupId()),
                 node.getSourceType(),

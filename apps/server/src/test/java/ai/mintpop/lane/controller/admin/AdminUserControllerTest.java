@@ -154,12 +154,58 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("落地节点已被占用时报 410002")
-    void occupiedLandNodeFails() throws Exception {
+    @DisplayName("容量未满时同一落地节点可以再分配给别人")
+    void landNodeWithRemainingCapacityAcceptsMoreUsers() throws Exception {
+        // landId 已被 memberWithSub 绑定，容量默认 10，仍有余量
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(updateRequest("ACTIVE", frontId, landId))))
-                .andExpect(jsonPath("$.code").value(410002));
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.countByLandNodeId(landId)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("容量已满的落地节点再分配报 410016")
+    void fullLandNodeRejectsAssignment() throws Exception {
+        Long tinyLand = fixtures.createLandNode("LAND-容量1", "203.0.113.20", 1);
+        fixtures.createUser("logto-m3", frontId, tinyLand);
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, tinyLand))))
+                .andExpect(jsonPath("$.code").value(410016));
+
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getLandNodeId()).isNull();
+    }
+
+    @Test
+    @DisplayName("重存自己已绑定的节点不占新名额，容量满也能保存")
+    void resavingOwnLandNodeDoesNotConsumeCapacity() throws Exception {
+        Long tinyLand = fixtures.createLandNode("LAND-容量1", "203.0.113.20", 1);
+        Long occupant = fixtures.createUser("logto-m3", frontId, tinyLand);
+
+        mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("SUSPENDED", frontId, tinyLand))))
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("取消分配即回补名额，满员节点随后可以再分配")
+    void unassigningRestoresCapacity() throws Exception {
+        Long tinyLand = fixtures.createLandNode("LAND-容量1", "203.0.113.20", 1);
+        Long occupant = fixtures.createUser("logto-m3", frontId, tinyLand);
+
+        mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, tinyLand))))
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test

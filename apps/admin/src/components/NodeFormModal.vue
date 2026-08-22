@@ -91,6 +91,10 @@ function changePort(raw: string): void {
   form.value.port = raw === "" ? null : Number(raw);
 }
 
+function changeCapacity(raw: string): void {
+  form.value.capacity = raw === "" ? null : Number(raw);
+}
+
 async function submit(): Promise<void> {
   const errors = validateNodeForm(form.value);
   if (errors.length > 0) {
@@ -209,6 +213,18 @@ async function submit(): Promise<void> {
           <datalist id="iana-timezones">
             <option v-for="tz in timeZoneOptions" :key="tz" :value="tz" />
           </datalist>
+        </div>
+        <div class="admin-field">
+          <label for="node-capacity">容量</label>
+          <input
+            id="node-capacity"
+            class="admin-input fact"
+            type="number"
+            min="1"
+            step="1"
+            :value="form.capacity ?? ''"
+            @input="changeCapacity(($event.target as HTMLInputElement).value)"
+          />
         </div>
       </div>
 

@@ -59,6 +59,13 @@ public class ProxyNode {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String egressTimezone;
 
+    /**
+     * 落地节点容量：最多可绑定的用户数，仅 LAND 有意义。
+     * 列上 NOT NULL DEFAULT 10：插入/更新时传 null 走默认跳过策略，
+     * 由数据库默认值补 10 或保留原值。
+     */
+    private Integer capacity;
+
     private NodeStatus status;
 
     private String remark;

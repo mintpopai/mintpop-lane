@@ -136,7 +136,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         // 先整体校验再删：不做「删到一半发现被引用」的部分删除
         for (ProxyNodeDto node : nodes) {
             if (userRepository.existsByFrontNodeId(node.getId())
-                    || userRepository.findByLandNodeId(node.getId()).isPresent()) {
+                    || userRepository.countByLandNodeId(node.getId()) > 0) {
                 throw new BizException(BizCodeEnum.NODE_GROUP_IN_USE);
             }
         }

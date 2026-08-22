@@ -32,6 +32,16 @@ public class MybatisProxyNodeRepository implements ProxyNodeRepository {
     }
 
     @Override
+    public Optional<ProxyNodeDto> findByIdForUpdate(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(mapper.selectOne(
+                        Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getId, id).last("FOR UPDATE")))
+                .map(converter::toDto);
+    }
+
+    @Override
     public List<ProxyNodeDto> findAll(NodeRole role) {
         var query = Wrappers.<ProxyNode>lambdaQuery().orderByAsc(ProxyNode::getId);
         if (role != null) {

@@ -32,8 +32,8 @@ export function selectableFrontNodes(nodes: AdminNodeResponse[]): AdminNodeRespo
 }
 
 /**
- * 可分配的落地节点：角色对、启用、且没被别人占用。
- * 当前用户自己占着的那个要保留，否则编辑时下拉框里会看不到自己已选的值。
+ * 可分配的落地节点：角色对、启用、且还有剩余容量（已绑人数 < 容量）。
+ * 当前用户自己绑着的那个要保留（即使已满），否则编辑时下拉框里会看不到自己已选的值。
  */
 export function selectableLandNodes(
   nodes: AdminNodeResponse[],
@@ -43,6 +43,6 @@ export function selectableLandNodes(
     (node) =>
       node.role === "LAND" &&
       node.status === "ENABLED" &&
-      (node.assignedUserName === null || node.id === currentLandNodeId),
+      ((node.assignedUserCount ?? 0) < (node.capacity ?? 0) || node.id === currentLandNodeId),
   );
 }

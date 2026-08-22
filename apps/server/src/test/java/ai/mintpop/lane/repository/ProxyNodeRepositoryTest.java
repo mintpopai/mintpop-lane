@@ -64,7 +64,30 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         assertThat(loaded.getSecret()).containsEntry("password", "落地密码");
         assertThat(loaded.getEgressIp()).isEqualTo("203.0.113.10");
         assertThat(loaded.getStatus()).isEqualTo(NodeStatus.ENABLED);
+        // 容量未显式设置时取数据库默认值 10
+        assertThat(loaded.getCapacity()).isEqualTo(10);
         assertThat(loaded.getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("容量能显式存取与更新")
+    void capacityRoundTripAndUpdate() {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName("LAND-东京-04");
+        node.setRole(NodeRole.LAND);
+        node.setProtocol(NodeProtocol.SOCKS5);
+        node.setServerAddr("203.0.113.11");
+        node.setPort(50101);
+        node.setSecret(Map.of("password", "落地密码"));
+        node.setCapacity(3);
+
+        Long id = repository.create(node);
+        assertThat(repository.findById(id).orElseThrow().getCapacity()).isEqualTo(3);
+
+        ProxyNodeDto loaded = repository.findById(id).orElseThrow();
+        loaded.setCapacity(25);
+        repository.update(loaded);
+        assertThat(repository.findById(id).orElseThrow().getCapacity()).isEqualTo(25);
     }
 
     @Test

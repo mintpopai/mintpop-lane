@@ -16,7 +16,8 @@ function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
     status: "ENABLED",
     remark: null,
     secretConfigured: true,
-    assignedUserName: null,
+    capacity: null,
+    assignedUserCount: null,
     groupId: null,
     groupName: null,
     sourceType: null,
@@ -94,26 +95,26 @@ describe("selectableFrontNodes", () => {
 });
 
 describe("selectableLandNodes", () => {
-  it("已被别人占用的落地节点不可选——一人一个出口是硬约束", () => {
+  it("容量已满的落地节点不可选，还有余量的可选（哪怕已有人绑定）", () => {
     const nodes = [
-      makeNode({ id: 10, role: "LAND", assignedUserName: null }),
-      makeNode({ id: 11, role: "LAND", assignedUserName: "李四" }),
+      makeNode({ id: 10, role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      makeNode({ id: 11, role: "LAND", capacity: 2, assignedUserCount: 2 }),
     ];
 
     expect(selectableLandNodes(nodes, null).map((n) => n.id)).toEqual([10]);
   });
 
-  it("自己当前占着的那个仍可选，否则编辑自己时选项会凭空消失", () => {
+  it("自己当前绑着的那个仍可选（即使已满），否则编辑自己时选项会凭空消失", () => {
     const nodes = [
-      makeNode({ id: 10, role: "LAND", assignedUserName: null }),
-      makeNode({ id: 11, role: "LAND", assignedUserName: "张三" }),
+      makeNode({ id: 10, role: "LAND", capacity: 10, assignedUserCount: 0 }),
+      makeNode({ id: 11, role: "LAND", capacity: 1, assignedUserCount: 1 }),
     ];
 
     expect(selectableLandNodes(nodes, 11).map((n) => n.id)).toEqual([10, 11]);
   });
 
   it("禁用的落地节点不可选", () => {
-    const nodes = [makeNode({ id: 12, role: "LAND", status: "DISABLED", assignedUserName: null })];
+    const nodes = [makeNode({ id: 12, role: "LAND", status: "DISABLED", capacity: 10, assignedUserCount: 0 })];
 
     expect(selectableLandNodes(nodes, null)).toEqual([]);
   });

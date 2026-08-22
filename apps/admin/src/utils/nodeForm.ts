@@ -43,9 +43,14 @@ export interface NodeFormModel {
   egressIp: string;
   /** 落地出口时区（IANA 时区名）；留空提交 null 表示未填 */
   egressTimezone: string;
+  /** 落地节点容量（最多可绑定的用户数）；仅 LAND 生效，默认 10 */
+  capacity: number | null;
   status: NodeStatus;
   remark: string;
 }
+
+/** 落地节点容量的默认值，与服务端数据库默认值保持一致 */
+export const DEFAULT_LAND_CAPACITY = 10;
 
 /** 把协议的敏感键铺成一组空值，供表单渲染 */
 function emptySecretKeys(protocol: NodeProtocol): Record<string, string> {
@@ -66,6 +71,7 @@ export function emptyNodeForm(role: NodeRole): NodeFormModel {
     secret: emptySecretKeys(protocol),
     egressIp: "",
     egressTimezone: "",
+    capacity: DEFAULT_LAND_CAPACITY,
     status: "ENABLED",
     remark: "",
   };
@@ -98,6 +104,8 @@ export function nodeToForm(node: AdminNodeResponse): NodeFormModel {
     secret: emptySecretKeys(node.protocol),
     egressIp: node.egressIp ?? "",
     egressTimezone: node.egressTimezone ?? "",
+    // 非 LAND 回传 null；回填成默认值，角色切到 LAND 时表单里不出现空容量
+    capacity: node.capacity ?? DEFAULT_LAND_CAPACITY,
     status: node.status,
     remark: node.remark ?? "",
   };
@@ -169,6 +177,11 @@ export function validateNodeForm(form: NodeFormModel): string[] {
   const egressTimezone = form.egressTimezone.trim();
   if (egressTimezone && !isIanaTimeZone(egressTimezone)) {
     errors.push(`出口时区「${egressTimezone}」不是合法的 IANA 时区名`);
+  }
+
+  // 容量是落地专属概念，且服务端校验 @Min(1)；分数/空值在这里先拦下
+  if (form.role === "LAND" && (form.capacity === null || !Number.isInteger(form.capacity) || form.capacity < 1)) {
+    errors.push("容量必须是不小于 1 的整数");
   }
 
   return errors;
@@ -269,9 +282,10 @@ export function buildNodePayload(form: NodeFormModel): NodeSaveRequest {
     port: form.port as number,
     extraConfig,
     secret,
-    // 出口 IP 与出口时区都是落地节点的属性，第一跳节点一律不带；留空提交 null 表示未填
+    // 出口 IP、出口时区、容量都是落地节点的属性，第一跳节点一律不带；留空提交 null 表示未填
     egressIp: form.role === "LAND" ? form.egressIp.trim() || null : null,
     egressTimezone: form.role === "LAND" ? form.egressTimezone.trim() || null : null,
+    capacity: form.role === "LAND" ? form.capacity : null,
     status: form.status,
     remark: form.remark.trim(),
   };

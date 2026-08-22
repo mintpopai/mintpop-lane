@@ -26,8 +26,10 @@ public record AdminNodeResponse(
         NodeStatus status,
         String remark,
         boolean secretConfigured,
-        /** 该落地节点当前的占用者姓名；未分配或非 LAND 时为 null */
-        String assignedUserName,
+        /** 落地节点容量（最多可绑定的用户数）；非 LAND 为 null */
+        Integer capacity,
+        /** 该落地节点当前绑定的用户数；非 LAND 为 null */
+        Long assignedUserCount,
         /** 所属分组；手工节点为 null */
         Long groupId,
         String groupName,

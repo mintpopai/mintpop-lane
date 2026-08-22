@@ -73,12 +73,12 @@ class UserRepositoryTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("同一个落地节点绑给第二个人时被数据库拒绝")
-    void sameLandNodeCannotBindTwoUsers() {
+    @DisplayName("同一个落地节点可以绑给多个用户，计数随之增长")
+    void sameLandNodeCanBindMultipleUsers() {
         fixtures.createUser("logto-user-1", frontId, landId);
+        fixtures.createUser("logto-user-2", frontId, landId);
 
-        assertThatThrownBy(() -> fixtures.createUser("logto-user-2", frontId, landId))
-                .isInstanceOf(DuplicateKeyException.class);
+        assertThat(repository.countByLandNodeId(landId)).isEqualTo(2);
     }
 
     @Test
@@ -94,19 +94,17 @@ class UserRepositoryTest extends MysqlTestBase {
 
         assertThat(reloaded.getLandNodeId()).isNull();
         assertThat(reloaded.getStatus()).isEqualTo(UserStatus.SUSPENDED);
-        // 落地释放后可以分配给别人
-        assertThat(repository.findByLandNodeId(landId)).isEmpty();
+        // 落地释放后名额即回补
+        assertThat(repository.countByLandNodeId(landId)).isZero();
     }
 
     @Test
-    @DisplayName("按落地节点反查占用者，供节点删除与分配校验使用")
-    void findOccupantByLandNode() {
+    @DisplayName("按落地节点统计绑定人数，供节点删除与容量校验使用")
+    void countUsersByLandNode() {
         fixtures.createUser("logto-user-1", frontId, landId);
 
-        assertThat(repository.findByLandNodeId(landId))
-                .get()
-                .extracting(UserDto::getSubject)
-                .isEqualTo("logto-user-1");
+        assertThat(repository.countByLandNodeId(landId)).isEqualTo(1);
+        assertThat(repository.countByLandNodeId(null)).isZero();
         assertThat(repository.existsByFrontNodeId(frontId)).isTrue();
         assertThat(repository.existsByFrontNodeId(landId)).isFalse();
     }
@@ -170,6 +168,6 @@ class UserRepositoryTest extends MysqlTestBase {
         repository.deleteById(id);
 
         assertThat(repository.findById(id)).isEmpty();
-        assertThat(repository.findByLandNodeId(landId)).isEmpty();
+        assertThat(repository.countByLandNodeId(landId)).isZero();
     }
 }

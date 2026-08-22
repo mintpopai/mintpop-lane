@@ -39,6 +39,7 @@ public class ProxyNodeConverter {
         dto.setSecret(readSecret(entity.getSecretCipher()));
         dto.setEgressIp(entity.getEgressIp());
         dto.setEgressTimezone(entity.getEgressTimezone());
+        dto.setCapacity(entity.getCapacity());
         dto.setStatus(entity.getStatus());
         dto.setRemark(entity.getRemark());
         dto.setGroupId(entity.getGroupId());
@@ -61,6 +62,7 @@ public class ProxyNodeConverter {
         entity.setSecretCipher(writeSecret(dto.getSecret()));
         entity.setEgressIp(dto.getEgressIp());
         entity.setEgressTimezone(dto.getEgressTimezone());
+        entity.setCapacity(dto.getCapacity());
         entity.setStatus(dto.getStatus());
         entity.setRemark(dto.getRemark());
         entity.setGroupId(dto.getGroupId());

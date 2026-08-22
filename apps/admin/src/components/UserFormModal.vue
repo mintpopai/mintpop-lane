@@ -33,7 +33,7 @@ const landOptions = computed(() => [
   { value: null, label: "暂不分配" },
   ...selectableLandNodes(props.nodes, props.user.landNodeId).map((node) => ({
     value: node.id,
-    label: `${node.name}（${node.egressIp ?? "未填出口 IP"}）`,
+    label: `${node.name}（${node.egressIp ?? "未填出口 IP"} · ${node.assignedUserCount ?? 0}/${node.capacity ?? 0}）`,
   })),
 ]);
 
@@ -46,7 +46,7 @@ async function submit(): Promise<void> {
     emit("saved");
     emit("close");
   } catch (error) {
-    // 410002 落地节点被占，由服务端给中文提示
+    // 410016 落地节点容量已满，由服务端给中文提示
     showToast("error", error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`);
   } finally {
     submitting.value = false;

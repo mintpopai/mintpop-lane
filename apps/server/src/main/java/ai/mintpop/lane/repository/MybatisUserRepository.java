@@ -46,13 +46,11 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public Optional<UserDto> findByLandNodeId(Long landNodeId) {
+    public long countByLandNodeId(Long landNodeId) {
         if (landNodeId == null) {
-            return Optional.empty();
+            return 0;
         }
-        return Optional.ofNullable(
-                        mapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getLandNodeId, landNodeId)))
-                .map(converter::toDto);
+        return mapper.selectCount(Wrappers.<User>lambdaQuery().eq(User::getLandNodeId, landNodeId));
     }
 
     @Override

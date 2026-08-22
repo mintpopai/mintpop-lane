@@ -41,6 +41,9 @@ public class ProxyNodeDto {
     /** 落地出口 IP 对应的 IANA 时区名，仅 LAND 有值；null 表示未填 */
     private String egressTimezone;
 
+    /** 落地节点容量：最多可绑定的用户数，仅 LAND 有意义；新建时 null 走数据库默认值 10 */
+    private Integer capacity;
+
     private NodeStatus status = NodeStatus.ENABLED;
 
     private String remark;

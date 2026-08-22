@@ -146,8 +146,10 @@ export interface AdminNodeResponse {
   remark: string | null;
   /** 同上，密码不回传，只告诉你配没配 */
   secretConfigured: boolean;
-  /** 该落地节点当前的占用者姓名；未分配或非 LAND 时为 null */
-  assignedUserName: string | null;
+  /** 落地节点容量（最多可绑定的用户数）；非 LAND 为 null */
+  capacity: number | null;
+  /** 该落地节点当前绑定的用户数；非 LAND 为 null */
+  assignedUserCount: number | null;
   /** 所属分组；手工节点为 null */
   groupId: number | null;
   groupName: string | null;
@@ -180,6 +182,8 @@ export interface NodeSaveRequest {
   egressIp: string | null;
   /** 落地出口时区（IANA 时区名），仅 LAND 需要；null 表示未填 */
   egressTimezone: string | null;
+  /** 落地节点容量（最多可绑定的用户数），仅 LAND 需要；非 LAND 提交 null */
+  capacity: number | null;
   status: NodeStatus;
   remark: string;
 }

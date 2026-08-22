@@ -109,6 +109,17 @@ describe("validateNodeForm", () => {
     expect(validateNodeForm(makeForm({ egressIp: "" }))).toEqual([]);
   });
 
+  it("落地节点的容量必须是不小于 1 的整数", () => {
+    expect(validateNodeForm(makeForm({ capacity: null }))).toContain("容量必须是不小于 1 的整数");
+    expect(validateNodeForm(makeForm({ capacity: 0 }))).toContain("容量必须是不小于 1 的整数");
+    expect(validateNodeForm(makeForm({ capacity: 2.5 }))).toContain("容量必须是不小于 1 的整数");
+    expect(validateNodeForm(makeForm({ capacity: 3 }))).toEqual([]);
+  });
+
+  it("第一跳节点不校验容量——容量是落地专属概念", () => {
+    expect(validateNodeForm(makeForm({ role: "FRONT", capacity: null }))).toEqual([]);
+  });
+
   it("IPv4 与 IPv6 字面量都放行", () => {
     expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10" }))).toEqual([]);
     expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1" }))).toEqual([]);
@@ -315,6 +326,16 @@ describe("buildNodePayload", () => {
   it("备注为空时提交空串而不是 undefined，避免 JSON 里整个键消失", () => {
     expect(buildNodePayload(makeForm()).remark).toBe("");
   });
+
+  it("新建落地节点表单默认容量 10，并随 payload 提交", () => {
+    expect(emptyNodeForm("LAND").capacity).toBe(10);
+    expect(buildNodePayload(makeForm()).capacity).toBe(10);
+    expect(buildNodePayload(makeForm({ capacity: 3 })).capacity).toBe(3);
+  });
+
+  it("第一跳节点不提交容量——容量是落地节点的属性", () => {
+    expect(buildNodePayload(makeForm({ role: "FRONT" })).capacity).toBeNull();
+  });
 });
 
 describe("nodeToForm", () => {
@@ -332,7 +353,8 @@ describe("nodeToForm", () => {
       status: "ENABLED",
       remark: "备注",
       secretConfigured: true,
-      assignedUserName: "张三",
+      capacity: 5,
+      assignedUserCount: 1,
       groupId: null,
       groupName: null,
       sourceType: null,
@@ -343,6 +365,7 @@ describe("nodeToForm", () => {
     const form = nodeToForm(node);
 
     expect(form.secret).toEqual({ password: "" });
+    expect(form.capacity).toBe(5);
     expect(form.originalProtocol).toBe("TROJAN");
     expect(form.extraConfig).toEqual([
       { key: "sni", value: "tokyo.example.com" },
@@ -366,7 +389,8 @@ describe("nodeToForm", () => {
       status: "ENABLED",
       remark: null,
       secretConfigured: false,
-      assignedUserName: null,
+      capacity: null,
+      assignedUserCount: null,
       groupId: null,
       groupName: null,
       sourceType: null,
@@ -376,6 +400,8 @@ describe("nodeToForm", () => {
 
     expect(nodeToForm(node).egressIp).toBe("");
     expect(nodeToForm(node).egressTimezone).toBe("");
+    // 容量为 null（如第一跳节点转来的场景）回填成默认值 10，避免表单里出现空容量
+    expect(nodeToForm(node).capacity).toBe(10);
   });
 
   it('库里的 null 值不铺成表单行——String(null) 会变成字符串 "null" 再被当真值写回去', () => {
@@ -392,7 +418,8 @@ describe("nodeToForm", () => {
       status: "ENABLED",
       remark: "备注",
       secretConfigured: true,
-      assignedUserName: "张三",
+      capacity: 10,
+      assignedUserCount: 0,
       groupId: null,
       groupName: null,
       sourceType: null,
@@ -417,7 +444,8 @@ describe("nodeForm 对 MIHOMO 的处理", () => {
     status: "ENABLED",
     remark: "",
     secretConfigured: true,
-    assignedUserName: null,
+    capacity: null,
+    assignedUserCount: null,
     groupId: 3,
     groupName: "机场A",
     sourceType: "anytls",

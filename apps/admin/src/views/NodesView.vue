@@ -157,7 +157,7 @@ onMounted(load);
     <p class="page-facts">
       第一跳 <span class="fact">{{ allNodes.filter((n) => n.role === "FRONT").length }}</span> 个 · 落地
       <span class="fact">{{ allNodes.filter((n) => n.role === "LAND").length }}</span> 个。
-      落地节点一人一座，占用者在表里直接可见。
+      落地节点按容量分配，已绑人数在表里直接可见。
     </p>
   </header>
 
@@ -230,7 +230,7 @@ onMounted(load);
           <template v-if="currentRole === 'LAND'">
             <th>出口 IP</th>
             <th>出口时区</th>
-            <th>占用者</th>
+            <th>已绑 / 容量</th>
           </template>
           <th>密码</th>
           <th>状态</th>
@@ -251,8 +251,10 @@ onMounted(load);
             <td class="fact muted">{{ row.egressIp ?? "—" }}</td>
             <td class="fact muted">{{ row.egressTimezone ?? "—" }}</td>
             <td>
-              <span v-if="row.assignedUserName" class="pill">{{ row.assignedUserName }}</span>
-              <span v-else class="muted">未分配</span>
+              <span v-if="(row.assignedUserCount ?? 0) > 0" class="pill">
+                {{ row.assignedUserCount }} / {{ row.capacity }}
+              </span>
+              <span v-else class="muted">0 / {{ row.capacity }}</span>
             </td>
           </template>
           <td>

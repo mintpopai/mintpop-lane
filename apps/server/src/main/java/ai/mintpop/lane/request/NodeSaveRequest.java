@@ -56,6 +56,10 @@ public class NodeSaveRequest {
     @Size(max = 64, message = "出口时区最长 64 个字符")
     private String egressTimezone;
 
+    /** 落地节点容量（最多可绑定的用户数），仅 LAND 需要；新建时 null 走默认值 10，更新时 null 表示不改 */
+    @Min(value = 1, message = "容量必须是不小于 1 的整数")
+    private Integer capacity;
+
     @NotNull(message = "状态不能为空")
     private NodeStatus status = NodeStatus.ENABLED;
 

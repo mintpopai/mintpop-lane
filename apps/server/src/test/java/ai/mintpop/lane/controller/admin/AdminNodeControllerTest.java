@@ -104,7 +104,83 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].secretConfigured").value(true))
                 // 密码一个字符都不许回传
                 .andExpect(jsonPath("$.data[0].secret").doesNotExist())
-                .andExpect(jsonPath("$.data[0].assignedUserName").doesNotExist());
+                // 未传容量时走默认值 10；尚未分配给任何人
+                .andExpect(jsonPath("$.data[0].capacity").value(10))
+                .andExpect(jsonPath("$.data[0].assignedUserCount").value(0));
+    }
+
+    @Test
+    @DisplayName("新建落地节点带自定义容量，列表回显该容量")
+    void createLandNodeWithCustomCapacity() throws Exception {
+        var body = Map.of(
+                "name", "LAND-东京-05",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.12",
+                "port", 50101,
+                "secret", Map.of("username", "u1", "password", "落地密码"),
+                "egressIp", "203.0.113.12",
+                "capacity", 3,
+                "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/nodes").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].capacity").value(3));
+    }
+
+    @Test
+    @DisplayName("容量小于 1 时报参数错误 110001，节点不落库")
+    void capacityBelowOneFails() throws Exception {
+        var body = Map.of(
+                "name", "LAND-东京-05",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.12",
+                "port", 50101,
+                "secret", Map.of("username", "u1", "password", "落地密码"),
+                "capacity", 0,
+                "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110001));
+        assertThat(nodeRepository.findAll(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("更新落地节点可以修改容量")
+    void updateLandNodeCapacity() throws Exception {
+        Long id = fixtures.createLandNode("LAND-1", "203.0.113.10");
+        var body = Map.of(
+                "name", "LAND-1",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10",
+                "port", 50101,
+                "egressIp", "203.0.113.10",
+                "capacity", 25,
+                "status", "ENABLED");
+
+        mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(nodeRepository.findById(id).orElseThrow().getCapacity()).isEqualTo(25);
+    }
+
+    @Test
+    @DisplayName("第一跳节点的容量与已绑人数在列表里为 null（容量是落地专属概念）")
+    void frontNodeHasNoCapacityInResponse() throws Exception {
+        fixtures.createFrontNode("FRONT-1");
+
+        mockMvc.perform(get("/api/admin/nodes").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].capacity").doesNotExist())
+                .andExpect(jsonPath("$.data[0].assignedUserCount").doesNotExist());
     }
 
     @Test
@@ -185,14 +261,15 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("落地节点已分配时列表里显示占用者")
-    void landNodeShowsAssignedUser() throws Exception {
+    @DisplayName("落地节点已分配时列表里显示已绑人数")
+    void landNodeShowsAssignedUserCount() throws Exception {
         Long front = fixtures.createFrontNode("FRONT-1");
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.10");
         fixtures.createUser("logto-user-1", front, land);
+        fixtures.createUser("logto-user-2", front, land);
 
         mockMvc.perform(get("/api/admin/nodes").param("role", "LAND").header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.data[0].assignedUserName").value("测试logto-user-1"));
+                .andExpect(jsonPath("$.data[0].assignedUserCount").value(2));
     }
 
     @Test

@@ -16,8 +16,8 @@ public interface UserRepository {
 
     Optional<UserDto> findById(Long id);
 
-    /** 反查某个落地节点当前被谁占用 */
-    Optional<UserDto> findByLandNodeId(Long landNodeId);
+    /** 某个落地节点当前绑定的用户数，供容量校验、节点删除/改角色前的引用检查与列表展示使用 */
+    long countByLandNodeId(Long landNodeId);
 
     /**
      * 分页搜索；keyword 为空时不过滤，非空时匹配姓名或 subject。
