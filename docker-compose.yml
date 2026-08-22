@@ -45,9 +45,6 @@ services:
     ports:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
       - "127.0.0.1:${ADMIN_PORT:-8082}:80"
-    volumes:
-      # 运行时接入配置：只含接口前缀 apiBaseUrl；镜像里没有这个文件，缺了页面会明确报启动失败
-      - ./admin-config.json:/usr/share/nginx/html/config.json:ro
     healthcheck:
       # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]

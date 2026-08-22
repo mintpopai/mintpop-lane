@@ -39,6 +39,4 @@ FROM nginx:1.30-alpine AS runtime
 COPY apps/admin/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/admin/dist /usr/share/nginx/html
 
-# 注意：镜像里刻意没有 config.json。它由部署时的只读卷提供，
-# 于是同一个镜像能部署到任何 Logto 租户；缺了它页面会显示明确的启动失败提示。
 EXPOSE 80

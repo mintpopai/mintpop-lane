@@ -8,7 +8,7 @@
 
 ## 首次部署
 
-> 以下 1～7 步的命令都在**仓库根目录**执行；部署所需的三个文件（`application.yml`、`admin-config.json`、可选的 `.env`）也都放仓库根、与 `docker-compose.yml` 同目录，均已被 `.gitignore` 排除。
+> 以下 1～7 步的命令都在**仓库根目录**执行；部署所需的两个文件（`application.yml`、可选的 `.env`）也都放仓库根、与 `docker-compose.yml` 同目录，均已被 `.gitignore` 排除。
 >
 > **前置条件**：外置 MySQL 需为 **8.0 及以上**（本项目开发与测试用的是 8.4）。建库语句用了 `utf8mb4_0900_ai_ci` 排序规则，表结构里也有 JSON 列，这两者都要求 8.0+；5.x 会在建库这一步直接报错。
 
@@ -45,9 +45,9 @@
    >
    > 文件里的 `client-secret` 不是本地生成的，而是**第 5 步**在 Logto 控制台建好传统 Web 应用后从控制台复制过来的，先留占位，走到那一步再填。
 
-5. **建 Logto 的传统 Web 应用并放置管理端运行时配置**：
+5. **建 Logto 的传统 Web 应用**：
 
-   a. 在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。要填两个地址：
+   在 Logto 控制台新建一个 **Traditional Web** 类型的应用。登录（无论是管理端网页还是桌面端）现在统一由**服务端**发起并用这一个应用做 authorization code 交换，不再需要像过去那样为桌面端、管理端、API 分别建应用——原来的 Native 应用、SPA 应用与 API Resource 都不再需要，可以在控制台删掉。要填两个地址：
 
    | 项 | 值 |
    |---|---|
@@ -60,27 +60,7 @@
 
    > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**一条回调地址 `http://localhost:5173/auth/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
 
-   b. 把模板复制成部署机上的运行时配置并填真值：
-
-   ```bash
-   cp apps/admin/config.example.json ./admin-config.json
-   ```
-
-   ```json
-   {
-     "apiBaseUrl": "/api"
-   }
-   ```
-
-   > 管理端网页不再直连 Logto——登录、回调、会话全由服务端承担，管理端只需要知道 API 前缀在哪，运行时配置因此只剩这一个字段。
-   >
-   > 这个文件由 compose 以只读卷挂进 nginx 的站点根目录，**镜像里没有它**——因此同一个镜像可以部署到任何环境，改 API 地址不需要重新构建。它已在 `.gitignore` 中，不入库。
-   >
-   > ⚠️ **必须在 `mise run up` 之前把这个文件建好**：绑定挂载的宿主侧路径不存在时，Docker 会**自作主张建成一个空目录**，nginx 于是把 `/config.json` 当目录处理、返回 404，页面显示「管理端启动失败」。若已经踩到，先 `mise run down`、`rmdir admin-config.json`、建好真文件再起。
-
-   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署，由同一入口的反代把 `/api`、`/auth`、`/oauth2` 转给服务端，其余给管理端静态站——见下文「对外暴露」里的 nginx 示例。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。
-   >
-   > 因此 `admin-config.json` 里的 `apiBaseUrl` **必须是相对路径**（如 `/api`），不能填绝对 URL（如 `https://api.x.com/api`）。
+   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署，由同一入口的反代把 `/api`、`/auth`、`/oauth2` 转给服务端，其余给管理端静态站——见下文「对外暴露」里的 nginx 示例。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端代码里，部署侧无需、也没有地方配置它。
 
 6. **拉起服务**：
 
