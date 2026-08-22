@@ -65,17 +65,17 @@ run = "mvn -q clean package -DskipTests"
 [tasks.image-admin]
 description = "构建管理端镜像（apps/admin/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
-run = "docker build -f apps/admin/Dockerfile -t lane-admin:local ."
+run = "docker build -f apps/admin/Dockerfile -t mintpop-lane-admin:local ."
 
 [tasks.image-website]
 description = "构建官网镜像（apps/website/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
-run = "docker build -f apps/website/Dockerfile -t lane-website:local ."
+run = "docker build -f apps/website/Dockerfile -t mintpop-lane-website:local ."
 
 [tasks.image-server]
 description = "构建服务端镜像（apps/server/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
-run = "docker build -f apps/server/Dockerfile -t lane-server:local ."
+run = "docker build -f apps/server/Dockerfile -t mintpop-lane-server:local ."
 
 # —— 质量 ——
 [tasks.test-admin]

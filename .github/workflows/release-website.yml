@@ -10,12 +10,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/lane-website
+  IMAGE: ghcr.io/${{ github.repository }}/website
 
 jobs:
   quality:
     name: 发版前质量门禁
-    uses: ./.github/workflows/quality.yml
+    uses: ./.github/workflows/quality-website.yml
 
   image:
     name: 构建并推送镜像
@@ -26,13 +26,13 @@ jobs:
       packages: write
     steps:
       - name: 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: 设置 Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: 登录 GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -40,7 +40,7 @@ jobs:
 
       - name: 计算镜像标签
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -50,7 +50,7 @@ jobs:
             latest=auto
 
       - name: 构建并推送
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/website/Dockerfile
@@ -69,7 +69,7 @@ jobs:
       contents: write
     steps:
       - name: 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # COMMIT 模式的变更日志需要全量历史
           fetch-depth: 0
@@ -136,7 +136,7 @@ jobs:
           fi
 
       - name: 发布 Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: MintPop Lane website v${{ steps.prev.outputs.version }}
           body_path: notes.md
