@@ -60,7 +60,7 @@
 
    > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**一条回调地址 `http://localhost:5173/auth/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
 
-   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署，由同一入口的反代把 `/api`、`/auth`、`/oauth2` 转给服务端，其余给管理端静态站——见下文「对外暴露」里的 nginx 示例。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端代码里，部署侧无需、也没有地方配置它。
+   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署。这件事由**管理端容器内的 nginx** 完成：它把 `/api`、`/auth`、`/oauth2` 反代到 server 容器（compose 内网），其余路径服务管理端静态站——宿主入口只需按 Host 把整个域名转给管理端容器即可，见下文「对外暴露」。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端代码里，部署侧无需、也没有地方配置它。
 
 6. **拉起服务**：
 
@@ -132,7 +132,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | 启动（服务端 + 管理端 + 官网） | `mise run up` |
 | 停止 | `mise run down` |
 | 查看日志（需在仓库根执行） | `docker compose logs -f server` / `docker compose logs -f admin` / `docker compose logs -f website` |
-| 健康检查 | `curl 127.0.0.1:8081/actuator/health` / `curl -I 127.0.0.1:8082/` / `curl -I 127.0.0.1:8083/` |
+| 健康检查 | `docker compose exec server wget -qO- http://127.0.0.1:8080/actuator/health`（server 不映射宿主端口） / `curl -I 127.0.0.1:8082/` / `curl -I 127.0.0.1:8083/` |
 
 从二期起，下面这些接口日常**不需要手工调**——打开管理端页面点就行。表格保留是为了排查问题时能直接验接口。
 
@@ -168,7 +168,6 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `SERVER_TAG` | `latest` | 镜像版本。回滚时指定具体版本，如 `SERVER_TAG=0.1.0` |
-| `SERVER_PORT` | `8081` | 宿主监听端口 |
 | `ADMIN_TAG` | `latest` | 管理端镜像版本。回滚时指定具体版本，如 `ADMIN_TAG=0.1.0` |
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
 | `WEBSITE_TAG` | `latest` | 官网镜像版本。回滚时指定具体版本，如 `WEBSITE_TAG=0.1.0` |
@@ -188,23 +187,12 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 ## 对外暴露
 
-两个容器端口**都只绑 `127.0.0.1`**，公网访问不到。对外由宿主上的反代承担，且**管理端与服务端必须同域分路径**——`/api`、`/auth`、`/oauth2` 这三段前缀给服务端，其余（含 `/`）给管理端。这样前端不需要 CORS，Logto 的回调也只有一个源。
+前端容器端口**都只绑 `127.0.0.1`**，公网访问不到；server **不映射宿主端口**，只经容器网络被管理端反代访问。对外入口是宿主机上**已有的反代**（OpenResty/nginx，与本机其它站点共用），它**只按 Host 分流**、每个站点一条 `location /`——API 的路径拆分不在这一层做：管理端容器内的 nginx 已把 `/api`、`/auth`、`/oauth2` 反代到 server（compose 服务名 `server:8080`），因此管理端域名上的 API 调用天然同源，前端不需要 CORS，Logto 的回调也只有一个源。
 
 ```nginx
 server {
     listen 443 ssl;
     server_name <你的域名>;
-
-    # 服务端要转发的不只是 /api：登录握手（/auth/**）与 OAuth2 回调（/oauth2/**）也在服务端，
-    # 三段前缀用一条正则 location 一起转发。正则 location 的优先级天然高于下面的前缀 location `/`，
-    # 与两者的书写顺序无关——凡是命中这三段前缀的请求都会先落到这里。
-    location ~ ^/(api|auth|oauth2)/ {
-        # 不带路径的 proxy_pass 会原样保留 URI，服务端拿到的仍是 /api/admin/users、/auth/callback
-        proxy_pass http://127.0.0.1:8081;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
 
     location / {
         proxy_pass http://127.0.0.1:8082;
@@ -215,7 +203,7 @@ server {
 }
 ```
 
-> 单域名分路径模型下，`lane.auth.admin-frontend-url` 就是这里的站点根地址（如 `https://<你的域名>`）；
+> 单域名同源模型下，`lane.auth.admin-frontend-url` 就是这里的站点根地址（如 `https://<你的域名>`）；
 > `spring.security.oauth2.client.registration.logto.redirect-uri` 配的是 `{baseUrl}/auth/callback`，
 > `{baseUrl}` 会按请求实际到达的域名展开，即解析成 `https://<你的域名>/auth/callback`——
 > 与第 5 步在 Logto 控制台登记的 Redirect URI、第 7 步访问的 `/oauth2/authorization/logto` 是同一个域名。

@@ -1,13 +1,14 @@
 # 部署：拉 GHCR 已发布镜像运行；本地构建镜像用 mise run image-server / mise run image-admin，不归 compose 管。
-# 只监听 127.0.0.1，对外访问由宿主 nginx / cloudflared 反代到这个端口。
+# 对外入口是宿主机上已有的 OpenResty（按 Host 分流到下面两个站点端口），compose 内不再另设网关；
+# 两个前端端口一律绑 127.0.0.1，只对本机可见——绑 0.0.0.0 会让容器直接对公网可达，绕过
+# OpenResty 与 Cloudflare。server 不映射宿主端口，只经容器网络被 admin 反代访问（/api、/auth、/oauth2）。
+# 依赖 Compose ≥ 2.17（depends_on 的 restart 字段）：升级 server 时 admin 自动重启以重新解析
+# nginx 上游 IP（proxy_pass 用主机名且未配 resolver，会在配置加载时永久缓存旧 IP，否则升级后 502）
 services:
   server:
     image: ghcr.io/mintpopai/lane-server:${SERVER_TAG:-latest}
     container_name: lane-server
     restart: unless-stopped
-    ports:
-      # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
-      - "127.0.0.1:${SERVER_PORT:-8081}:8080"
     environment:
       # 仅影响容器日志时间戳；业务时间全链路 UTC 存取，与本变量无关
       TZ: ${TZ:-UTC}
@@ -45,6 +46,10 @@ services:
     ports:
       # 宿主 IP 钉死 127.0.0.1，宿主端口参数化，容器端口固定
       - "127.0.0.1:${ADMIN_PORT:-8082}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+        restart: true
     healthcheck:
       # 这里的 127.0.0.1 是容器内部探活自己，与上面宿主侧的监听地址是两回事
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
