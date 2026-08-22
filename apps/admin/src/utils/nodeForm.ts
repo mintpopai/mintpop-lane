@@ -39,8 +39,8 @@ export interface NodeFormModel {
   extraConfig: KeyValueRow[];
   /** 键固定为该协议的敏感键；值留空表示沿用原值 */
   secret: Record<string, string>;
-  /** 一行一个出口 IP，提交前拆分 */
-  egressIpsText: string;
+  /** 出口 IP，单条；留空提交 null 表示未填 */
+  egressIp: string;
   status: NodeStatus;
   remark: string;
 }
@@ -62,7 +62,7 @@ export function emptyNodeForm(role: NodeRole): NodeFormModel {
     port: null,
     extraConfig: PROTOCOL_EXTRA_HINTS[protocol].map((key) => ({ key, value: "" })),
     secret: emptySecretKeys(protocol),
-    egressIpsText: "",
+    egressIp: "",
     status: "ENABLED",
     remark: "",
   };
@@ -93,7 +93,7 @@ export function nodeToForm(node: AdminNodeResponse): NodeFormModel {
       .map(([key, value]) => ({ key, value: String(value) })),
     // 服务端不回传密码，回填时一律是空的；留空提交即沿用原值
     secret: emptySecretKeys(node.protocol),
-    egressIpsText: (node.egressIps ?? []).join("\n"),
+    egressIp: node.egressIp ?? "",
     status: node.status,
     remark: node.remark ?? "",
   };
@@ -155,21 +155,50 @@ export function validateNodeForm(form: NodeFormModel): string[] {
     }
   }
 
-  for (const ip of splitEgressIps(form.egressIpsText)) {
-    if (/\s/.test(ip)) {
-      errors.push(`出口 IP「${ip}」格式不对，一行填一个`);
-    }
+  // 出口 IP 会与客户端探测到的实际出口逐字比对，填个域名或坏值只会换来必然的校验失败
+  const egressIp = form.egressIp.trim();
+  if (egressIp && !isIpLiteral(egressIp)) {
+    errors.push(`出口 IP「${egressIp}」不是合法的 IP 地址`);
   }
 
   return errors;
 }
 
-/** 按行拆，去空白与空行；一行里若混了空格也原样留着，交给校验去报错 */
-function splitEgressIps(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+/** 是否为 IPv4/IPv6 字面量。IPv6 只做形态校验，不含 zone id 与 v4 内嵌写法 */
+export function isIpLiteral(value: string): boolean {
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(value);
+  if (v4) {
+    // 前导零一并拒绝：010 这类写法有八进制歧义，探测端也不会这么回显
+    return v4.slice(1).every((octet) => Number(octet) <= 255 && !(octet.length > 1 && octet.startsWith("0")));
+  }
+  if (!value.includes(":") || value.includes(":::")) {
+    return false;
+  }
+  if (value.split("::").length - 1 > 1) {
+    return false;
+  }
+  const groups = value.split(":");
+  if (groups.length > 8 || (!value.includes("::") && groups.length !== 8)) {
+    return false;
+  }
+  return groups.every((group) => /^[0-9a-fA-F]{0,4}$/.test(group)) && groups.some((group) => group !== "");
+}
+
+/**
+ * 地址改动后同步出口 IP 的预填：落地节点的地址是 IP 字面量时（单 IP VPS 的常态，
+ * 出口就是它自己），把空的、或仍等于上一次地址值（说明此前也是预填的）的出口 IP
+ * 跟随更新；管理员手工改过的值绝不覆盖。
+ */
+export function syncEgressIpFromServerAddr(form: NodeFormModel, previousServerAddr: string): NodeFormModel {
+  const serverAddr = form.serverAddr.trim();
+  if (form.role !== "LAND" || !isIpLiteral(serverAddr)) {
+    return form;
+  }
+  const egressIp = form.egressIp.trim();
+  if (egressIp !== "" && egressIp !== previousServerAddr.trim()) {
+    return form;
+  }
+  return { ...form, egressIp: serverAddr };
 }
 
 export function buildNodePayload(form: NodeFormModel): NodeSaveRequest {
@@ -200,8 +229,8 @@ export function buildNodePayload(form: NodeFormModel): NodeSaveRequest {
     port: form.port as number,
     extraConfig,
     secret,
-    // 出口 IP 是落地节点的属性，第一跳节点一律不带
-    egressIps: form.role === "LAND" ? splitEgressIps(form.egressIpsText) : [],
+    // 出口 IP 是落地节点的属性，第一跳节点一律不带；留空提交 null 表示未填
+    egressIp: form.role === "LAND" ? form.egressIp.trim() || null : null,
     status: form.status,
     remark: form.remark.trim(),
   };

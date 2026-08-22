@@ -12,7 +12,6 @@ import ai.mintpop.lane.enumeration.NodeStatus;
 import lombok.Data;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -45,9 +44,13 @@ public class ProxyNode {
     /** 敏感键 JSON 的密文 */
     private String secretCipher;
 
-    /** 出口 IP 集合，仅 LAND 有值 */
-    @TableField(typeHandler = JacksonTypeHandler.class)
-    private List<String> egressIps;
+    /**
+     * 出口 IP，仅 LAND 有值；NULL 表示未填。
+     * updateStrategy = ALWAYS：MyBatis-Plus 默认跳过 null 字段，
+     * 没有它「把出口 IP 清空」的更新会被静默忽略。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String egressIp;
 
     private NodeStatus status;
 

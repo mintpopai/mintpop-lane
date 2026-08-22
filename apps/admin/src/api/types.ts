@@ -114,8 +114,8 @@ export interface AdminUserResponse {
   frontNodeName: string | null;
   landNodeId: number | null;
   landNodeName: string | null;
-  /** 取自其落地节点，未分配时是空数组 */
-  egressIps: string[];
+  /** 取自其落地节点，未分配或落地未填出口时为 null */
+  egressIp: string | null;
   /** 在期订阅摘要，一眼看出这个人开了什么、到什么时候 */
   activeSubscriptions: ActiveSubscriptionBrief[];
   createdAt: string;
@@ -138,7 +138,8 @@ export interface AdminNodeResponse {
   serverAddr: string;
   port: number;
   extraConfig: Record<string, unknown>;
-  egressIps: string[];
+  /** 出口 IP，仅 LAND 节点有值；未填为 null */
+  egressIp: string | null;
   status: NodeStatus;
   remark: string | null;
   /** 同上，密码不回传，只告诉你配没配 */
@@ -173,7 +174,8 @@ export interface NodeSaveRequest {
   extraConfig: Record<string, unknown>;
   /** 空对象表示沿用原值，不会把已有密码清掉 */
   secret: Record<string, string>;
-  egressIps: string[];
+  /** 出口 IP，仅 LAND 需要；null 表示未填 */
+  egressIp: string | null;
   status: NodeStatus;
   remark: string;
 }

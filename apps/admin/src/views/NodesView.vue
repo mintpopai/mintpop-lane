@@ -9,7 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import { showToast } from "../toast";
-import { booleanLabel, formatDateTime, joinOrDash } from "../utils/format";
+import { booleanLabel, formatDateTime } from "../utils/format";
 
 const currentRole = ref<NodeRole>("FRONT");
 const allNodes = ref<AdminNodeResponse[]>([]);
@@ -247,7 +247,7 @@ onMounted(load);
           </td>
           <td class="fact">{{ row.serverAddr }}:{{ row.port }}</td>
           <template v-if="currentRole === 'LAND'">
-            <td class="fact muted">{{ joinOrDash(row.egressIps) }}</td>
+            <td class="fact muted">{{ row.egressIp ?? "—" }}</td>
             <td>
               <span v-if="row.assignedUserName" class="pill">{{ row.assignedUserName }}</span>
               <span v-else class="muted">未分配</span>

@@ -24,7 +24,8 @@ public interface ProxyNodeRepository {
      * <p>
      * 用实体方式更新以便 JSON 列的 typeHandler 生效，代价是 **null 字段会被跳过**：
      * <ul>
-     *   <li>{@code extraConfig} / {@code egressIps} 传空集合可以把该字段覆盖为空；</li>
+     *   <li>{@code extraConfig} 传空集合可以把该字段覆盖为空；{@code egressIp} 列上有
+     *       updateStrategy = ALWAYS，传 null 即清空；</li>
      *   <li>{@code secret} 传 null 或空 Map 都表示「沿用原有敏感键」，**无法通过 update
      *       清空**——这与管理端「敏感键留空即不改」的语义一致（页面上看不到原密码，
      *       没重填就不该被清掉）。</li>
@@ -32,8 +33,8 @@ public interface ProxyNodeRepository {
      * <p>
      * 调用前提：入参必须是先 {@link #findById(Long)} 拿到的完整 DTO，改动要改的字段后
      * 原样回传其余字段；如果直接 new 一个只填了部分字段的 DTO 调用本方法，
-     * {@code status} 会被静默重置成默认值 {@code ENABLED}，{@code extraConfig} /
-     * {@code egressIps} 会被覆盖成空集合。
+     * {@code status} 会被静默重置成默认值 {@code ENABLED}，{@code extraConfig}
+     * 会被覆盖成空集合，{@code egressIp} 会被清空。
      */
     void update(ProxyNodeDto node);
 

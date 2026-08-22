@@ -33,7 +33,7 @@ const landOptions = computed(() => [
   { value: null, label: "暂不分配" },
   ...selectableLandNodes(props.nodes, props.user.landNodeId).map((node) => ({
     value: node.id,
-    label: `${node.name}（${node.egressIps.join("、") || "未填出口 IP"}）`,
+    label: `${node.name}（${node.egressIp ?? "未填出口 IP"}）`,
   })),
 ]);
 

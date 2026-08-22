@@ -35,14 +35,6 @@ export function formatDate(value?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** 列表拼接，空列表给占位符 */
-export function joinOrDash(list?: string[] | null, separator = "、"): string {
-  if (!list || list.length === 0) {
-    return PLACEHOLDER;
-  }
-  return list.join(separator);
-}
-
 /** 布尔值 → 中文标签 */
 export function booleanLabel(value: boolean, truthy: string, falsy: string): string {
   return value ? truthy : falsy;

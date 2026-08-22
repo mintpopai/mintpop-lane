@@ -56,7 +56,7 @@ class LinkServiceImplTest {
         n.setSecret(Map.of("password", "节点密码"));
         n.setStatus(NodeStatus.ENABLED);
         if (role == NodeRole.LAND) {
-            n.setEgressIps(List.of("203.0.113.10"));
+            n.setEgressIp("203.0.113.10");
         }
         return n;
     }
@@ -134,7 +134,7 @@ class LinkServiceImplTest {
 
         assertThat(resp.front()).containsEntry("type", "trojan").containsEntry("server", "us.example.com");
         assertThat(resp.land()).containsEntry("type", "socks5").containsEntry("server", "203.0.113.10");
-        assertThat(resp.expectedEgressIps()).containsExactly("203.0.113.10");
+        assertThat(resp.expectedEgressIp()).isEqualTo("203.0.113.10");
         assertThat(resp.agentCredentials()).hasSize(1);
         assertThat(resp.agentCredentials().getFirst().credential()).isEqualTo("sk-ant-test");
         assertThat(resp.agentCredentials().getFirst().agentType()).isEqualTo(AgentType.CLAUDE);
@@ -181,7 +181,7 @@ class LinkServiceImplTest {
         var resp = service.resolveLink(USER_ID);
 
         assertThat(resp.agentCredentials()).isEmpty();
-        assertThat(resp.expectedEgressIps()).isNotEmpty();
+        assertThat(resp.expectedEgressIp()).isNotBlank();
     }
 
     @Test
@@ -193,7 +193,7 @@ class LinkServiceImplTest {
         var resp = service.resolveLink(USER_ID);
 
         assertThat(resp.agentCredentials()).isEmpty();
-        assertThat(resp.expectedEgressIps()).isNotEmpty();
+        assertThat(resp.expectedEgressIp()).isNotBlank();
     }
 
     @Test
@@ -288,7 +288,7 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
         ProxyNodeDto noIp = node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10");
-        noIp.setEgressIps(List.of());
+        noIp.setEgressIp(null);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(noIp));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID))
@@ -306,7 +306,7 @@ class LinkServiceImplTest {
         var resp = service.resolveLink(USER_ID);
 
         assertThat(resp.agentCredentials()).isEmpty();
-        assertThat(resp.expectedEgressIps()).isNotEmpty();
+        assertThat(resp.expectedEgressIp()).isNotBlank();
     }
 
     @Test
@@ -318,7 +318,7 @@ class LinkServiceImplTest {
         var resp = service.resolveLink(USER_ID);
 
         assertThat(resp.agentCredentials()).isEmpty();
-        assertThat(resp.expectedEgressIps()).isNotEmpty();
+        assertThat(resp.expectedEgressIp()).isNotBlank();
     }
 
     @Test

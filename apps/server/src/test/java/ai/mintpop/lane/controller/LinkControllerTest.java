@@ -78,7 +78,7 @@ class LinkControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.front.type").value("trojan"))
                 .andExpect(jsonPath("$.data.land.server").value("77.47.143.6"))
-                .andExpect(jsonPath("$.data.expectedEgressIps[0]").value("77.47.143.6"))
+                .andExpect(jsonPath("$.data.expectedEgressIp").value("77.47.143.6"))
                 .andExpect(jsonPath("$.data.agentCredentials[0].credential").value("sk-ant-test-1"))
                 .andExpect(jsonPath("$.data.agentCredentials[0].agentType").value("CLAUDE"));
     }

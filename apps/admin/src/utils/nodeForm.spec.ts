@@ -3,8 +3,10 @@ import {
   applyProtocol,
   buildNodePayload,
   emptyNodeForm,
+  isIpLiteral,
   nodeToForm,
   parseScalar,
+  syncEgressIpFromServerAddr,
   validateNodeForm,
   PROTOCOL_SECRET_KEYS,
   type NodeFormModel,
@@ -93,10 +95,81 @@ describe("validateNodeForm", () => {
     expect(validateNodeForm(form)).toEqual([]);
   });
 
-  it("出口 IP 不允许含空白字符", () => {
-    expect(validateNodeForm(makeForm({ egressIpsText: "1.2.3.4 5.6.7.8" }))).toContain(
-      "出口 IP「1.2.3.4 5.6.7.8」格式不对，一行填一个",
+  it("出口 IP 填了就必须是合法的 IP 字面量——它要与客户端探测到的出口 IP 逐字比对", () => {
+    expect(validateNodeForm(makeForm({ egressIp: "1.2.3.4 5.6.7.8" }))).toContain(
+      "出口 IP「1.2.3.4 5.6.7.8」不是合法的 IP 地址",
     );
+    expect(validateNodeForm(makeForm({ egressIp: "tokyo.example.com" }))).toContain(
+      "出口 IP「tokyo.example.com」不是合法的 IP 地址",
+    );
+  });
+
+  it("出口 IP 留空允许——先建节点、随后补出口是正常流程", () => {
+    expect(validateNodeForm(makeForm({ egressIp: "" }))).toEqual([]);
+  });
+
+  it("IPv4 与 IPv6 字面量都放行", () => {
+    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10" }))).toEqual([]);
+    expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1" }))).toEqual([]);
+  });
+});
+
+describe("isIpLiteral", () => {
+  it("识别合法 IPv4", () => {
+    expect(isIpLiteral("1.2.3.4")).toBe(true);
+    expect(isIpLiteral("255.255.255.255")).toBe(true);
+  });
+
+  it("拒绝越界、前导零与域名", () => {
+    expect(isIpLiteral("256.1.1.1")).toBe(false);
+    expect(isIpLiteral("01.2.3.4")).toBe(false);
+    expect(isIpLiteral("tokyo.example.com")).toBe(false);
+    expect(isIpLiteral("1.2.3.4:443")).toBe(false);
+    expect(isIpLiteral("")).toBe(false);
+  });
+
+  it("识别合法 IPv6", () => {
+    expect(isIpLiteral("2001:db8::1")).toBe(true);
+    expect(isIpLiteral("::1")).toBe(true);
+    expect(isIpLiteral("2001:0db8:0000:0000:0000:0000:0000:0001")).toBe(true);
+  });
+
+  it("拒绝形似 IPv6 的坏值", () => {
+    expect(isIpLiteral("host:443")).toBe(false);
+    expect(isIpLiteral("1::2::3")).toBe(false);
+    expect(isIpLiteral("2001:db8::12345")).toBe(false);
+  });
+});
+
+describe("syncEgressIpFromServerAddr", () => {
+  it("落地节点地址填成 IP 字面量时，空的出口 IP 预填为该地址", () => {
+    const form = makeForm({ serverAddr: "203.0.113.10", egressIp: "" });
+
+    expect(syncEgressIpFromServerAddr(form, "203.0.113.1").egressIp).toBe("203.0.113.10");
+  });
+
+  it("出口 IP 若还等于上一次的地址值（即此前是预填的），跟随地址一起更新", () => {
+    const form = makeForm({ serverAddr: "203.0.113.20", egressIp: "203.0.113.10" });
+
+    expect(syncEgressIpFromServerAddr(form, "203.0.113.10").egressIp).toBe("203.0.113.20");
+  });
+
+  it("出口 IP 已被手工改过（与上一次地址不同）就不动它", () => {
+    const form = makeForm({ serverAddr: "203.0.113.20", egressIp: "198.51.100.7" });
+
+    expect(syncEgressIpFromServerAddr(form, "203.0.113.10").egressIp).toBe("198.51.100.7");
+  });
+
+  it("地址是域名时不预填", () => {
+    const form = makeForm({ serverAddr: "tokyo.example.com", egressIp: "" });
+
+    expect(syncEgressIpFromServerAddr(form, "").egressIp).toBe("");
+  });
+
+  it("第一跳节点不预填——出口 IP 是落地节点的属性", () => {
+    const form = makeForm({ role: "FRONT", serverAddr: "203.0.113.10", egressIp: "" });
+
+    expect(syncEgressIpFromServerAddr(form, "").egressIp).toBe("");
   });
 });
 
@@ -169,16 +242,15 @@ describe("buildNodePayload", () => {
     expect(buildNodePayload(form).extraConfig).toEqual({});
   });
 
-  it("落地节点的出口 IP 按行拆分并去掉空行与首尾空白", () => {
-    const form = makeForm({ egressIpsText: " 1.2.3.4 \n\n5.6.7.8\n" });
-
-    expect(buildNodePayload(form).egressIps).toEqual(["1.2.3.4", "5.6.7.8"]);
+  it("落地节点的出口 IP 去掉首尾空白后提交，留空提交 null", () => {
+    expect(buildNodePayload(makeForm({ egressIp: " 1.2.3.4 " })).egressIp).toBe("1.2.3.4");
+    expect(buildNodePayload(makeForm({ egressIp: "  " })).egressIp).toBeNull();
   });
 
   it("第一跳节点不提交出口 IP——出口 IP 是落地节点的属性", () => {
-    const form = makeForm({ role: "FRONT", egressIpsText: "1.2.3.4" });
+    const form = makeForm({ role: "FRONT", egressIp: "1.2.3.4" });
 
-    expect(buildNodePayload(form).egressIps).toEqual([]);
+    expect(buildNodePayload(form).egressIp).toBeNull();
   });
 
   it("备注为空时提交空串而不是 undefined，避免 JSON 里整个键消失", () => {
@@ -196,7 +268,7 @@ describe("nodeToForm", () => {
       serverAddr: "tokyo.example.com",
       port: 443,
       extraConfig: { sni: "tokyo.example.com", "skip-cert-verify": true },
-      egressIps: ["1.2.3.4"],
+      egressIp: "1.2.3.4",
       status: "ENABLED",
       remark: "备注",
       secretConfigured: true,
@@ -216,7 +288,31 @@ describe("nodeToForm", () => {
       { key: "sni", value: "tokyo.example.com" },
       { key: "skip-cert-verify", value: "true" },
     ]);
-    expect(form.egressIpsText).toBe("1.2.3.4");
+    expect(form.egressIp).toBe("1.2.3.4");
+  });
+
+  it("库里出口 IP 为 null 时回填成空串，表单输入框不显示「null」", () => {
+    const node = {
+      id: 4,
+      name: "LAND-东京-04",
+      role: "LAND",
+      protocol: "TROJAN",
+      serverAddr: "203.0.113.10",
+      port: 443,
+      extraConfig: {},
+      egressIp: null,
+      status: "ENABLED",
+      remark: null,
+      secretConfigured: false,
+      assignedUserName: null,
+      groupId: null,
+      groupName: null,
+      sourceType: null,
+      createdAt: "2026-08-18T10:00:00",
+      updatedAt: "2026-08-18T10:00:00",
+    } as AdminNodeResponse;
+
+    expect(nodeToForm(node).egressIp).toBe("");
   });
 
   it('库里的 null 值不铺成表单行——String(null) 会变成字符串 "null" 再被当真值写回去', () => {
@@ -228,7 +324,7 @@ describe("nodeToForm", () => {
       serverAddr: "tokyo.example.com",
       port: 443,
       extraConfig: { sni: "tokyo.example.com", "skip-cert-verify": null },
-      egressIps: ["1.2.3.4"],
+      egressIp: "1.2.3.4",
       status: "ENABLED",
       remark: "备注",
       secretConfigured: true,
@@ -253,7 +349,7 @@ describe("nodeForm 对 MIHOMO 的处理", () => {
     serverAddr: "hk.example.com",
     port: 35355,
     extraConfig: {},
-    egressIps: [],
+    egressIp: null,
     status: "ENABLED",
     remark: "",
     secretConfigured: true,

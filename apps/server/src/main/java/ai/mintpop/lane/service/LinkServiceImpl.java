@@ -65,7 +65,7 @@ public class LinkServiceImpl implements LinkService {
             throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
 
-        if (land.getEgressIps() == null || land.getEgressIps().isEmpty()) {
+        if (land.getEgressIp() == null || land.getEgressIp().isBlank()) {
             throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
 
@@ -83,7 +83,7 @@ public class LinkServiceImpl implements LinkService {
         return new LinkConfigResponse(
                 front.toMihomoNode(),
                 land.toMihomoNode(),
-                land.getEgressIps(),
+                land.getEgressIp(),
                 credentials,
                 linkProperties.getTtlSeconds()
         );

@@ -141,7 +141,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 front == null ? null : front.getName(),
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),
-                land == null ? List.of() : land.getEgressIps(),
+                land == null ? null : land.getEgressIp(),
                 activeSubscriptions,
                 user.getCreatedAt(),
                 user.getUpdatedAt());

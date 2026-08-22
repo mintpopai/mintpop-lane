@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { NODE_PROTOCOL, NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
@@ -10,6 +10,7 @@ import {
   buildNodePayload,
   emptyNodeForm,
   nodeToForm,
+  syncEgressIpFromServerAddr,
   validateNodeForm,
   type NodeFormModel,
 } from "../utils/nodeForm";
@@ -23,6 +24,14 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 
 const form = ref<NodeFormModel>(props.editing ? nodeToForm(props.editing) : emptyNodeForm(props.role));
 const submitting = ref(false);
+
+// 落地节点地址填成 IP 字面量时预填出口 IP（单 IP VPS 出口就是它自己），手工改过的值不覆盖
+watch(
+  () => form.value.serverAddr,
+  (_, previousServerAddr) => {
+    form.value = syncEgressIpFromServerAddr(form.value, previousServerAddr);
+  },
+);
 
 const title = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
 const roleOptions = Object.entries(NODE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
@@ -151,13 +160,12 @@ async function submit(): Promise<void> {
 
       <div v-if="!isSubscriptionNode && form.role === 'LAND'" class="admin-field">
         <label for="node-egress">出口 IP</label>
-        <textarea
+        <input
           id="node-egress"
-          v-model="form.egressIpsText"
-          class="admin-textarea fact"
-          rows="3"
-          placeholder="一行一个"
-        ></textarea>
+          v-model="form.egressIp"
+          class="admin-input fact"
+          placeholder="地址填 IP 时自动带入，可改"
+        />
       </div>
 
       <div class="admin-form-row">

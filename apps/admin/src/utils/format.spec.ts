@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { booleanLabel, formatDate, formatDateTime, joinOrDash } from "./format";
+import { booleanLabel, formatDate, formatDateTime } from "./format";
 
 // 钉死本进程时区，让「按本地时区渲染」可断言（Node 在 POSIX 上支持运行中生效）
 process.env.TZ = "Asia/Shanghai";
@@ -44,17 +44,6 @@ describe("formatDate", () => {
 
   it("解析不了的串显示占位符，不显示 Invalid Date", () => {
     expect(formatDate("不是时间")).toBe("—");
-  });
-});
-
-describe("joinOrDash", () => {
-  it("拼接非空列表", () => {
-    expect(joinOrDash(["1.2.3.4", "5.6.7.8"])).toBe("1.2.3.4、5.6.7.8");
-  });
-
-  it("空列表显示占位符——未分配落地出口的用户很常见，不能显示成空白", () => {
-    expect(joinOrDash([])).toBe("—");
-    expect(joinOrDash(null)).toBe("—");
   });
 });
 

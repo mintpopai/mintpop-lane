@@ -5,7 +5,6 @@ import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.NodeStatus;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -20,7 +19,8 @@ public record AdminNodeResponse(
         String serverAddr,
         Integer port,
         Map<String, Object> extraConfig,
-        List<String> egressIps,
+        /** 出口 IP，仅 LAND 节点有值；未填为 null */
+        String egressIp,
         NodeStatus status,
         String remark,
         boolean secretConfigured,

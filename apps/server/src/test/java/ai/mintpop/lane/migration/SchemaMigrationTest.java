@@ -106,4 +106,20 @@ class SchemaMigrationTest extends MysqlTestBase {
                 """, Integer.class);
         assertThat(cols).isEqualTo(3);
     }
+
+    @Test
+    @DisplayName("V3 迁移后出口 IP 是单列 egress_ip 并带注释，旧 JSON 列 egress_ips 已删除")
+    void v3MigrationReplacesEgressIpsWithSingleColumn() {
+        String comment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'proxy_node' AND column_name = 'egress_ip'
+                """, String.class);
+        assertThat(comment).contains("出口 IP");
+
+        Integer legacyCols = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'proxy_node' AND column_name = 'egress_ips'
+                """, Integer.class);
+        assertThat(legacyCols).isZero();
+    }
 }

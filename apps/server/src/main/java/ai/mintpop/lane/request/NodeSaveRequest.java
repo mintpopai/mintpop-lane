@@ -11,7 +11,6 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.ToString;
 
-import java.util.List;
 import java.util.Map;
 
 /** 新建或更新节点的入参。 */
@@ -49,8 +48,9 @@ public class NodeSaveRequest {
     @ToString.Exclude
     private Map<String, Object> secret = Map.of();
 
-    /** 出口 IP 集合，仅 LAND 需要 */
-    private List<String> egressIps = List.of();
+    /** 出口 IP，仅 LAND 需要；null 或空白表示未填 */
+    @Size(max = 64, message = "出口 IP 最长 64 个字符")
+    private String egressIp;
 
     @NotNull(message = "状态不能为空")
     private NodeStatus status = NodeStatus.ENABLED;

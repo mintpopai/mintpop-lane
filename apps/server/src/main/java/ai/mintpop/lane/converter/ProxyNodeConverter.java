@@ -7,7 +7,6 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.ProxyNode;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,7 +37,7 @@ public class ProxyNodeConverter {
         dto.setPort(entity.getPort());
         dto.setExtraConfig(entity.getExtraConfig() == null ? Map.of() : entity.getExtraConfig());
         dto.setSecret(readSecret(entity.getSecretCipher()));
-        dto.setEgressIps(entity.getEgressIps() == null ? List.of() : entity.getEgressIps());
+        dto.setEgressIp(entity.getEgressIp());
         dto.setStatus(entity.getStatus());
         dto.setRemark(entity.getRemark());
         dto.setGroupId(entity.getGroupId());
@@ -59,7 +58,7 @@ public class ProxyNodeConverter {
         entity.setPort(dto.getPort());
         entity.setExtraConfig(dto.getExtraConfig() == null ? Map.of() : dto.getExtraConfig());
         entity.setSecretCipher(writeSecret(dto.getSecret()));
-        entity.setEgressIps(dto.getEgressIps() == null ? List.of() : dto.getEgressIps());
+        entity.setEgressIp(dto.getEgressIp());
         entity.setStatus(dto.getStatus());
         entity.setRemark(dto.getRemark());
         entity.setGroupId(dto.getGroupId());

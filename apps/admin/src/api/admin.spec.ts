@@ -64,8 +64,7 @@ describe("createAdminApi", () => {
   it("新增与更新用 POST / PUT 并把 body 序列化成 JSON", async () => {
     const { http, request } = fakeClient();
     const api = createAdminApi(http);
-    // 显式标注成 NodeSaveRequest 而不是 as const：as const 会把 egressIps 变成
-    // readonly []，展开后与 string[] 不兼容；标注类型还顺带让这条测试校验载荷形状
+    // 显式标注成 NodeSaveRequest，让这条测试顺带校验载荷形状
     const body: NodeSaveRequest = {
       name: "US-01",
       role: "FRONT",
@@ -74,7 +73,7 @@ describe("createAdminApi", () => {
       port: 443,
       extraConfig: {},
       secret: {},
-      egressIps: [],
+      egressIp: null,
       status: "ENABLED",
       remark: "",
     };

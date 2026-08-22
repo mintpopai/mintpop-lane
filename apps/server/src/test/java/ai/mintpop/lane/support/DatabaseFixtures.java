@@ -69,7 +69,7 @@ public class DatabaseFixtures {
         node.setServerAddr(egressIp);
         node.setPort(50101);
         node.setSecret(Map.of("username", "land-用户名", "password", "land-密码"));
-        node.setEgressIps(List.of(egressIp));
+        node.setEgressIp(egressIp);
         return nodeRepository.create(node);
     }
 

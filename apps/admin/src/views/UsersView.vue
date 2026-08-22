@@ -9,7 +9,7 @@ import Select from "../components/AdminSelect.vue";
 import SubscriptionModal from "../components/SubscriptionModal.vue";
 import UserFormModal from "../components/UserFormModal.vue";
 import { showToast } from "../toast";
-import { formatDate, formatDateTime, joinOrDash } from "../utils/format";
+import { formatDate, formatDateTime } from "../utils/format";
 
 const list = ref<AdminUserResponse[]>([]);
 const nodes = ref<AdminNodeResponse[]>([]);
@@ -162,7 +162,7 @@ onMounted(refresh);
               <template v-if="row.landNodeName">{{ row.landNodeName }}</template>
               <span v-else class="muted">未分配</span>
             </td>
-            <td class="fact muted">{{ joinOrDash(row.egressIps) }}</td>
+            <td class="fact muted">{{ row.egressIp ?? "—" }}</td>
             <td>
               <template v-if="row.activeSubscriptions.length">
                 <span v-for="s in row.activeSubscriptions" :key="s.id" class="pill">

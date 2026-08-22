@@ -155,7 +155,10 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         node.setServerAddr(request.getServerAddr());
         node.setPort(request.getPort());
         node.setExtraConfig(request.getExtraConfig());
-        node.setEgressIps(request.getEgressIps());
+        // 出口 IP 是落地节点的属性：非 LAND 一律清空（含角色由 LAND 改走时清掉残值），空白归一成 null
+        String egressIp = request.getEgressIp() == null ? null : request.getEgressIp().trim();
+        node.setEgressIp(request.getRole() == NodeRole.LAND && egressIp != null && !egressIp.isEmpty()
+                ? egressIp : null);
         node.setStatus(request.getStatus());
         node.setRemark(request.getRemark());
     }
@@ -173,7 +176,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getServerAddr(),
                 node.getPort(),
                 node.getExtraConfig(),
-                node.getEgressIps(),
+                node.getEgressIp(),
                 node.getStatus(),
                 node.getRemark(),
                 node.getSecret() != null && !node.getSecret().isEmpty(),

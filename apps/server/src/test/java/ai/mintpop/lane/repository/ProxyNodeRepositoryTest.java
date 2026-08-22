@@ -50,7 +50,7 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         node.setPort(50101);
         node.setExtraConfig(Map.of("udp", true));
         node.setSecret(Map.of("username", "落地用户名", "password", "落地密码"));
-        node.setEgressIps(List.of("203.0.113.10", "203.0.113.11"));
+        node.setEgressIp("203.0.113.10");
         node.setRemark("给张三用");
 
         Long id = repository.create(node);
@@ -62,7 +62,7 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         assertThat(loaded.getPort()).isEqualTo(50101);
         assertThat(loaded.getExtraConfig()).containsEntry("udp", true);
         assertThat(loaded.getSecret()).containsEntry("password", "落地密码");
-        assertThat(loaded.getEgressIps()).containsExactly("203.0.113.10", "203.0.113.11");
+        assertThat(loaded.getEgressIp()).isEqualTo("203.0.113.10");
         assertThat(loaded.getStatus()).isEqualTo(NodeStatus.ENABLED);
         assertThat(loaded.getCreatedAt()).isNotNull();
     }
@@ -99,15 +99,27 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         Long id = fixtures.createLandNode("LAND-1", "203.0.113.10");
         ProxyNodeDto node = repository.findById(id).orElseThrow();
         node.setSecret(Map.of("username", "u2", "password", "换过的密码"));
-        node.setEgressIps(List.of("198.51.100.7"));
+        node.setEgressIp("198.51.100.7");
         node.setStatus(NodeStatus.DISABLED);
 
         repository.update(node);
         ProxyNodeDto reloaded = repository.findById(id).orElseThrow();
 
         assertThat(reloaded.getSecret()).containsEntry("password", "换过的密码");
-        assertThat(reloaded.getEgressIps()).containsExactly("198.51.100.7");
+        assertThat(reloaded.getEgressIp()).isEqualTo("198.51.100.7");
         assertThat(reloaded.getStatus()).isEqualTo(NodeStatus.DISABLED);
+    }
+
+    @Test
+    @DisplayName("更新节点：出口 IP 置 null 能清空——MyBatis-Plus 默认跳过 null 字段，此处必须能覆盖")
+    void updateNodeClearsEgressIp() {
+        Long id = fixtures.createLandNode("LAND-1", "203.0.113.10");
+        ProxyNodeDto node = repository.findById(id).orElseThrow();
+        node.setEgressIp(null);
+
+        repository.update(node);
+
+        assertThat(repository.findById(id).orElseThrow().getEgressIp()).isNull();
     }
 
     @Test

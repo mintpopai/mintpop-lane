@@ -8,7 +8,6 @@ import lombok.ToString;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,8 +35,8 @@ public class ProxyNodeDto {
     @ToString.Exclude
     private Map<String, Object> secret = Map.of();
 
-    /** 出口 IP 集合，仅 LAND 有值 */
-    private List<String> egressIps = List.of();
+    /** 出口 IP，仅 LAND 有值；null 表示未填 */
+    private String egressIp;
 
     private NodeStatus status = NodeStatus.ENABLED;
 

@@ -14,7 +14,7 @@ import java.util.Map;
 public record LinkConfigResponse(
         Map<String, Object> front,
         Map<String, Object> land,
-        List<String> expectedEgressIps,
+        String expectedEgressIp,
         List<AgentCredential> agentCredentials,
         long ttlSeconds
 ) {

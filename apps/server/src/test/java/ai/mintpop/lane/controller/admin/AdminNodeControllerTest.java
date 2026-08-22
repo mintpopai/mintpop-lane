@@ -86,7 +86,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 "port", 50101,
                 "extraConfig", Map.of("udp", true),
                 "secret", Map.of("username", "u1", "password", "落地密码"),
-                "egressIps", List.of("203.0.113.10"),
+                "egressIp", "203.0.113.10",
                 "status", "ENABLED");
 
         mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
@@ -100,7 +100,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].name").value("LAND-东京-03"))
                 .andExpect(jsonPath("$.data[0].protocol").value("SOCKS5"))
                 .andExpect(jsonPath("$.data[0].extraConfig.udp").value(true))
-                .andExpect(jsonPath("$.data[0].egressIps[0]").value("203.0.113.10"))
+                .andExpect(jsonPath("$.data[0].egressIp").value("203.0.113.10"))
                 .andExpect(jsonPath("$.data[0].secretConfigured").value(true))
                 // 密码一个字符都不许回传
                 .andExpect(jsonPath("$.data[0].secret").doesNotExist())
@@ -139,7 +139,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 "protocol", "SOCKS5",
                 "serverAddr", "203.0.113.10",
                 "port", 50101,
-                "egressIps", List.of("203.0.113.10"),
+                "egressIp", "203.0.113.10",
                 "status", "ENABLED");
 
         mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
@@ -162,7 +162,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 "protocol", "SOCKS5",
                 "serverAddr", "203.0.113.10",
                 "port", 50101,
-                "egressIps", List.of("203.0.113.10"),
+                "egressIp", "203.0.113.10",
                 "status", "ENABLED");
 
         mockMvc.perform(put("/api/admin/nodes/" + b).header("Authorization", bearer(adminId))
@@ -184,7 +184,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 "protocol", "SOCKS5",
                 "serverAddr", "203.0.113.10",
                 "port", 50102,
-                "egressIps", List.of("203.0.113.10"),
+                "egressIp", "203.0.113.10",
                 "status", "ENABLED");
 
         mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
@@ -287,7 +287,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
         var changeToFront = Map.of(
                 "name", "LAND-1", "role", "FRONT", "protocol", "SOCKS5",
                 "serverAddr", "203.0.113.10", "port", 50101,
-                "egressIps", List.of("203.0.113.10"), "status", "ENABLED");
+                "egressIp", "203.0.113.10", "status", "ENABLED");
 
         mockMvc.perform(put("/api/admin/nodes/" + land).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(changeToFront)))
@@ -300,7 +300,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
         var idleNodeChangeToFront = Map.of(
                 "name", "LAND-空闲", "role", "FRONT", "protocol", "SOCKS5",
                 "serverAddr", "203.0.113.20", "port", 50101,
-                "egressIps", List.of("203.0.113.20"), "status", "ENABLED");
+                "egressIp", "203.0.113.20", "status", "ENABLED");
 
         mockMvc.perform(put("/api/admin/nodes/" + idle).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(idleNodeChangeToFront)))
