@@ -187,7 +187,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤�
 
 ## 对外暴露
 
-前端容器端口**都只绑 `127.0.0.1`**，公网访问不到；server **不映射宿主端口**，只经容器网络被管理端反代访问。对外入口是宿主机上**已有的反代**（OpenResty/nginx，与本机其它站点共用），它**只按 Host 分流**、每个站点一条 `location /`——API 的路径拆分不在这一层做：管理端容器内的 nginx 已把 `/api`、`/auth`、`/oauth2` 反代到 server（compose 服务名 `server:8080`），因此管理端域名上的 API 调用天然同源，前端不需要 CORS，Logto 的回调也只有一个源。
+前端容器端口**都只绑 `127.0.0.1`**，公网访问不到；server **不映射宿主端口**，只经容器网络被管理端与官网反代访问。对外入口是宿主机上**已有的反代**（OpenResty/nginx，与本机其它站点共用），它**只按 Host 分流**、每个站点一条 `location /`——API 的路径拆分不在这一层做：管理端与官网容器内的 nginx 各自把 `/api`、`/auth`、`/oauth2` 反代到 server（compose 服务名 `server:8080`），因此各域名上的 API 调用天然同源，前端不需要 CORS。
 
 ```nginx
 server {
@@ -208,7 +208,7 @@ server {
 > `{baseUrl}` 会按请求实际到达的域名展开，即解析成 `https://<你的域名>/auth/callback`——
 > 与第 5 步在 Logto 控制台登记的 Redirect URI、第 7 步访问的 `/oauth2/authorization/logto` 是同一个域名。
 
-官网是独立站点，用**另一个域名**（或子域名）反代到 `127.0.0.1:8083` 即可，无路径拆分约束：
+官网是**主站域名**（如 `lane.mintpop.ai`），用另一个域名（或子域名）反代到 `127.0.0.1:8083`。**桌面端 app 的 API 与登录流都打主站域名**（`/api/link/**`、`/api/auth/desktop/exchange`、`/auth/desktop/start`、`/oauth2/**`），官网容器内的 nginx 已把这三段前缀反代到 server——与管理端一样，宿主反代仍只需一条 `location /`：
 
 ```nginx
 server {
@@ -218,11 +218,15 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8083;
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
-> 官网容器内的 nginx 自带 `/api/gh/releases` 反代（上游 GitHub API、带缓存），宿主反代不需要为它做任何额外配置。
+> 官网容器内的 nginx 还自带 `/api/gh/releases` 反代（上游 GitHub API、带缓存，精确匹配优先于 `/api/` 前缀，不会转给 server），宿主反代不需要为它做任何额外配置。
+>
+> 桌面端登录回跳发生在主站域名（`{baseUrl}/auth/callback` 按请求到达的域名展开），因此 Logto 控制台的 Redirect URI 要**同时登记管理端与主站两个域名**的 `/auth/callback`。
 
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
 
