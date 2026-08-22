@@ -7,4 +7,6 @@
 !apps/admin
 apps/admin/node_modules
 apps/admin/dist
+# 单元测试不进镜像：产物不含它们，排除后改测试不会让源码层缓存失效（门禁在 CI 里跑）
+apps/admin/src/**/*.spec.ts
 **/.git
