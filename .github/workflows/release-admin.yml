@@ -93,11 +93,12 @@ jobs:
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v6
         with:
+          # mode 是 action 的输入，不是 configurationJson 的字段：写进 JSON 会被忽略、退回 PR 模式
+          mode: COMMIT
           fromTag: ${{ steps.prev.outputs.from }}
           toTag: ${{ github.ref_name }}
           configurationJson: |
             {
-              "mode": "COMMIT",
               "template": "#{{CHANGELOG}}",
               "label_extractor": [
                 {
