@@ -108,7 +108,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .dialog.wide {
-  max-width: 860px;
+  max-width: 1000px;
 }
 
 .head {

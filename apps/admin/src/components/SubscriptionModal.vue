@@ -72,6 +72,16 @@ const predictedEndsAt = computed<string | null>(() => {
   return formatDateTime(computeEndsAt(form.value.startsAt, durationDays.value).toISOString());
 });
 
+/** 分配号是管理员要转交给用户的 32 位串，抄写必错，给一键复制 */
+async function copyAssignmentNo(row: AdminSubscriptionResponse): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(row.assignmentNo);
+    showToast("success", "分配号已复制");
+  } catch {
+    showToast("error", "复制失败，请手动选中复制");
+  }
+}
+
 function reportError(error: unknown, prefix: string): void {
   showToast("error", error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`);
 }
@@ -167,51 +177,55 @@ async function confirmDelete(): Promise<void> {
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
       <div class="admin-toolbar">
+        <span v-if="!loading && !loadError" class="sub-count">共 {{ list.length }} 条</span>
         <span class="spacer" />
         <button type="button" class="admin-btn" @click="create()">分配订阅</button>
       </div>
 
       <p v-if="loading" class="admin-hint">加载中……</p>
       <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
-      <div v-else class="admin-card">
-        <p v-if="list.length === 0" class="admin-hint">还没有订阅，点右上角「分配订阅」，先选 Agent 类型再挑套餐。</p>
-        <table v-else class="admin-table dense sticky-actions">
-          <thead>
-            <tr>
-              <th>分配号</th>
-              <th>套餐</th>
-              <th>Agent</th>
-              <th>起期</th>
-              <th>止期</th>
-              <th>凭据</th>
-              <th>备注</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in list" :key="row.id">
-              <td class="fact muted assignment-no">{{ row.assignmentNo }}</td>
-              <td>
-                {{ row.name }}
-                <span class="muted">（{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}）</span>
-              </td>
-              <td>{{ AGENT_TYPE_LABELS[row.agentType as keyof typeof AGENT_TYPE_LABELS] ?? row.agentType }}</td>
-              <td class="fact muted">{{ formatDateTime(row.startsAt) }}</td>
-              <td class="fact muted">{{ formatDateTime(row.endsAt) }}</td>
-              <td>
-                <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
-                  {{ row.hasCredential ? "已录入" : "未录入" }}
-                </span>
-              </td>
-              <td class="muted">{{ row.remark || "—" }}</td>
-              <td class="actions">
-                <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-                <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else-if="list.length === 0" class="admin-card">
+        <p class="admin-hint">还没有订阅，点右上角「分配订阅」，先选 Agent 类型再挑套餐。</p>
       </div>
+      <!-- 每条订阅通常就一两条，用卡片摊开所有字段，不再塞截断横滚的密表 -->
+      <ul v-else class="sub-list">
+        <li v-for="row in list" :key="row.id" class="sub-item">
+          <div class="sub-item-head">
+            <span class="sub-item-name">{{ row.name }}</span>
+            <span class="sub-item-spec">{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}</span>
+            <span class="pill muted">{{ agentLabel(row.agentType) }}</span>
+            <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
+              {{ row.hasCredential ? "凭据已录入" : "凭据未录入" }}
+            </span>
+            <span class="sub-item-gap" />
+            <div class="sub-item-actions">
+              <button type="button" class="admin-link" @click="edit(row)">编辑</button>
+              <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+            </div>
+          </div>
+          <dl class="sub-item-facts">
+            <div class="sub-fact">
+              <dt>起期</dt>
+              <dd class="fact">{{ formatDateTime(row.startsAt) }}</dd>
+            </div>
+            <div class="sub-fact">
+              <dt>止期</dt>
+              <dd class="fact">{{ formatDateTime(row.endsAt) }}</dd>
+            </div>
+            <div class="sub-fact">
+              <dt>分配号</dt>
+              <dd class="fact">
+                <span class="sub-assignment-no">{{ row.assignmentNo }}</span>
+                <button type="button" class="admin-link" @click="copyAssignmentNo(row)">复制</button>
+              </dd>
+            </div>
+            <div v-if="row.remark" class="sub-fact sub-fact-remark">
+              <dt>备注</dt>
+              <dd>{{ row.remark }}</dd>
+            </div>
+          </dl>
+        </li>
+      </ul>
     </template>
 
     <div v-else class="sub-form">
@@ -339,9 +353,92 @@ async function confirmDelete(): Promise<void> {
   gap: 12px;
 }
 
-/* 分配号 32 位很长：缩字号、禁换行完整展示，宽度靠表格横向滚动消化 */
-.assignment-no {
+.sub-count {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+/* —— 订阅卡片列表 —— */
+.sub-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sub-item {
+  padding: 16px 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
+}
+
+.sub-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.sub-item-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.sub-item-spec {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+/* 把操作推到头行最右；窄屏头行折行时它自然落到下一行 */
+.sub-item-gap {
+  flex: 1;
+}
+
+.sub-item-actions {
+  display: flex;
+  gap: 16px;
+}
+
+.sub-item-facts {
+  margin: 12px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 48px;
+}
+
+.sub-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sub-fact dt {
   font-size: 12px;
-  white-space: nowrap;
+  color: var(--color-ink-secondary);
+}
+
+.sub-fact dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--color-ink);
+}
+
+/* 分配号 32 位完整展示；容器再窄就断行，绝不横向滚动 */
+.sub-assignment-no {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* 备注是自由文本，独占一行随便换行，不跟等宽事实挤 */
+.sub-fact-remark {
+  flex-basis: 100%;
 }
 </style>
