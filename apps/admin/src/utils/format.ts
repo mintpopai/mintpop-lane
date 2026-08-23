@@ -1,5 +1,15 @@
+import { AGENT_TYPE_LABELS } from "../api/types";
+
 /** 列表里空值统一显示这个，避免出现空白单元格或 undefined */
 export const PLACEHOLDER = "—";
+
+/**
+ * agent 类型 → 界面上的中文标签。
+ * 服务端可能新增本前端还不认识的类型，那就原样展示取值——比显示空白或「未知」有用。
+ */
+export function agentLabel(agentType: string): string {
+  return AGENT_TYPE_LABELS[agentType as keyof typeof AGENT_TYPE_LABELS] ?? agentType;
+}
 
 /**
  * 服务端时间一律是带 Z 的 UTC 绝对时刻串（如 `2026-08-18T02:20:30Z`）。

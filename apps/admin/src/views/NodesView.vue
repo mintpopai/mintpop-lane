@@ -5,9 +5,14 @@ import { BizError } from "../api/http";
 import { NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
 import type { AdminNodeResponse, NodeGroupResponse, NodeRole } from "../api/types";
 import AdminModal from "../components/AdminModal.vue";
+import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
+import DataCard from "../components/DataCard.vue";
+import FilterChips from "../components/FilterChips.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
+import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
+import ViewTabs from "../components/ViewTabs.vue";
 import { showToast } from "../toast";
 import { booleanLabel, formatDateTime } from "../utils/format";
 
@@ -32,30 +37,97 @@ const renaming = ref(false);
 const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
 const deletingGroup = ref(false);
 
-// 各跳的节点数：挂在对应 tab 上，比堆在页头副题里更贴近它描述的对象
-const roleCounts = computed<Record<NodeRole, number>>(() => ({
-  FRONT: allNodes.value.filter((node) => node.role === "FRONT").length,
-  LAND: allNodes.value.filter((node) => node.role === "LAND").length,
-}));
+/** 启用状态筛选，两跳共用：ALL=不筛 */
+const currentStatus = ref<"ALL" | "ENABLED" | "DISABLED">("ALL");
 
-const currentList = computed(() =>
-  allNodes.value.filter((node) => {
-    if (node.role !== currentRole.value) {
-      return false;
-    }
-    if (currentRole.value !== "FRONT" || currentGroup.value === "ALL") {
-      return true;
-    }
-    return currentGroup.value === "NONE" ? node.groupId === null : node.groupId === currentGroup.value;
-  }),
+/* 计数的唯一口径：「选它之后表格里会有多少行」。所以 tab 与 chip 的计数都从这批
+   「已经过了状态下拉」的节点里数——否则会出现 chip 写着 12、表格却空着，看着像 bug。
+   页头的「共 N 个节点」是例外，那是整页规模，不随筛选变。 */
+const allFront = computed(() => allNodes.value.filter((node) => node.role === "FRONT"));
+const allLand = computed(() => allNodes.value.filter((node) => node.role === "LAND"));
+
+function keepStatus(node: AdminNodeResponse): boolean {
+  return currentStatus.value === "ALL" || node.status === currentStatus.value;
+}
+
+const frontNodes = computed(() => allFront.value.filter(keepStatus));
+const landNodes = computed(() => allLand.value.filter(keepStatus));
+
+/* 一级按跳数分。两跳的表格列都不同（落地多出口 IP / 时区 / 容量三列），合不到一起，
+   所以这里没有「全部」一档——与套餐、企业那种「列相同、可以合看」的一级不同。
+   各跳的节点数挂在对应 tab 上，比堆在页头副题里更贴近它描述的对象 */
+const roleOptions = computed(() =>
+  (Object.entries(NODE_ROLE_LABELS) as [NodeRole, string][]).map(([value, label]) => ({
+    value,
+    label,
+    count: value === "FRONT" ? frontNodes.value.length : landNodes.value.length,
+  })),
 );
 
-// 当前选中的分组对象；选中态只可能来自 chips 点击，正常恒能找到，找不到时按钮区整体不渲染
+/* 二级带只给第一跳：分组是它的主视角（节点本就是按订阅链接成批导进来的），值少、每次都要切、
+   计数有意义。落地节点没有组，它的二级带就空着——那条带里还有状态下拉，仍然有内容，切 tab 不塌。
+   分组的计数不用服务端的 group.nodeCount：那是全量，与上面的口径对不上 */
+const groupOptions = computed(() => [
+  { value: "ALL" as const, label: "全部", count: frontNodes.value.length },
+  {
+    value: "NONE" as const,
+    label: "未分组",
+    count: frontNodes.value.filter((node) => node.groupId === null).length,
+  },
+  ...groupList.value.map((group) => ({
+    value: group.id,
+    label: group.name,
+    count: frontNodes.value.filter((node) => node.groupId === group.id).length,
+  })),
+]);
+
+/* 状态对两跳都适用，是附加条件不是主视角，故走下拉、不占常驻带、不带计数 */
+const statusOptions: { value: "ALL" | "ENABLED" | "DISABLED"; label: string }[] = [
+  { value: "ALL", label: "全部" },
+  { value: "ENABLED", label: NODE_STATUS_LABELS.ENABLED },
+  { value: "DISABLED", label: NODE_STATUS_LABELS.DISABLED },
+];
+
+const currentList = computed(() => {
+  // frontNodes / landNodes 已经过了状态下拉，这里只再叠一层分组
+  const kind = currentRole.value === "FRONT" ? frontNodes.value : landNodes.value;
+  if (currentRole.value !== "FRONT" || currentGroup.value === "ALL") {
+    return kind;
+  }
+  return kind.filter((node) =>
+    currentGroup.value === "NONE" ? node.groupId === null : node.groupId === currentGroup.value,
+  );
+});
+
+/* 当前选中的分组对象。分组只属于第一跳，所以这里连 role 一起判——否则切到落地 tab 后，
+   上一次选中的分组操作（重新拉取 / 改名 / 删除分组）会跟着漏进落地视图的工具条。
+   选中态只可能来自 chips 点击，正常恒能找到，找不到时按钮区整体不渲染 */
 const selectedGroup = computed(() =>
-  typeof currentGroup.value === "number"
+  currentRole.value === "FRONT" && typeof currentGroup.value === "number"
     ? (groupList.value.find((g) => g.id === currentGroup.value) ?? null)
     : null,
 );
+
+/* 这一跳一个节点都没有（区别于「筛出来是空的」）——两者说法与下一步动作都不同。
+   这里数的是没过筛选的原始数量：12 个第一跳节点里没有禁用的，说法该是「这一批里没有」，
+   不是「还没有第一跳节点」 */
+const kindEmpty = computed(() =>
+  currentRole.value === "FRONT" ? allFront.value.length === 0 : allLand.value.length === 0,
+);
+
+const emptyText = computed(() => {
+  if (!kindEmpty.value) {
+    return "这一批里没有节点。";
+  }
+  return currentRole.value === "FRONT"
+    ? "还没有第一跳节点。手工建一个，或者把机场订阅链接整批导进来。"
+    : "还没有落地节点。落地节点要填出口 IP 与容量，用户的出口就是从这里分配的。";
+});
+
+function resetFilters(): void {
+  currentGroup.value = "ALL";
+  currentStatus.value = "ALL";
+}
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -158,61 +230,39 @@ onMounted(load);
 </script>
 
 <template>
-  <header class="page-head with-actions">
-    <div class="page-head-text">
-      <h2 class="page-title">节点池</h2>
-      <p class="page-facts">落地节点按容量分配，已绑人数在表里直接可见。</p>
-    </div>
-    <div class="page-head-actions">
+  <PageHead title="节点池">
+    <template #facts>
+      共 <span class="fact">{{ allNodes.length }}</span> 个节点 ·
+      <span class="fact">{{ groupList.length }}</span> 个分组。落地节点按容量分配，已绑人数在表里直接可见。
+    </template>
+    <template #actions>
       <button v-if="currentRole === 'FRONT'" type="button" class="admin-btn-ghost" @click="importModalOpen = true">
         从订阅导入
       </button>
       <button type="button" class="admin-btn" @click="create()">新建节点</button>
-    </div>
-  </header>
+    </template>
+  </PageHead>
 
-  <!-- 一级：换的是看哪一跳，用 tab；二级分组是筛选，用 chip。两层不同形，管辖关系才读得出来 -->
-  <nav class="admin-tabs">
-    <button
-      v-for="(label, value) in NODE_ROLE_LABELS"
-      :key="value"
-      type="button"
-      class="admin-tab"
-      :class="{ active: currentRole === value }"
-      @click="currentRole = value"
-    >
-      {{ label }} <span class="fact">{{ roleCounts[value] }}</span>
-    </button>
-  </nav>
+  <!-- 一级：换的是看哪一跳，用 tab；二级是在这一跳里挑一批看，用 chip。两层不同形，管辖关系才读得出来 -->
+  <ViewTabs v-model="currentRole" :options="roleOptions" label="按跳数分" />
 
-  <div v-if="currentRole === 'FRONT'" class="admin-toolbar">
-    <button
-      type="button"
-      class="admin-chip"
-      :class="{ active: currentGroup === 'ALL' }"
-      @click="currentGroup = 'ALL'"
-    >
-      全部
-    </button>
-    <button
-      type="button"
-      class="admin-chip"
-      :class="{ active: currentGroup === 'NONE' }"
-      @click="currentGroup = 'NONE'"
-    >
-      未分组
-    </button>
-    <button
-      v-for="group in groupList"
-      :key="group.id"
-      type="button"
-      class="admin-chip"
-      :class="{ active: currentGroup === group.id }"
-      @click="currentGroup = group.id"
-    >
-      {{ group.name }} <span class="fact">{{ group.nodeCount }}</span>
-    </button>
-    <!-- 选中某个分组时露出它的操作 -->
+  <div class="admin-toolbar">
+    <FilterChips
+      v-if="currentRole === 'FRONT'"
+      v-model="currentGroup"
+      :options="groupOptions"
+      label="按分组筛选"
+    />
+    <Select
+      v-model="currentStatus"
+      class="filter-select"
+      prefix="状态"
+      :filtered="currentStatus !== 'ALL'"
+      :options="statusOptions"
+    />
+
+    <!-- 选中某个分组时露出它的操作。这些是「当前所选批次」的操作，不是页面级操作，
+         所以留在筛选带右侧，不上提到页头 -->
     <template v-if="selectedGroup">
       <span class="spacer" />
       <button type="button" class="admin-link" @click="openRefetch(selectedGroup)">重新拉取</button>
@@ -221,12 +271,29 @@ onMounted(load);
     </template>
   </div>
 
-  <p v-if="loading" class="admin-hint">加载中……</p>
-  <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
+  <DataCard
+    :loading="loading"
+    :error="loadError"
+    :empty="currentList.length === 0"
+    :empty-text="emptyText"
+  >
+    <template #empty-action>
+      <!-- 空态说明里许诺了哪几条路，就把哪几条路摆出来，顺序与页头右上那对按钮一致 -->
+      <template v-if="kindEmpty">
+        <button
+          v-if="currentRole === 'FRONT'"
+          type="button"
+          class="admin-btn-ghost"
+          @click="importModalOpen = true"
+        >
+          从订阅导入
+        </button>
+        <button type="button" class="admin-btn" @click="create()">新建节点</button>
+      </template>
+      <button v-else type="button" class="admin-btn-ghost" @click="resetFilters()">查看全部</button>
+    </template>
 
-  <div v-else class="admin-card">
-    <p v-if="currentList.length === 0" class="admin-hint">这一类还没有节点，点右上角「新建节点」加一个。</p>
-    <table v-else class="admin-table sticky-actions">
+    <table class="admin-table sticky-actions">
       <thead>
         <tr>
           <th>节点名</th>
@@ -279,7 +346,7 @@ onMounted(load);
         </tr>
       </tbody>
     </table>
-  </div>
+  </DataCard>
 
   <NodeFormModal
     v-if="modalOpen"

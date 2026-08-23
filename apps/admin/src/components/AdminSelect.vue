@@ -22,11 +22,22 @@ interface SelectOption {
 const props = defineProps<{
   modelValue: OptionValue
   options: SelectOption[]
-  /** 没有可见 label 时给屏幕阅读器用 */
+  /** 没有可见 label 时给屏幕阅读器用。给了 prefix 就不必再给它——触发器上的文字本身就是名字 */
   ariaLabel?: string
   id?: string
   /** 选项是枚举值这类「系统生成的事实」时置真，走等宽——与表格里同一个值的排版对齐 */
   mono?: boolean
+  /**
+   * 维度名（「状态」「每页」），弱色显示在当前值左边，只出现在触发器上、不进选项面板。
+   *
+   * 收起来的下拉只显示当前取值（「上架」），不写维度就读不出这是在筛什么。维度名做成
+   * 控件外面一段裸文字最难看：一条带上其它东西都是有边框的实体，只有它是浮在页面底色上的
+   * 灰字，节奏被打断。收进控件本体，它就和搜索框、按钮是同一种材质了。
+   * 面板里不重复它——展开时上下文已经足够，每行都带前缀纯属啰嗦。
+   */
+  prefix?: string
+  /** 当前值不是默认值（正在筛）。已筛的控件亮起来，未筛的保持安静，不跟表格抢视线 */
+  filtered?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [OptionValue] }>()
@@ -181,10 +192,11 @@ function nextInstanceId(): number {
       :aria-controls="uid"
       :aria-label="ariaLabel"
       :aria-activedescendant="open ? optionId(activeIndex) : undefined"
-      :class="{ open }"
+      :class="{ open, filtered }"
       @click="open = !open"
       @keydown="onKeydown"
     >
+      <span v-if="prefix" class="sel-prefix">{{ prefix }}</span>
       <span v-if="selected?.dot" class="accent-dot" :style="{ background: selected.dot }"></span>
       <span class="sel-value" :class="{ fact: mono }">{{ selected?.label ?? '' }}</span>
     </button>
@@ -244,10 +256,24 @@ function nextInstanceId(): number {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 5l4-4 4 4' fill='none' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
+/* 维度名比当前值弱一档：一眼扫到的是「现在筛的是什么值」，维度是背景信息 */
+.sel-prefix {
+  flex-shrink: 0;
+  margin-right: 6px;
+  color: var(--color-ink-secondary);
+}
+
 .sel-value {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 已生效的筛选用薄荷底标出来，与面板里「已选项」同一种语言；未筛时保持白底，
+   一条带上默认全是安静的，不跟表格抢视线。底色之外还有值本身可读，不靠颜色单独传达 */
+.sel-trigger.filtered {
+  border-color: color-mix(in srgb, var(--color-brand) 55%, #ffffff);
+  background-color: color-mix(in srgb, var(--color-brand) 14%, #ffffff);
 }
 
 /* 面板：白面 + 描边 + 一层浅投影，和弹窗、纸带浮层同一种「盖在页面之上」的材质 */

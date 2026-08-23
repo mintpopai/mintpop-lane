@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { booleanLabel, formatDate, formatDateTime } from "./format";
+import { agentLabel, booleanLabel, formatDate, formatDateTime } from "./format";
 
 // 钉死本进程时区，让「按本地时区渲染」可断言（Node 在 POSIX 上支持运行中生效）
 process.env.TZ = "Asia/Shanghai";
@@ -51,5 +51,16 @@ describe("booleanLabel", () => {
   it("按真假给出中文标签", () => {
     expect(booleanLabel(true, "已配置", "未配置")).toBe("已配置");
     expect(booleanLabel(false, "已配置", "未配置")).toBe("未配置");
+  });
+});
+
+describe("agentLabel", () => {
+  it("已知类型换成中文标签", () => {
+    expect(agentLabel("CLAUDE")).toBe("Claude Code");
+    expect(agentLabel("CODEX")).toBe("Codex");
+  });
+
+  it("服务端新增的未知类型原样展示，不显示空白或「未知」", () => {
+    expect(agentLabel("GEMINI_CLI")).toBe("GEMINI_CLI");
   });
 });
