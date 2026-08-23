@@ -32,6 +32,12 @@ const renaming = ref(false);
 const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
 const deletingGroup = ref(false);
 
+// 各跳的节点数：挂在对应 tab 上，比堆在页头副题里更贴近它描述的对象
+const roleCounts = computed<Record<NodeRole, number>>(() => ({
+  FRONT: allNodes.value.filter((node) => node.role === "FRONT").length,
+  LAND: allNodes.value.filter((node) => node.role === "LAND").length,
+}));
+
 const currentList = computed(() =>
   allNodes.value.filter((node) => {
     if (node.role !== currentRole.value) {
@@ -152,32 +158,32 @@ onMounted(load);
 </script>
 
 <template>
-  <header class="page-head">
-    <h2 class="page-title">节点池</h2>
-    <p class="page-facts">
-      第一跳 <span class="fact">{{ allNodes.filter((n) => n.role === "FRONT").length }}</span> 个 · 落地
-      <span class="fact">{{ allNodes.filter((n) => n.role === "LAND").length }}</span> 个。
-      落地节点按容量分配，已绑人数在表里直接可见。
-    </p>
+  <header class="page-head with-actions">
+    <div class="page-head-text">
+      <h2 class="page-title">节点池</h2>
+      <p class="page-facts">落地节点按容量分配，已绑人数在表里直接可见。</p>
+    </div>
+    <div class="page-head-actions">
+      <button v-if="currentRole === 'FRONT'" type="button" class="admin-btn-ghost" @click="importModalOpen = true">
+        从订阅导入
+      </button>
+      <button type="button" class="admin-btn" @click="create()">新建节点</button>
+    </div>
   </header>
 
-  <div class="admin-toolbar">
+  <!-- 一级：换的是看哪一跳，用 tab；二级分组是筛选，用 chip。两层不同形，管辖关系才读得出来 -->
+  <nav class="admin-tabs">
     <button
       v-for="(label, value) in NODE_ROLE_LABELS"
       :key="value"
       type="button"
-      class="admin-chip"
+      class="admin-tab"
       :class="{ active: currentRole === value }"
       @click="currentRole = value"
     >
-      {{ label }}
+      {{ label }} <span class="fact">{{ roleCounts[value] }}</span>
     </button>
-    <span class="spacer" />
-    <button v-if="currentRole === 'FRONT'" type="button" class="admin-btn-ghost" @click="importModalOpen = true">
-      从订阅导入
-    </button>
-    <button type="button" class="admin-btn" @click="create()">新建节点</button>
-  </div>
+  </nav>
 
   <div v-if="currentRole === 'FRONT'" class="admin-toolbar">
     <button

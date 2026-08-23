@@ -202,6 +202,26 @@ body {
   margin-bottom: 24px;
 }
 
+/* 页面级操作（新建、导入）挂在页头右侧：它们与「在看哪一类」无关，
+   摆进筛选行会和筛选控件抢同一条视线 */
+.page-head.with-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.page-head-text {
+  min-width: 0;
+}
+
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .page-title {
   font-size: 26px;
   font-weight: 600;
@@ -558,6 +578,65 @@ body {
   color: var(--color-ink-secondary);
 }
 
+/* —— 视图切换 tab：换的是「看哪一批数据」，是一次换页，不是叠加的筛选条件。
+   所以它不能长成 chip 的样子——两层都是药丸时，谁管辖谁读不出来。
+   当前项用的指示条与导航轨当前项同款（2px、brand-deep），全站只有一种「你在这里」 —— */
+.admin-tabs {
+  display: flex;
+  gap: 28px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 12px;
+  border: none;
+  background: none;
+  color: var(--color-ink-secondary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.admin-tab:hover {
+  color: var(--color-ink);
+}
+
+/* 当前项三重表达：墨色、加粗、指示条——不靠颜色单独传达 */
+.admin-tab.active {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.admin-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* 压在容器那条发丝线上，而不是浮在它上方 */
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--color-brand-deep);
+}
+
+/* tab 上的计数是这一批的规模，非当前项也要读得到，所以不跟着文字变灰太多 */
+.admin-tab .fact {
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
+/* 焦点环画在元素外侧，tab 是贴边的，环贴着下边框会被裁；往里收一档 */
+.admin-tab:focus-visible {
+  outline-offset: -2px;
+}
+
 /* 筛选 chip：带状态点的用与表格同一套语义色 */
 .admin-chip {
   display: inline-flex;
@@ -810,6 +889,16 @@ body {
 
   .page-title {
     font-size: 22px;
+  }
+
+  /* 窄屏放不下「标题 | 操作」两栏，操作落到下一行 */
+  .page-head.with-actions {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .admin-tabs {
+    gap: 20px;
   }
 
   .admin-form-row {
