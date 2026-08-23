@@ -1,6 +1,7 @@
 import { AGENT_TYPE_LABELS } from "../api/types";
 import type {
   AdminSubscriptionResponse,
+  EnterpriseResponse,
   PlanResponse,
   SubscriptionCreateRequest,
   SubscriptionUpdateRequest,
@@ -16,6 +17,8 @@ export interface SubscriptionFormModel {
   agentType: string | null;
   /** 所选套餐 id；null = 未选（仅新增模式需要选） */
   planId: number | null;
+  /** 归属企业 id；null = 个人订阅。可选，不参与校验 */
+  enterpriseId: number | null;
   /** 模型存 Date（绝对时刻）；datetime-local 控件值经 utils/datetimeLocal 换算；null = 未填 */
   startsAt: Date | null;
   /** 留空表示沿用原凭据 */
@@ -29,6 +32,7 @@ export function emptySubscriptionForm(now: Date = new Date()): SubscriptionFormM
     id: null,
     agentType: null,
     planId: null,
+    enterpriseId: null,
     startsAt: now,
     credential: "",
     remark: "",
@@ -40,6 +44,7 @@ export function subscriptionToForm(s: AdminSubscriptionResponse): SubscriptionFo
     id: s.id,
     agentType: s.agentType,
     planId: s.planId,
+    enterpriseId: s.enterpriseId,
     // 服务端给的是带 Z 的 UTC 串，解析成 Date 后由控件按本地时区回显
     startsAt: new Date(s.startsAt),
     // 服务端不回传凭据，回填一律为空；提交时空串即表示不修改
@@ -72,6 +77,7 @@ export function buildSubscriptionCreatePayload(form: SubscriptionFormModel): Sub
   }
   return {
     planId: form.planId,
+    enterpriseId: form.enterpriseId,
     // toISOString 天然输出 UTC（带 Z），提交即绝对时刻
     startsAt: form.startsAt.toISOString(),
     // 空串 = 沿用原值，服务端按空白转 null 处理
@@ -85,6 +91,7 @@ export function buildSubscriptionUpdatePayload(form: SubscriptionFormModel): Sub
     throw new Error("起期未填，先通过表单校验再构造入参");
   }
   return {
+    enterpriseId: form.enterpriseId,
     startsAt: form.startsAt.toISOString(),
     credential: form.credential.trim(),
     remark: form.remark.trim(),
@@ -132,4 +139,20 @@ export function planOptionsForAgent(
   return plans
     .filter((plan) => plan.enabled && plan.agentType === agentType)
     .map((plan) => ({ value: plan.id, label: formatPlanLabel(plan) }));
+}
+
+/**
+ * 归属企业下拉选项：只列启用中、且支持所选 agent 类型的企业；未选类型时为空。
+ * 与套餐下拉同一条链路——先定 agent 类型，套餐与企业再各自按它收窄。
+ */
+export function enterpriseOptionsForAgent(
+  enterprises: EnterpriseResponse[],
+  agentType: string | null,
+): Array<{ value: number; label: string }> {
+  if (agentType === null) {
+    return [];
+  }
+  return enterprises
+    .filter((e) => e.enabled && e.agentTypes.includes(agentType))
+    .map((e) => ({ value: e.id, label: `${e.name}（${e.domain}）` }));
 }

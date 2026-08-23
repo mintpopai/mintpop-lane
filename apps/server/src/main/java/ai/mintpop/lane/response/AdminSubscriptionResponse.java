@@ -14,6 +14,8 @@ public record AdminSubscriptionResponse(
         Long id,
         String assignmentNo,
         Long userId,
+        /** 归属企业 id；null 表示个人订阅 */
+        Long enterpriseId,
         AgentType agentType,
         Long planId,
         String name,

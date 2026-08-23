@@ -2,9 +2,11 @@ package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.entity.Enterprise;
 import ai.mintpop.lane.entity.Plan;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
+import ai.mintpop.lane.repository.EnterpriseRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -26,6 +28,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
@@ -66,6 +69,9 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Autowired
     private PlanRepository planRepository;
+
+    @Autowired
+    private EnterpriseRepository enterpriseRepository;
 
     @Autowired
     private SessionTokenService sessionTokenService;
@@ -109,6 +115,15 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
         plan.setCurrency(Currency.USD);
         plan.setEnabled(enabled);
         return planRepository.create(plan);
+    }
+
+    private Long createEnterprise(String name, String domain, boolean enabled, AgentType... agentTypes) {
+        Enterprise enterprise = new Enterprise();
+        enterprise.setName(name);
+        enterprise.setDomain(domain);
+        enterprise.setAgentTypes(List.of(agentTypes));
+        enterprise.setEnabled(enabled);
+        return enterpriseRepository.create(enterprise);
     }
 
     private Long createSubscription(Long userId, Map<String, Object> body) throws Exception {
@@ -345,5 +360,109 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
         JsonNode row = listSubscriptions(memberId).get(0);
         assertThat(Instant.parse(row.get("endsAt").asText()))
                 .isEqualTo(Instant.parse("2026-01-15T08:30:00Z").plus(31, ChronoUnit.DAYS));
+    }
+
+    @Test
+    @DisplayName("归属企业留空即个人订阅：enterpriseId 回显为 null")
+    void enterpriseIdIsNullWhenNotAssigned() throws Exception {
+        createSubscription(memberId, createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null));
+
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].enterpriseId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("分配时指定归属企业：enterpriseId 落库并回显")
+    void createWithEnterprise() throws Exception {
+        Long enterpriseId = createEnterprise("Acme", "acme.com", true, AgentType.CLAUDE);
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("enterpriseId", enterpriseId);
+        createSubscription(memberId, body);
+
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].enterpriseId").value(enterpriseId));
+    }
+
+    @Test
+    @DisplayName("归属到不存在的企业报 410020")
+    void createWithMissingEnterpriseRejected() throws Exception {
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("enterpriseId", 99999L);
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(410020));
+    }
+
+    @Test
+    @DisplayName("归属到已停用的企业报 410023")
+    void createWithDisabledEnterpriseRejected() throws Exception {
+        Long enterpriseId = createEnterprise("Acme", "acme.com", false, AgentType.CLAUDE);
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("enterpriseId", enterpriseId);
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(410023));
+    }
+
+    @Test
+    @DisplayName("套餐的 agent 类型不在企业支持范围内报 410024")
+    void createWithAgentTypeOutsideEnterpriseRejected() throws Exception {
+        Long enterpriseId = createEnterprise("Codex Only", "codex.example", true, AgentType.CODEX);
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("enterpriseId", enterpriseId);
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(410024));
+    }
+
+    @Test
+    @DisplayName("更新可改归属企业，也可置空改回个人订阅")
+    void updateChangesEnterprise() throws Exception {
+        Long enterpriseId = createEnterprise("Acme", "acme.com", true, AgentType.CLAUDE);
+        Long subscriptionId = createSubscription(memberId,
+                createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null));
+
+        Map<String, Object> assign = updateRequest("2026-08-01T00:00:00Z", null, "归到 Acme");
+        assign.put("enterpriseId", enterpriseId);
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(assign)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].enterpriseId").value(enterpriseId));
+
+        Map<String, Object> clear = updateRequest("2026-08-01T00:00:00Z", null, "改回个人");
+        clear.put("enterpriseId", null);
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(clear)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].enterpriseId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("更新归属时同样校验企业支持的 agent 类型，不匹配报 410024")
+    void updateWithAgentTypeOutsideEnterpriseRejected() throws Exception {
+        Long enterpriseId = createEnterprise("Codex Only", "codex.example", true, AgentType.CODEX);
+        Long subscriptionId = createSubscription(memberId,
+                createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null));
+
+        Map<String, Object> body = updateRequest("2026-08-01T00:00:00Z", null, "");
+        body.put("enterpriseId", enterpriseId);
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(410024));
     }
 }

@@ -17,6 +17,9 @@ public class SubscriptionCreateRequest {
     @NotNull(message = "套餐不能为空")
     private Long planId;
 
+    /** 归属企业 id；留空表示个人订阅 */
+    private Long enterpriseId;
+
     /** 服务起期；留空表示从分配当下开始 */
     private Instant startsAt;
 

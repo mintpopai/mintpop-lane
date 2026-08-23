@@ -17,6 +17,9 @@ public class SubscriptionUpdateRequest {
     @NotNull(message = "起期不能为空")
     private Instant startsAt;
 
+    /** 归属企业 id；留空表示个人订阅。与凭据不同，这里留空就是清除归属 */
+    private Long enterpriseId;
+
     /** 席位凭据。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude
     private String credential;

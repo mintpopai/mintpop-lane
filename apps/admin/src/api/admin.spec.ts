@@ -106,11 +106,13 @@ describe("createAdminApi", () => {
     const api = createAdminApi(http);
     const createBody = {
       planId: 11,
+      enterpriseId: null,
       startsAt: "2026-08-01T00:00:00",
       credential: "sk-ant-x",
       remark: "",
     };
     const updateBody = {
+      enterpriseId: null,
       startsAt: "2026-08-01T00:00:00",
       credential: "",
       remark: "",
@@ -182,5 +184,33 @@ describe("createAdminApi", () => {
       body: JSON.stringify(body),
     });
     expect(request).toHaveBeenNthCalledWith(4, "/admin/plans/3", { method: "DELETE" });
+  });
+
+  it("企业接口逐个打到正确的路径与方法", async () => {
+    const { http, request } = fakeClient();
+    const api = createAdminApi(http);
+    const body = {
+      name: "Acme 科技",
+      domain: "acme.com",
+      agentTypes: ["CLAUDE" as const],
+      enabled: true,
+      remark: "",
+    };
+
+    await api.listEnterprises();
+    await api.createEnterprise(body);
+    await api.updateEnterprise(7, body);
+    await api.deleteEnterprise(7);
+
+    expect(request).toHaveBeenNthCalledWith(1, "/admin/enterprises");
+    expect(request).toHaveBeenNthCalledWith(2, "/admin/enterprises", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    expect(request).toHaveBeenNthCalledWith(3, "/admin/enterprises/7", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    expect(request).toHaveBeenNthCalledWith(4, "/admin/enterprises/7", { method: "DELETE" });
   });
 });

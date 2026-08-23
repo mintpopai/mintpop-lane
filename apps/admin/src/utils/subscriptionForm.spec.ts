@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { AdminSubscriptionResponse, PlanResponse } from "../api/types";
+import type { AdminSubscriptionResponse, EnterpriseResponse, PlanResponse } from "../api/types";
 import {
   agentTypeOptions,
+  enterpriseOptionsForAgent,
   buildSubscriptionCreatePayload,
   buildSubscriptionUpdatePayload,
   computeEndsAt,
@@ -16,6 +17,7 @@ const sample: AdminSubscriptionResponse = {
   id: 3,
   assignmentNo: "0f8fad5bd9cb469fa16570867728950e",
   userId: 7,
+  enterpriseId: null,
   agentType: "CLAUDE",
   planId: 11,
   name: "Claude 月付",
@@ -37,6 +39,17 @@ const plan: PlanResponse = {
   durationDays: 30,
   price: 99.99,
   currency: "USD",
+  enabled: true,
+  remark: null,
+  createdAt: "2026-08-01T00:00:00Z",
+  updatedAt: "2026-08-01T00:00:00Z",
+};
+
+const enterprise: EnterpriseResponse = {
+  id: 21,
+  name: "Acme 科技",
+  domain: "acme.com",
+  agentTypes: ["CLAUDE"],
   enabled: true,
   remark: null,
   createdAt: "2026-08-01T00:00:00Z",
@@ -93,16 +106,18 @@ describe("subscriptionForm", () => {
     const payload = buildSubscriptionCreatePayload(form);
     expect(payload).toEqual({
       planId: 11,
+      enterpriseId: null,
       startsAt: "2026-08-01T00:00:00.000Z",
       credential: "sk-ant-x",
       remark: "首月",
     });
   });
 
-  it("编辑入参：只有起期/凭据/备注，不含套餐字段", () => {
+  it("编辑入参：只有归属/起期/凭据/备注，不含套餐字段", () => {
     const form = subscriptionToForm(sample);
     const payload = buildSubscriptionUpdatePayload(form);
     expect(payload).toEqual({
+      enterpriseId: null,
       startsAt: "2026-08-01T00:00:00.000Z",
       credential: "",
       remark: "线下收款",
@@ -146,5 +161,58 @@ describe("subscriptionForm", () => {
       { value: 11, label: "Claude 月付（30 天 · 99.99 USD）" },
     ]);
     expect(planOptionsForAgent(all, null)).toEqual([]);
+  });
+
+  it("企业选项：只列启用中且支持所选 agent 类型的企业，标签带域名", () => {
+    const codexOnly: EnterpriseResponse = {
+      ...enterprise,
+      id: 22,
+      name: "Codex 公司",
+      domain: "codex.example",
+      agentTypes: ["CODEX"],
+    };
+    const both: EnterpriseResponse = {
+      ...enterprise,
+      id: 23,
+      name: "双栈公司",
+      domain: "both.example",
+      agentTypes: ["CLAUDE", "CODEX"],
+    };
+    const disabled: EnterpriseResponse = {
+      ...enterprise,
+      id: 24,
+      name: "停用公司",
+      domain: "off.example",
+      enabled: false,
+    };
+    const all = [enterprise, codexOnly, both, disabled];
+
+    expect(enterpriseOptionsForAgent(all, "CLAUDE")).toEqual([
+      { value: 21, label: "Acme 科技（acme.com）" },
+      { value: 23, label: "双栈公司（both.example）" },
+    ]);
+  });
+
+  it("企业选项：未选 agent 类型时为空，逼着先选类型", () => {
+    expect(enterpriseOptionsForAgent([enterprise], null)).toEqual([]);
+  });
+
+  it("回填带出归属企业；分配与更新的提交体都带 enterpriseId", () => {
+    const form = subscriptionToForm({ ...sample, enterpriseId: 21 });
+    expect(form.enterpriseId).toBe(21);
+
+    expect(buildSubscriptionCreatePayload(form).enterpriseId).toBe(21);
+    expect(buildSubscriptionUpdatePayload(form).enterpriseId).toBe(21);
+  });
+
+  it("未归属企业时提交体的 enterpriseId 是 null", () => {
+    const form = subscriptionToForm(sample);
+    expect(form.enterpriseId).toBeNull();
+    expect(buildSubscriptionCreatePayload(form).enterpriseId).toBeNull();
+    expect(buildSubscriptionUpdatePayload(form).enterpriseId).toBeNull();
+  });
+
+  it("空表单不预选归属企业", () => {
+    expect(emptySubscriptionForm(new Date("2026-08-20T12:00:00Z")).enterpriseId).toBeNull();
   });
 });

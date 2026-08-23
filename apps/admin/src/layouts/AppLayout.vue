@@ -20,6 +20,7 @@ const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
       <RouterLink :to="{ name: 'USERS' }" class="rail-link">用户</RouterLink>
       <RouterLink :to="{ name: 'NODES' }" class="rail-link">节点池</RouterLink>
       <RouterLink :to="{ name: 'PLANS' }" class="rail-link">套餐</RouterLink>
+      <RouterLink :to="{ name: 'ENTERPRISES' }" class="rail-link">企业</RouterLink>
     </div>
 
     <div class="rail-foot">

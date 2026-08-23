@@ -6,6 +6,7 @@ import { useAuthStore } from "../stores/auth";
 import { loginPagePath } from "../auth/constants";
 import { clearLoginMark, isLikelyLoginLoop } from "../utils/loginLoop";
 import AppLayout from "../layouts/AppLayout.vue";
+import EnterprisesView from "../views/EnterprisesView.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
 import LoginErrorView from "../views/LoginErrorView.vue";
 import LoginView from "../views/LoginView.vue";
@@ -38,6 +39,7 @@ export function createAppRouter(
           { path: "users", name: "USERS", component: UsersView },
           { path: "nodes", name: "NODES", component: NodesView },
           { path: "plans", name: "PLANS", component: PlansView },
+          { path: "enterprises", name: "ENTERPRISES", component: EnterprisesView },
         ],
       },
       { path: "/:pathMatch(.*)*", redirect: { name: "USERS" } },

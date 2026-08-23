@@ -20,6 +20,7 @@ public class SubscriptionConverter {
         dto.setId(entity.getId());
         dto.setAssignmentNo(entity.getAssignmentNo());
         dto.setUserId(entity.getUserId());
+        dto.setEnterpriseId(entity.getEnterpriseId());
         dto.setAgentType(entity.getAgentType());
         dto.setPlanId(entity.getPlanId());
         dto.setName(entity.getName());
@@ -40,6 +41,7 @@ public class SubscriptionConverter {
         entity.setId(dto.getId());
         entity.setAssignmentNo(dto.getAssignmentNo());
         entity.setUserId(dto.getUserId());
+        entity.setEnterpriseId(dto.getEnterpriseId());
         entity.setAgentType(dto.getAgentType());
         entity.setPlanId(dto.getPlanId());
         entity.setName(dto.getName());

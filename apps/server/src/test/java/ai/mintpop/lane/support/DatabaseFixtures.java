@@ -48,6 +48,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE proxy_node");
         jdbc.execute("TRUNCATE TABLE node_group");
         jdbc.execute("TRUNCATE TABLE plan");
+        jdbc.execute("TRUNCATE TABLE enterprise");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 

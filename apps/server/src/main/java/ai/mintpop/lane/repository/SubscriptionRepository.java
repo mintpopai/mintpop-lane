@@ -29,4 +29,7 @@ public interface SubscriptionRepository {
     void update(SubscriptionDto subscription);
 
     void deleteById(Long id);
+
+    /** 是否还有订阅归属于该企业。企业删除前的引用检查用，企业侧不设外键，靠这里把关 */
+    boolean existsByEnterpriseId(Long enterpriseId);
 }
