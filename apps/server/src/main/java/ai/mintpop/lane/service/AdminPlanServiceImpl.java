@@ -71,6 +71,7 @@ public class AdminPlanServiceImpl implements AdminPlanService {
 
     private void apply(Plan plan, PlanSaveRequest request) {
         plan.setName(request.getName());
+        plan.setAgentType(request.getAgentType());
         plan.setDurationDays(request.getDurationDays());
         plan.setPrice(request.getPrice());
         plan.setCurrency(request.getCurrency());
@@ -79,7 +80,7 @@ public class AdminPlanServiceImpl implements AdminPlanService {
     }
 
     private PlanResponse toResponse(Plan plan) {
-        return new PlanResponse(plan.getId(), plan.getName(), plan.getDurationDays(), plan.getPrice(),
+        return new PlanResponse(plan.getId(), plan.getName(), plan.getAgentType(), plan.getDurationDays(), plan.getPrice(),
                 plan.getCurrency(), plan.getEnabled(), plan.getRemark(), plan.getCreatedAt(), plan.getUpdatedAt());
     }
 }

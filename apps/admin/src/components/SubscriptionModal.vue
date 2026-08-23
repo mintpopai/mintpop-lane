@@ -38,13 +38,24 @@ const deleting = ref(false);
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-// 下拉只在新增态出现（编辑态 agent 锁定为只读展示），选项就是已知枚举全集
-const agentOptions = Object.entries(AGENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
 /** 只列上架套餐——分配只能从可售卖的选项里挑 */
 const planOptions = computed(() =>
   plans.value.filter((plan) => plan.enabled).map((plan) => ({ value: plan.id, label: formatPlanLabel(plan) })),
 );
+
+function agentLabel(agentType: string): string {
+  return AGENT_TYPE_LABELS[agentType as keyof typeof AGENT_TYPE_LABELS] ?? agentType;
+}
+
+/** agent 类型不可选：新增随所选套餐确定，编辑展示分配时的快照 */
+const agentTypeDisplay = computed<string>(() => {
+  if (formMode.value === "edit") {
+    return agentLabel(editingRow.value?.agentType ?? "");
+  }
+  const selected = plans.value.find((plan) => plan.id === form.value.planId);
+  return selected ? agentLabel(selected.agentType) : "选套餐后自动确定";
+});
 
 /** 止期推算用的时长：新增取所选套餐，编辑取分配时的快照 */
 const durationDays = computed<number | null>(() => {
@@ -202,18 +213,6 @@ async function confirmDelete(): Promise<void> {
       <div class="admin-form">
         <div class="admin-form-row">
           <div class="admin-field">
-            <label for="sub-agent">Agent 类型</label>
-            <!-- 编辑时 agent 锁定：分配后不可改，与套餐一致 -->
-            <input
-              v-if="formMode === 'edit'"
-              id="sub-agent"
-              class="admin-input"
-              :value="AGENT_TYPE_LABELS[form.agentType as keyof typeof AGENT_TYPE_LABELS] ?? form.agentType"
-              disabled
-            />
-            <Select v-else id="sub-agent" v-model="form.agentType" :options="agentOptions" aria-label="Agent 类型" />
-          </div>
-          <div class="admin-field">
             <label for="sub-plan">套餐</label>
             <!-- 编辑时套餐锁定：展示分配当时的快照，要换套餐就删了重新分配 -->
             <input
@@ -227,6 +226,11 @@ async function confirmDelete(): Promise<void> {
             <p v-if="formMode === 'create' && planOptions.length === 0" class="admin-note">
               没有上架的套餐，先去「套餐管理」新建。
             </p>
+          </div>
+          <div class="admin-field">
+            <label for="sub-agent">Agent 类型</label>
+            <!-- agent 类型不可选：由所选套餐决定（编辑时展示分配当时的快照） -->
+            <input id="sub-agent" class="admin-input" :value="agentTypeDisplay" disabled />
           </div>
         </div>
 

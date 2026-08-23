@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 import lombok.Data;
 
@@ -23,6 +24,9 @@ public class Plan {
     private Long id;
 
     private String name;
+
+    /** 本套餐面向的 agent 类型 */
+    private AgentType agentType;
 
     /** 套餐时长（天），正整数 */
     private Integer durationDays;

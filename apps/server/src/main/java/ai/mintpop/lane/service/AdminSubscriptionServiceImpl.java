@@ -51,8 +51,8 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         SubscriptionDto s = new SubscriptionDto();
         s.setAssignmentNo(newAssignmentNo());
         s.setUserId(userId);
-        s.setAgentType(request.getAgentType());
-        // 套餐信息落快照：套餐之后改名改价甚至被删，都不影响这一次分配的记录
+        // 套餐信息落快照（含 agent 类型）：套餐之后改名改价改类型甚至被删，都不影响这一次分配的记录
+        s.setAgentType(plan.getAgentType());
         s.setPlanId(plan.getId());
         s.setName(plan.getName());
         s.setPlanDurationDays(plan.getDurationDays());

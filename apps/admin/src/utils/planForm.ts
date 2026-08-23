@@ -3,6 +3,8 @@ import type { Currency, PlanResponse, PlanSaveRequest } from "../api/types";
 /** 套餐表单模型。数字输入未填时为 null，提交前经 validatePlanForm 拦住 */
 export interface PlanFormModel {
   name: string;
+  /** agentType 用 string：回填未知类型时保留原值，避免打开即误改 */
+  agentType: string;
   durationDays: number | null;
   price: number | null;
   currency: Currency;
@@ -13,6 +15,7 @@ export interface PlanFormModel {
 export function emptyPlanForm(): PlanFormModel {
   return {
     name: "",
+    agentType: "CLAUDE",
     durationDays: null,
     price: null,
     currency: "USD",
@@ -24,6 +27,7 @@ export function emptyPlanForm(): PlanFormModel {
 export function planToForm(plan: PlanResponse): PlanFormModel {
   return {
     name: plan.name,
+    agentType: plan.agentType,
     durationDays: plan.durationDays,
     price: plan.price,
     currency: plan.currency,
@@ -56,6 +60,7 @@ export function validatePlanForm(form: PlanFormModel): string[] {
 export function buildPlanPayload(form: PlanFormModel): PlanSaveRequest {
   return {
     name: form.name.trim(),
+    agentType: form.agentType as PlanSaveRequest["agentType"],
     // 校验已保证非 null，这里的 ?? 只为收窄类型
     durationDays: form.durationDays ?? 0,
     price: form.price ?? 0,

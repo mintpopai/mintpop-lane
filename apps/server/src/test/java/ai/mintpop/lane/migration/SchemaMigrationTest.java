@@ -66,6 +66,18 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("V8 迁移给 plan 表加出 agent_type 列：非空、带注释、无默认值（新建必须显式传）")
+    void v8MigrationAddsPlanAgentType() {
+        var column = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable, column_default FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'plan' AND column_name = 'agent_type'
+                """);
+        assertThat((String) column.get("column_comment")).contains("CLAUDE");
+        assertThat(column.get("is_nullable")).isEqualTo("NO");
+        assertThat(column.get("column_default")).isNull();
+    }
+
+    @Test
     @DisplayName("多个用户可以同时处于「未分配落地」状态")
     void multipleUsersWithoutLandCanCoexist() {
         long front = createNode("FRONT-1", "FRONT");

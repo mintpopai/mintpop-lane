@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
+import { AGENT_TYPE_LABELS } from "../api/types";
 import type { PlanResponse } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import PlanFormModal from "../components/PlanFormModal.vue";
@@ -83,6 +84,7 @@ onMounted(load);
       <thead>
         <tr>
           <th>套餐名</th>
+          <th>Agent</th>
           <th>时长</th>
           <th>价格</th>
           <th>状态</th>
@@ -94,6 +96,7 @@ onMounted(load);
       <tbody>
         <tr v-for="row in plans" :key="row.id">
           <td>{{ row.name }}</td>
+          <td>{{ AGENT_TYPE_LABELS[row.agentType as keyof typeof AGENT_TYPE_LABELS] ?? row.agentType }}</td>
           <td class="fact">{{ row.durationDays }} 天</td>
           <td class="fact">{{ row.price.toFixed(2) }} {{ row.currency }}</td>
           <td>

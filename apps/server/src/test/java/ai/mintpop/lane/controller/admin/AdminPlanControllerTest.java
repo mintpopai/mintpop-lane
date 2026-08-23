@@ -76,6 +76,7 @@ class AdminPlanControllerTest extends MysqlTestBase {
     private Map<String, Object> validBody() {
         Map<String, Object> body = new HashMap<>();
         body.put("name", "月付套餐");
+        body.put("agentType", "CLAUDE");
         body.put("durationDays", 30);
         body.put("price", 29.9);
         body.put("currency", "USD");
@@ -105,6 +106,7 @@ class AdminPlanControllerTest extends MysqlTestBase {
         Long firstId = createPlan(validBody());
         Map<String, Object> second = validBody();
         second.put("name", "季付套餐");
+        second.put("agentType", "CODEX");
         second.put("durationDays", 90);
         second.put("price", 79.0);
         second.put("currency", "CNY");
@@ -117,6 +119,7 @@ class AdminPlanControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.length()").value(2))
                 .andExpect(jsonPath("$.data[0].id").value(firstId))
                 .andExpect(jsonPath("$.data[0].name").value("月付套餐"))
+                .andExpect(jsonPath("$.data[0].agentType").value("CLAUDE"))
                 .andExpect(jsonPath("$.data[0].durationDays").value(30))
                 .andExpect(jsonPath("$.data[0].price").value(29.9))
                 .andExpect(jsonPath("$.data[0].currency").value("USD"))
@@ -125,6 +128,7 @@ class AdminPlanControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].createdAt").exists())
                 .andExpect(jsonPath("$.data[0].updatedAt").exists())
                 .andExpect(jsonPath("$.data[1].name").value("季付套餐"))
+                .andExpect(jsonPath("$.data[1].agentType").value("CODEX"))
                 .andExpect(jsonPath("$.data[1].durationDays").value(90))
                 .andExpect(jsonPath("$.data[1].currency").value("CNY"));
     }
@@ -142,8 +146,14 @@ class AdminPlanControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("参数校验：天数至少 1、价格不能为负、名称必填，均报 110001")
+    @DisplayName("参数校验：天数至少 1、价格不能为负、名称与 agent 类型必填，均报 110001")
     void validationFailures() throws Exception {
+        Map<String, Object> noAgentType = validBody();
+        noAgentType.put("agentType", null);
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(noAgentType)))
+                .andExpect(jsonPath("$.code").value(110001));
+
         Map<String, Object> zeroDays = validBody();
         zeroDays.put("durationDays", 0);
         mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
@@ -173,6 +183,7 @@ class AdminPlanControllerTest extends MysqlTestBase {
 
         Map<String, Object> updated = validBody();
         updated.put("name", "月付套餐·新");
+        updated.put("agentType", "CODEX");
         updated.put("durationDays", 31);
         updated.put("price", 39.9);
         updated.put("currency", "CNY");
@@ -184,6 +195,7 @@ class AdminPlanControllerTest extends MysqlTestBase {
 
         mockMvc.perform(get("/api/admin/plans").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data[0].name").value("月付套餐·新"))
+                .andExpect(jsonPath("$.data[0].agentType").value("CODEX"))
                 .andExpect(jsonPath("$.data[0].durationDays").value(31))
                 .andExpect(jsonPath("$.data[0].price").value(39.9))
                 .andExpect(jsonPath("$.data[0].currency").value("CNY"))

@@ -1,5 +1,6 @@
 package ai.mintpop.lane.response;
 
+import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 
 import java.math.BigDecimal;
@@ -9,6 +10,8 @@ import java.time.Instant;
 public record PlanResponse(
         Long id,
         String name,
+        /** 本套餐面向的 agent 类型 */
+        AgentType agentType,
         /** 套餐时长（天） */
         Integer durationDays,
         BigDecimal price,

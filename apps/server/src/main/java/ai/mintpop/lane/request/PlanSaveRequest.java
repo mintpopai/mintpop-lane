@@ -1,5 +1,6 @@
 package ai.mintpop.lane.request;
 
+import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -18,6 +19,10 @@ public class PlanSaveRequest {
     @NotBlank
     @Size(max = 64)
     private String name;
+
+    /** 本套餐面向的 agent 类型 */
+    @NotNull
+    private AgentType agentType;
 
     /** 套餐时长（天），正整数 */
     @NotNull

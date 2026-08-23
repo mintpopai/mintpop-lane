@@ -1,3 +1,4 @@
+import { AGENT_TYPE_LABELS } from "../api/types";
 import type {
   AdminSubscriptionResponse,
   PlanResponse,
@@ -6,12 +7,11 @@ import type {
 } from "../api/types";
 
 /**
- * 表单模型。agentType 用 string：回填未知类型时保留原值，避免打开即误改。
- * 套餐名/时长/价格不进表单——它们由所选套餐决定，编辑时是分配当时的快照、不可改。
+ * 表单模型。套餐名/agent 类型/时长/价格不进表单——它们由所选套餐决定，
+ * 编辑时是分配当时的快照、不可改。
  */
 export interface SubscriptionFormModel {
   id: number | null;
-  agentType: string;
   /** 所选套餐 id；null = 未选（仅新增模式需要选） */
   planId: number | null;
   /** 模型存 Date（绝对时刻）；datetime-local 控件值经 utils/datetimeLocal 换算；null = 未填 */
@@ -25,7 +25,6 @@ export interface SubscriptionFormModel {
 export function emptySubscriptionForm(now: Date = new Date()): SubscriptionFormModel {
   return {
     id: null,
-    agentType: "CLAUDE",
     planId: null,
     startsAt: now,
     credential: "",
@@ -36,7 +35,6 @@ export function emptySubscriptionForm(now: Date = new Date()): SubscriptionFormM
 export function subscriptionToForm(s: AdminSubscriptionResponse): SubscriptionFormModel {
   return {
     id: s.id,
-    agentType: s.agentType,
     planId: s.planId,
     // 服务端给的是带 Z 的 UTC 串，解析成 Date 后由控件按本地时区回显
     startsAt: new Date(s.startsAt),
@@ -66,7 +64,6 @@ export function buildSubscriptionCreatePayload(form: SubscriptionFormModel): Sub
     throw new Error("套餐或起期未填，先通过表单校验再构造入参");
   }
   return {
-    agentType: form.agentType as SubscriptionCreateRequest["agentType"],
     planId: form.planId,
     // toISOString 天然输出 UTC（带 Z），提交即绝对时刻
     startsAt: form.startsAt.toISOString(),
@@ -92,7 +89,8 @@ export function computeEndsAt(startsAt: Date, durationDays: number): Date {
   return new Date(startsAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
 }
 
-/** 套餐下拉的展示标签：名称 + 时长 + 价格 */
+/** 套餐下拉的展示标签：agent 类型 + 名称 + 时长 + 价格；未知类型直接展示原始取值 */
 export function formatPlanLabel(plan: PlanResponse): string {
-  return `${plan.name}（${plan.durationDays} 天 · ${plan.price} ${plan.currency}）`;
+  const agentLabel = AGENT_TYPE_LABELS[plan.agentType as keyof typeof AGENT_TYPE_LABELS] ?? plan.agentType;
+  return `${agentLabel} · ${plan.name}（${plan.durationDays} 天 · ${plan.price} ${plan.currency}）`;
 }

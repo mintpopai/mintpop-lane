@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { CURRENCY_LABELS } from "../api/types";
+import { AGENT_TYPE_LABELS, CURRENCY_LABELS } from "../api/types";
 import type { PlanResponse } from "../api/types";
 import { showToast } from "../toast";
 import { buildPlanPayload, emptyPlanForm, planToForm, validatePlanForm } from "../utils/planForm";
@@ -17,6 +17,7 @@ const form = ref(props.editing ? planToForm(props.editing) : emptyPlanForm());
 const submitting = ref(false);
 
 const title = computed(() => (props.editing ? `编辑套餐：${props.editing.name}` : "新建套餐"));
+const agentOptions = Object.entries(AGENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 const currencyOptions = Object.entries(CURRENCY_LABELS).map(([value, label]) => ({
   value,
   label: `${value}（${label}）`,
@@ -58,6 +59,10 @@ async function submit(): Promise<void> {
       <div class="admin-field">
         <label for="plan-name">套餐名</label>
         <input id="plan-name" v-model="form.name" class="admin-input" placeholder="如：月付套餐" />
+      </div>
+      <div class="admin-field">
+        <label for="plan-agent">Agent 类型</label>
+        <Select id="plan-agent" v-model="form.agentType" :options="agentOptions" aria-label="Agent 类型" />
       </div>
       <div class="admin-field">
         <label for="plan-duration">时长（天）</label>

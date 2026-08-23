@@ -233,10 +233,9 @@ export interface AdminSubscriptionResponse {
   updatedAt: string;
 }
 
-/** 分配订阅的入参。只能选现有套餐，止期由服务端按套餐时长推算 */
+/** 分配订阅的入参。只能选现有套餐，agent 类型与止期都由所选套餐决定 */
 export interface SubscriptionCreateRequest {
   planId: number;
-  agentType: AgentType;
   startsAt: string;
   credential: string;
   remark: string;
@@ -297,6 +296,8 @@ export interface NodeGroupImportRequest {
 export interface PlanResponse {
   id: number;
   name: string;
+  /** 本套餐面向的 agent 类型。服务端可能新增本前端不认识的类型，故用 string 承载 */
+  agentType: string;
   /** 套餐时长（天） */
   durationDays: number;
   price: number;
@@ -311,6 +312,7 @@ export interface PlanResponse {
 /** 新建/更新套餐的入参，更新时全量覆盖 */
 export interface PlanSaveRequest {
   name: string;
+  agentType: AgentType;
   durationDays: number;
   price: number;
   currency: Currency;

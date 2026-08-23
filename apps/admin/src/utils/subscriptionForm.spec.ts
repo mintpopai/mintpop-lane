@@ -31,6 +31,7 @@ const sample: AdminSubscriptionResponse = {
 const plan: PlanResponse = {
   id: 11,
   name: "Claude 月付",
+  agentType: "CLAUDE",
   durationDays: 30,
   price: 99.99,
   currency: "USD",
@@ -41,11 +42,10 @@ const plan: PlanResponse = {
 };
 
 describe("subscriptionForm", () => {
-  it("空表单默认 CLAUDE、未选套餐、起期取当下", () => {
+  it("空表单未选套餐、起期取当下", () => {
     const now = new Date("2026-08-20T12:00:00Z");
     const form = emptySubscriptionForm(now);
     expect(form.id).toBeNull();
-    expect(form.agentType).toBe("CLAUDE");
     expect(form.planId).toBeNull();
     expect(form.startsAt).toEqual(now);
     expect(form.credential).toBe("");
@@ -81,7 +81,6 @@ describe("subscriptionForm", () => {
     form.remark = "  首月  ";
     const payload = buildSubscriptionCreatePayload(form);
     expect(payload).toEqual({
-      agentType: "CLAUDE",
       planId: 11,
       startsAt: "2026-08-01T00:00:00.000Z",
       credential: "sk-ant-x",
@@ -113,12 +112,13 @@ describe("subscriptionForm", () => {
     expect(endsAt.toISOString()).toBe("2026-08-31T08:30:00.000Z");
   });
 
-  it("套餐下拉标签带名称、时长与价格", () => {
-    expect(formatPlanLabel(plan)).toBe("Claude 月付（30 天 · 99.99 USD）");
+  it("套餐下拉标签带 agent 类型、名称、时长与价格", () => {
+    expect(formatPlanLabel(plan)).toBe("Claude Code · Claude 月付（30 天 · 99.99 USD）");
   });
 
-  it("未知 agentType 回填时保留原值以免误改", () => {
-    const form = subscriptionToForm({ ...sample, agentType: "FUTURE_AGENT" });
-    expect(form.agentType).toBe("FUTURE_AGENT");
+  it("未知 agentType 的套餐标签直接展示原始取值", () => {
+    expect(formatPlanLabel({ ...plan, agentType: "FUTURE_AGENT" })).toBe(
+      "FUTURE_AGENT · Claude 月付（30 天 · 99.99 USD）",
+    );
   });
 });

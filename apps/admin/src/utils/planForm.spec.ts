@@ -5,6 +5,7 @@ import { buildPlanPayload, emptyPlanForm, planToForm, validatePlanForm } from ".
 const plan: PlanResponse = {
   id: 3,
   name: "月付套餐",
+  agentType: "CLAUDE",
   durationDays: 30,
   price: 29.9,
   currency: "USD",
@@ -19,6 +20,7 @@ describe("emptyPlanForm", () => {
     const form = emptyPlanForm();
     expect(form).toEqual({
       name: "",
+      agentType: "CLAUDE",
       durationDays: null,
       price: null,
       currency: "USD",
@@ -37,6 +39,7 @@ describe("planToForm / buildPlanPayload", () => {
 
     expect(buildPlanPayload(form)).toEqual({
       name: "月付套餐",
+      agentType: "CLAUDE",
       durationDays: 30,
       price: 29.9,
       currency: "USD",
@@ -54,6 +57,13 @@ describe("planToForm / buildPlanPayload", () => {
     const payload = buildPlanPayload(form);
     expect(payload.name).toBe("月付套餐");
     expect(payload.remark).toBe("备注");
+  });
+});
+
+describe("planToForm 对未知 agentType 的兼容", () => {
+  it("未知 agentType 回填时保留原值以免误改", () => {
+    const form = planToForm({ ...plan, agentType: "FUTURE_AGENT" });
+    expect(form.agentType).toBe("FUTURE_AGENT");
   });
 });
 

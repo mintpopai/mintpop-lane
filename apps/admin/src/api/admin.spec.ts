@@ -105,7 +105,6 @@ describe("createAdminApi", () => {
     };
     const api = createAdminApi(http);
     const createBody = {
-      agentType: "CLAUDE" as const,
       planId: 11,
       startsAt: "2026-08-01T00:00:00",
       credential: "sk-ant-x",
@@ -160,6 +159,7 @@ describe("createAdminApi", () => {
     const api = createAdminApi(http);
     const body = {
       name: "月付套餐",
+      agentType: "CLAUDE" as const,
       durationDays: 30,
       price: 29.9,
       currency: "USD" as const,
