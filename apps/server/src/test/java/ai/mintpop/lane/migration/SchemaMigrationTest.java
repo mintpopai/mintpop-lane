@@ -136,6 +136,35 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("V6 迁移建出 plan 表：套餐名唯一、价格 DECIMAL、列注释落库")
+    void v6MigrationCreatesPlanTable() {
+        String tableComment = jdbc.queryForObject("""
+                SELECT table_comment FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = 'plan'
+                """, String.class);
+        assertThat(tableComment).contains("套餐");
+
+        String durationComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'plan' AND column_name = 'duration_days'
+                """, String.class);
+        assertThat(durationComment).contains("天");
+
+        String priceType = jdbc.queryForObject("""
+                SELECT column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'plan' AND column_name = 'price'
+                """, String.class);
+        assertThat(priceType).isEqualTo("decimal(10,2)");
+
+        Integer uniqueOnName = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'plan'
+                  AND column_name = 'name' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnName).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("V3 迁移后出口 IP 是单列 egress_ip 并带注释，旧 JSON 列 egress_ips 已删除")
     void v3MigrationReplacesEgressIpsWithSingleColumn() {
         String comment = jdbc.queryForObject("""

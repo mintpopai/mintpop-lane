@@ -58,6 +58,17 @@ export const NODE_STATUS_LABELS: Record<NodeStatus, string> = {
   DISABLED: "禁用",
 };
 
+export const CURRENCY = {
+  USD: "USD",
+  CNY: "CNY",
+} as const;
+export type Currency = (typeof CURRENCY)[keyof typeof CURRENCY];
+
+export const CURRENCY_LABELS: Record<Currency, string> = {
+  USD: "美元",
+  CNY: "人民币",
+};
+
 export const AGENT_TYPE = {
   CLAUDE: "CLAUDE",
   CODEX: "CODEX",
@@ -262,4 +273,29 @@ export interface NodeGroupRenameRequest {
 
 export interface NodeGroupImportRequest {
   selectedNames: string[];
+}
+
+/** 管理端的套餐视图 */
+export interface PlanResponse {
+  id: number;
+  name: string;
+  /** 套餐时长（天） */
+  durationDays: number;
+  price: number;
+  currency: Currency;
+  /** 上架状态：false 表示停用但保留 */
+  enabled: boolean;
+  remark: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 新建/更新套餐的入参，更新时全量覆盖 */
+export interface PlanSaveRequest {
+  name: string;
+  durationDays: number;
+  price: number;
+  currency: Currency;
+  enabled: boolean;
+  remark: string;
 }

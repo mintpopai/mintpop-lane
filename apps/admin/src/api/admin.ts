@@ -10,6 +10,8 @@ import type {
   NodeRole,
   NodeSaveRequest,
   PageResult,
+  PlanResponse,
+  PlanSaveRequest,
   SubPreviewNode,
   SubPreviewRequest,
   SubscriptionSaveRequest,
@@ -36,6 +38,10 @@ export interface AdminApi {
   refreshPreviewNodeGroup(id: number): Promise<SubPreviewNode[]>;
   importNodeGroup(id: number, body: NodeGroupImportRequest): Promise<void>;
   deleteNodeGroup(id: number): Promise<void>;
+  listPlans(): Promise<PlanResponse[]>;
+  createPlan(body: PlanSaveRequest): Promise<number>;
+  updatePlan(id: number, body: PlanSaveRequest): Promise<void>;
+  deletePlan(id: number): Promise<void>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -124,6 +130,22 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deleteNodeGroup(id) {
       return http.request(`/admin/node-groups/${id}`, { method: "DELETE" });
+    },
+
+    listPlans() {
+      return http.request("/admin/plans");
+    },
+
+    createPlan(body) {
+      return http.request("/admin/plans", { method: "POST", body: JSON.stringify(body) });
+    },
+
+    updatePlan(id, body) {
+      return http.request(`/admin/plans/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    deletePlan(id) {
+      return http.request(`/admin/plans/${id}`, { method: "DELETE" });
     },
   };
 }

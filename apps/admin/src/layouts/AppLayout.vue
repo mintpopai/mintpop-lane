@@ -19,6 +19,7 @@ const initial = computed(() => (auth.displayName || "?").slice(0, 1));
     <div class="rail-nav">
       <RouterLink :to="{ name: 'USERS' }" class="rail-link">用户</RouterLink>
       <RouterLink :to="{ name: 'NODES' }" class="rail-link">节点池</RouterLink>
+      <RouterLink :to="{ name: 'PLANS' }" class="rail-link">套餐</RouterLink>
     </div>
 
     <div class="rail-foot">

@@ -10,6 +10,7 @@ import ForbiddenView from "../views/ForbiddenView.vue";
 import LoginErrorView from "../views/LoginErrorView.vue";
 import LoginView from "../views/LoginView.vue";
 import NodesView from "../views/NodesView.vue";
+import PlansView from "../views/PlansView.vue";
 import UsersView from "../views/UsersView.vue";
 
 /**
@@ -36,6 +37,7 @@ export function createAppRouter(
           { path: "", redirect: { name: "USERS" } },
           { path: "users", name: "USERS", component: UsersView },
           { path: "nodes", name: "NODES", component: NodesView },
+          { path: "plans", name: "PLANS", component: PlansView },
         ],
       },
       { path: "/:pathMatch(.*)*", redirect: { name: "USERS" } },

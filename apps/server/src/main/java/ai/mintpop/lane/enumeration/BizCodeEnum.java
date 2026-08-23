@@ -43,7 +43,9 @@ public enum BizCodeEnum {
     NODE_GROUP_IN_USE(410013, "分组内有节点被用户引用，无法删除"),
     SELECTED_NODE_MISSING(410014, "勾选的节点在订阅中已不存在，请重新预览"),
     NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名"),
-    LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配");
+    LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配"),
+    PLAN_NOT_FOUND(410017, "套餐不存在"),
+    PLAN_NAME_DUPLICATED(410018, "套餐名已存在");
 
     private final int code;
     private final String message;

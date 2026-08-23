@@ -150,4 +150,33 @@ describe("createAdminApi", () => {
     });
     expect(request).toHaveBeenNthCalledWith(7, "/admin/node-groups/3", { method: "DELETE" });
   });
+
+  it("套餐接口逐个打到正确的路径与方法", async () => {
+    const { http, request } = fakeClient();
+    const api = createAdminApi(http);
+    const body = {
+      name: "月付套餐",
+      durationDays: 30,
+      price: 29.9,
+      currency: "USD" as const,
+      enabled: true,
+      remark: "",
+    };
+
+    await api.listPlans();
+    await api.createPlan(body);
+    await api.updatePlan(3, body);
+    await api.deletePlan(3);
+
+    expect(request).toHaveBeenNthCalledWith(1, "/admin/plans");
+    expect(request).toHaveBeenNthCalledWith(2, "/admin/plans", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    expect(request).toHaveBeenNthCalledWith(3, "/admin/plans/3", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    expect(request).toHaveBeenNthCalledWith(4, "/admin/plans/3", { method: "DELETE" });
+  });
 });
