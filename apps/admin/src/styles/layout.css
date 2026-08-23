@@ -496,6 +496,13 @@ body {
   line-height: 18px;
 }
 
+/* 单行控件统一钉死 36px：input / datetime-local / 自绘下拉按钮三种控件的内容盒
+   高度各不相同（空值下拉的 span 甚至会塌成 0），不显式定高就会各长各的 */
+.admin-input,
+.admin-select {
+  height: 36px;
+}
+
 .admin-input:hover,
 .admin-select:hover,
 .admin-textarea:hover {
