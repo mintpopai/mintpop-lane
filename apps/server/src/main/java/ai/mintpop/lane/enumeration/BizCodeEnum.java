@@ -45,7 +45,8 @@ public enum BizCodeEnum {
     NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名"),
     LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配"),
     PLAN_NOT_FOUND(410017, "套餐不存在"),
-    PLAN_NAME_DUPLICATED(410018, "套餐名已存在");
+    PLAN_NAME_DUPLICATED(410018, "套餐名已存在"),
+    PLAN_DISABLED(410019, "套餐已停用");
 
     private final int code;
     private final String message;

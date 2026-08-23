@@ -207,12 +207,24 @@ export interface UserPageQuery {
   pageSize: number;
 }
 
-/** 管理端的订阅视图。凭据只回传有没有录，本体一个字符不出现 */
+/**
+ * 管理端的订阅视图。凭据只回传有没有录，本体一个字符不出现。
+ * 套餐信息（名称/时长/价格/币种）是分配时的快照，套餐后续改动不影响这里。
+ */
 export interface AdminSubscriptionResponse {
   id: number;
+  /** 分配号：本次分配的唯一业务标识（32 位十六进制），对外引用一律用它 */
+  assignmentNo: string;
   userId: number;
   agentType: string;
+  /** 所选套餐 id。弱引用，套餐硬删后允许悬空 */
+  planId: number;
   name: string;
+  /** 套餐时长快照（天）：止期 = 起期 + 本值 */
+  planDurationDays: number;
+  planPrice: number;
+  /** 服务端可能新增币种，故用 string 承载 */
+  planCurrency: string;
   startsAt: string;
   endsAt: string;
   hasCredential: boolean;
@@ -221,12 +233,18 @@ export interface AdminSubscriptionResponse {
   updatedAt: string;
 }
 
-/** 新建/更新订阅的入参。更新时 credential 留空表示沿用原值 */
-export interface SubscriptionSaveRequest {
+/** 分配订阅的入参。只能选现有套餐，止期由服务端按套餐时长推算 */
+export interface SubscriptionCreateRequest {
+  planId: number;
   agentType: AgentType;
-  name: string;
   startsAt: string;
-  endsAt: string;
+  credential: string;
+  remark: string;
+}
+
+/** 更新订阅的入参。套餐不可换；credential 留空表示沿用原值 */
+export interface SubscriptionUpdateRequest {
+  startsAt: string;
   credential: string;
   remark: string;
 }

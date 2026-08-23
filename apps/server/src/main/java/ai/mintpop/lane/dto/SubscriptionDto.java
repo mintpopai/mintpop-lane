@@ -1,9 +1,11 @@
 package ai.mintpop.lane.dto;
 
 import ai.mintpop.lane.enumeration.AgentType;
+import ai.mintpop.lane.enumeration.Currency;
 import lombok.Data;
 import lombok.ToString;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /** 订阅的明文领域对象。凭据在这里是明文，密文只存在于 entity 与 converter 之间。 */
@@ -12,12 +14,27 @@ public class SubscriptionDto {
 
     private Long id;
 
+    /** 分配号：本次分配的唯一业务标识（32 位十六进制 UUID），对外引用一律用它 */
+    private String assignmentNo;
+
     private Long userId;
 
     private AgentType agentType;
 
-    /** 用户可见的套餐名 */
+    /** 所选套餐 id。弱引用，套餐硬删后允许悬空，历史呈现以快照字段为准 */
+    private Long planId;
+
+    /** 用户可见的套餐名，分配时从所选套餐快照 */
     private String name;
+
+    /** 套餐时长快照（天）：止期 = 起期 + 本值 */
+    private Integer planDurationDays;
+
+    /** 套餐价格快照 */
+    private BigDecimal planPrice;
+
+    /** 套餐币种快照 */
+    private Currency planCurrency;
 
     private Instant startsAt;
 

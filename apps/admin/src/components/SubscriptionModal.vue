@@ -3,13 +3,16 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { AGENT_TYPE_LABELS } from "../api/types";
-import type { AdminSubscriptionResponse, AdminUserResponse } from "../api/types";
+import type { AdminSubscriptionResponse, AdminUserResponse, PlanResponse } from "../api/types";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
 import { formatDateTime } from "../utils/format";
 import {
-  buildSubscriptionPayload,
+  buildSubscriptionCreatePayload,
+  buildSubscriptionUpdatePayload,
+  computeEndsAt,
   emptySubscriptionForm,
+  formatPlanLabel,
   subscriptionToForm,
   validateSubscriptionForm,
   type SubscriptionFormModel,
@@ -26,20 +29,37 @@ const loading = ref(true);
 const loadError = ref("");
 const formMode = ref<"hidden" | "create" | "edit">("hidden");
 const form = ref<SubscriptionFormModel>(emptySubscriptionForm());
+/** 编辑中的原始行：套餐快照（名称/时长）从这里取，不进表单模型 */
+const editingRow = ref<AdminSubscriptionResponse | null>(null);
+const plans = ref<PlanResponse[]>([]);
 const submitting = ref(false);
 const pendingDelete = ref<AdminSubscriptionResponse | null>(null);
 const deleting = ref(false);
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-// 编辑的这条如果 agentType 不在已知枚举里（服务端新增了本前端还不认识的类型），
-// 下拉必须额外补一项原值，否则选项列表里找不到当前值，会显示成空白
-const agentOptions = computed<Array<{ value: string; label: string }>>(() => {
-  const known = Object.entries(AGENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
-  if (form.value.agentType && !(form.value.agentType in AGENT_TYPE_LABELS)) {
-    return [...known, { value: form.value.agentType, label: `${form.value.agentType}（未知类型）` }];
+// 下拉只在新增态出现（编辑态 agent 锁定为只读展示），选项就是已知枚举全集
+const agentOptions = Object.entries(AGENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
+
+/** 只列上架套餐——分配只能从可售卖的选项里挑 */
+const planOptions = computed(() =>
+  plans.value.filter((plan) => plan.enabled).map((plan) => ({ value: plan.id, label: formatPlanLabel(plan) })),
+);
+
+/** 止期推算用的时长：新增取所选套餐，编辑取分配时的快照 */
+const durationDays = computed<number | null>(() => {
+  if (formMode.value === "edit") {
+    return editingRow.value?.planDurationDays ?? null;
   }
-  return known;
+  return plans.value.find((plan) => plan.id === form.value.planId)?.durationDays ?? null;
+});
+
+/** 预计止期 = 起期 + 套餐时长，只读展示；真正落库的值由服务端算 */
+const predictedEndsAt = computed<string | null>(() => {
+  if (!form.value.startsAt || durationDays.value === null) {
+    return null;
+  }
+  return formatDateTime(computeEndsAt(form.value.startsAt, durationDays.value).toISOString());
 });
 
 function reportError(error: unknown, prefix: string): void {
@@ -58,20 +78,34 @@ async function loadList(): Promise<void> {
   }
 }
 
-onMounted(loadList);
+async function loadPlans(): Promise<void> {
+  try {
+    plans.value = await adminApi().listPlans();
+  } catch (error) {
+    reportError(error, "套餐加载失败");
+  }
+}
+
+onMounted(() => {
+  void loadList();
+  void loadPlans();
+});
 
 function create(): void {
   form.value = emptySubscriptionForm();
+  editingRow.value = null;
   formMode.value = "create";
 }
 
 function edit(subscription: AdminSubscriptionResponse): void {
   form.value = subscriptionToForm(subscription);
+  editingRow.value = subscription;
   formMode.value = "edit";
 }
 
 async function submit(): Promise<void> {
-  const errors = validateSubscriptionForm(form.value);
+  const mode = formMode.value === "edit" ? "edit" : "create";
+  const errors = validateSubscriptionForm(form.value, mode);
   if (errors.length > 0) {
     showToast("error", errors[0]);
     return;
@@ -79,11 +113,10 @@ async function submit(): Promise<void> {
 
   submitting.value = true;
   try {
-    const payload = buildSubscriptionPayload(form.value);
-    if (formMode.value === "edit") {
-      await adminApi().updateSubscription(form.value.id as number, payload);
+    if (mode === "edit") {
+      await adminApi().updateSubscription(form.value.id as number, buildSubscriptionUpdatePayload(form.value));
     } else {
-      await adminApi().createSubscription(props.user.id, payload);
+      await adminApi().createSubscription(props.user.id, buildSubscriptionCreatePayload(form.value));
     }
     showToast("success", "已保存");
     formMode.value = "hidden";
@@ -119,17 +152,18 @@ async function confirmDelete(): Promise<void> {
   <Modal :title="`订阅管理：${user.name}`" wide @close="emit('close')">
     <div class="admin-toolbar">
       <span class="spacer" />
-      <button type="button" class="admin-btn" @click="create()">新增订阅</button>
+      <button type="button" class="admin-btn" @click="create()">分配订阅</button>
     </div>
 
     <p v-if="loading" class="admin-hint">加载中……</p>
     <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
     <div v-else class="admin-card">
-      <p v-if="list.length === 0" class="admin-hint">还没有订阅，点右上角「新增订阅」录一条。</p>
+      <p v-if="list.length === 0" class="admin-hint">还没有订阅，点右上角「分配订阅」从套餐里选一个。</p>
       <table v-else class="admin-table dense">
         <thead>
           <tr>
-            <th>套餐名</th>
+            <th>分配号</th>
+            <th>套餐</th>
             <th>Agent</th>
             <th>起期</th>
             <th>止期</th>
@@ -140,7 +174,11 @@ async function confirmDelete(): Promise<void> {
         </thead>
         <tbody>
           <tr v-for="row in list" :key="row.id">
-            <td>{{ row.name }}</td>
+            <td class="fact muted assignment-no" :title="row.assignmentNo">{{ row.assignmentNo }}</td>
+            <td>
+              {{ row.name }}
+              <span class="muted">（{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}）</span>
+            </td>
             <td>{{ AGENT_TYPE_LABELS[row.agentType as keyof typeof AGENT_TYPE_LABELS] ?? row.agentType }}</td>
             <td class="fact muted">{{ formatDateTime(row.startsAt) }}</td>
             <td class="fact muted">{{ formatDateTime(row.endsAt) }}</td>
@@ -160,16 +198,35 @@ async function confirmDelete(): Promise<void> {
     </div>
 
     <div v-if="formMode !== 'hidden'" class="sub-form">
-      <h4 class="sub-form-title">{{ formMode === "edit" ? "编辑订阅" : "新增订阅" }}</h4>
+      <h4 class="sub-form-title">{{ formMode === "edit" ? "编辑订阅" : "分配订阅" }}</h4>
       <div class="admin-form">
         <div class="admin-form-row">
           <div class="admin-field">
             <label for="sub-agent">Agent 类型</label>
-            <Select id="sub-agent" v-model="form.agentType" :options="agentOptions" aria-label="Agent 类型" />
+            <!-- 编辑时 agent 锁定：分配后不可改，与套餐一致 -->
+            <input
+              v-if="formMode === 'edit'"
+              id="sub-agent"
+              class="admin-input"
+              :value="AGENT_TYPE_LABELS[form.agentType as keyof typeof AGENT_TYPE_LABELS] ?? form.agentType"
+              disabled
+            />
+            <Select v-else id="sub-agent" v-model="form.agentType" :options="agentOptions" aria-label="Agent 类型" />
           </div>
           <div class="admin-field">
-            <label for="sub-name">套餐名</label>
-            <input id="sub-name" v-model="form.name" class="admin-input" maxlength="64" />
+            <label for="sub-plan">套餐</label>
+            <!-- 编辑时套餐锁定：展示分配当时的快照，要换套餐就删了重新分配 -->
+            <input
+              v-if="formMode === 'edit'"
+              id="sub-plan"
+              class="admin-input"
+              :value="`${editingRow?.name}（${editingRow?.planDurationDays} 天 · ${editingRow?.planPrice} ${editingRow?.planCurrency}）`"
+              disabled
+            />
+            <Select v-else id="sub-plan" v-model="form.planId" :options="planOptions" aria-label="套餐" />
+            <p v-if="formMode === 'create' && planOptions.length === 0" class="admin-note">
+              没有上架的套餐，先去「套餐管理」新建。
+            </p>
           </div>
         </div>
 
@@ -185,19 +242,13 @@ async function confirmDelete(): Promise<void> {
             />
           </div>
           <div class="admin-field">
-            <label for="sub-ends">止期</label>
-            <input
-              id="sub-ends"
-              class="admin-input fact"
-              type="datetime-local"
-              :value="toDatetimeLocal(form.endsAt)"
-              @input="form.endsAt = fromDatetimeLocal(($event.target as HTMLInputElement).value)"
-            />
+            <label for="sub-ends">预计止期</label>
+            <input id="sub-ends" class="admin-input fact" :value="predictedEndsAt ?? '选套餐后自动推算'" disabled />
           </div>
         </div>
         <p class="admin-note">
-          起止期按你的本地时区（<span class="fact">{{ localTimeZone }}</span
-          >）填写，保存为绝对时刻，各端按各自时区显示。
+          起期按你的本地时区（<span class="fact">{{ localTimeZone }}</span
+          >）填写，保存为绝对时刻；止期 = 起期 + 套餐时长，由服务端推算，不可手改。
         </p>
 
         <div class="admin-form-row">
@@ -229,7 +280,7 @@ async function confirmDelete(): Promise<void> {
     <ConfirmDialog
       v-if="pendingDelete"
       title="删除确认"
-      :message="`确认删除订阅「${pendingDelete.name}」？`"
+      :message="`确认删除订阅「${pendingDelete.name}」（分配号 ${pendingDelete.assignmentNo}）？`"
       :busy="deleting"
       @confirm="confirmDelete()"
       @cancel="pendingDelete = null"
@@ -255,5 +306,14 @@ async function confirmDelete(): Promise<void> {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+/* 分配号 32 位很长，缩字号并截断展示，完整值放 title 里悬停可见 */
+.assignment-no {
+  max-width: 130px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

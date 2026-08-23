@@ -104,17 +104,21 @@ describe("createAdminApi", () => {
       },
     };
     const api = createAdminApi(http);
-    const body = {
+    const createBody = {
       agentType: "CLAUDE" as const,
-      name: "Claude 席位 1",
+      planId: 11,
       startsAt: "2026-08-01T00:00:00",
-      endsAt: "2026-09-01T00:00:00",
       credential: "sk-ant-x",
       remark: "",
     };
+    const updateBody = {
+      startsAt: "2026-08-01T00:00:00",
+      credential: "",
+      remark: "",
+    };
     await api.listSubscriptions(7);
-    await api.createSubscription(7, body);
-    await api.updateSubscription(3, body);
+    await api.createSubscription(7, createBody);
+    await api.updateSubscription(3, updateBody);
     await api.deleteSubscription(3);
     expect(calls).toEqual([
       { path: "/admin/users/7/subscriptions", method: undefined },

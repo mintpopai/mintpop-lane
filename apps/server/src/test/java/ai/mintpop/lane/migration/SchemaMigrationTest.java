@@ -165,6 +165,56 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("V7 迁移给 subscription 加分配号与套餐快照列：分配号 char(32) 唯一，快照带注释，不设套餐外键")
+    void v7MigrationAddsAssignmentAndPlanSnapshotColumns() {
+        String assignmentType = jdbc.queryForObject("""
+                SELECT column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'assignment_no'
+                """, String.class);
+        assertThat(assignmentType).isEqualTo("char(32)");
+
+        String assignmentComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'assignment_no'
+                """, String.class);
+        assertThat(assignmentComment).contains("分配");
+
+        Integer uniqueOnAssignment = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name = 'assignment_no' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnAssignment).isEqualTo(1);
+
+        Integer snapshotCols = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name IN ('plan_id', 'plan_duration_days', 'plan_price', 'plan_currency')
+                """, Integer.class);
+        assertThat(snapshotCols).isEqualTo(4);
+
+        String priceType = jdbc.queryForObject("""
+                SELECT column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'plan_price'
+                """, String.class);
+        assertThat(priceType).isEqualTo("decimal(10,2)");
+
+        String durationComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'plan_duration_days'
+                """, String.class);
+        assertThat(durationComment).contains("快照");
+
+        // plan_id 是弱引用：subscription 上不许有指向 plan 的外键，否则套餐硬删会被牵制
+        Integer fkToPlan = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.key_column_usage
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND referenced_table_name = 'plan'
+                """, Integer.class);
+        assertThat(fkToPlan).isZero();
+    }
+
+    @Test
     @DisplayName("V3 迁移后出口 IP 是单列 egress_ip 并带注释，旧 JSON 列 egress_ips 已删除")
     void v3MigrationReplacesEgressIpsWithSingleColumn() {
         String comment = jdbc.queryForObject("""

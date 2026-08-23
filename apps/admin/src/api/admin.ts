@@ -14,7 +14,8 @@ import type {
   PlanSaveRequest,
   SubPreviewNode,
   SubPreviewRequest,
-  SubscriptionSaveRequest,
+  SubscriptionCreateRequest,
+  SubscriptionUpdateRequest,
   UserPageQuery,
   UserSaveRequest,
 } from "./types";
@@ -28,8 +29,8 @@ export interface AdminApi {
   updateNode(id: number, body: NodeSaveRequest): Promise<void>;
   deleteNode(id: number): Promise<void>;
   listSubscriptions(userId: number): Promise<AdminSubscriptionResponse[]>;
-  createSubscription(userId: number, body: SubscriptionSaveRequest): Promise<number>;
-  updateSubscription(id: number, body: SubscriptionSaveRequest): Promise<void>;
+  createSubscription(userId: number, body: SubscriptionCreateRequest): Promise<number>;
+  updateSubscription(id: number, body: SubscriptionUpdateRequest): Promise<void>;
   deleteSubscription(id: number): Promise<void>;
   previewSub(body: SubPreviewRequest): Promise<SubPreviewNode[]>;
   createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;

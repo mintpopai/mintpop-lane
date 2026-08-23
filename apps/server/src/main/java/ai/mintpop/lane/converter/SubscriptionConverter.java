@@ -18,9 +18,14 @@ public class SubscriptionConverter {
     public SubscriptionDto toDto(Subscription entity) {
         SubscriptionDto dto = new SubscriptionDto();
         dto.setId(entity.getId());
+        dto.setAssignmentNo(entity.getAssignmentNo());
         dto.setUserId(entity.getUserId());
         dto.setAgentType(entity.getAgentType());
+        dto.setPlanId(entity.getPlanId());
         dto.setName(entity.getName());
+        dto.setPlanDurationDays(entity.getPlanDurationDays());
+        dto.setPlanPrice(entity.getPlanPrice());
+        dto.setPlanCurrency(entity.getPlanCurrency());
         dto.setStartsAt(entity.getStartsAt());
         dto.setEndsAt(entity.getEndsAt());
         dto.setCredential(decrypt(entity.getCredentialCipher()));
@@ -33,9 +38,14 @@ public class SubscriptionConverter {
     public Subscription toEntity(SubscriptionDto dto) {
         Subscription entity = new Subscription();
         entity.setId(dto.getId());
+        entity.setAssignmentNo(dto.getAssignmentNo());
         entity.setUserId(dto.getUserId());
         entity.setAgentType(dto.getAgentType());
+        entity.setPlanId(dto.getPlanId());
         entity.setName(dto.getName());
+        entity.setPlanDurationDays(dto.getPlanDurationDays());
+        entity.setPlanPrice(dto.getPlanPrice());
+        entity.setPlanCurrency(dto.getPlanCurrency());
         entity.setStartsAt(dto.getStartsAt());
         entity.setEndsAt(dto.getEndsAt());
         String credential = dto.getCredential();

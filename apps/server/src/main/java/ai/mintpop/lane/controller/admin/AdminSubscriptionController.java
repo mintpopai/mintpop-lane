@@ -1,6 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
-import ai.mintpop.lane.request.SubscriptionSaveRequest;
+import ai.mintpop.lane.request.SubscriptionCreateRequest;
+import ai.mintpop.lane.request.SubscriptionUpdateRequest;
 import ai.mintpop.lane.response.AdminSubscriptionResponse;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.service.AdminSubscriptionService;
@@ -34,13 +35,13 @@ public class AdminSubscriptionController {
 
     @PostMapping("/users/{userId}/subscriptions")
     public ApiResponse<Long> create(@PathVariable Long userId,
-                                    @Valid @RequestBody SubscriptionSaveRequest request) {
+                                    @Valid @RequestBody SubscriptionCreateRequest request) {
         return ApiResponse.success(adminSubscriptionService.create(userId, request));
     }
 
     @PutMapping("/subscriptions/{id}")
     public ApiResponse<Void> update(@PathVariable Long id,
-                                    @Valid @RequestBody SubscriptionSaveRequest request) {
+                                    @Valid @RequestBody SubscriptionUpdateRequest request) {
         adminSubscriptionService.update(id, request);
         return ApiResponse.success();
     }

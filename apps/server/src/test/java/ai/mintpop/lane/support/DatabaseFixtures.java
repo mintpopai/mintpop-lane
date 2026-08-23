@@ -4,6 +4,7 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.AgentType;
+import ai.mintpop.lane.enumeration.Currency;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.UserRole;
@@ -13,10 +14,12 @@ import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 测试数据夹具。造数据一律走真实 repository，好让加密路径也被覆盖到；
@@ -102,13 +105,21 @@ public class DatabaseFixtures {
         return userRepository.create(user);
     }
 
-    /** 给用户建一条订阅；credential 传 null 表示未录入凭据 */
+    /**
+     * 给用户建一条订阅；credential 传 null 表示未录入凭据。
+     * 套餐相关字段填固定快照值：plan_id 是弱引用（允许悬空），夹具不建真实套餐。
+     */
     public Long createSubscription(Long userId, AgentType agentType, String name,
                     Instant startsAt, Instant endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
+        s.setAssignmentNo(UUID.randomUUID().toString().replace("-", ""));
         s.setUserId(userId);
         s.setAgentType(agentType);
+        s.setPlanId(1L);
         s.setName(name);
+        s.setPlanDurationDays(30);
+        s.setPlanPrice(new BigDecimal("10.00"));
+        s.setPlanCurrency(Currency.USD);
         s.setStartsAt(startsAt);
         s.setEndsAt(endsAt);
         s.setCredential(credential);

@@ -1,7 +1,6 @@
 package ai.mintpop.lane.request;
 
 import ai.mintpop.lane.enumeration.AgentType;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -9,22 +8,21 @@ import lombok.ToString;
 
 import java.time.Instant;
 
-/** 新建或更新订阅的入参。更新时 credential 留空表示沿用原值（页面上看不到原凭据）。 */
+/**
+ * 给用户分配订阅的入参。只能从现有套餐里选：名称/时长/价格一律取自所选套餐，
+ * 止期由服务端按套餐时长推算，均不在入参里出现。
+ */
 @Data
-public class SubscriptionSaveRequest {
+public class SubscriptionCreateRequest {
+
+    @NotNull(message = "套餐不能为空")
+    private Long planId;
 
     @NotNull(message = "agent 类型不能为空")
     private AgentType agentType;
 
-    @NotBlank(message = "套餐名不能为空")
-    @Size(max = 64, message = "套餐名最长 64 个字符")
-    private String name;
-
-    @NotNull(message = "起期不能为空")
+    /** 服务起期；留空表示从分配当下开始 */
     private Instant startsAt;
-
-    @NotNull(message = "止期不能为空")
-    private Instant endsAt;
 
     /** 席位凭据。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude
