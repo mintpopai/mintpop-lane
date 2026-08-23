@@ -14,6 +14,8 @@ public record AdminSubscriptionResponse(
         Long id,
         String assignmentNo,
         Long userId,
+        /** 归属企业 id；null 表示个人订阅 */
+        Long enterpriseId,
         AgentType agentType,
         Long planId,
         String name,
@@ -22,6 +24,8 @@ public record AdminSubscriptionResponse(
         Currency planCurrency,
         Instant startsAt,
         Instant endsAt,
+        /** 本次分配给用户的账号邮箱；null 表示未录 */
+        String accountEmail,
         boolean hasCredential,
         String remark,
         Instant createdAt,

@@ -47,7 +47,14 @@ public enum BizCodeEnum {
     LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配"),
     PLAN_NOT_FOUND(410017, "套餐不存在"),
     PLAN_NAME_DUPLICATED(410018, "套餐名已存在"),
-    PLAN_DISABLED(410019, "套餐已停用");
+    PLAN_DISABLED(410019, "套餐已停用"),
+    ENTERPRISE_NOT_FOUND(410020, "企业不存在"),
+    ENTERPRISE_NAME_DUPLICATED(410021, "企业名称已存在"),
+    ENTERPRISE_DOMAIN_DUPLICATED(410022, "企业域名已存在"),
+    ENTERPRISE_DISABLED(410023, "企业已停用，无法分配订阅"),
+    ENTERPRISE_AGENT_TYPE_MISMATCH(410024, "该企业不支持此套餐的 agent 类型"),
+    ENTERPRISE_IN_USE(410025, "该企业仍被订阅引用，无法删除"),
+    SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致");
 
     private final int code;
     private final String message;

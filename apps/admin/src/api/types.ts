@@ -214,6 +214,8 @@ export interface AdminSubscriptionResponse {
   /** 分配号：本次分配的唯一业务标识（32 位十六进制），对外引用一律用它 */
   assignmentNo: string;
   userId: number;
+  /** 归属企业 id；null 表示个人订阅 */
+  enterpriseId: number | null;
   agentType: string;
   /** 所选套餐 id。弱引用，套餐硬删后允许悬空 */
   planId: number;
@@ -225,6 +227,8 @@ export interface AdminSubscriptionResponse {
   planCurrency: string;
   startsAt: string;
   endsAt: string;
+  /** 本次分配给用户的账号邮箱，小写；null 表示未录 */
+  accountEmail: string | null;
   hasCredential: boolean;
   remark: string | null;
   createdAt: string;
@@ -234,14 +238,22 @@ export interface AdminSubscriptionResponse {
 /** 分配订阅的入参。只能选现有套餐，agent 类型与止期都由所选套餐决定 */
 export interface SubscriptionCreateRequest {
   planId: number;
+  /** 归属企业 id；null 表示个人订阅 */
+  enterpriseId: number | null;
   startsAt: string;
+  /** 分配出去的账号邮箱，小写；空串表示未录 */
+  accountEmail: string;
   credential: string;
   remark: string;
 }
 
 /** 更新订阅的入参。套餐不可换；credential 留空表示沿用原值 */
 export interface SubscriptionUpdateRequest {
+  /** 归属企业 id；null 表示个人订阅。与凭据不同，这里留空就是清除归属 */
+  enterpriseId: number | null;
   startsAt: string;
+  /** 分配出去的账号邮箱，小写。与凭据不同，这里留空就是清除 */
+  accountEmail: string;
   credential: string;
   remark: string;
 }
@@ -305,6 +317,30 @@ export interface PlanResponse {
   remark: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** 管理端的企业视图 */
+export interface EnterpriseResponse {
+  id: number;
+  name: string;
+  /** 企业域名，小写 */
+  domain: string;
+  /** 本企业支持的 agent 类型。服务端可能新增本前端不认识的类型，故用 string 承载 */
+  agentTypes: string[];
+  /** 启用状态：false 表示停用但保留 */
+  enabled: boolean;
+  remark: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 新建/更新企业的入参，更新时全量覆盖 */
+export interface EnterpriseSaveRequest {
+  name: string;
+  domain: string;
+  agentTypes: AgentType[];
+  enabled: boolean;
+  remark: string;
 }
 
 /** 新建/更新套餐的入参，更新时全量覆盖 */

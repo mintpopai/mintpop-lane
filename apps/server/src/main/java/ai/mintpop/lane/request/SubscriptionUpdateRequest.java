@@ -1,5 +1,6 @@
 package ai.mintpop.lane.request;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -16,6 +17,14 @@ public class SubscriptionUpdateRequest {
 
     @NotNull(message = "起期不能为空")
     private Instant startsAt;
+
+    /** 归属企业 id；留空表示个人订阅。与凭据不同，这里留空就是清除归属 */
+    private Long enterpriseId;
+
+    /** 分配出去的账号邮箱。账号是明文、页面看得见原值，故与凭据不同：留空就是清除 */
+    @Email(message = "账号邮箱格式不正确")
+    @Size(max = 128, message = "账号邮箱最长 128 个字符")
+    private String accountEmail;
 
     /** 席位凭据。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude

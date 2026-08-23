@@ -64,10 +64,12 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
         // 逐列 set：null 也要显式写库（清除凭据依赖这个行为），不能用默认跳过 null 的 updateById
         mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
                 .eq(Subscription::getId, subscription.getId())
+                .set(Subscription::getEnterpriseId, entity.getEnterpriseId())
                 .set(Subscription::getAgentType, entity.getAgentType())
                 .set(Subscription::getName, entity.getName())
                 .set(Subscription::getStartsAt, entity.getStartsAt())
                 .set(Subscription::getEndsAt, entity.getEndsAt())
+                .set(Subscription::getAccountEmail, entity.getAccountEmail())
                 .set(Subscription::getCredentialCipher, entity.getCredentialCipher())
                 .set(Subscription::getRemark, entity.getRemark()));
     }
@@ -75,5 +77,14 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
     @Override
     public void deleteById(Long id) {
         mapper.deleteById(id);
+    }
+
+    @Override
+    public boolean existsByEnterpriseId(Long enterpriseId) {
+        if (enterpriseId == null) {
+            return false;
+        }
+        return mapper.selectCount(Wrappers.<Subscription>lambdaQuery()
+                .eq(Subscription::getEnterpriseId, enterpriseId)) > 0;
     }
 }

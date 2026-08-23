@@ -3,7 +3,12 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { AGENT_TYPE_LABELS } from "../api/types";
-import type { AdminSubscriptionResponse, AdminUserResponse, PlanResponse } from "../api/types";
+import type {
+  AdminSubscriptionResponse,
+  AdminUserResponse,
+  EnterpriseResponse,
+  PlanResponse,
+} from "../api/types";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
 import { formatDateTime } from "../utils/format";
@@ -13,6 +18,7 @@ import {
   buildSubscriptionUpdatePayload,
   computeEndsAt,
   emptySubscriptionForm,
+  enterpriseOptionsForAgent,
   planOptionsForAgent,
   subscriptionToForm,
   validateSubscriptionForm,
@@ -33,6 +39,7 @@ const form = ref<SubscriptionFormModel>(emptySubscriptionForm());
 /** 编辑中的原始行：套餐快照（名称/时长）从这里取，不进表单模型 */
 const editingRow = ref<AdminSubscriptionResponse | null>(null);
 const plans = ref<PlanResponse[]>([]);
+const enterprises = ref<EnterpriseResponse[]>([]);
 const submitting = ref(false);
 const pendingDelete = ref<AdminSubscriptionResponse | null>(null);
 const deleting = ref(false);
@@ -46,14 +53,40 @@ const agentOptions = computed(() => agentTypeOptions(plans.value));
 /** 第二步选套餐：只列所选 agent 类型下的上架套餐 */
 const planOptions = computed(() => planOptionsForAgent(plans.value, form.value.agentType));
 
+/**
+ * 归属企业同样按所选 agent 类型收窄，另加一个「个人」空档——
+ * 归属是可选的，留空即个人订阅。
+ */
+const enterpriseOptions = computed(() => [
+  { value: null, label: "个人（不归属企业）" },
+  ...enterpriseOptionsForAgent(enterprises.value, form.value.agentType),
+]);
+
+/** 列表里把归属企业 id 还原成名字；企业已被改名或前端没拉到时退回 id */
+function enterpriseLabel(enterpriseId: number): string {
+  return enterprises.value.find((e) => e.id === enterpriseId)?.name ?? `#${enterpriseId}`;
+}
+
+/**
+ * 所选归属企业的域名，账号邮箱要照着它校验；未选企业（个人订阅）时为 null。
+ * 企业没拉到时也给 null——宁可放行让服务端拦，也别拿不全的数据误伤。
+ */
+const selectedEnterpriseDomain = computed<string | null>(() => {
+  if (form.value.enterpriseId === null) {
+    return null;
+  }
+  return enterprises.value.find((e) => e.id === form.value.enterpriseId)?.domain ?? null;
+});
+
 function agentLabel(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType as keyof typeof AGENT_TYPE_LABELS] ?? agentType;
 }
 
-/** 换 agent 类型后已选套餐随之作废，清掉逼着重挑 */
+/** 换 agent 类型后已选套餐与归属企业随之作废，清掉逼着重挑 */
 function onAgentTypeChange(agentType: string | null): void {
   form.value.agentType = agentType;
   form.value.planId = null;
+  form.value.enterpriseId = null;
 }
 
 /** 止期推算用的时长：新增取所选套餐，编辑取分配时的快照 */
@@ -106,9 +139,18 @@ async function loadPlans(): Promise<void> {
   }
 }
 
+async function loadEnterprises(): Promise<void> {
+  try {
+    enterprises.value = await adminApi().listEnterprises();
+  } catch (error) {
+    reportError(error, "企业加载失败");
+  }
+}
+
 onMounted(() => {
   void loadList();
   void loadPlans();
+  void loadEnterprises();
 });
 
 function create(): void {
@@ -129,7 +171,7 @@ function edit(subscription: AdminSubscriptionResponse): void {
 
 async function submit(): Promise<void> {
   const mode = formMode.value === "edit" ? "edit" : "create";
-  const errors = validateSubscriptionForm(form.value, mode);
+  const errors = validateSubscriptionForm(form.value, mode, selectedEnterpriseDomain.value);
   if (errors.length > 0) {
     showToast("error", errors[0]);
     return;
@@ -219,6 +261,14 @@ async function confirmDelete(): Promise<void> {
                 <button type="button" class="admin-link" @click="copyAssignmentNo(row)">复制</button>
               </dd>
             </div>
+            <div class="sub-fact">
+              <dt>归属</dt>
+              <dd>{{ row.enterpriseId === null ? "个人" : enterpriseLabel(row.enterpriseId) }}</dd>
+            </div>
+            <div class="sub-fact">
+              <dt>账号邮箱</dt>
+              <dd :class="{ fact: row.accountEmail !== null }">{{ row.accountEmail ?? "未录入" }}</dd>
+            </div>
             <div v-if="row.remark" class="sub-fact sub-fact-remark">
               <dt>备注</dt>
               <dd>{{ row.remark }}</dd>
@@ -273,6 +323,46 @@ async function confirmDelete(): Promise<void> {
               disabled
             />
             <Select v-else id="sub-plan" v-model="form.planId" :options="planOptions" aria-label="套餐" />
+          </div>
+        </div>
+
+        <div class="admin-form-row">
+          <div class="admin-field">
+            <label for="sub-enterprise">归属企业</label>
+            <!-- 归属随 agent 类型收窄：没定类型就还不知道哪些企业可选 -->
+            <input
+              v-if="form.agentType === null"
+              id="sub-enterprise"
+              class="admin-input"
+              value="先选 Agent 类型"
+              disabled
+            />
+            <Select
+              v-else
+              id="sub-enterprise"
+              v-model="form.enterpriseId"
+              :options="enterpriseOptions"
+              aria-label="归属企业"
+            />
+            <p class="admin-note">只列启用中、且支持该 Agent 类型的企业；留空即个人订阅。</p>
+          </div>
+          <div class="admin-field">
+            <label for="sub-account-email">账号邮箱</label>
+            <input
+              id="sub-account-email"
+              v-model="form.accountEmail"
+              class="admin-input"
+              type="email"
+              maxlength="128"
+              :placeholder="
+                selectedEnterpriseDomain ? `zhangsan@${selectedEnterpriseDomain}` : 'zhangsan@example.com'
+              "
+            />
+            <p class="admin-note">
+              本次分配给用户的是哪个账号，选填。<template v-if="selectedEnterpriseDomain"
+                >归属企业时须为 <span class="fact">@{{ selectedEnterpriseDomain }}</span> 的邮箱。</template
+              >
+            </p>
           </div>
         </div>
 

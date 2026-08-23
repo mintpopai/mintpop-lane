@@ -264,4 +264,77 @@ class SchemaMigrationTest extends MysqlTestBase {
                 """, String.class);
         assertThat(emailComment).contains("唯一业务标识");
     }
+
+    @Test
+    @DisplayName("V10 迁移建出 enterprise 表：名称与域名各自唯一，agent_types 为 JSON，enabled 默认启用，注释落库")
+    void v10MigrationCreatesEnterpriseTable() {
+        String tableComment = jdbc.queryForObject("""
+                SELECT table_comment FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = 'enterprise'
+                """, String.class);
+        assertThat(tableComment).contains("企业");
+
+        String agentTypesType = jdbc.queryForObject("""
+                SELECT data_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'enterprise' AND column_name = 'agent_types'
+                """, String.class);
+        assertThat(agentTypesType).isEqualTo("json");
+
+        String domainComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'enterprise' AND column_name = 'domain'
+                """, String.class);
+        assertThat(domainComment).contains("域名");
+
+        Integer uniqueColumns = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'enterprise'
+                  AND column_name IN ('name', 'domain') AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueColumns).isEqualTo(2);
+
+        var enabled = jdbc.queryForMap("""
+                SELECT column_default, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'enterprise' AND column_name = 'enabled'
+                """);
+        assertThat(enabled.get("column_default")).isEqualTo("1");
+        assertThat(enabled.get("is_nullable")).isEqualTo("NO");
+    }
+
+    @Test
+    @DisplayName("V10 迁移给 subscription 加 enterprise_id：可空（NULL 即个人订阅）、带注释、不设外键")
+    void v10MigrationAddsSubscriptionEnterpriseId() {
+        var column = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'enterprise_id'
+                """);
+        assertThat((String) column.get("column_comment")).contains("个人订阅");
+        assertThat(column.get("is_nullable")).isEqualTo("YES");
+
+        Integer foreignKeys = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.key_column_usage
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name = 'enterprise_id' AND referenced_table_name IS NOT NULL
+                """, Integer.class);
+        assertThat(foreignKeys).isZero();
+    }
+
+    @Test
+    @DisplayName("V11 迁移给 subscription 加 account_email：可空、带注释、不建唯一索引（允许同一账号重复分配）")
+    void v11MigrationAddsSubscriptionAccountEmail() {
+        var column = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable, column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'account_email'
+                """);
+        assertThat((String) column.get("column_comment")).contains("账号邮箱");
+        assertThat(column.get("is_nullable")).isEqualTo("YES");
+        assertThat((String) column.get("column_type")).isEqualTo("varchar(128)");
+
+        Integer uniqueIndexes = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name = 'account_email' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueIndexes).isZero();
+    }
 }

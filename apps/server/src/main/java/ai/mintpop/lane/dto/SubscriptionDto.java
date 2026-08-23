@@ -19,6 +19,9 @@ public class SubscriptionDto {
 
     private Long userId;
 
+    /** 归属企业 id；NULL 表示个人订阅 */
+    private Long enterpriseId;
+
     private AgentType agentType;
 
     /** 所选套餐 id。弱引用，套餐硬删后允许悬空，历史呈现以快照字段为准 */
@@ -39,6 +42,9 @@ public class SubscriptionDto {
     private Instant startsAt;
 
     private Instant endsAt;
+
+    /** 本次分配给用户的账号邮箱，一律小写；null 表示未录 */
+    private String accountEmail;
 
     /** 席位凭据（明文）。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude

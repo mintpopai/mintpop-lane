@@ -1,5 +1,6 @@
 package ai.mintpop.lane.request;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -17,8 +18,16 @@ public class SubscriptionCreateRequest {
     @NotNull(message = "套餐不能为空")
     private Long planId;
 
+    /** 归属企业 id；留空表示个人订阅 */
+    private Long enterpriseId;
+
     /** 服务起期；留空表示从分配当下开始 */
     private Instant startsAt;
+
+    /** 分配出去的账号邮箱；留空表示未录。归属企业时域名须与企业域名一致，由服务层把关 */
+    @Email(message = "账号邮箱格式不正确")
+    @Size(max = 128, message = "账号邮箱最长 128 个字符")
+    private String accountEmail;
 
     /** 席位凭据。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude

@@ -20,6 +20,7 @@ public class SubscriptionConverter {
         dto.setId(entity.getId());
         dto.setAssignmentNo(entity.getAssignmentNo());
         dto.setUserId(entity.getUserId());
+        dto.setEnterpriseId(entity.getEnterpriseId());
         dto.setAgentType(entity.getAgentType());
         dto.setPlanId(entity.getPlanId());
         dto.setName(entity.getName());
@@ -28,6 +29,7 @@ public class SubscriptionConverter {
         dto.setPlanCurrency(entity.getPlanCurrency());
         dto.setStartsAt(entity.getStartsAt());
         dto.setEndsAt(entity.getEndsAt());
+        dto.setAccountEmail(entity.getAccountEmail());
         dto.setCredential(decrypt(entity.getCredentialCipher()));
         dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
@@ -40,6 +42,7 @@ public class SubscriptionConverter {
         entity.setId(dto.getId());
         entity.setAssignmentNo(dto.getAssignmentNo());
         entity.setUserId(dto.getUserId());
+        entity.setEnterpriseId(dto.getEnterpriseId());
         entity.setAgentType(dto.getAgentType());
         entity.setPlanId(dto.getPlanId());
         entity.setName(dto.getName());
@@ -48,6 +51,7 @@ public class SubscriptionConverter {
         entity.setPlanCurrency(dto.getPlanCurrency());
         entity.setStartsAt(dto.getStartsAt());
         entity.setEndsAt(dto.getEndsAt());
+        entity.setAccountEmail(dto.getAccountEmail());
         String credential = dto.getCredential();
         entity.setCredentialCipher(
                 credential == null || credential.isBlank() ? null : cipher.encrypt(credential));

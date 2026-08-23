@@ -110,4 +110,12 @@ describe("路由守卫", () => {
 
     expect(sessionStorage.getItem("lane.loginRedirectAt")).toBeNull();
   });
+
+  it("企业管理挂在 /enterprises 上，路由名为 ENTERPRISES（侧边栏按名字跳转，名字错了会运行时报错）", async () => {
+    const router = createRouter(adminUser);
+
+    await router.push({ name: "ENTERPRISES" });
+
+    expect(router.currentRoute.value.path).toBe("/enterprises");
+  });
 });

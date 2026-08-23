@@ -18,6 +18,8 @@ import type {
   SubscriptionUpdateRequest,
   UserPageQuery,
   UserSaveRequest,
+  EnterpriseResponse,
+  EnterpriseSaveRequest,
 } from "./types";
 
 export interface AdminApi {
@@ -43,6 +45,10 @@ export interface AdminApi {
   createPlan(body: PlanSaveRequest): Promise<number>;
   updatePlan(id: number, body: PlanSaveRequest): Promise<void>;
   deletePlan(id: number): Promise<void>;
+  listEnterprises(): Promise<EnterpriseResponse[]>;
+  createEnterprise(body: EnterpriseSaveRequest): Promise<number>;
+  updateEnterprise(id: number, body: EnterpriseSaveRequest): Promise<void>;
+  deleteEnterprise(id: number): Promise<void>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -147,6 +153,22 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deletePlan(id) {
       return http.request(`/admin/plans/${id}`, { method: "DELETE" });
+    },
+
+    listEnterprises() {
+      return http.request("/admin/enterprises");
+    },
+
+    createEnterprise(body) {
+      return http.request("/admin/enterprises", { method: "POST", body: JSON.stringify(body) });
+    },
+
+    updateEnterprise(id, body) {
+      return http.request(`/admin/enterprises/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    deleteEnterprise(id) {
+      return http.request(`/admin/enterprises/${id}`, { method: "DELETE" });
     },
   };
 }

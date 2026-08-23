@@ -28,6 +28,9 @@ public class Subscription {
 
     private Long userId;
 
+    /** 归属企业 id；NULL 表示个人订阅。弱引用，不设外键，删除把关在服务层 */
+    private Long enterpriseId;
+
     private AgentType agentType;
 
     /** 所选套餐 id。弱引用，套餐硬删后允许悬空，历史呈现以快照字段为准 */
@@ -48,6 +51,9 @@ public class Subscription {
     private Instant startsAt;
 
     private Instant endsAt;
+
+    /** 本次分配给用户的账号邮箱，一律小写存储；NULL 表示未录 */
+    private String accountEmail;
 
     /** 席位凭据的密文 */
     private String credentialCipher;
