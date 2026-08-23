@@ -53,7 +53,8 @@ public enum BizCodeEnum {
     ENTERPRISE_DOMAIN_DUPLICATED(410022, "企业域名已存在"),
     ENTERPRISE_DISABLED(410023, "企业已停用，无法分配订阅"),
     ENTERPRISE_AGENT_TYPE_MISMATCH(410024, "该企业不支持此套餐的 agent 类型"),
-    ENTERPRISE_IN_USE(410025, "该企业仍被订阅引用，无法删除");
+    ENTERPRISE_IN_USE(410025, "该企业仍被订阅引用，无法删除"),
+    SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致");
 
     private final int code;
     private final String message;

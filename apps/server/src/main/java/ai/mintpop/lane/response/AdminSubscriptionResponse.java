@@ -24,6 +24,8 @@ public record AdminSubscriptionResponse(
         Currency planCurrency,
         Instant startsAt,
         Instant endsAt,
+        /** 本次分配给用户的账号邮箱；null 表示未录 */
+        String accountEmail,
         boolean hasCredential,
         String remark,
         Instant createdAt,

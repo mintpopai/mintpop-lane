@@ -69,6 +69,7 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
                 .set(Subscription::getName, entity.getName())
                 .set(Subscription::getStartsAt, entity.getStartsAt())
                 .set(Subscription::getEndsAt, entity.getEndsAt())
+                .set(Subscription::getAccountEmail, entity.getAccountEmail())
                 .set(Subscription::getCredentialCipher, entity.getCredentialCipher())
                 .set(Subscription::getRemark, entity.getRemark()));
     }

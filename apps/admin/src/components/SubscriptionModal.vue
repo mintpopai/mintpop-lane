@@ -67,6 +67,17 @@ function enterpriseLabel(enterpriseId: number): string {
   return enterprises.value.find((e) => e.id === enterpriseId)?.name ?? `#${enterpriseId}`;
 }
 
+/**
+ * 所选归属企业的域名，账号邮箱要照着它校验；未选企业（个人订阅）时为 null。
+ * 企业没拉到时也给 null——宁可放行让服务端拦，也别拿不全的数据误伤。
+ */
+const selectedEnterpriseDomain = computed<string | null>(() => {
+  if (form.value.enterpriseId === null) {
+    return null;
+  }
+  return enterprises.value.find((e) => e.id === form.value.enterpriseId)?.domain ?? null;
+});
+
 function agentLabel(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType as keyof typeof AGENT_TYPE_LABELS] ?? agentType;
 }
@@ -160,7 +171,7 @@ function edit(subscription: AdminSubscriptionResponse): void {
 
 async function submit(): Promise<void> {
   const mode = formMode.value === "edit" ? "edit" : "create";
-  const errors = validateSubscriptionForm(form.value, mode);
+  const errors = validateSubscriptionForm(form.value, mode, selectedEnterpriseDomain.value);
   if (errors.length > 0) {
     showToast("error", errors[0]);
     return;
@@ -254,6 +265,10 @@ async function confirmDelete(): Promise<void> {
               <dt>归属</dt>
               <dd>{{ row.enterpriseId === null ? "个人" : enterpriseLabel(row.enterpriseId) }}</dd>
             </div>
+            <div class="sub-fact">
+              <dt>账号邮箱</dt>
+              <dd :class="{ fact: row.accountEmail !== null }">{{ row.accountEmail ?? "未录入" }}</dd>
+            </div>
             <div v-if="row.remark" class="sub-fact sub-fact-remark">
               <dt>备注</dt>
               <dd>{{ row.remark }}</dd>
@@ -331,7 +346,24 @@ async function confirmDelete(): Promise<void> {
             />
             <p class="admin-note">只列启用中、且支持该 Agent 类型的企业；留空即个人订阅。</p>
           </div>
-          <div class="admin-field" />
+          <div class="admin-field">
+            <label for="sub-account-email">账号邮箱</label>
+            <input
+              id="sub-account-email"
+              v-model="form.accountEmail"
+              class="admin-input"
+              type="email"
+              maxlength="128"
+              :placeholder="
+                selectedEnterpriseDomain ? `zhangsan@${selectedEnterpriseDomain}` : 'zhangsan@example.com'
+              "
+            />
+            <p class="admin-note">
+              本次分配给用户的是哪个账号，选填。<template v-if="selectedEnterpriseDomain"
+                >归属企业时须为 <span class="fact">@{{ selectedEnterpriseDomain }}</span> 的邮箱。</template
+              >
+            </p>
+          </div>
         </div>
 
         <div class="admin-form-row">

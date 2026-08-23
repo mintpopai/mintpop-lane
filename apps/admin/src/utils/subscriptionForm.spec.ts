@@ -26,6 +26,7 @@ const sample: AdminSubscriptionResponse = {
   planCurrency: "USD",
   startsAt: "2026-08-01T00:00:00Z",
   endsAt: "2026-08-31T00:00:00Z",
+  accountEmail: null,
   hasCredential: true,
   remark: "线下收款",
   createdAt: "2026-08-01T00:00:00Z",
@@ -108,17 +109,19 @@ describe("subscriptionForm", () => {
       planId: 11,
       enterpriseId: null,
       startsAt: "2026-08-01T00:00:00.000Z",
+      accountEmail: "",
       credential: "sk-ant-x",
       remark: "首月",
     });
   });
 
-  it("编辑入参：只有归属/起期/凭据/备注，不含套餐字段", () => {
+  it("编辑入参：只有归属/起期/账号邮箱/凭据/备注，不含套餐字段", () => {
     const form = subscriptionToForm(sample);
     const payload = buildSubscriptionUpdatePayload(form);
     expect(payload).toEqual({
       enterpriseId: null,
       startsAt: "2026-08-01T00:00:00.000Z",
+      accountEmail: "",
       credential: "",
       remark: "线下收款",
     });
@@ -214,5 +217,57 @@ describe("subscriptionForm", () => {
 
   it("空表单不预选归属企业", () => {
     expect(emptySubscriptionForm(new Date("2026-08-20T12:00:00Z")).enterpriseId).toBeNull();
+  });
+
+  it("账号邮箱选填：留空或全空白都放行，个人订阅、归属企业均然", () => {
+    const form = emptySubscriptionForm();
+    form.agentType = "CLAUDE";
+    form.planId = 11;
+    expect(validateSubscriptionForm(form, "create", null)).toEqual([]);
+
+    form.accountEmail = "   ";
+    expect(validateSubscriptionForm(form, "create", "acme.com")).toEqual([]);
+  });
+
+  it("账号邮箱填了就得是邮箱格式", () => {
+    const form = subscriptionToForm(sample);
+    form.accountEmail = "zhangsan";
+    expect(validateSubscriptionForm(form, "edit", null)).toEqual(["账号邮箱格式不正确"]);
+  });
+
+  it("归属企业时账号邮箱域名须与企业域名一致，大小写与首尾空白不计", () => {
+    const form = subscriptionToForm({ ...sample, enterpriseId: 21 });
+    form.accountEmail = " Zhang@ACME.com ";
+    expect(validateSubscriptionForm(form, "edit", "acme.com")).toEqual([]);
+
+    form.accountEmail = "zhang@other.com";
+    expect(validateSubscriptionForm(form, "edit", "acme.com")).toEqual([
+      "账号邮箱域名须与企业域名 acme.com 一致",
+    ]);
+  });
+
+  it("个人订阅不校验域名：任何域名的邮箱都放行", () => {
+    const form = subscriptionToForm(sample);
+    form.accountEmail = "zhang@other.com";
+    expect(validateSubscriptionForm(form, "edit", null)).toEqual([]);
+  });
+
+  it("回填带出账号邮箱；未录时回填成空串", () => {
+    expect(subscriptionToForm({ ...sample, accountEmail: "zhang@acme.com" }).accountEmail).toBe(
+      "zhang@acme.com",
+    );
+    expect(subscriptionToForm(sample).accountEmail).toBe("");
+  });
+
+  it("提交体带账号邮箱：去空白并转小写，留空即清除", () => {
+    const form = emptySubscriptionForm(new Date("2026-08-01T00:00:00Z"));
+    form.planId = 11;
+    form.accountEmail = "  Zhang@ACME.com  ";
+    expect(buildSubscriptionCreatePayload(form).accountEmail).toBe("zhang@acme.com");
+    expect(buildSubscriptionUpdatePayload(form).accountEmail).toBe("zhang@acme.com");
+
+    form.accountEmail = "";
+    expect(buildSubscriptionCreatePayload(form).accountEmail).toBe("");
+    expect(buildSubscriptionUpdatePayload(form).accountEmail).toBe("");
   });
 });

@@ -43,6 +43,9 @@ public class SubscriptionDto {
 
     private Instant endsAt;
 
+    /** 本次分配给用户的账号邮箱，一律小写；null 表示未录 */
+    private String accountEmail;
+
     /** 席位凭据（明文）。排除出 toString，避免凭据随日志外泄 */
     @ToString.Exclude
     private String credential;

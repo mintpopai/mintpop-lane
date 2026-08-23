@@ -452,6 +452,127 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("账号邮箱落库并回显，统一转小写")
+    void createWithAccountEmail() throws Exception {
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("accountEmail", "Zhang@Acme.COM");
+        createSubscription(memberId, body);
+
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].accountEmail").value("zhang@acme.com"));
+    }
+
+    @Test
+    @DisplayName("归属企业时账号邮箱域名须与企业域名一致，不一致报 410026")
+    void createWithAccountEmailOutsideEnterpriseDomainRejected() throws Exception {
+        Long enterpriseId = createEnterprise("Acme", "acme.com", true, AgentType.CLAUDE);
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("enterpriseId", enterpriseId);
+        body.put("accountEmail", "zhang@other.com");
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(410026));
+    }
+
+    @Test
+    @DisplayName("归属企业且账号邮箱域名一致时放行，大小写不计")
+    void createWithAccountEmailMatchingEnterpriseDomain() throws Exception {
+        Long enterpriseId = createEnterprise("Acme", "acme.com", true, AgentType.CLAUDE);
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("enterpriseId", enterpriseId);
+        body.put("accountEmail", "Zhang@ACME.com");
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("个人订阅不校验账号邮箱域名：任意域名都放行")
+    void personalSubscriptionSkipsDomainCheck() throws Exception {
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("accountEmail", "zhang@other.com");
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("账号邮箱格式不合法报 110001")
+    void createWithMalformedAccountEmailFailsValidation() throws Exception {
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("accountEmail", "zhangsan");
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("账号邮箱留空即未录：回显为 null")
+    void accountEmailIsNullWhenBlank() throws Exception {
+        Map<String, Object> body = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        body.put("accountEmail", "  ");
+        createSubscription(memberId, body);
+
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].accountEmail").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("更新可改账号邮箱，也可留空清除（与凭据的沿用语义不同）")
+    void updateChangesAndClearsAccountEmail() throws Exception {
+        Map<String, Object> created = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        created.put("accountEmail", "zhang@acme.com");
+        Long subscriptionId = createSubscription(memberId, created);
+
+        Map<String, Object> change = updateRequest("2026-08-01T00:00:00Z", null, "换账号");
+        change.put("accountEmail", "li@acme.com");
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(change)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].accountEmail").value("li@acme.com"));
+
+        Map<String, Object> clear = updateRequest("2026-08-01T00:00:00Z", null, "清掉账号");
+        clear.put("accountEmail", null);
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(clear)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].accountEmail").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("更新时把订阅归到企业，账号邮箱域名不一致同样报 410026")
+    void updateWithAccountEmailOutsideEnterpriseDomainRejected() throws Exception {
+        Long enterpriseId = createEnterprise("Acme", "acme.com", true, AgentType.CLAUDE);
+        Map<String, Object> created = createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null);
+        created.put("accountEmail", "zhang@other.com");
+        Long subscriptionId = createSubscription(memberId, created);
+
+        Map<String, Object> body = updateRequest("2026-08-01T00:00:00Z", null, "");
+        body.put("enterpriseId", enterpriseId);
+        body.put("accountEmail", "zhang@other.com");
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(410026));
+    }
+
+    @Test
     @DisplayName("更新归属时同样校验企业支持的 agent 类型，不匹配报 410024")
     void updateWithAgentTypeOutsideEnterpriseRejected() throws Exception {
         Long enterpriseId = createEnterprise("Codex Only", "codex.example", true, AgentType.CODEX);

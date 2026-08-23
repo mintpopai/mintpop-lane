@@ -227,6 +227,8 @@ export interface AdminSubscriptionResponse {
   planCurrency: string;
   startsAt: string;
   endsAt: string;
+  /** 本次分配给用户的账号邮箱，小写；null 表示未录 */
+  accountEmail: string | null;
   hasCredential: boolean;
   remark: string | null;
   createdAt: string;
@@ -239,6 +241,8 @@ export interface SubscriptionCreateRequest {
   /** 归属企业 id；null 表示个人订阅 */
   enterpriseId: number | null;
   startsAt: string;
+  /** 分配出去的账号邮箱，小写；空串表示未录 */
+  accountEmail: string;
   credential: string;
   remark: string;
 }
@@ -248,6 +252,8 @@ export interface SubscriptionUpdateRequest {
   /** 归属企业 id；null 表示个人订阅。与凭据不同，这里留空就是清除归属 */
   enterpriseId: number | null;
   startsAt: string;
+  /** 分配出去的账号邮箱，小写。与凭据不同，这里留空就是清除 */
+  accountEmail: string;
   credential: string;
   remark: string;
 }

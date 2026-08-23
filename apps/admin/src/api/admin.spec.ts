@@ -108,12 +108,14 @@ describe("createAdminApi", () => {
       planId: 11,
       enterpriseId: null,
       startsAt: "2026-08-01T00:00:00",
+      accountEmail: "zhang@acme.com",
       credential: "sk-ant-x",
       remark: "",
     };
     const updateBody = {
       enterpriseId: null,
       startsAt: "2026-08-01T00:00:00",
+      accountEmail: "",
       credential: "",
       remark: "",
     };

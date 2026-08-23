@@ -52,6 +52,9 @@ public class Subscription {
 
     private Instant endsAt;
 
+    /** 本次分配给用户的账号邮箱，一律小写存储；NULL 表示未录 */
+    private String accountEmail;
+
     /** 席位凭据的密文 */
     private String credentialCipher;
 

@@ -318,4 +318,23 @@ class SchemaMigrationTest extends MysqlTestBase {
                 """, Integer.class);
         assertThat(foreignKeys).isZero();
     }
+
+    @Test
+    @DisplayName("V11 迁移给 subscription 加 account_email：可空、带注释、不建唯一索引（允许同一账号重复分配）")
+    void v11MigrationAddsSubscriptionAccountEmail() {
+        var column = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable, column_type FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'account_email'
+                """);
+        assertThat((String) column.get("column_comment")).contains("账号邮箱");
+        assertThat(column.get("is_nullable")).isEqualTo("YES");
+        assertThat((String) column.get("column_type")).isEqualTo("varchar(128)");
+
+        Integer uniqueIndexes = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name = 'account_email' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueIndexes).isZero();
+    }
 }
