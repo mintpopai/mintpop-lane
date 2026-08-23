@@ -184,6 +184,26 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("只改大小写的节点改名不被表的 ci 排序规则误判为重名")
+    void renameNodeCaseOnlyChangeSucceeds() throws Exception {
+        Long nodeId = fixtures.createFrontNode("Front A");
+
+        var body = Map.of(
+                "name", "FRONT A",
+                "role", "FRONT",
+                "protocol", "TROJAN",
+                "serverAddr", "us.example.com",
+                "port", 443,
+                "secret", Map.of(),
+                "status", "ENABLED");
+        mockMvc.perform(put("/api/admin/nodes/" + nodeId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(nodeRepository.findById(nodeId).orElseThrow().getName()).isEqualTo("FRONT A");
+    }
+
+    @Test
     @DisplayName("新建落地节点带出口时区，列表回显该时区")
     void createLandNodeWithEgressTimezone() throws Exception {
         var body = Map.of(

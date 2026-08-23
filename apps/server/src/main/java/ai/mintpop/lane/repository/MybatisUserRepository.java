@@ -54,6 +54,15 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public long countByLandNodeIdExcludingUser(Long landNodeId, Long excludeUserId) {
+        if (landNodeId == null) {
+            return 0;
+        }
+        return mapper.selectCount(Wrappers.<User>lambdaQuery()
+                .eq(User::getLandNodeId, landNodeId).ne(User::getId, excludeUserId));
+    }
+
+    @Override
     public PageResult<UserDto> search(String keyword, Boolean hasActiveSubscription, long pageNo, long pageSize) {
         // 钳制分页参数：MyBatis-Plus 在 size 为负且未设 maxLimit 时不会拼 LIMIT，
         // 外部传入的负数会退化成全表返回、逐行解密，必须在这里挡住

@@ -67,7 +67,8 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         ProxyNodeDto node = nodeRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
 
-        if (!node.getName().equals(request.getName()) && nodeRepository.existsByName(request.getName())) {
+        // 重名检查按 id 排除自身：表是 ai_ci 排序规则，只改大小写时 existsByName 会匹配到自己
+        if (nodeRepository.existsByNameExcludingId(request.getName(), id)) {
             throw new BizException(BizCodeEnum.NODE_NAME_DUPLICATED);
         }
 

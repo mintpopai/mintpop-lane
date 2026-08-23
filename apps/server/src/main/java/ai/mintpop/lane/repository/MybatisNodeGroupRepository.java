@@ -58,4 +58,10 @@ public class MybatisNodeGroupRepository implements NodeGroupRepository {
     public boolean existsByName(String name) {
         return mapper.selectCount(Wrappers.<NodeGroup>lambdaQuery().eq(NodeGroup::getName, name)) > 0;
     }
+
+    @Override
+    public boolean existsByNameExcludingId(String name, Long excludeId) {
+        return mapper.selectCount(Wrappers.<NodeGroup>lambdaQuery()
+                .eq(NodeGroup::getName, name).ne(NodeGroup::getId, excludeId)) > 0;
+    }
 }

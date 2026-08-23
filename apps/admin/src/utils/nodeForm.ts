@@ -167,16 +167,20 @@ export function validateNodeForm(form: NodeFormModel): string[] {
     }
   }
 
-  // 出口 IP 会与客户端探测到的实际出口逐字比对，填个域名或坏值只会换来必然的校验失败
-  const egressIp = form.egressIp.trim();
-  if (egressIp && !isIpLiteral(egressIp)) {
-    errors.push(`出口 IP「${egressIp}」不是合法的 IP 地址`);
-  }
+  // 出口 IP / 出口时区是落地专属字段：切到 FRONT 后表单里不渲染、提交时被置 null，
+  // 残值若继续参与校验，会用一条看不见的报错把提交卡死
+  if (form.role === "LAND") {
+    // 出口 IP 会与客户端探测到的实际出口逐字比对，填个域名或坏值只会换来必然的校验失败
+    const egressIp = form.egressIp.trim();
+    if (egressIp && !isIpLiteral(egressIp)) {
+      errors.push(`出口 IP「${egressIp}」不是合法的 IP 地址`);
+    }
 
-  // 时区存的是给后续业务直接消费的 IANA 名，坏值服务端也会 410015 挡回来，这里先给能看懂的话
-  const egressTimezone = form.egressTimezone.trim();
-  if (egressTimezone && !isIanaTimeZone(egressTimezone)) {
-    errors.push(`出口时区「${egressTimezone}」不是合法的 IANA 时区名`);
+    // 时区存的是给后续业务直接消费的 IANA 名，坏值服务端也会 410015 挡回来，这里先给能看懂的话
+    const egressTimezone = form.egressTimezone.trim();
+    if (egressTimezone && !isIanaTimeZone(egressTimezone)) {
+      errors.push(`出口时区「${egressTimezone}」不是合法的 IANA 时区名`);
+    }
   }
 
   // 容量是落地专属概念，且服务端校验 @Min(1)；分数/空值在这里先拦下
@@ -204,17 +208,26 @@ export function isIpLiteral(value: string): boolean {
     // 前导零一并拒绝：010 这类写法有八进制歧义，探测端也不会这么回显
     return v4.slice(1).every((octet) => Number(octet) <= 255 && !(octet.length > 1 && octet.startsWith("0")));
   }
-  if (!value.includes(":") || value.includes(":::")) {
+  if (!value.includes(":")) {
     return false;
   }
-  if (value.split("::").length - 1 > 1) {
+  // 孤立的首尾单冒号不合法（"::" 除外）
+  if ((value.startsWith(":") && !value.startsWith("::")) || (value.endsWith(":") && !value.endsWith("::"))) {
     return false;
+  }
+  const doubleColonCount = value.split("::").length - 1;
+  if (doubleColonCount > 1) {
+    return false;
+  }
+  const isHexGroup = (group: string) => /^[0-9a-fA-F]{1,4}$/.test(group);
+  if (doubleColonCount === 1) {
+    // "::" 至少压缩一组零，两侧的显式组合计最多 7 组
+    const [head, tail] = value.split("::");
+    const groups = [...(head ? head.split(":") : []), ...(tail ? tail.split(":") : [])];
+    return groups.length <= 7 && groups.every(isHexGroup);
   }
   const groups = value.split(":");
-  if (groups.length > 8 || (!value.includes("::") && groups.length !== 8)) {
-    return false;
-  }
-  return groups.every((group) => /^[0-9a-fA-F]{0,4}$/.test(group)) && groups.some((group) => group !== "");
+  return groups.length === 8 && groups.every(isHexGroup);
 }
 
 /**

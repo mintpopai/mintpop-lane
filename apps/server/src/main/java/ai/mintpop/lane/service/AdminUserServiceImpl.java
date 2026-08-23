@@ -20,7 +20,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -80,7 +79,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (request.getFrontNodeId() != null) {
             validateNode(request.getFrontNodeId(), NodeRole.FRONT);
         }
-        validateLandAvailable(request.getLandNodeId(), user.getLandNodeId());
+        validateLandAvailable(request.getLandNodeId(), id);
 
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
@@ -105,12 +104,17 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     /**
-     * 落地节点必须存在、角色正确，且还有剩余容量（当前绑定人数 < capacity）。
-     * currentLandNodeId 是该用户现在绑着的节点：重存同一个节点不新占名额，直接放行。
+     * 落地节点必须存在、角色正确，且还有剩余容量（除本人外的绑定人数 < capacity）。
      * 用锁定读取节点行（见 {@link ProxyNodeRepository#findByIdForUpdate}），
      * 同一节点的并发分配在此串行化，配合外层事务的 READ_COMMITTED 防止超卖。
+     * <p>
+     * 计数按「排除本人」统计，而不是「重存同一节点直接放行」的快速路径：
+     * 后者依赖加锁前读到的用户旧快照，在「读快照 → 拿到锁」的间隙里若发生
+     * 「先解绑本人、再由别人占走最后一个名额」，凭旧快照放行会把绑定人数写超容量；
+     * 排除本人的计数在拿到锁之后才执行（READ_COMMITTED 下读到的是最新已提交状态），
+     * 重存同一节点天然不新占名额，也顺带修掉了并发重复提交时的 410016 误报。
      */
-    private void validateLandAvailable(Long landNodeId, Long currentLandNodeId) {
+    private void validateLandAvailable(Long landNodeId, Long userId) {
         if (landNodeId == null) {
             return;
         }
@@ -119,10 +123,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (node.getRole() != NodeRole.LAND) {
             throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
         }
-        if (Objects.equals(landNodeId, currentLandNodeId)) {
-            return;
-        }
-        if (userRepository.countByLandNodeId(landNodeId) >= node.getCapacity()) {
+        if (userRepository.countByLandNodeIdExcludingUser(landNodeId, userId) >= node.getCapacity()) {
             throw new BizException(BizCodeEnum.LAND_NODE_FULL);
         }
     }

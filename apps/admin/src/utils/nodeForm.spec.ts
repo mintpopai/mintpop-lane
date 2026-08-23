@@ -125,6 +125,11 @@ describe("validateNodeForm", () => {
     expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1" }))).toEqual([]);
   });
 
+  it("切到第一跳后不再校验已隐藏的出口 IP / 出口时区残值——提交时它们会被置 null", () => {
+    expect(validateNodeForm(makeForm({ role: "FRONT", egressIp: "不是IP" }))).toEqual([]);
+    expect(validateNodeForm(makeForm({ role: "FRONT", egressTimezone: "东京时间" }))).toEqual([]);
+  });
+
   it("出口时区填了就必须是合法的 IANA 时区名——坏值会被服务端 410015 挡回来，这里先给能看懂的话", () => {
     expect(validateNodeForm(makeForm({ egressTimezone: "东京时间" }))).toContain(
       "出口时区「东京时间」不是合法的 IANA 时区名",
@@ -157,10 +162,22 @@ describe("isIpLiteral", () => {
     expect(isIpLiteral("2001:0db8:0000:0000:0000:0000:0000:0001")).toBe(true);
   });
 
+  it("识别 :: 的边缘合法形态：全零地址与首尾压缩", () => {
+    expect(isIpLiteral("::")).toBe(true);
+    expect(isIpLiteral("1:2:3:4:5:6:7::")).toBe(true);
+    expect(isIpLiteral("::1:2:3:4:5:6:7")).toBe(true);
+  });
+
   it("拒绝形似 IPv6 的坏值", () => {
     expect(isIpLiteral("host:443")).toBe(false);
     expect(isIpLiteral("1::2::3")).toBe(false);
     expect(isIpLiteral("2001:db8::12345")).toBe(false);
+  });
+
+  it("拒绝孤立的首尾单冒号与组数不足", () => {
+    expect(isIpLiteral(":1:2:3:4:5:6:7")).toBe(false);
+    expect(isIpLiteral("1:2:3:4:5:6:7:")).toBe(false);
+    expect(isIpLiteral("1:2:3:4:5:6:7")).toBe(false);
   });
 });
 

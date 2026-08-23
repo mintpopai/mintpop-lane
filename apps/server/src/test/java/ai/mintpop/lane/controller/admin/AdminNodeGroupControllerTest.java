@@ -246,6 +246,22 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("只改大小写的分组改名不被表的 ci 排序规则误判为重名")
+    void renameGroupCaseOnlyChangeSucceeds() throws Exception {
+        var body = Map.of("name", "Airport A", "subUrl", SUB_URL, "selectedNames", List.of("香港 IEPL-01"));
+        var result = mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn();
+        Long groupId = objectMapper.readTree(result.getResponse().getContentAsString()).get("data").asLong();
+
+        mockMvc.perform(put("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "AIRPORT A"))))
+                .andExpect(jsonPath("$.code").value(0));
+        assertThat(groupRepository.findById(groupId).orElseThrow().getName()).isEqualTo("AIRPORT A");
+    }
+
+    @Test
     @DisplayName("改名撞上另一个已存在的分组名时报 410010，且该分组名字不变")
     void renameToExistingGroupNameFails() throws Exception {
         Long groupA = createGroupImportingTwoNodes();

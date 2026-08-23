@@ -16,8 +16,14 @@ public interface UserRepository {
 
     Optional<UserDto> findById(Long id);
 
-    /** 某个落地节点当前绑定的用户数，供容量校验、节点删除/改角色前的引用检查与列表展示使用 */
+    /** 某个落地节点当前绑定的用户数，供节点删除/改角色前的引用检查与列表展示使用 */
     long countByLandNodeId(Long landNodeId);
+
+    /**
+     * 某个落地节点上「除指定用户外」的绑定人数，容量校验专用：
+     * 排除本人后，重存同一节点天然不新占名额，也不依赖锁前读到的用户旧快照。
+     */
+    long countByLandNodeIdExcludingUser(Long landNodeId, Long excludeUserId);
 
     /**
      * 分页搜索；keyword 为空时不过滤，非空时匹配姓名或 subject。

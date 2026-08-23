@@ -22,4 +22,11 @@ public interface NodeGroupRepository {
     void deleteById(Long id);
 
     boolean existsByName(String name);
+
+    /**
+     * 更新时的重名检查：排除自身那一行。
+     * 表的排序规则是忽略大小写的 ai_ci，只改大小写的改名会让 existsByName 匹配到自己，
+     * 必须按 id 排除，不能在 Java 层用 equals 比较新旧名字来代替。
+     */
+    boolean existsByNameExcludingId(String name, Long excludeId);
 }

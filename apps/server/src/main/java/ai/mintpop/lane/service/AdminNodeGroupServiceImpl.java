@@ -99,7 +99,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     @Override
     public void rename(Long id, NodeGroupRenameRequest request) {
         NodeGroupDto group = getGroup(id);
-        if (!group.getName().equals(request.getName()) && groupRepository.existsByName(request.getName())) {
+        // 重名检查按 id 排除自身：表是 ai_ci 排序规则，只改大小写时 existsByName 会匹配到自己
+        if (groupRepository.existsByNameExcludingId(request.getName(), id)) {
             throw new BizException(BizCodeEnum.NODE_GROUP_NAME_DUPLICATED);
         }
         group.setName(request.getName());
