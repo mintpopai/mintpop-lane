@@ -25,7 +25,7 @@ spring:
             client-id: 填入 Logto 传统 Web 应用的 App ID
             client-secret: 填入 Logto 传统 Web 应用的 App Secret
             redirect-uri: "{baseUrl}/auth/callback"
-            scope: openid,profile,email
+            scope: openid,email
         provider:
           logto:
             # Logto 租户的 OIDC issuer，形如 https://<tenant>.logto.app/oidc

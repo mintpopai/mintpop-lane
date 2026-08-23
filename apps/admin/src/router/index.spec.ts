@@ -7,8 +7,8 @@ import type { MeResponse } from "../api/types";
 import { markLoginRedirect } from "../utils/loginLoop";
 import { createAppRouter } from "./index";
 
-const adminUser: MeResponse = { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] };
-const memberUser: MeResponse = { id: 2, email: "m@b.c", name: "乙", role: "MEMBER", subscriptions: [] };
+const adminUser: MeResponse = { id: 1, email: "a@b.c", role: "ADMIN", subscriptions: [] };
+const memberUser: MeResponse = { id: 2, email: "m@b.c", role: "MEMBER", subscriptions: [] };
 
 function fakeApi(result: MeResponse | Error): AuthApi {
   return {

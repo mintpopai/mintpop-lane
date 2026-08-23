@@ -19,6 +19,7 @@ public enum BizCodeEnum {
     TOKEN_INVALID(210001, "令牌无效"),
     TOKEN_EXPIRED(210002, "令牌已过期"),
     TICKET_INVALID(210004, "登录票据无效或已过期，请重新登录"),
+    EMAIL_ALREADY_BOUND(210005, "该邮箱已绑定其它 Logto 账号"),
 
     /* 链路 */
     EGRESS_NOT_ASSIGNED(310001, "尚未为该用户分配落地出口"),

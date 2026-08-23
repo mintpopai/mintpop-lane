@@ -5,8 +5,8 @@ import { UnauthorizedError } from "../api/http";
 import type { MeResponse } from "../api/types";
 import { useAuthStore } from "./auth";
 
-const adminUser: MeResponse = { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] };
-const memberUser: MeResponse = { id: 2, email: "m@b.c", name: "", role: "MEMBER", subscriptions: [] };
+const adminUser: MeResponse = { id: 1, email: "a@b.c", role: "ADMIN", subscriptions: [] };
+const memberUser: MeResponse = { id: 2, email: "m@b.c", role: "MEMBER", subscriptions: [] };
 
 function fakeApi(result: MeResponse | Error): AuthApi {
   return {
@@ -26,7 +26,7 @@ describe("useAuthStore", () => {
     expect(await store.refreshAuthState(fakeApi(adminUser))).toBe(true);
     expect(store.authenticated).toBe(true);
     expect(store.isAdmin).toBe(true);
-    expect(store.displayName).toBe("甲");
+    expect(store.email).toBe("a@b.c");
   });
 
   it("401 视为未登录且不抛异常", async () => {
@@ -67,10 +67,10 @@ describe("useAuthStore", () => {
     }
   });
 
-  it("普通成员已登录但非管理员，姓名缺失回退邮箱", async () => {
+  it("普通成员已登录但非管理员，邮箱即其唯一标识", async () => {
     const store = useAuthStore();
     await store.refreshAuthState(fakeApi(memberUser));
     expect(store.isAdmin).toBe(false);
-    expect(store.displayName).toBe("m@b.c");
+    expect(store.email).toBe("m@b.c");
   });
 });

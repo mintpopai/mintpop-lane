@@ -94,7 +94,7 @@ public class AuthController {
                                 s.getStartsAt(), s.getEndsAt(), s.isActiveAt(now)))
                         .toList();
         return ApiResponse.success(new MeResponse(
-                user.getId(), user.getEmail(), user.getName(), user.getRole(), subscriptions));
+                user.getId(), user.getEmail(), user.getRole(), subscriptions));
     }
 
     /**

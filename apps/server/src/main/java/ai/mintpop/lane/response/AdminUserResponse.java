@@ -12,7 +12,6 @@ public record AdminUserResponse(
         Long id,
         String subject,
         String email,
-        String name,
         UserRole role,
         UserStatus status,
         Long frontNodeId,

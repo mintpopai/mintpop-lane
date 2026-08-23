@@ -4,7 +4,7 @@
 
    两条贯穿全站的规则：
    1. 排版即信息——等宽（IBM Plex Mono）只给「系统生成的事实」：邮箱、ID、地址、
-      端口、IP、时间戳、计数；Inter 只给「人写的内容」：姓名、节点名、备注、界面文案。
+      端口、IP、时间戳、计数；Inter 只给「人写的内容」：节点名、套餐名、备注、界面文案。
    2. 品牌绿的位置由对比度决定——#17D1A7 / #0FB389 对白底只有 2.7:1，达不到 AA，
       所以白底上它只做「底色」不做「文字」：主按钮是绿底深墨字（9.1:1）、当前导航项
       是淡薄荷底。词标属 logotype，沿用 --color-brand-deep，不受对比度约束。
@@ -162,7 +162,7 @@ body {
   object-fit: cover;
 }
 
-.rail-user-name {
+.rail-user-email {
   font-size: 13px;
   color: var(--color-ink);
   overflow: hidden;
@@ -800,7 +800,7 @@ body {
 }
 
 @media (max-width: 640px) {
-  .rail-user-name {
+  .rail-user-email {
     display: none;
   }
 

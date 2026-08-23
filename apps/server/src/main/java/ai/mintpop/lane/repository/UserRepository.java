@@ -26,7 +26,7 @@ public interface UserRepository {
     long countByLandNodeIdExcludingUser(Long landNodeId, Long excludeUserId);
 
     /**
-     * 分页搜索；keyword 为空时不过滤，非空时匹配姓名或 subject。
+     * 分页搜索；keyword 为空时不过滤，非空时匹配邮箱或 subject。
      * hasActiveSubscription 为 null 时不按订阅状态过滤，非 null 时只返回「有/没有」在期订阅的用户。
      * 按 id 升序。
      */

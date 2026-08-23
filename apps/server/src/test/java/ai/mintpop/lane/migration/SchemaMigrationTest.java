@@ -34,9 +34,9 @@ class SchemaMigrationTest extends MysqlTestBase {
 
     private void createUser(String subject, long frontNodeId, Long landNodeId) {
         jdbc.update("""
-                INSERT INTO app_user (subject, email, name, front_node_id, land_node_id)
-                VALUES (?, ?, ?, ?, ?)
-                """, subject, subject + "@test.example", "测试" + subject, frontNodeId, landNodeId);
+                INSERT INTO app_user (subject, email, front_node_id, land_node_id)
+                VALUES (?, ?, ?, ?)
+                """, subject, subject + "@test.example", frontNodeId, landNodeId);
     }
 
     @Test
@@ -240,5 +240,28 @@ class SchemaMigrationTest extends MysqlTestBase {
                 WHERE table_schema = DATABASE() AND table_name = 'proxy_node' AND column_name = 'egress_ips'
                 """, Integer.class);
         assertThat(legacyCols).isZero();
+    }
+
+    @Test
+    @DisplayName("V9 迁移删掉 app_user.name，email 升级为唯一键并改了注释")
+    void v9MigrationDropsUserNameAndMakesEmailUnique() {
+        Integer nameCols = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'app_user' AND column_name = 'name'
+                """, Integer.class);
+        assertThat(nameCols).isZero();
+
+        Integer uniqueOnEmail = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'app_user'
+                  AND column_name = 'email' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnEmail).isEqualTo(1);
+
+        String emailComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'app_user' AND column_name = 'email'
+                """, String.class);
+        assertThat(emailComment).contains("唯一业务标识");
     }
 }

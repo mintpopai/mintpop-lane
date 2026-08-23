@@ -22,13 +22,11 @@ public class User {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** Logto 中的 user id，即 JWT 的 sub */
+    /** Logto 中的 user id，即 JWT 的 sub；登录查档键 */
     private String subject;
 
-    /** 邮箱，登录时从 id_token 同步 */
+    /** 邮箱，登录时从 id_token 同步；用户的唯一业务标识 */
     private String email;
-
-    private String name;
 
     private UserRole role;
 

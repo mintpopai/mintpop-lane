@@ -5,8 +5,8 @@ import { useAuthStore } from "../stores/auth";
 
 const auth = useAuthStore();
 
-/** 头像兜底字母：显示名首字（displayName 兜过 email，不会为空串才取） */
-const initial = computed(() => (auth.displayName || "?").slice(0, 1));
+/** 头像字母：邮箱首字母大写；/api/me 还没回来时用 ? 占位 */
+const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
 </script>
 
 <template>
@@ -25,7 +25,7 @@ const initial = computed(() => (auth.displayName || "?").slice(0, 1));
     <div class="rail-foot">
       <div class="rail-user">
         <span class="rail-avatar">{{ initial }}</span>
-        <span class="rail-user-name">{{ auth.displayName }}</span>
+        <span class="rail-user-email" :title="auth.email">{{ auth.email }}</span>
       </div>
       <button type="button" class="rail-signout" @click="auth.signOut()">退出登录</button>
     </div>

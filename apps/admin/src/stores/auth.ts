@@ -20,7 +20,8 @@ export const useAuthStore = defineStore("auth", () => {
   const isAdmin = computed<boolean | null>(() =>
     probed.value ? (me.value ? me.value.role === "ADMIN" : false) : null,
   );
-  const displayName = computed(() => me.value?.name || me.value?.email || "");
+  /** 系统里没有「用户名」这一概念，邮箱就是称呼当前登录者的唯一方式 */
+  const email = computed(() => me.value?.email ?? "");
 
   /**
    * 用 /api/me 同步一次登录态。401 = 没登录（返回 false，不抛）；
@@ -57,5 +58,5 @@ export const useAuthStore = defineStore("auth", () => {
     window.location.assign("/auth/logout");
   }
 
-  return { me, authenticated, isAdmin, displayName, refreshAuthState, signIn, signOut };
+  return { me, authenticated, isAdmin, email, refreshAuthState, signIn, signOut };
 });

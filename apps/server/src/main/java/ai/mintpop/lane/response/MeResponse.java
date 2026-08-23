@@ -10,7 +10,6 @@ import java.util.List;
 public record MeResponse(
         Long id,
         String email,
-        String name,
         UserRole role,
         List<MeSubscription> subscriptions
 ) {

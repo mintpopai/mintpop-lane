@@ -8,7 +8,7 @@ describe("createAuthApi", () => {
     const http: HttpClient = {
       request: async <T>(path: string) => {
         calls.push(path);
-        return { id: 1, email: "a@b.c", name: "甲", role: "ADMIN", subscriptions: [] } as T;
+        return { id: 1, email: "a@b.c", role: "ADMIN", subscriptions: [] } as T;
       },
     };
     const me = await createAuthApi(http).me();

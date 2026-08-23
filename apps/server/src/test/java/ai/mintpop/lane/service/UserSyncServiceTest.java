@@ -1,8 +1,10 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
+import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserSyncServiceTest extends MysqlTestBase {
 
@@ -41,12 +44,11 @@ class UserSyncServiceTest extends MysqlTestBase {
     @Test
     @DisplayName("首次登录自动建档：MEMBER、ACTIVE、无任何资源")
     void firstLoginCreatesProfile() {
-        UserDto user = userSyncService.syncOnLogin("logto-new", "new@example.com", "小新");
+        UserDto user = userSyncService.syncOnLogin("logto-new", "new@example.com");
 
         assertThat(user.getId()).isNotNull();
         UserDto read = userRepository.findBySubject("logto-new").orElseThrow();
         assertThat(read.getEmail()).isEqualTo("new@example.com");
-        assertThat(read.getName()).isEqualTo("小新");
         assertThat(read.getRole()).isEqualTo(UserRole.MEMBER);
         assertThat(read.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(read.getFrontNodeId()).isNull();
@@ -54,21 +56,19 @@ class UserSyncServiceTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("再次登录不重复建档，email 与 name 有变化则刷新")
+    @DisplayName("再次登录不重复建档，email 有变化则刷新")
     void repeatLoginRefreshesProfile() {
-        Long id = userSyncService.syncOnLogin("logto-a", "old@example.com", "旧名").getId();
-        UserDto again = userSyncService.syncOnLogin("logto-a", "new@example.com", "新名");
+        Long id = userSyncService.syncOnLogin("logto-a", "old@example.com").getId();
+        UserDto again = userSyncService.syncOnLogin("logto-a", "new@example.com");
 
         assertThat(again.getId()).isEqualTo(id);
-        UserDto read = userRepository.findById(id).orElseThrow();
-        assertThat(read.getEmail()).isEqualTo("new@example.com");
-        assertThat(read.getName()).isEqualTo("新名");
+        assertThat(userRepository.findById(id).orElseThrow().getEmail()).isEqualTo("new@example.com");
     }
 
     @Test
     @DisplayName("刷新资料不动角色/处置态/节点分配")
     void refreshKeepsRoleAndResources() {
-        UserDto user = userSyncService.syncOnLogin("logto-b", "b@example.com", "乙");
+        UserDto user = userSyncService.syncOnLogin("logto-b", "b@example.com");
         // 管理员改库提权 + 分配节点
         DatabaseFixtures fixtures =
                 new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
@@ -78,7 +78,7 @@ class UserSyncServiceTest extends MysqlTestBase {
         stored.setFrontNodeId(front);
         userRepository.update(stored);
 
-        userSyncService.syncOnLogin("logto-b", "b2@example.com", "乙");
+        userSyncService.syncOnLogin("logto-b", "b2@example.com");
 
         UserDto read = userRepository.findById(user.getId()).orElseThrow();
         assertThat(read.getRole()).isEqualTo(UserRole.ADMIN);
@@ -87,21 +87,29 @@ class UserSyncServiceTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("Logto 未提供姓名时用邮箱 @ 前缀兜底")
-    void missingNameFallsBackToEmailPrefix() {
-        UserDto user = userSyncService.syncOnLogin("logto-c", "carol@example.com", null);
-        assertThat(user.getName()).isEqualTo("carol");
+    @DisplayName("邮箱已被别的 Logto 账号占用时首登报错，不静默建档")
+    void firstLoginWithTakenEmailFails() {
+        userSyncService.syncOnLogin("logto-owner", "shared@example.com");
+
+        assertThatThrownBy(() -> userSyncService.syncOnLogin("logto-other", "shared@example.com"))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.EMAIL_ALREADY_BOUND);
+
+        assertThat(userRepository.findBySubject("logto-other")).isEmpty();
     }
 
     @Test
-    @DisplayName("name 超过 64 字符时截断，避免 VARCHAR(64) 落库报错")
-    void overlongNameTruncated() {
-        String longName = "名".repeat(100);
-        UserDto user = userSyncService.syncOnLogin("logto-d", "d@example.com", longName);
+    @DisplayName("改邮箱撞上别人已占用的邮箱时报错，原邮箱保持不变")
+    void refreshToTakenEmailFails() {
+        userSyncService.syncOnLogin("logto-x", "x@example.com");
+        Long yId = userSyncService.syncOnLogin("logto-y", "y@example.com").getId();
 
-        assertThat(user.getName()).hasSize(64);
-        assertThat(user.getName()).isEqualTo("名".repeat(64));
-        UserDto read = userRepository.findById(user.getId()).orElseThrow();
-        assertThat(read.getName()).hasSize(64);
+        assertThatThrownBy(() -> userSyncService.syncOnLogin("logto-y", "x@example.com"))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.EMAIL_ALREADY_BOUND);
+
+        assertThat(userRepository.findById(yId).orElseThrow().getEmail()).isEqualTo("y@example.com");
     }
 }

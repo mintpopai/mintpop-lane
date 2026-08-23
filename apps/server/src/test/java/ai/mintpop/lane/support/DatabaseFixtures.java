@@ -97,7 +97,6 @@ public class DatabaseFixtures {
         UserDto user = new UserDto();
         user.setSubject(subject);
         user.setEmail(subject + "@test.example");
-        user.setName("测试" + subject);
         user.setRole(role);
         user.setStatus(status);
         user.setFrontNodeId(frontNodeId);

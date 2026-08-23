@@ -32,7 +32,6 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
     id: 5,
     subject: "logto-user-1",
     email: "zhangsan@example.com",
-    name: "张三",
     role: "MEMBER",
     status: "ACTIVE",
     frontNodeId: 1,

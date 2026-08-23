@@ -173,7 +173,7 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <template>
-  <Modal :title="`订阅管理：${user.name}`" wide @close="emit('close')">
+  <Modal :title="`订阅管理：${user.email}`" wide @close="emit('close')">
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
       <div class="admin-toolbar">

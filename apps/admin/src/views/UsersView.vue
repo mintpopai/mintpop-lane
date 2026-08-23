@@ -114,7 +114,7 @@ onMounted(refresh);
     <input
       v-model="keyword"
       class="admin-input search"
-      placeholder="按姓名、邮箱或 Logto user id 搜索"
+      placeholder="按邮箱或 Logto user id 搜索"
       @keyup.enter="search()"
     />
     <button type="button" class="admin-btn-ghost" @click="search()">搜索</button>
@@ -135,7 +135,6 @@ onMounted(refresh);
       <table v-else class="admin-table sticky-actions">
         <thead>
           <tr>
-            <th>姓名</th>
             <th>邮箱</th>
             <th>Logto user id</th>
             <th>角色</th>
@@ -150,7 +149,6 @@ onMounted(refresh);
         </thead>
         <tbody>
           <tr v-for="row in list" :key="row.id">
-            <td>{{ row.name }}</td>
             <td class="fact">{{ row.email }}</td>
             <td class="fact muted">{{ row.subject }}</td>
             <td>{{ USER_ROLE_LABELS[row.role] }}</td>
@@ -210,7 +208,7 @@ onMounted(refresh);
   <ConfirmDialog
     v-if="pendingDelete"
     title="删除确认"
-    :message="`确认删除用户「${pendingDelete.name}」？其订阅与落地出口会随之释放。`"
+    :message="`确认删除用户「${pendingDelete.email}」？其订阅与落地出口会随之释放。`"
     :busy="deleting"
     @confirm="confirmDelete()"
     @cancel="pendingDelete = null"

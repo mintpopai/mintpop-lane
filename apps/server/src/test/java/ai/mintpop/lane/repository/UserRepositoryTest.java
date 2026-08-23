@@ -53,7 +53,6 @@ class UserRepositoryTest extends MysqlTestBase {
         UserDto loaded = repository.findBySubject("logto-user-1").orElseThrow();
 
         assertThat(loaded.getId()).isEqualTo(id);
-        assertThat(loaded.getName()).isEqualTo("测试logto-user-1");
         assertThat(loaded.getRole()).isEqualTo(UserRole.MEMBER);
         assertThat(loaded.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(loaded.getFrontNodeId()).isEqualTo(frontId);

@@ -91,7 +91,6 @@ export interface ApiResponse<T> {
 export interface MeResponse {
   id: number;
   email: string;
-  name: string;
   role: UserRole;
   subscriptions: MeSubscription[];
 }
@@ -117,7 +116,6 @@ export interface AdminUserResponse {
   id: number;
   subject: string;
   email: string;
-  name: string;
   role: UserRole;
   status: UserStatus;
   /** 注册即无资源，未分配时为 null */
@@ -172,7 +170,7 @@ export interface AdminNodeResponse {
 
 /**
  * 更新用户的入参。用户由登录自动建档，这里只管管理员能动的部分：
- * 处置态与链路资源分配。subject/email/name 随身份走、role 提权只能改库。
+ * 处置态与链路资源分配。subject/email 随身份走、role 提权只能改库。
  */
 export interface UserSaveRequest {
   status: UserStatus;

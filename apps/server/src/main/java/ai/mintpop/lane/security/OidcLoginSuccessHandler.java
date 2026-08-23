@@ -2,6 +2,7 @@ package ai.mintpop.lane.security;
 
 import ai.mintpop.lane.config.AuthProperties;
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.service.UserSyncService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,7 +63,16 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
             return;
         }
 
-        UserDto user = userSyncService.syncOnLogin(oidcUser.getSubject(), email, oidcUser.getFullName());
+        UserDto user;
+        try {
+            user = userSyncService.syncOnLogin(oidcUser.getSubject(), email);
+        } catch (BizException e) {
+            // 建档/同步被业务规则挡下（目前只有「邮箱已绑定其它 Logto 账号」）。
+            // 这里在过滤器链里，抛出去只会变成 500 白页，必须自己走登录失败的落点
+            log.error("登录建档失败：{}", e.getMessage());
+            respondFailure(flow, response);
+            return;
+        }
 
         if (flow.isPresent()) {
             // 桌面端：签一次性 ticket，渲染落地页把深链交回桌面端（不能裸 302 跳自定义

@@ -67,7 +67,6 @@ class LinkServiceImplTest {
         u.setId(USER_ID);
         u.setSubject("u1");
         u.setEmail("u1@test.example");
-        u.setName("张三");
         u.setStatus(status);
         u.setFrontNodeId(10L);
         u.setLandNodeId(20L);

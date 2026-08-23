@@ -78,7 +78,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         return objectMapper.writeValueAsString(body);
     }
 
-    /** 可变 Map：部分用例要放 null 值，Map.of 不允许。name 不再是入参字段，接口收窄为处置态+节点 */
+    /** 可变 Map：部分用例要放 null 值，Map.of 不允许。接口收窄为处置态+节点 */
     private Map<String, Object> updateRequest(String status, Long front, Long land) {
         Map<String, Object> body = new HashMap<>();
         body.put("status", status);
@@ -137,7 +137,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("更新只改处置态与节点，subject/name 不受影响")
+    @DisplayName("更新只改处置态与节点，subject/email 不受影响")
     void updateOnlyChangesStatusAndNodes() throws Exception {
         var before = userRepository.findById(memberNoSubId).orElseThrow();
 
@@ -148,8 +148,8 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         var user = userRepository.findById(memberNoSubId).orElseThrow();
         assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
-        // 更新接口不再收 name 参数：库里的原值不受影响（改名只能靠登录同步）
-        assertThat(user.getName()).isEqualTo(before.getName());
+        // 更新接口不收身份字段：邮箱与 subject 的原值不受影响（改邮箱只能靠登录同步）
+        assertThat(user.getEmail()).isEqualTo(before.getEmail());
         assertThat(user.getSubject()).isEqualTo("logto-m2");
     }
 

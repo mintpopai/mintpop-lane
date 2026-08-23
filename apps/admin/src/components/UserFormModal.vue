@@ -55,15 +55,14 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <Modal :title="`编辑用户：${user.name}`" @close="emit('close')">
+  <Modal :title="`编辑用户：${user.email}`" @close="emit('close')">
     <!-- 身份事实只读展示：这些随登录自动同步，不在这里改 -->
     <dl class="facts">
       <div class="facts-item"><dt>邮箱</dt><dd class="fact">{{ user.email }}</dd></div>
-      <div class="facts-item"><dt>姓名</dt><dd>{{ user.name }}</dd></div>
       <div class="facts-item"><dt>Logto id</dt><dd class="fact">{{ user.subject }}</dd></div>
       <div class="facts-item"><dt>角色</dt><dd>{{ USER_ROLE_LABELS[user.role] }}</dd></div>
     </dl>
-    <p class="admin-note">姓名与邮箱随登录自动同步；授予管理员请直接改库。</p>
+    <p class="admin-note">邮箱随登录自动同步，它就是这个用户的唯一标识；授予管理员请直接改库。</p>
 
     <div class="admin-form form-block">
       <div class="admin-field">

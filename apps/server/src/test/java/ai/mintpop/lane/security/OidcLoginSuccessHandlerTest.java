@@ -54,9 +54,9 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
         new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).clearAll();
     }
 
-    private static OidcUser oidcUser(String subject, String email, String name) {
+    private static OidcUser oidcUser(String subject, String email) {
         OidcIdToken idToken = new OidcIdToken("token-value", Instant.now(), Instant.now().plusSeconds(300),
-                Map.of("sub", subject, "email", email, "name", name));
+                Map.of("sub", subject, "email", email));
         return new DefaultOidcUser(java.util.List.of(), idToken);
     }
 
@@ -67,7 +67,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(request, response,
-                new TestingAuthenticationToken(oidcUser("logto-web", "web@example.com", "网页用户"), null));
+                new TestingAuthenticationToken(oidcUser("logto-web", "web@example.com"), null));
 
         assertThat(userRepository.findBySubject("logto-web")).isPresent();
         assertThat(response.getHeaders("Set-Cookie"))
@@ -96,7 +96,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(request, response,
-                new TestingAuthenticationToken(oidcUser("logto-desk", "d@example.com", "桌面用户"), null));
+                new TestingAuthenticationToken(oidcUser("logto-desk", "d@example.com"), null));
 
         assertThat(userRepository.findBySubject("logto-desk")).isPresent();
         // 不再裸 302 跳自定义 scheme（浏览器会静默拦截无手势的外部协议跳转），

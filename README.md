@@ -119,9 +119,11 @@
 **管理端不提供改角色的入口**——能在页面上提权，就等于给自己留了后门，且本期没有操作日志可追溯。授予管理员一律改库：
 
 ```sql
-UPDATE app_user SET role = 'ADMIN' WHERE subject = '<Logto user id>';
-UPDATE app_user SET role = 'MEMBER' WHERE subject = '<Logto user id>';  -- 撤销
+UPDATE app_user SET role = 'ADMIN' WHERE email = '<用户邮箱>';
+UPDATE app_user SET role = 'MEMBER' WHERE email = '<用户邮箱>';  -- 撤销
 ```
+
+> 系统里没有「用户名」这一概念，**邮箱就是用户的唯一标识**（`app_user.email` 上有唯一索引），定位人一律用它。`subject`（Logto user id）只是登录时找档案用的内部键，不必在运维场景里记。
 
 改完立即生效（每次请求都会重新查库取角色，无缓存）。
 
@@ -231,6 +233,14 @@ server {
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
 
 ## 发版顺序（桌面端与服务端）
+
+> ⚠️ **V9 迁移（去掉用户名、邮箱升级为唯一键）的上线前置检查**：`V9__user_email_unique.sql` 会给 `app_user.email` 加唯一索引，库里若已有重复邮箱，**迁移会失败、服务起不来**。升级服务端前先在生产库上跑一次：
+>
+> ```sql
+> SELECT email, COUNT(*) FROM app_user GROUP BY email HAVING COUNT(*) > 1;
+> ```
+>
+> 有输出就先人工合并/清理这些账号再升级。此外该版本的 `/api/me` 与 `GET /api/admin/users` 响应都不再返回 `name` 字段，管理端需同版本一起上线。
 
 > ⚠️ **登录体系重构的上线配套**：本文档描述的是新协议（服务端自签会话 + Logto 传统 Web 应用）。桌面端与管理端均已跟进新登录协议，三期已收官；发版时注意三个组件版本配套。旧的 `GET /api/client-config` 端点已随本次重构下线——若线上还有跑旧协议的桌面端或管理端，升级服务端会让它们的登录立即失效，升级前请确认桌面端/管理端已同步跟进，不要单独抢先上线服务端。
 
