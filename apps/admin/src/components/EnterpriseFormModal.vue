@@ -84,16 +84,24 @@ async function submit(): Promise<void> {
         <p class="admin-note">只填裸域名，不带 https:// 与路径；保存时统一转小写。</p>
       </div>
       <div class="admin-field">
-        <span class="field-label">支持的 Agent 类型</span>
-        <div class="agent-choices">
-          <label v-for="choice in agentChoices" :key="choice.value" class="agent-choice">
-            <input
-              type="checkbox"
-              :checked="form.agentTypes.includes(choice.value)"
-              @change="toggleAgentType(form, choice.value)"
-            />
-            <span>{{ choice.label }}</span>
-          </label>
+        <span id="enterprise-agent-types" class="field-label">支持的 Agent 类型</span>
+        <!-- 多选用 chip 切换，不用原生 checkbox：这套后台的控件全是自绘的，
+             系统方框在里面格格不入。aria-pressed 承载勾选状态 -->
+        <div class="agent-choices" role="group" aria-labelledby="enterprise-agent-types">
+          <button
+            v-for="choice in agentChoices"
+            :key="choice.value"
+            type="button"
+            class="admin-chip agent-chip"
+            :class="{ selected: form.agentTypes.includes(choice.value) }"
+            :aria-pressed="form.agentTypes.includes(choice.value)"
+            @click="toggleAgentType(form, choice.value)"
+          >
+            <span v-if="form.agentTypes.includes(choice.value)" class="agent-chip-check" aria-hidden="true">
+              ✓
+            </span>
+            {{ choice.label }}
+          </button>
         </div>
         <p class="admin-note">分配订阅时，只有这里勾中的类型能归属到本企业。</p>
       </div>
@@ -136,18 +144,26 @@ async function submit(): Promise<void> {
 .agent-choices {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px;
 }
 
-.agent-choice {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
+/* 勾号只在选中时出现，不给它留常驻空位——留了空位未选中的 chip 左边就空一块、
+   文字也不居中，比「勾选时 chip 变宽一点」难看得多 */
+.agent-chip-check {
+  color: var(--color-brand-deep);
+  font-size: 12px;
 }
 
-.agent-choice input[type='checkbox'] {
-  accent-color: var(--counter-focus);
-  cursor: pointer;
+/* 选中态沿用下拉面板里「已选项」的语言：薄荷底 + 勾号。
+   不用筛选 chip 的深墨底——那表达「我在看什么」，这里表达「这个值选上了」 */
+.agent-chip.selected {
+  border-color: color-mix(in srgb, var(--color-brand) 55%, #ffffff);
+  background: color-mix(in srgb, var(--color-brand) 14%, #ffffff);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.agent-chip.selected .agent-chip-check {
+  font-weight: 400;
 }
 </style>
