@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AdminSubscriptionResponse, PlanResponse } from "../api/types";
 import {
+  agentTypeOptions,
   buildSubscriptionCreatePayload,
   buildSubscriptionUpdatePayload,
   computeEndsAt,
   emptySubscriptionForm,
   formatPlanLabel,
+  planOptionsForAgent,
   subscriptionToForm,
   validateSubscriptionForm,
 } from "./subscriptionForm";
@@ -42,28 +44,37 @@ const plan: PlanResponse = {
 };
 
 describe("subscriptionForm", () => {
-  it("空表单未选套餐、起期取当下", () => {
+  it("空表单未选 agent 类型与套餐、起期取当下", () => {
     const now = new Date("2026-08-20T12:00:00Z");
     const form = emptySubscriptionForm(now);
     expect(form.id).toBeNull();
+    expect(form.agentType).toBeNull();
     expect(form.planId).toBeNull();
     expect(form.startsAt).toEqual(now);
     expect(form.credential).toBe("");
   });
 
-  it("回填把 UTC 串解析成 Date，带上套餐 id，不含凭据", () => {
+  it("回填把 UTC 串解析成 Date，带上 agent 类型与套餐 id，不含凭据", () => {
     const form = subscriptionToForm(sample);
+    expect(form.agentType).toBe("CLAUDE");
     expect(form.planId).toBe(11);
     expect(form.startsAt?.toISOString()).toBe("2026-08-01T00:00:00.000Z");
     expect(form.credential).toBe("");
   });
 
-  it("新增校验：必须选套餐、起期必填", () => {
+  it("新增校验：必须先选 agent 类型再选套餐、起期必填", () => {
     const form = emptySubscriptionForm();
     form.startsAt = null;
     const errors = validateSubscriptionForm(form, "create");
+    expect(errors).toContain("请选择 Agent 类型");
     expect(errors).toContain("请选择套餐");
     expect(errors).toContain("起期不能为空");
+  });
+
+  it("新增校验：选了 agent 类型但没选套餐仍提示选套餐", () => {
+    const form = emptySubscriptionForm();
+    form.agentType = "CLAUDE";
+    expect(validateSubscriptionForm(form, "create")).toEqual(["请选择套餐"]);
   });
 
   it("编辑校验：不再要求选套餐，只要求起期", () => {
@@ -112,13 +123,28 @@ describe("subscriptionForm", () => {
     expect(endsAt.toISOString()).toBe("2026-08-31T08:30:00.000Z");
   });
 
-  it("套餐下拉标签带 agent 类型、名称、时长与价格", () => {
-    expect(formatPlanLabel(plan)).toBe("Claude Code · Claude 月付（30 天 · 99.99 USD）");
+  it("套餐下拉标签只带名称、时长与价格，不再混入 agent 类型", () => {
+    expect(formatPlanLabel(plan)).toBe("Claude 月付（30 天 · 99.99 USD）");
   });
 
-  it("未知 agentType 的套餐标签直接展示原始取值", () => {
-    expect(formatPlanLabel({ ...plan, agentType: "FUTURE_AGENT" })).toBe(
-      "FUTURE_AGENT · Claude 月付（30 天 · 99.99 USD）",
-    );
+  it("agent 类型选项：只取有上架套餐的类型并去重，未知类型展示原始取值", () => {
+    const codexPlan: PlanResponse = { ...plan, id: 12, name: "Codex 月付", agentType: "CODEX" };
+    const disabledPlan: PlanResponse = { ...plan, id: 13, agentType: "FUTURE_AGENT", enabled: false };
+    const futurePlan: PlanResponse = { ...plan, id: 14, agentType: "FUTURE_AGENT" };
+    expect(agentTypeOptions([plan, codexPlan, { ...plan, id: 15 }, disabledPlan, futurePlan])).toEqual([
+      { value: "CLAUDE", label: "Claude Code" },
+      { value: "CODEX", label: "Codex" },
+      { value: "FUTURE_AGENT", label: "FUTURE_AGENT" },
+    ]);
+  });
+
+  it("套餐选项：只列所选 agent 类型下的上架套餐；未选类型时为空", () => {
+    const codexPlan: PlanResponse = { ...plan, id: 12, name: "Codex 月付", agentType: "CODEX" };
+    const disabledPlan: PlanResponse = { ...plan, id: 13, enabled: false };
+    const all = [plan, codexPlan, disabledPlan];
+    expect(planOptionsForAgent(all, "CLAUDE")).toEqual([
+      { value: 11, label: "Claude 月付（30 天 · 99.99 USD）" },
+    ]);
+    expect(planOptionsForAgent(all, null)).toEqual([]);
   });
 });

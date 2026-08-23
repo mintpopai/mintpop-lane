@@ -8,11 +8,12 @@ import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
 import { formatDateTime } from "../utils/format";
 import {
+  agentTypeOptions,
   buildSubscriptionCreatePayload,
   buildSubscriptionUpdatePayload,
   computeEndsAt,
   emptySubscriptionForm,
-  formatPlanLabel,
+  planOptionsForAgent,
   subscriptionToForm,
   validateSubscriptionForm,
   type SubscriptionFormModel,
@@ -39,23 +40,21 @@ const deleting = ref(false);
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-/** 只列上架套餐——分配只能从可售卖的选项里挑 */
-const planOptions = computed(() =>
-  plans.value.filter((plan) => plan.enabled).map((plan) => ({ value: plan.id, label: formatPlanLabel(plan) })),
-);
+/** 第一步选 agent 类型：只列有上架套餐的类型 */
+const agentOptions = computed(() => agentTypeOptions(plans.value));
+
+/** 第二步选套餐：只列所选 agent 类型下的上架套餐 */
+const planOptions = computed(() => planOptionsForAgent(plans.value, form.value.agentType));
 
 function agentLabel(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType as keyof typeof AGENT_TYPE_LABELS] ?? agentType;
 }
 
-/** agent 类型不可选：新增随所选套餐确定，编辑展示分配时的快照 */
-const agentTypeDisplay = computed<string>(() => {
-  if (formMode.value === "edit") {
-    return agentLabel(editingRow.value?.agentType ?? "");
-  }
-  const selected = plans.value.find((plan) => plan.id === form.value.planId);
-  return selected ? agentLabel(selected.agentType) : "选套餐后自动确定";
-});
+/** 换 agent 类型后已选套餐随之作废，清掉逼着重挑 */
+function onAgentTypeChange(agentType: string | null): void {
+  form.value.agentType = agentType;
+  form.value.planId = null;
+}
 
 /** 止期推算用的时长：新增取所选套餐，编辑取分配时的快照 */
 const durationDays = computed<number | null>(() => {
@@ -104,6 +103,10 @@ onMounted(() => {
 
 function create(): void {
   form.value = emptySubscriptionForm();
+  // 只有一种可选类型时替管理员先选上，少点一次
+  if (agentOptions.value.length === 1) {
+    form.value.agentType = agentOptions.value[0].value;
+  }
   editingRow.value = null;
   formMode.value = "create";
 }
@@ -161,57 +164,82 @@ async function confirmDelete(): Promise<void> {
 
 <template>
   <Modal :title="`订阅管理：${user.name}`" wide @close="emit('close')">
-    <div class="admin-toolbar">
-      <span class="spacer" />
-      <button type="button" class="admin-btn" @click="create()">分配订阅</button>
-    </div>
+    <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
+    <template v-if="formMode === 'hidden'">
+      <div class="admin-toolbar">
+        <span class="spacer" />
+        <button type="button" class="admin-btn" @click="create()">分配订阅</button>
+      </div>
 
-    <p v-if="loading" class="admin-hint">加载中……</p>
-    <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
-    <div v-else class="admin-card">
-      <p v-if="list.length === 0" class="admin-hint">还没有订阅，点右上角「分配订阅」从套餐里选一个。</p>
-      <table v-else class="admin-table dense">
-        <thead>
-          <tr>
-            <th>分配号</th>
-            <th>套餐</th>
-            <th>Agent</th>
-            <th>起期</th>
-            <th>止期</th>
-            <th>凭据</th>
-            <th>备注</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in list" :key="row.id">
-            <td class="fact muted assignment-no" :title="row.assignmentNo">{{ row.assignmentNo }}</td>
-            <td>
-              {{ row.name }}
-              <span class="muted">（{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}）</span>
-            </td>
-            <td>{{ AGENT_TYPE_LABELS[row.agentType as keyof typeof AGENT_TYPE_LABELS] ?? row.agentType }}</td>
-            <td class="fact muted">{{ formatDateTime(row.startsAt) }}</td>
-            <td class="fact muted">{{ formatDateTime(row.endsAt) }}</td>
-            <td>
-              <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
-                {{ row.hasCredential ? "已录入" : "未录入" }}
-              </span>
-            </td>
-            <td class="muted">{{ row.remark || "—" }}</td>
-            <td class="actions">
-              <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-              <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <p v-if="loading" class="admin-hint">加载中……</p>
+      <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
+      <div v-else class="admin-card">
+        <p v-if="list.length === 0" class="admin-hint">还没有订阅，点右上角「分配订阅」，先选 Agent 类型再挑套餐。</p>
+        <table v-else class="admin-table dense sticky-actions">
+          <thead>
+            <tr>
+              <th>分配号</th>
+              <th>套餐</th>
+              <th>Agent</th>
+              <th>起期</th>
+              <th>止期</th>
+              <th>凭据</th>
+              <th>备注</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in list" :key="row.id">
+              <td class="fact muted assignment-no">{{ row.assignmentNo }}</td>
+              <td>
+                {{ row.name }}
+                <span class="muted">（{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}）</span>
+              </td>
+              <td>{{ AGENT_TYPE_LABELS[row.agentType as keyof typeof AGENT_TYPE_LABELS] ?? row.agentType }}</td>
+              <td class="fact muted">{{ formatDateTime(row.startsAt) }}</td>
+              <td class="fact muted">{{ formatDateTime(row.endsAt) }}</td>
+              <td>
+                <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
+                  {{ row.hasCredential ? "已录入" : "未录入" }}
+                </span>
+              </td>
+              <td class="muted">{{ row.remark || "—" }}</td>
+              <td class="actions">
+                <button type="button" class="admin-link" @click="edit(row)">编辑</button>
+                <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
-    <div v-if="formMode !== 'hidden'" class="sub-form">
+    <div v-else class="sub-form">
       <h4 class="sub-form-title">{{ formMode === "edit" ? "编辑订阅" : "分配订阅" }}</h4>
       <div class="admin-form">
         <div class="admin-form-row">
+          <div class="admin-field">
+            <label for="sub-agent">Agent 类型</label>
+            <!-- 编辑时锁定：展示分配当时的快照 -->
+            <input
+              v-if="formMode === 'edit'"
+              id="sub-agent"
+              class="admin-input"
+              :value="agentLabel(editingRow?.agentType ?? '')"
+              disabled
+            />
+            <Select
+              v-else
+              id="sub-agent"
+              :model-value="form.agentType"
+              :options="agentOptions"
+              aria-label="Agent 类型"
+              @update:model-value="onAgentTypeChange($event as string | null)"
+            />
+            <p v-if="formMode === 'create' && agentOptions.length === 0" class="admin-note">
+              没有上架的套餐，先去「套餐管理」新建。
+            </p>
+          </div>
           <div class="admin-field">
             <label for="sub-plan">套餐</label>
             <!-- 编辑时套餐锁定：展示分配当时的快照，要换套餐就删了重新分配 -->
@@ -222,15 +250,15 @@ async function confirmDelete(): Promise<void> {
               :value="`${editingRow?.name}（${editingRow?.planDurationDays} 天 · ${editingRow?.planPrice} ${editingRow?.planCurrency}）`"
               disabled
             />
+            <!-- 还没选类型时先占位，选了类型才放开挑套餐 -->
+            <input
+              v-else-if="form.agentType === null"
+              id="sub-plan"
+              class="admin-input"
+              value="先选 Agent 类型"
+              disabled
+            />
             <Select v-else id="sub-plan" v-model="form.planId" :options="planOptions" aria-label="套餐" />
-            <p v-if="formMode === 'create' && planOptions.length === 0" class="admin-note">
-              没有上架的套餐，先去「套餐管理」新建。
-            </p>
-          </div>
-          <div class="admin-field">
-            <label for="sub-agent">Agent 类型</label>
-            <!-- agent 类型不可选：由所选套餐决定（编辑时展示分配当时的快照） -->
-            <input id="sub-agent" class="admin-input" :value="agentTypeDisplay" disabled />
           </div>
         </div>
 
@@ -293,10 +321,9 @@ async function confirmDelete(): Promise<void> {
 </template>
 
 <style scoped>
+/* 表单是独立视图（与列表整屏切换），不需要再与上方内容做分隔 */
 .sub-form {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
 }
 
 .sub-form-title {
@@ -312,12 +339,9 @@ async function confirmDelete(): Promise<void> {
   gap: 12px;
 }
 
-/* 分配号 32 位很长，缩字号并截断展示，完整值放 title 里悬停可见 */
+/* 分配号 32 位很长：缩字号、禁换行完整展示，宽度靠表格横向滚动消化 */
 .assignment-no {
-  max-width: 130px;
-  overflow: hidden;
   font-size: 12px;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 </style>

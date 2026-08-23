@@ -7,11 +7,13 @@ import type {
 } from "../api/types";
 
 /**
- * 表单模型。套餐名/agent 类型/时长/价格不进表单——它们由所选套餐决定，
+ * 表单模型。套餐名/时长/价格不进表单——它们由所选套餐决定，
  * 编辑时是分配当时的快照、不可改。
  */
 export interface SubscriptionFormModel {
   id: number | null;
+  /** 先选 agent 类型、再从该类型下选套餐；null = 未选（仅新增模式需要选） */
+  agentType: string | null;
   /** 所选套餐 id；null = 未选（仅新增模式需要选） */
   planId: number | null;
   /** 模型存 Date（绝对时刻）；datetime-local 控件值经 utils/datetimeLocal 换算；null = 未填 */
@@ -25,6 +27,7 @@ export interface SubscriptionFormModel {
 export function emptySubscriptionForm(now: Date = new Date()): SubscriptionFormModel {
   return {
     id: null,
+    agentType: null,
     planId: null,
     startsAt: now,
     credential: "",
@@ -35,6 +38,7 @@ export function emptySubscriptionForm(now: Date = new Date()): SubscriptionFormM
 export function subscriptionToForm(s: AdminSubscriptionResponse): SubscriptionFormModel {
   return {
     id: s.id,
+    agentType: s.agentType,
     planId: s.planId,
     // 服务端给的是带 Z 的 UTC 串，解析成 Date 后由控件按本地时区回显
     startsAt: new Date(s.startsAt),
@@ -49,6 +53,9 @@ export function validateSubscriptionForm(
   mode: "create" | "edit",
 ): string[] {
   const errors: string[] = [];
+  if (mode === "create" && form.agentType === null) {
+    errors.push("请选择 Agent 类型");
+  }
   if (mode === "create" && form.planId === null) {
     errors.push("请选择套餐");
   }
@@ -89,8 +96,40 @@ export function computeEndsAt(startsAt: Date, durationDays: number): Date {
   return new Date(startsAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
 }
 
-/** 套餐下拉的展示标签：agent 类型 + 名称 + 时长 + 价格；未知类型直接展示原始取值 */
+/** 套餐下拉的展示标签：名称 + 时长 + 价格。agent 类型已由上一级选择承担，不再混入 */
 export function formatPlanLabel(plan: PlanResponse): string {
-  const agentLabel = AGENT_TYPE_LABELS[plan.agentType as keyof typeof AGENT_TYPE_LABELS] ?? plan.agentType;
-  return `${agentLabel} · ${plan.name}（${plan.durationDays} 天 · ${plan.price} ${plan.currency}）`;
+  return `${plan.name}（${plan.durationDays} 天 · ${plan.price} ${plan.currency}）`;
+}
+
+/**
+ * Agent 类型下拉选项：只取「有上架套餐」的类型（选了也没套餐可挑的类型不列），
+ * 按首次出现顺序去重；未知类型直接展示原始取值。
+ */
+export function agentTypeOptions(plans: PlanResponse[]): Array<{ value: string; label: string }> {
+  const seen = new Set<string>();
+  const options: Array<{ value: string; label: string }> = [];
+  for (const plan of plans) {
+    if (!plan.enabled || seen.has(plan.agentType)) {
+      continue;
+    }
+    seen.add(plan.agentType);
+    options.push({
+      value: plan.agentType,
+      label: AGENT_TYPE_LABELS[plan.agentType as keyof typeof AGENT_TYPE_LABELS] ?? plan.agentType,
+    });
+  }
+  return options;
+}
+
+/** 套餐下拉选项：只列所选 agent 类型下的上架套餐；未选类型时为空 */
+export function planOptionsForAgent(
+  plans: PlanResponse[],
+  agentType: string | null,
+): Array<{ value: number; label: string }> {
+  if (agentType === null) {
+    return [];
+  }
+  return plans
+    .filter((plan) => plan.enabled && plan.agentType === agentType)
+    .map((plan) => ({ value: plan.id, label: formatPlanLabel(plan) }));
 }
