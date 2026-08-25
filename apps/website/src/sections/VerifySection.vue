@@ -1,33 +1,35 @@
 <script setup lang="ts">
-import { verify } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 </script>
 
 <template>
   <section id="verify" class="section section-line">
     <div class="container">
-      <p class="kicker">{{ verify.kicker }}</p>
-      <h2 class="section-title">{{ verify.title }}</h2>
-      <p class="section-lede">{{ verify.lede }}</p>
+      <p class="kicker">{{ t.verify.kicker }}</p>
+      <h2 class="section-title">{{ t.verify.title }}</h2>
+      <p class="section-lede">{{ t.verify.lede }}</p>
 
-      <p class="caption">{{ verify.caption }}</p>
+      <p class="caption">{{ t.verify.caption }}</p>
 
       <!-- 左右对照：同一个故障，别处给你一行，Lane 给你一整段。
            两张卡等高，左边那片留白就是论据本身，别把它填满。 -->
       <div class="pair">
         <article class="card plain">
-          <span class="tag">{{ verify.others.tag }}</span>
-          <p class="code">{{ verify.others.code }}</p>
-          <p class="note">{{ verify.others.note }}</p>
+          <span class="tag">{{ t.verify.others.tag }}</span>
+          <p class="code">{{ t.verify.others.code }}</p>
+          <p class="note">{{ t.verify.others.note }}</p>
         </article>
 
         <article class="card ours">
-          <span class="tag tag-brand">{{ verify.lane.tag }}</span>
-          <span class="badge">{{ verify.lane.badge }}</span>
-          <h3 class="label">{{ verify.lane.label }}</h3>
-          <p class="detail">{{ verify.lane.detail }}</p>
+          <span class="tag tag-brand">{{ t.verify.lane.tag }}</span>
+          <span class="badge">{{ t.verify.lane.badge }}</span>
+          <h3 class="label">{{ t.verify.lane.label }}</h3>
+          <p class="detail">{{ t.verify.lane.detail }}</p>
           <!-- 画成应用里那个按钮的样子，但它只是展示，不可点 -->
-          <span class="retry">{{ verify.lane.retry }}</span>
-          <p class="note">{{ verify.lane.note }}</p>
+          <span class="retry">{{ t.verify.lane.retry }}</span>
+          <p class="note">{{ t.verify.lane.note }}</p>
         </article>
       </div>
     </div>

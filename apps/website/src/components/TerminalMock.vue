@@ -5,7 +5,9 @@
  *
  * 内容是手写的高保真示意，不是截图：随主题与字体自适应、体积极小、改版不用重截。
  */
-import { terminal } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 
 withDefaults(
   defineProps<{
@@ -16,8 +18,6 @@ withDefaults(
   }>(),
   { tabs: () => [], chrome: true },
 );
-
-const lines = terminal.lines;
 </script>
 
 <template>
@@ -39,7 +39,7 @@ const lines = terminal.lines;
         </li>
       </ul>
 
-      <pre class="screen mono"><template v-for="(l, i) in lines" :key="i"><span
+      <pre class="screen mono"><template v-for="(l, i) in t.terminal.lines" :key="i"><span
           v-if="l.kind === 'prompt'"
         ><span class="sigil">$</span> {{ l.text }}
 </span><span v-else-if="l.kind === 'dim'" class="dim">{{ l.text }}

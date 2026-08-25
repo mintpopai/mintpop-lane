@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { faq } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 </script>
 
 <template>
   <section id="faq" class="section-tight section-line">
     <div class="container">
-      <p class="kicker">{{ faq.kicker }}</p>
-      <h2 class="section-title">{{ faq.title }}</h2>
+      <p class="kicker">{{ t.faq.kicker }}</p>
+      <h2 class="section-title">{{ t.faq.title }}</h2>
 
       <!-- 用原生 details：无 JS、键盘可达、搜索引擎能读到答案正文 -->
       <div class="list">
-        <details v-for="item in faq.items" :key="item.q">
+        <details v-for="item in t.faq.items" :key="item.q">
           <summary>
             <span class="q">{{ item.q }}</span>
             <span class="sign" aria-hidden="true"></span>

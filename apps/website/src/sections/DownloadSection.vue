@@ -2,8 +2,9 @@
 import { computed } from "vue";
 import { formatSize } from "../composables/release";
 import { useRelease } from "../composables/useRelease";
-import { download } from "../content/copy";
+import { useI18n } from "../i18n";
 
+const { t } = useI18n();
 const { version, platformFor } = useRelease();
 
 const mac = computed(() => platformFor("MAC_ARM"));
@@ -16,8 +17,8 @@ const winSize = computed(() => formatSize(win.value?.size ?? 0));
 <template>
   <section id="download" class="section section-soft">
     <div class="container">
-      <p class="kicker">{{ download.kicker }}</p>
-      <h2 class="section-title">{{ download.title }}</h2>
+      <p class="kicker">{{ t.download.kicker }}</p>
+      <h2 class="section-title">{{ t.download.title }}</h2>
       <p class="version">
         <template v-if="version">
           最新版本 <span class="mono">v{{ version }}</span>
@@ -42,16 +43,16 @@ const winSize = computed(() => formatSize(win.value?.size ?? 0));
         </a>
       </div>
 
-      <p v-if="!mac && !win" class="unavailable">{{ download.unavailable }}</p>
+      <p v-if="!mac && !win" class="unavailable">{{ t.download.unavailable }}</p>
 
       <dl class="req">
-        <template v-for="r in download.requirements" :key="r.platform">
+        <template v-for="r in t.download.requirements" :key="r.platform">
           <dt>{{ r.platform }}</dt>
           <dd>{{ r.body }}</dd>
         </template>
       </dl>
 
-      <p class="note">{{ download.note }}</p>
+      <p class="note">{{ t.download.note }}</p>
     </div>
   </section>
 </template>

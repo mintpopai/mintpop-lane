@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import LaneVisual from "../components/LaneVisual.vue";
-import { hero } from "../content/copy";
+import { useI18n } from "../i18n";
 import { useRelease } from "../composables/useRelease";
 
+const { t } = useI18n();
 const { primaryKey, platformFor, version } = useRelease();
 
 // 主按钮按访客系统给平台直链。识别不出系统、或清单还没到手/拉取失败时，
@@ -24,15 +25,15 @@ const primaryLabel = computed(() => {
       <div class="copy">
         <p class="pill rise">
           <span class="led" aria-hidden="true"></span>
-          {{ hero.pill }}
+          {{ t.hero.pill }}
         </p>
 
         <h1 class="rise rise-1">
-          {{ hero.title[0] }}<br />
-          <span class="accent">{{ hero.title[1] }}</span>
+          {{ t.hero.title[0] }}<br />
+          <span class="accent">{{ t.hero.title[1] }}</span>
         </h1>
 
-        <p class="lede rise rise-2">{{ hero.lede }}</p>
+        <p class="lede rise rise-2">{{ t.hero.lede }}</p>
 
         <div class="cta rise rise-3">
           <a class="btn btn-primary" :href="primaryHref">{{ primaryLabel }}</a>
@@ -43,7 +44,7 @@ const primaryLabel = computed(() => {
           <template v-if="version">
             最新版本 <span class="mono">v{{ version }}</span> ·
           </template>
-          {{ hero.note }}
+          {{ t.hero.note }}
         </p>
       </div>
 

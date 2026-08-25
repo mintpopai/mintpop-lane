@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { footer } from "../content/copy";
+import { useI18n } from "../i18n";
 
+const { t } = useI18n();
 const year = new Date().getFullYear();
 </script>
 
@@ -16,11 +17,11 @@ const year = new Date().getFullYear();
           width="132"
           height="36"
         />
-        <p class="tagline">{{ footer.tagline }}</p>
+        <p class="tagline">{{ t.footer.tagline }}</p>
       </div>
 
       <nav class="links" aria-label="页脚导航">
-        <a v-for="l in footer.links" :key="l.href" :href="l.href">{{ l.label }}</a>
+        <a v-for="l in t.footer.links" :key="l.href" :href="l.href">{{ l.label }}</a>
       </nav>
     </div>
 

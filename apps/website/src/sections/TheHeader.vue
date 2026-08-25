@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { nav } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 
 /** 滚过首屏就给顶栏加边框与更实的底：不滚动时让它彻底融进 Hero 的留白里 */
 const scrolled = ref(false);
@@ -41,7 +43,7 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
       </a>
 
       <nav class="nav" aria-label="主导航">
-        <a v-for="item in nav" :key="item.href" :href="item.href">{{ item.label }}</a>
+        <a v-for="item in t.nav" :key="item.href" :href="item.href">{{ item.label }}</a>
       </nav>
 
       <a class="btn btn-primary btn-sm cta" href="#download">下载</a>

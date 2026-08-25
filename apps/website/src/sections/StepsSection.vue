@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { steps } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 </script>
 
 <template>
   <section class="section-tight section-line">
     <div class="container">
-      <p class="kicker">{{ steps.kicker }}</p>
-      <h2 class="section-title">{{ steps.title }}</h2>
+      <p class="kicker">{{ t.steps.kicker }}</p>
+      <h2 class="section-title">{{ t.steps.title }}</h2>
 
       <ol class="list">
-        <li v-for="s in steps.items" :key="s.title">
+        <li v-for="s in t.steps.items" :key="s.title">
           <h3>{{ s.title }}</h3>
           <p>{{ s.body }}</p>
         </li>

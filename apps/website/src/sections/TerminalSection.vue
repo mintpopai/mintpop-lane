@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import TerminalMock from "../components/TerminalMock.vue";
-import { terminal } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 
 /** 终端 mock 侧栏里的示例会话，与首屏窗口里那两个保持一致 */
 const tabs = [
@@ -15,16 +17,16 @@ const tabs = [
   <section id="terminal" class="terminal-section">
     <div class="container">
       <div class="head">
-        <p class="kicker">{{ terminal.kicker }}</p>
-        <h2 class="title">{{ terminal.title }}</h2>
-        <p class="lede">{{ terminal.lede }}</p>
+        <p class="kicker">{{ t.terminal.kicker }}</p>
+        <h2 class="title">{{ t.terminal.title }}</h2>
+        <p class="lede">{{ t.terminal.lede }}</p>
       </div>
 
       <div class="split">
         <TerminalMock :tabs="tabs" />
 
         <ul class="points">
-          <li v-for="p in terminal.points" :key="p.title">
+          <li v-for="p in t.terminal.points" :key="p.title">
             <h3>{{ p.title }}</h3>
             <p>{{ p.body }}</p>
           </li>

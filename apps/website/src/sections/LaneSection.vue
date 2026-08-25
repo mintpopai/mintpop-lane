@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import LanePathGraphic from "../components/LanePathGraphic.vue";
-import { lane } from "../content/copy";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
 </script>
 
 <template>
   <section id="lane" class="section section-soft">
     <div class="container">
-      <p class="kicker">{{ lane.kicker }}</p>
-      <h2 class="section-title">{{ lane.title }}</h2>
-      <p class="section-lede">{{ lane.lede }}</p>
+      <p class="kicker">{{ t.lane.kicker }}</p>
+      <h2 class="section-title">{{ t.lane.title }}</h2>
+      <p class="section-lede">{{ t.lane.lede }}</p>
 
       <div class="diagram">
         <!-- 图本身按内容收缩，这里给一个上限宽度让两段连线拉开，读起来才像一条「路」 -->
@@ -17,7 +19,7 @@ import { lane } from "../content/copy";
       </div>
 
       <div class="grid">
-        <article v-for="p in lane.points" :key="p.title" class="cell">
+        <article v-for="p in t.lane.points" :key="p.title" class="cell">
           <h3>{{ p.title }}</h3>
           <p>{{ p.body }}</p>
         </article>

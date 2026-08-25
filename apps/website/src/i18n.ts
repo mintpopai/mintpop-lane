@@ -1,6 +1,10 @@
 // 语言的单一来源是 URL：/ 是中文，/en/ 是英文。
 // 这里只放不依赖 vue-router 的纯逻辑；provide/inject 那部分见本文件后半（Task 4 补）。
 
+import { computed, inject, provide, ref, watch, type InjectionKey, type Ref } from "vue";
+import { useRoute } from "vue-router";
+import { COPY, type Copy } from "./content/copy";
+
 // 取值刻意用小写 "zh" | "en"（非 SCREAMING_SNAKE_CASE），因为这是 BCP 47 语言子标签，
 // 会逐字出现在 URL 路径段 /en/ 与 html lang 属性，标准要求小写；故不套用 enum-naming.md。
 export type Locale = "zh" | "en";
@@ -27,4 +31,33 @@ export function rememberLocale(l: Locale): void {
 export function savedLocale(): Locale | null {
   const saved = localStorage.getItem(STORAGE_KEY);
   return saved === "zh" || saved === "en" ? saved : null;
+}
+
+const LOCALE_KEY: InjectionKey<Ref<Locale>> = Symbol("locale");
+
+// 在根组件（App.vue）的 setup 里调用一次：locale 挂在 app 实例上（provide），**不做模块单例**——
+// vite-ssg 会在同一进程里**并发**预渲染多条路由，模块级可变状态会被其它路由的渲染改写
+// （跨请求状态污染：典型症状是中文页序列化出英文 head）。每个 app 实例一份，天然隔离。
+export function provideI18n() {
+  const route = useRoute();
+  const locale = ref<Locale>(localeFromPath(route.path));
+  watch(
+    () => route.path,
+    (p) => (locale.value = localeFromPath(p)),
+  );
+  provide(LOCALE_KEY, locale);
+  return makeI18n(locale);
+}
+
+/** 子组件取用（App.vue 已 provide，注入必然成功） */
+export function useI18n() {
+  const locale = inject(LOCALE_KEY);
+  if (!locale) throw new Error("useI18n 必须在 App.vue（provideI18n）之下使用");
+  return makeI18n(locale);
+}
+
+function makeI18n(locale: Ref<Locale>) {
+  const t = computed<Copy>(() => COPY[locale.value]);
+  const htmlLang = computed(() => (locale.value === "zh" ? "zh-CN" : "en"));
+  return { locale, t, htmlLang };
 }
