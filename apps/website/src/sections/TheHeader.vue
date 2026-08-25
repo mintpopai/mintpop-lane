@@ -17,12 +17,22 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
 <template>
   <header :class="['header', { scrolled }]">
     <div class="container bar">
-      <!-- 品牌部分一律用官方词标图，不用文字排 logo（品牌规范 INVARIANT）；
-           产品名 Lane 才是文字。浅底 → 深字版词标 -->
+      <!-- 品牌锁定组合：Lane 应用瓦片 + 官方词标 + 分隔线 + 产品名。
+           品牌部分一律用官方词标图，不用文字排 logo（品牌规范 INVARIANT）；产品名 Lane 才是文字。
+           浅底 → 深字版词标；瓦片与词标都直接引品牌规范站，不落地到本仓库，规范站换图这边跟着变。
+           瓦片 alt 留空：它与紧随其后的词标表达的是同一件事，读屏念两遍反而啰嗦，
+           链接本身的 aria-label 已说清这是「MintPop Lane 首页」 -->
       <a class="brand" href="/" aria-label="MintPop Lane 首页">
         <img
+          class="app-icon"
+          src="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png"
+          alt=""
+          width="36"
+          height="36"
+        />
+        <img
           class="wordmark"
-          src="/brand/wordmark/mintpop-wordmark-dark.png"
+          src="https://standards.mintpop.ai/assets/brand/wordmark/mintpop-wordmark-dark.png"
           alt="MintPop"
           width="106"
           height="29"
@@ -68,6 +78,17 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   align-items: center;
   gap: 14px;
   text-decoration: none;
+}
+
+/* 应用瓦片自带约 20% 安全区（图形真身比外框小一圈），故取 36px——比 26px 的词标高一档，
+   两者的「视觉重量」才对得上。瓦片底色是 Cloud，在白色顶栏上是一个看得见的浅色方块，
+   故左缘按「方块本身」对齐容器左边（不做负外边距）；右侧则抵掉那圈留白，
+   让它与词标的实际间距回到 14px，不至于看着被推远 */
+.app-icon {
+  width: 36px;
+  height: 36px;
+  display: block;
+  margin-right: -6px;
 }
 
 /* 词标是原图抠出的透明底 PNG：等比缩放，不加描边/阴影/圆角，高度不低于 20px */

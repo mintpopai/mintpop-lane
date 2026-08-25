@@ -5,12 +5,13 @@ const year = new Date().getFullYear();
 </script>
 
 <template>
-  <!-- 深色页脚 → 用白字版词标（品牌规范：浅底深字版、深底白字版，不许硬放反） -->
+  <!-- 深色页脚 → 用白字版词标（品牌规范：浅底深字版、深底白字版，不许硬放反）。
+       与页头一样直接引品牌规范站，不落地到本仓库 -->
   <footer class="footer">
     <div class="container bar">
       <div class="brand">
         <img
-          src="/brand/wordmark/mintpop-wordmark-light.png"
+          src="https://standards.mintpop.ai/assets/brand/wordmark/mintpop-wordmark-light.png"
           alt="MintPop"
           width="132"
           height="36"

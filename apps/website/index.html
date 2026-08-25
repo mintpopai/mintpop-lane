@@ -12,11 +12,19 @@
     <link rel="canonical" href="https://lane.mintpop.ai/" />
     <meta name="theme-color" content="#17d1a7" />
 
-    <!-- 品牌 favicon（Pop Mark 下采样，见 MintPop 品牌规范） -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon/favicon-16.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/brand/favicon/favicon-192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/brand/favicon/apple-touch-icon.png" />
+    <!-- 图标与词标都托管在品牌规范站，首屏就要用：提前把连接建好，省掉一次 DNS + TLS 往返 -->
+    <link rel="preconnect" href="https://standards.mintpop.ai" />
+
+    <!-- 浏览器图标：直接引品牌规范站上的 Lane 应用瓦片（Cloud 底、深浅通用，规范里的首选素材）。
+         不落地到本仓库：规范站换图，这边跟着变，不用重出尺寸也不会与规范漂移。
+         规范站同在 Cloudflare 后面（含中国大陆在内全球可达），不违反可达性要求。 -->
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="512x512"
+      href="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png"
+    />
+    <link rel="apple-touch-icon" href="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png" />
 
     <!-- 社交卡片 -->
     <meta property="og:type" content="website" />
