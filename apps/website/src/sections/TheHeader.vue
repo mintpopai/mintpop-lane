@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useI18n } from "../i18n";
+import { useRouter } from "vue-router";
+import { localePath, rememberLocale, useI18n } from "../i18n";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const router = useRouter();
+
+// 语言切换 = 路由跳转（/ ↔ /en/），URL 即语言；同时记住偏好，供回访时 App.vue 自动跳转
+function toggleLocale() {
+  const next = locale.value === "zh" ? "en" : "zh";
+  rememberLocale(next);
+  router.push(localePath(next));
+}
 
 /** 滚过首屏就给顶栏加边框与更实的底：不滚动时让它彻底融进 Hero 的留白里 */
 const scrolled = ref(false);
@@ -45,6 +54,12 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
       <nav class="nav" :aria-label="t.ui.header.navLabel">
         <a v-for="item in t.nav" :key="item.href" :href="item.href">{{ item.label }}</a>
       </nav>
+
+      <!-- 放在 .nav 外面：<860px 时 .nav 整个 display:none，
+           切换按钮若在里面，手机上就没法切语言了——而手机正是英文访客最可能的入口 -->
+      <button class="lang" type="button" :aria-label="t.ui.header.langSwitchLabel" @click="toggleLocale">
+        {{ t.ui.header.langToggle }}
+      </button>
 
       <a class="btn btn-primary btn-sm cta" href="#download">{{ t.ui.header.cta }}</a>
     </div>
@@ -128,6 +143,28 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   color: var(--ink);
 }
 
+/* 与顶栏其它文字同级的朴素文字按钮：它是一个低频开关，不该抢下载 CTA 的注意力 */
+.lang {
+  flex: none;
+  margin-left: 24px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.lang:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+
 .cta {
   flex: none;
 }
@@ -136,8 +173,11 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   .nav {
     display: none;
   }
-  .cta {
+  .lang {
     margin-left: auto;
+  }
+  .cta {
+    margin-left: 12px;
   }
 }
 </style>
