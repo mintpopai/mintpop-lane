@@ -18,6 +18,7 @@ import java.time.Duration;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -80,7 +81,9 @@ class LinkControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.land.server").value("77.47.143.6"))
                 .andExpect(jsonPath("$.data.expectedEgressIp").value("77.47.143.6"))
                 .andExpect(jsonPath("$.data.agentCredentials[0].credential").value("sk-ant-test-1"))
-                .andExpect(jsonPath("$.data.agentCredentials[0].agentType").value("CLAUDE"));
+                .andExpect(jsonPath("$.data.agentCredentials[0].agentType").value("CLAUDE"))
+                .andExpect(jsonPath("$.data.agentCredentials[0].assignmentNo",
+                        matchesPattern("[0-9A-HJKMNP-TV-Z]{10}")));
     }
 
     @Test

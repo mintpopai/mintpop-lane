@@ -211,7 +211,7 @@ export interface UserPageQuery {
  */
 export interface AdminSubscriptionResponse {
   id: number;
-  /** 分配号：本次分配的唯一业务标识（32 位十六进制），对外引用一律用它 */
+  /** 分配号：给用户看的分配标识，10 位 Crockford Base32 短码；程序内部引用走自增 id */
   assignmentNo: string;
   userId: number;
   /** 归属企业 id；null 表示个人订阅 */

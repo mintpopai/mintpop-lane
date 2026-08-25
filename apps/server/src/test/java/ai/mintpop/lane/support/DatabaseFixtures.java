@@ -11,6 +11,7 @@ import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.util.AssignmentNo;
 import ai.mintpop.lane.repository.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -19,7 +20,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 测试数据夹具。造数据一律走真实 repository，好让加密路径也被覆盖到；
@@ -112,7 +112,7 @@ public class DatabaseFixtures {
     public Long createSubscription(Long userId, AgentType agentType, String name,
                     Instant startsAt, Instant endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
-        s.setAssignmentNo(UUID.randomUUID().toString().replace("-", ""));
+        s.setAssignmentNo(AssignmentNo.generate());
         s.setUserId(userId);
         s.setAgentType(agentType);
         s.setPlanId(1L);

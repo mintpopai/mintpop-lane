@@ -21,9 +21,11 @@ public record LinkConfigResponse(
         long ttlSeconds
 ) {
 
-    /** 单条可用席位：订阅标识 + 套餐名 + agent 类型 + 凭据 + 止期（供客户端展示） */
+    /** 单条可用席位：订阅标识 + 分配号 + 套餐名 + agent 类型 + 凭据 + 止期（供客户端展示） */
     public record AgentCredential(
             Long subscriptionId,
+            /** 分配号：客户端会话向导里用它区分同套餐的多份分配，纯展示，选中回传的仍是 subscriptionId */
+            String assignmentNo,
             String name,
             AgentType agentType,
             String credential,

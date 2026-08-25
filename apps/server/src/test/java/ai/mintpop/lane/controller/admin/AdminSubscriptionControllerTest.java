@@ -171,7 +171,7 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].planDurationDays").value(30))
                 .andExpect(jsonPath("$.data[0].planPrice").value(99.99))
                 .andExpect(jsonPath("$.data[0].planCurrency").value("USD"))
-                .andExpect(jsonPath("$.data[0].assignmentNo", matchesPattern("[0-9a-f]{32}")))
+                .andExpect(jsonPath("$.data[0].assignmentNo", matchesPattern("[0-9A-HJKMNP-TV-Z]{10}")))
                 .andExpect(jsonPath("$.data[0].startsAt", containsString("2026-08-01T00:00:00")))
                 .andExpect(jsonPath("$.data[0].endsAt", containsString("2026-08-31T00:00:00")))
                 .andExpect(jsonPath("$.data[0].hasCredential").value(true))

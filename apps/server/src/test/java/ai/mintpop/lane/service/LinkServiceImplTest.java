@@ -78,6 +78,8 @@ class LinkServiceImplTest {
                                                  Instant startsAt, Instant endsAt, String credential) {
         SubscriptionDto s = new SubscriptionDto();
         s.setId(id);
+        // 分配号取一个固定短码即可：本测试只关心它是否被原样透传给客户端
+        s.setAssignmentNo("7K3M9QX2FT");
         s.setUserId(USER_ID);
         s.setAgentType(agentType);
         s.setName(name);
@@ -138,6 +140,7 @@ class LinkServiceImplTest {
         assertThat(resp.agentCredentials()).hasSize(1);
         assertThat(resp.agentCredentials().getFirst().credential()).isEqualTo("sk-ant-test");
         assertThat(resp.agentCredentials().getFirst().agentType()).isEqualTo(AgentType.CLAUDE);
+        assertThat(resp.agentCredentials().getFirst().assignmentNo()).isEqualTo("7K3M9QX2FT");
         assertThat(resp.ttlSeconds()).isEqualTo(1800);
     }
 

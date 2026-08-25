@@ -77,7 +77,8 @@ public class LinkServiceImpl implements LinkService {
                 .filter(s -> s.isActiveAt(now))
                 .filter(s -> s.getCredential() != null && !s.getCredential().isBlank())
                 .map(s -> new LinkConfigResponse.AgentCredential(
-                        s.getId(), s.getName(), s.getAgentType(), s.getCredential(), s.getEndsAt()))
+                        s.getId(), s.getAssignmentNo(), s.getName(), s.getAgentType(),
+                        s.getCredential(), s.getEndsAt()))
                 .toList();
 
         return new LinkConfigResponse(

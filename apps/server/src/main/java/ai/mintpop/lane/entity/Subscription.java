@@ -23,7 +23,10 @@ public class Subscription {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 分配号：本次分配的唯一业务标识（32 位十六进制 UUID），对外引用一律用它 */
+    /**
+     * 分配号：给用户看的分配标识，10 位 Crockford Base32 大写短码。
+     * 用户界面与工单里用它指认「是哪一次分配」，程序内部引用仍走自增 id。
+     */
     private String assignmentNo;
 
     private Long userId;

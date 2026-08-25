@@ -13,16 +13,20 @@ import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.SubscriptionCreateRequest;
 import ai.mintpop.lane.request.SubscriptionUpdateRequest;
 import ai.mintpop.lane.response.AdminSubscriptionResponse;
+import ai.mintpop.lane.util.AssignmentNo;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 
 @Service
 public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
+
+    /** 分配号撞唯一键后的重试次数上限，见 createWithUniqueAssignmentNo */
+    private static final int ASSIGNMENT_NO_MAX_ATTEMPTS = 5;
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
@@ -58,7 +62,6 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
 
         Instant startsAt = request.getStartsAt() != null ? request.getStartsAt() : Instant.now();
         SubscriptionDto s = new SubscriptionDto();
-        s.setAssignmentNo(newAssignmentNo());
         s.setUserId(userId);
         s.setEnterpriseId(request.getEnterpriseId());
         // 套餐信息落快照（含 agent 类型）：套餐之后改名改价改类型甚至被删，都不影响这一次分配的记录
@@ -73,7 +76,25 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         s.setAccountEmail(accountEmail);
         s.setCredential(blankToNull(request.getCredential()));
         s.setRemark(request.getRemark());
-        return subscriptionRepository.create(s);
+        return createWithUniqueAssignmentNo(s);
+    }
+
+    /**
+     * 落库，并保证分配号唯一。分配号是 10 位短码，不像 UUID 那样能「生成即认定唯一」，
+     * 撞上唯一键就换一个再试。试满仍撞说明撞的不是分配号（碰撞概率在本项目量级下可忽略），
+     * 而是别处出了问题，异常照原样抛出去，不要静默吞掉。
+     */
+    private Long createWithUniqueAssignmentNo(SubscriptionDto s) {
+        for (int attempt = 1; ; attempt++) {
+            s.setAssignmentNo(AssignmentNo.generate());
+            try {
+                return subscriptionRepository.create(s);
+            } catch (DuplicateKeyException e) {
+                if (attempt >= ASSIGNMENT_NO_MAX_ATTEMPTS) {
+                    throw e;
+                }
+            }
+        }
     }
 
     @Override
@@ -139,11 +160,6 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     private static String normalizeEmail(String email) {
         String trimmed = blankToNull(email);
         return trimmed == null ? null : trimmed.trim().toLowerCase(Locale.ROOT);
-    }
-
-    /** 分配号：不可猜测的 32 位十六进制 UUID，对外引用一律用它、不用自增 id */
-    private static String newAssignmentNo() {
-        return UUID.randomUUID().toString().replace("-", "");
     }
 
     private static String blankToNull(String value) {

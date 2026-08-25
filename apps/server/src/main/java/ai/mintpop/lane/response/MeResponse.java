@@ -17,6 +17,8 @@ public record MeResponse(
     /** 订阅概览；active 为服务端按当前时间算好的在期标记 */
     public record MeSubscription(
             Long id,
+            /** 分配号：给用户看的分配标识。买了多份同套餐时，只有它能把两份分辨开 */
+            String assignmentNo,
             String name,
             AgentType agentType,
             Instant startsAt,

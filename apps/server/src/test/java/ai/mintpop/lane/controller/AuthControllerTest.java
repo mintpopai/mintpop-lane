@@ -150,6 +150,8 @@ class AuthControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.subscriptions[0].active").value(true))
                 .andExpect(jsonPath("$.data.subscriptions[1].active").value(false))
                 // 凭据一个字符都不许出现在响应里
+                .andExpect(jsonPath("$.data.subscriptions[0].assignmentNo",
+                        matchesPattern("[0-9A-HJKMNP-TV-Z]{10}")))
                 .andExpect(jsonPath("$.data.subscriptions[0].credential").doesNotExist())
                 // 时间字段必须是带 Z 的 UTC 绝对时刻串，这是与前端的契约
                 .andExpect(jsonPath("$.data.subscriptions[0].endsAt", matchesPattern(".+Z$")));

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { agentLabel, booleanLabel, formatDate, formatDateTime } from "./format";
+import {
+  agentLabel,
+  booleanLabel,
+  formatAssignmentNo,
+  formatDate,
+  formatDateTime,
+  PLACEHOLDER,
+} from "./format";
 
 // 钉死本进程时区，让「按本地时区渲染」可断言（Node 在 POSIX 上支持运行中生效）
 process.env.TZ = "Asia/Shanghai";
@@ -62,5 +69,23 @@ describe("agentLabel", () => {
 
   it("服务端新增的未知类型原样展示，不显示空白或「未知」", () => {
     expect(agentLabel("GEMINI_CLI")).toBe("GEMINI_CLI");
+  });
+});
+
+describe("formatAssignmentNo", () => {
+  it("10 位短码从中间劈成两组", () => {
+    expect(formatAssignmentNo("7K3M9QX2FT")).toBe("7K3M9-QX2FT");
+  });
+
+  it("长度不是 10 的原样返回，不硬拆", () => {
+    expect(formatAssignmentNo("ABC")).toBe("ABC");
+    expect(formatAssignmentNo("a3f19c2b8e5f4d1a9c37b20e6f8d4a11")).toBe(
+      "a3f19c2b8e5f4d1a9c37b20e6f8d4a11",
+    );
+  });
+
+  it("空值走占位符", () => {
+    expect(formatAssignmentNo(null)).toBe(PLACEHOLDER);
+    expect(formatAssignmentNo("")).toBe(PLACEHOLDER);
   });
 });

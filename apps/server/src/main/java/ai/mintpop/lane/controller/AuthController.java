@@ -90,7 +90,7 @@ public class AuthController {
         List<MeResponse.MeSubscription> subscriptions =
                 subscriptionRepository.findByUserId(userId).stream()
                         .map(s -> new MeResponse.MeSubscription(
-                                s.getId(), s.getName(), s.getAgentType(),
+                                s.getId(), s.getAssignmentNo(), s.getName(), s.getAgentType(),
                                 s.getStartsAt(), s.getEndsAt(), s.isActiveAt(now)))
                         .toList();
         return ApiResponse.success(new MeResponse(

@@ -49,3 +49,15 @@ export function formatDate(value?: string | null): string {
 export function booleanLabel(value: boolean, truthy: string, falsy: string): string {
   return value ? truthy : falsy;
 }
+
+/**
+ * 分配号 → 展示形态：10 位短码从中间劈开成两组（`7K3M9-QX2FT`），照着念、照着抄都不容易串行。
+ * 连字符只是展示，库里存的是不带连字符的原值——复制按钮复制的也是原值，
+ * 这样粘进任何搜索框都能直接命中。长度不是 10 的（历史数据或服务端换了口径）原样返回，不硬拆。
+ */
+export function formatAssignmentNo(value?: string | null): string {
+  if (!value) {
+    return PLACEHOLDER;
+  }
+  return value.length === 10 ? `${value.slice(0, 5)}-${value.slice(5)}` : value;
+}

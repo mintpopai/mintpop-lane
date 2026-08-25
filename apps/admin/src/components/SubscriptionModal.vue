@@ -11,7 +11,7 @@ import type {
 } from "../api/types";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
-import { formatDateTime } from "../utils/format";
+import { formatAssignmentNo, formatDateTime } from "../utils/format";
 import {
   agentTypeOptions,
   buildSubscriptionCreatePayload,
@@ -105,7 +105,10 @@ const predictedEndsAt = computed<string | null>(() => {
   return formatDateTime(computeEndsAt(form.value.startsAt, durationDays.value).toISOString());
 });
 
-/** 分配号是管理员要转交给用户的 32 位串，抄写必错，给一键复制 */
+/**
+ * 分配号是管理员要转交给用户的短码。展示成分组形态便于口述，
+ * 但复制的是不带连字符的原值——与库里一致，粘进搜索框能直接命中。
+ */
 async function copyAssignmentNo(row: AdminSubscriptionResponse): Promise<void> {
   try {
     await navigator.clipboard.writeText(row.assignmentNo);
@@ -257,7 +260,7 @@ async function confirmDelete(): Promise<void> {
             <div class="sub-fact">
               <dt>分配号</dt>
               <dd class="fact">
-                <span class="sub-assignment-no">{{ row.assignmentNo }}</span>
+                <span class="sub-assignment-no">{{ formatAssignmentNo(row.assignmentNo) }}</span>
                 <button type="button" class="admin-link" @click="copyAssignmentNo(row)">复制</button>
               </dd>
             </div>
@@ -416,7 +419,7 @@ async function confirmDelete(): Promise<void> {
     <ConfirmDialog
       v-if="pendingDelete"
       title="删除确认"
-      :message="`确认删除订阅「${pendingDelete.name}」（分配号 ${pendingDelete.assignmentNo}）？`"
+      :message="`确认删除订阅「${pendingDelete.name}」（分配号 ${formatAssignmentNo(pendingDelete.assignmentNo)}）？`"
       :busy="deleting"
       @confirm="confirmDelete()"
       @cancel="pendingDelete = null"
@@ -521,10 +524,11 @@ async function confirmDelete(): Promise<void> {
   color: var(--color-ink);
 }
 
-/* 分配号 32 位完整展示；容器再窄就断行，绝不横向滚动 */
+/* 分配号是 10 位短码，等宽字体排出来才对得齐、也不会把 0 和 O 看混（字母表本就没有 O） */
 .sub-assignment-no {
   font-size: 13px;
-  word-break: break-all;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  letter-spacing: 0.04em;
 }
 
 /* 备注是自由文本，独占一行随便换行，不跟等宽事实挤 */

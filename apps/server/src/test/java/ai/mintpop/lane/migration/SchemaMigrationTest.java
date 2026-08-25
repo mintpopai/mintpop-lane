@@ -177,14 +177,9 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("V7 迁移给 subscription 加分配号与套餐快照列：分配号 char(32) 唯一，快照带注释，不设套餐外键")
+    @DisplayName("V7 迁移给 subscription 加分配号与套餐快照列：分配号唯一，快照带注释，不设套餐外键")
     void v7MigrationAddsAssignmentAndPlanSnapshotColumns() {
-        String assignmentType = jdbc.queryForObject("""
-                SELECT column_type FROM information_schema.columns
-                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'assignment_no'
-                """, String.class);
-        assertThat(assignmentType).isEqualTo("char(32)");
-
+        // 分配号的列宽在 V12 被收窄，故这里只管「有、且唯一」，宽度交给 V12 的用例断言
         String assignmentComment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
                 WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'assignment_no'
@@ -336,5 +331,24 @@ class SchemaMigrationTest extends MysqlTestBase {
                   AND column_name = 'account_email' AND non_unique = 0
                 """, Integer.class);
         assertThat(uniqueIndexes).isZero();
+    }
+
+    @Test
+    @DisplayName("V12 迁移把分配号收窄成 char(10) 短码：注释改口径，唯一键仍在")
+    void v12MigrationShortensAssignmentNo() {
+        var column = jdbc.queryForMap("""
+                SELECT column_type, column_comment, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'assignment_no'
+                """);
+        assertThat((String) column.get("column_type")).isEqualTo("char(10)");
+        assertThat((String) column.get("column_comment")).contains("给用户看");
+        assertThat(column.get("is_nullable")).isEqualTo("NO");
+
+        Integer uniqueOnAssignment = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name = 'assignment_no' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnAssignment).isEqualTo(1);
     }
 }
