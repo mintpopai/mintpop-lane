@@ -21,21 +21,21 @@ withDefaults(
 </script>
 
 <template>
-  <div class="well" role="img" aria-label="内置终端示意：链路已接通，正在运行 Agent 会话">
+  <div class="well" role="img" :aria-label="t.ui.terminalMock.ariaLabel">
     <div v-if="chrome" class="bar">
       <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="bar-title mono">MintPop Lane</span>
       <span class="state">
         <i class="led" aria-hidden="true"></i>
-        链路正常
+        {{ t.ui.terminalMock.state }}
       </span>
     </div>
 
     <div class="body">
       <ul v-if="tabs.length" class="rail">
-        <li v-for="t in tabs" :key="t.name" :class="['tab', { on: t.active }]">
+        <li v-for="tab in tabs" :key="tab.name" :class="['tab', { on: tab.active }]">
           <span class="tab-dot" aria-hidden="true"></span>
-          <span class="tab-name mono">{{ t.name }}</span>
+          <span class="tab-name mono">{{ tab.name }}</span>
         </li>
       </ul>
 

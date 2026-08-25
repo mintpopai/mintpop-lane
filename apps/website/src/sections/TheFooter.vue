@@ -20,7 +20,7 @@ const year = new Date().getFullYear();
         <p class="tagline">{{ t.footer.tagline }}</p>
       </div>
 
-      <nav class="links" aria-label="页脚导航">
+      <nav class="links" :aria-label="t.ui.footer.navLabel">
         <a v-for="l in t.footer.links" :key="l.href" :href="l.href">{{ l.label }}</a>
       </nav>
     </div>

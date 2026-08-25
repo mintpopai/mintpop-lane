@@ -24,7 +24,7 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
            浅底 → 深字版词标；瓦片与词标都直接引品牌规范站，不落地到本仓库，规范站换图这边跟着变。
            瓦片 alt 留空：它与紧随其后的词标表达的是同一件事，读屏念两遍反而啰嗦，
            链接本身的 aria-label 已说清这是「MintPop Lane 首页」 -->
-      <a class="brand" href="/" aria-label="MintPop Lane 首页">
+      <a class="brand" href="/" :aria-label="t.ui.header.homeLabel">
         <img
           class="app-icon"
           src="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png"
@@ -42,11 +42,11 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
         <span class="product">Lane</span>
       </a>
 
-      <nav class="nav" aria-label="主导航">
+      <nav class="nav" :aria-label="t.ui.header.navLabel">
         <a v-for="item in t.nav" :key="item.href" :href="item.href">{{ item.label }}</a>
       </nav>
 
-      <a class="btn btn-primary btn-sm cta" href="#download">下载</a>
+      <a class="btn btn-primary btn-sm cta" href="#download">{{ t.ui.header.cta }}</a>
     </div>
   </header>
 </template>

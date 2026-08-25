@@ -7,6 +7,10 @@
  * 颜色永远配一个字形（✓ / ✕ / !），不靠颜色单独传达状态。
  */
 import { computed } from "vue";
+import { useI18n } from "../i18n";
+import type { LaneVariant } from "../content/copy";
+
+const { t } = useI18n();
 
 /** 节点标记与连线形态，与桌面端 link.ts 的 Mark / Seg 同名同义 */
 type Mark = "ok" | "fail" | "warn" | "pending" | "off";
@@ -15,7 +19,7 @@ type Seg = "on" | "flow" | "broken" | "warn" | "off";
 const props = withDefaults(
   defineProps<{
     /** 展示哪一种处境的形状 */
-    variant?: "active" | "connecting" | "unreachable" | "mismatch" | "off";
+    variant?: LaneVariant;
     /** 是否显示节点下方的说明文字 */
     labels?: boolean;
     size?: "md" | "lg";
@@ -23,46 +27,31 @@ const props = withDefaults(
   { variant: "active", labels: true, size: "md" },
 );
 
-/** 各 variant 的形状。取值与桌面端 present 表里对应处境的 nodes/segs 逐一对齐 */
-const shapes: Record<
-  NonNullable<typeof props.variant>,
-  { nodes: [Mark, Mark, Mark]; segs: [Seg, Seg]; aria: string }
-> = {
-  active: { nodes: ["ok", "ok", "ok"], segs: ["on", "on"], aria: "链路状态：已接通" },
-  connecting: {
-    nodes: ["ok", "ok", "pending"],
-    segs: ["on", "flow"],
-    aria: "链路状态：正在接通",
-  },
-  unreachable: {
-    nodes: ["ok", "fail", "off"],
-    segs: ["broken", "off"],
-    aria: "链路状态：连不上",
-  },
-  mismatch: {
-    nodes: ["ok", "ok", "warn"],
-    segs: ["on", "warn"],
-    aria: "链路状态：出口对不上",
-  },
-  off: { nodes: ["ok", "off", "off"], segs: ["off", "off"], aria: "链路状态：还没分配链路" },
+/** 各 variant 的形状。取值与桌面端 present 表里对应处境的 nodes/segs 逐一对齐。
+    这里只管形状，读屏用的文案按语言放在 copy.ts 的 ui.path.aria */
+const shapes: Record<LaneVariant, { nodes: [Mark, Mark, Mark]; segs: [Seg, Seg] }> = {
+  active: { nodes: ["ok", "ok", "ok"], segs: ["on", "on"] },
+  connecting: { nodes: ["ok", "ok", "pending"], segs: ["on", "flow"] },
+  unreachable: { nodes: ["ok", "fail", "off"], segs: ["broken", "off"] },
+  mismatch: { nodes: ["ok", "ok", "warn"], segs: ["on", "warn"] },
+  off: { nodes: ["ok", "off", "off"], segs: ["off", "off"] },
 };
 
 const shape = computed(() => shapes[props.variant]);
+const aria = computed(() => t.value.ui.path.aria[props.variant]);
 
 const glyph: Record<Mark, string> = { ok: "✓", fail: "✕", warn: "!", pending: "", off: "" };
-const names = ["本机", "专属链路", "出口"] as const;
-const hints = ["你的电脑", "专门给你的", "只有你在走"] as const;
 </script>
 
 <template>
-  <div :class="['lane', size, { bare: !labels }]" role="img" :aria-label="shape.aria">
-    <template v-for="(name, i) in names" :key="name">
+  <div :class="['lane', size, { bare: !labels }]" role="img" :aria-label="aria">
+    <template v-for="(name, i) in t.ui.path.names" :key="i">
       <div v-if="i > 0" :class="['seg', shape.segs[i - 1]]"></div>
       <div class="node">
         <span :class="['mark', shape.nodes[i]]" aria-hidden="true">{{ glyph[shape.nodes[i]] }}</span>
         <template v-if="labels">
           <span class="name">{{ name }}</span>
-          <span class="hint">{{ hints[i] }}</span>
+          <span class="hint">{{ t.ui.path.hints[i] }}</span>
         </template>
       </div>
     </template>

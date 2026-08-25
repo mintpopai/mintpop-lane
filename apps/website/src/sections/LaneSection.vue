@@ -15,7 +15,7 @@ const { t } = useI18n();
       <div class="diagram">
         <!-- 图本身按内容收缩，这里给一个上限宽度让两段连线拉开，读起来才像一条「路」 -->
         <LanePathGraphic class="graphic" variant="active" size="lg" />
-        <p class="caption">应用里能一直看到链路的状态，哪一段没通，就在哪一段上标出来。</p>
+        <p class="caption">{{ t.ui.lane.caption }}</p>
       </div>
 
       <div class="grid">

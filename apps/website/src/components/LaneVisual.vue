@@ -6,25 +6,33 @@
  * 手写矢量而非截图：随字体自适应、体积极小、改版不用重截，也不会把真实邮箱/分配号带出来。
  * 里面出现的 7K3M9-QX2FT 是示例分配号，不是真实数据。
  */
+import { computed } from "vue";
 import LanePathGraphic from "./LanePathGraphic.vue";
+import { useI18n } from "../i18n";
+
+const { t } = useI18n();
+
+// 终端井里那两行与 TerminalMock 是同一段内容，按 kind 取，避免在 copy.ts 里重复维护两份
+const dimLine = computed(() => t.value.terminal.lines.find((l) => l.kind === "dim")?.text ?? "");
+const outLine = computed(() => t.value.terminal.lines.find((l) => l.kind === "out")?.text ?? "");
 </script>
 
 <template>
-  <div class="window" role="img" aria-label="MintPop Lane 应用界面示意：链路已接通，终端里正在运行 Agent 会话">
+  <div class="window" role="img" :aria-label="t.ui.visual.ariaLabel">
     <!-- 窗口顶栏 -->
     <div class="titlebar">
       <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="title">MintPop Lane</span>
       <span class="status">
         <i class="led" aria-hidden="true"></i>
-        链路已接通
+        {{ t.ui.visual.status }}
       </span>
     </div>
 
     <div class="body">
       <!-- 会话侧栏 -->
       <div class="rail">
-        <div class="rail-head mono">会话</div>
+        <div class="rail-head mono">{{ t.ui.visual.railHead }}</div>
         <div class="tab on">
           <span class="tab-dot" aria-hidden="true"></span>
           <span class="tab-name mono">lane-website</span>
@@ -33,28 +41,28 @@ import LanePathGraphic from "./LanePathGraphic.vue";
           <span class="tab-dot" aria-hidden="true"></span>
           <span class="tab-name mono">api-server</span>
         </div>
-        <div class="tab add" aria-hidden="true">＋ 新建会话</div>
+        <div class="tab add" aria-hidden="true">{{ t.ui.visual.newSession }}</div>
       </div>
 
       <div class="main">
         <!-- 链路卡：与桌面端主页顶上那张卡同构 -->
         <div class="card">
           <div class="card-head">
-            <h3>专属链路</h3>
+            <h3>{{ t.ui.visual.cardTitle }}</h3>
             <span class="chip mono">7K3M9-QX2FT</span>
           </div>
           <LanePathGraphic variant="active" :labels="false" />
           <p class="card-note">
-            <strong>链路已接通</strong>
-            <span>出口正常，可以开始了。</span>
+            <strong>{{ t.ui.visual.noteStrong }}</strong>
+            <span>{{ t.ui.visual.noteBody }}</span>
           </p>
         </div>
 
         <!-- 终端井 -->
         <div class="well">
           <pre class="screen mono"><span class="sigil">$</span> claude
-<span class="dim">链路已就绪 · 额度已接入</span>
-欢迎回来，从哪里开始？
+<span class="dim">{{ dimLine }}</span>
+{{ outLine }}
 <span class="sigil">›</span> <span class="caret" aria-hidden="true"></span></pre>
         </div>
       </div>

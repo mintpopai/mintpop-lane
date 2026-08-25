@@ -9,9 +9,16 @@ const { version, platformFor } = useRelease();
 
 const mac = computed(() => platformFor("MAC_ARM"));
 const win = computed(() => platformFor("WINDOWS"));
-// 体积拿不到（清单缺 size 或还没加载）就不渲染这一段，不出「约 0 MB」
-const macSize = computed(() => formatSize(mac.value?.size ?? 0));
-const winSize = computed(() => formatSize(win.value?.size ?? 0));
+// 体积拿不到（清单缺 size 或还没加载）就不渲染这一段，不出「约 0 MB」。
+// formatSize 只给裸体积，「约 / ~」这种语言相关的前缀在这里按当前语言拼。
+const macSize = computed(() => {
+  const s = formatSize(mac.value?.size ?? 0);
+  return s ? t.value.ui.download.sizePrefix + s : null;
+});
+const winSize = computed(() => {
+  const s = formatSize(win.value?.size ?? 0);
+  return s ? t.value.ui.download.sizePrefix + s : null;
+});
 </script>
 
 <template>
@@ -21,22 +28,22 @@ const winSize = computed(() => formatSize(win.value?.size ?? 0));
       <h2 class="section-title">{{ t.download.title }}</h2>
       <p class="version">
         <template v-if="version">
-          最新版本 <span class="mono">v{{ version }}</span>
+          {{ t.ui.download.latest }} <span class="mono">v{{ version }}</span>
         </template>
-        <template v-else>正在获取最新版本…</template>
+        <template v-else>{{ t.ui.download.loading }}</template>
       </p>
 
       <div class="grid">
         <a class="platform" :class="{ 'is-unavailable': !mac }" :href="mac?.url">
           <span class="os">macOS</span>
-          <span class="arch">Apple 芯片（M 系列）</span>
+          <span class="arch">{{ t.ui.download.archMac }}</span>
           <span class="file mono">
             .dmg<template v-if="macSize"> · {{ macSize }}</template>
           </span>
         </a>
         <a class="platform" :class="{ 'is-unavailable': !win }" :href="win?.url">
           <span class="os">Windows</span>
-          <span class="arch">x64 安装器</span>
+          <span class="arch">{{ t.ui.download.archWin }}</span>
           <span class="file mono">
             .exe<template v-if="winSize"> · {{ winSize }}</template>
           </span>

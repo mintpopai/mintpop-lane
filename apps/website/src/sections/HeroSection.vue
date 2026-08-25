@@ -12,10 +12,10 @@ const { primaryKey, platformFor, version } = useRelease();
 const primary = computed(() => (primaryKey.value ? platformFor(primaryKey.value) : null));
 const primaryHref = computed(() => primary.value?.url ?? "#download");
 const primaryLabel = computed(() => {
-  if (!primary.value) return "前往下载";
-  if (primaryKey.value === "MAC_ARM") return "下载 macOS 版";
-  if (primaryKey.value === "WINDOWS") return "下载 Windows 版";
-  return "前往下载";
+  if (!primary.value) return t.value.ui.hero.primaryFallback;
+  if (primaryKey.value === "MAC_ARM") return t.value.ui.hero.primaryMac;
+  if (primaryKey.value === "WINDOWS") return t.value.ui.hero.primaryWin;
+  return t.value.ui.hero.primaryFallback;
 });
 </script>
 
@@ -37,12 +37,12 @@ const primaryLabel = computed(() => {
 
         <div class="cta rise rise-3">
           <a class="btn btn-primary" :href="primaryHref">{{ primaryLabel }}</a>
-          <a class="btn btn-ghost" href="#download">全部安装包</a>
+          <a class="btn btn-ghost" href="#download">{{ t.ui.hero.allDownloads }}</a>
         </div>
 
         <p class="note rise rise-3">
           <template v-if="version">
-            最新版本 <span class="mono">v{{ version }}</span> ·
+            {{ t.ui.hero.latest }} <span class="mono">v{{ version }}</span> ·
           </template>
           {{ t.hero.note }}
         </p>
