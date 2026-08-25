@@ -1,5 +1,8 @@
 // 语言的单一来源是 URL：/ 是中文，/en/ 是英文。
 // 这里只放不依赖 vue-router 的纯逻辑；provide/inject 那部分见本文件后半（Task 4 补）。
+
+// 取值刻意用小写 "zh" | "en"（非 SCREAMING_SNAKE_CASE），因为这是 BCP 47 语言子标签，
+// 会逐字出现在 URL 路径段 /en/ 与 html lang 属性，标准要求小写；故不套用 enum-naming.md。
 export type Locale = "zh" | "en";
 
 const STORAGE_KEY = "lane-locale";
