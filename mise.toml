@@ -58,9 +58,9 @@ dir = "apps/admin"
 run = "pnpm vite build"
 
 [tasks.build-website]
-description = "构建官网静态产物到 apps/website/dist"
+description = "构建官网静态产物到 apps/website/dist（vite-ssg 预渲染 / 与 /en/ 两份 HTML）"
 dir = "apps/website"
-run = "pnpm vite build"
+run = "pnpm vite-ssg build"
 
 [tasks.build-server]
 description = "打包服务端可执行 jar（测试由 test-server 单独承担，镜像构建环境无 Docker 跑不了 Testcontainers）"

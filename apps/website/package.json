@@ -7,7 +7,9 @@
     "@fontsource/fredoka": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/space-grotesk": "5.3.0",
-    "vue": "3.5.41"
+    "@unhead/vue": "2.1.17",
+    "vue": "3.5.41",
+    "vue-router": "5.2.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -19,6 +21,7 @@
     "globals": "17.11.0",
     "typescript": "6.0.3",
     "vite": "8.2.1",
+    "vite-ssg": "28.3.0",
     "vitest": "4.1.10",
     "vue-tsc": "3.3.10"
   }
