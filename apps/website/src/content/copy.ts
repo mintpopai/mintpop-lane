@@ -247,7 +247,7 @@ const zh: Copy = {
       navLabel: "主导航",
       homeLabel: "MintPop Lane 首页",
       langToggle: "中 / EN",
-      langSwitchLabel: "切换到英文",
+      langSwitchLabel: "中 / EN，切换到英文",
     },
     hero: {
       primaryFallback: "前往下载",
@@ -445,7 +445,7 @@ const en: Copy = {
       navLabel: "Main navigation",
       homeLabel: "MintPop Lane home",
       langToggle: "EN / 中",
-      langSwitchLabel: "Switch to Chinese",
+      langSwitchLabel: "EN / 中, switch to Chinese",
     },
     hero: {
       primaryFallback: "Go to downloads",

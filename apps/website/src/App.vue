@@ -22,9 +22,9 @@ useHead({
   title: () => t.value.meta.title,
   link: () => [
     { rel: "canonical", href: SITE + localePath(locale.value) },
-    { rel: "alternate", hreflang: "zh-CN", href: `${SITE}/` },
-    { rel: "alternate", hreflang: "en", href: `${SITE}/en/` },
-    { rel: "alternate", hreflang: "x-default", href: `${SITE}/` },
+    { rel: "alternate", hreflang: "zh-CN", href: SITE + localePath("zh") },
+    { rel: "alternate", hreflang: "en", href: SITE + localePath("en") },
+    { rel: "alternate", hreflang: "x-default", href: SITE + localePath("zh") },
   ],
   meta: () => {
     const { title, description } = t.value.meta;

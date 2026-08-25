@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { localePath, rememberLocale, useI18n } from "../i18n";
 
 const { t, locale } = useI18n();
 const router = useRouter();
+const route = useRoute();
 
-// 语言切换 = 路由跳转（/ ↔ /en/），URL 即语言；同时记住偏好，供回访时 App.vue 自动跳转
+// 语言切换 = 路由跳转（/ ↔ /en/），URL 即语言；同时记住偏好，供回访时 App.vue 自动跳转。
+// 带上当前 hash：否则滚到 FAQ 时点切换会被扔回页顶（B2.2）
 function toggleLocale() {
   const next = locale.value === "zh" ? "en" : "zh";
   rememberLocale(next);
-  router.push(localePath(next));
+  router.push({ path: localePath(next), hash: route.hash });
 }
 
 /** 滚过首屏就给顶栏加边框与更实的底：不滚动时让它彻底融进 Hero 的留白里 */
@@ -33,7 +35,10 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
            浅底 → 深字版词标；瓦片与词标都直接引品牌规范站，不落地到本仓库，规范站换图这边跟着变。
            瓦片 alt 留空：它与紧随其后的词标表达的是同一件事，读屏念两遍反而啰嗦，
            链接本身的 aria-label 已说清这是「MintPop Lane 首页」 -->
-      <a class="brand" href="/" :aria-label="t.ui.header.homeLabel">
+      <!-- 品牌链接跟随当前语言（/ 或 /en/），不硬编码 "/"：否则从搜索引擎直落 /en/ 的
+           英文访客（没有 localStorage 偏好）点一下 logo 就会被整页带回中文站（A2）。
+           用 RouterLink 而非 <a> 还省一次整页刷新。 -->
+      <RouterLink class="brand" :to="localePath(locale)" :aria-label="t.ui.header.homeLabel">
         <img
           class="app-icon"
           src="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png"
@@ -49,7 +54,7 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
           height="29"
         />
         <span class="product">Lane</span>
-      </a>
+      </RouterLink>
 
       <nav class="nav" :aria-label="t.ui.header.navLabel">
         <a v-for="item in t.nav" :key="item.href" :href="item.href">{{ item.label }}</a>
@@ -95,6 +100,11 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   align-items: center;
   gap: 14px;
   text-decoration: none;
+  /* .brand 是 flex 项且内含固定尺寸图片，默认 min-width:auto 会让它无法收缩，
+     是窄屏下整页横向溢出的根因（A1）。加上后最坏情况是品牌锁定组合被裁切，
+     而不是整页出现横向滚动条。 */
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* 应用瓦片自带约 20% 安全区（图形真身比外框小一圈），故取 36px——比 26px 的词标高一档，
@@ -178,6 +188,16 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   }
   .cta {
     margin-left: 12px;
+  }
+}
+
+/* 真实手机视口（iPhone 常见 390px、部分安卓 360px）下，即便 .nav 已隐藏，
+   brand + lang + cta 的最小内容宽仍会顶穿页面（A1）。隐藏 .product（竖线 + "Lane" 文字）
+   省下约 59px；.wordmark（官方词标图）不在此列——是否可在窄屏隐藏属于品牌判断，
+   不在本次修复授权范围内。 */
+@media (max-width: 520px) {
+  .product {
+    display: none;
   }
 }
 </style>

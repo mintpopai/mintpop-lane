@@ -89,7 +89,7 @@ dir = "apps/admin"
 run = "pnpm vitest run"
 
 [tasks.test-website]
-description = "跑官网单元测试（下载逻辑纯函数）"
+description = "跑官网单元测试（下载逻辑纯函数、i18n 路由映射、中英文案结构一致性）"
 dir = "apps/website"
 run = "pnpm vitest run"
 

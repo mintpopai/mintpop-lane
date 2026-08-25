@@ -7,6 +7,7 @@
 !apps/website
 apps/website/node_modules
 apps/website/dist
-# 单元测试不进镜像：产物不含它们，排除后改测试不会让源码层缓存失效（门禁在 CI 里跑）
-apps/website/src/**/*.spec.ts
+# 单元测试不进镜像：产物不含它们，排除后改测试不会让源码层缓存失效（门禁在 CI 里跑）。
+# 本仓库测试文件命名是 *.test.ts（不是 *.spec.ts），排除规则要跟命名对上才生效
+apps/website/src/**/*.test.ts
 **/.git

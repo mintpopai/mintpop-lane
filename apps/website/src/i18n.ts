@@ -22,15 +22,26 @@ export function localePath(l: Locale): string {
 }
 
 /** 只在用户手动切换语言时写入；回访时 App.vue 据此把 / 跳到 /en/。
-    调用方必须保证在浏览器里执行（onMounted 之后），构建期没有 localStorage */
+    调用方必须保证在浏览器里执行（onMounted 之后），构建期没有 localStorage。
+    iOS「阻止所有 Cookie」等隐私模式下访问 localStorage 不是「读不到」而是直接抛
+    SecurityError；这里在 router.push 之前调用，不兜住的话会连语言都切不了，
+    故失败静默忽略——记不住偏好总比切换语言整个失效轻 */
 export function rememberLocale(l: Locale): void {
-  localStorage.setItem(STORAGE_KEY, l);
+  try {
+    localStorage.setItem(STORAGE_KEY, l);
+  } catch {
+    // 忽略：写入失败只是下次回访记不住语言偏好，不影响本次切换
+  }
 }
 
-/** 读回显式选择过的语言；没存过或存着不认识的值都给 null */
+/** 读回显式选择过的语言；没存过、存着不认识的值、或访问本身抛异常（同上）都给 null */
 export function savedLocale(): Locale | null {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  return saved === "zh" || saved === "en" ? saved : null;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved === "zh" || saved === "en" ? saved : null;
+  } catch {
+    return null;
+  }
 }
 
 const LOCALE_KEY: InjectionKey<Ref<Locale>> = Symbol("locale");

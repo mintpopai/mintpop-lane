@@ -20,3 +20,34 @@ jobs:
         run: mise run lint-website
       - name: 运行官网单元测试
         run: mise run test-website
+      - name: 构建官网静态产物（校验预渲染层）
+        run: mise run build-website
+      - name: 校验预渲染产物（locale 串台 / head 重复 / 空壳，均不报错的失败模式）
+        run: |
+          set -euo pipefail
+          DIST=apps/website/dist
+          fail=0
+
+          if ! grep -q "Open it and start coding" "$DIST/en/index.html"; then
+            echo "断言失败：$DIST/en/index.html 未含英文标题 'Open it and start coding'（英文页可能被渲染成中文/空壳）"
+            fail=1
+          fi
+
+          if grep -q "Open it and start coding" "$DIST/index.html"; then
+            echo "断言失败：$DIST/index.html（中文页）含英文标题 'Open it and start coding'（locale 在并发预渲染中串台）"
+            fail=1
+          fi
+
+          zh_title_count=$(grep -o '<title>' "$DIST/index.html" | wc -l | tr -d ' ')
+          if [ "$zh_title_count" != "1" ]; then
+            echo "断言失败：$DIST/index.html 的 <title> 出现 $zh_title_count 次，应为 1 次（head 被重复叠加）"
+            fail=1
+          fi
+
+          en_title_count=$(grep -o '<title>' "$DIST/en/index.html" | wc -l | tr -d ' ')
+          if [ "$en_title_count" != "1" ]; then
+            echo "断言失败：$DIST/en/index.html 的 <title> 出现 $en_title_count 次，应为 1 次（head 被重复叠加）"
+            fail=1
+          fi
+
+          exit $fail

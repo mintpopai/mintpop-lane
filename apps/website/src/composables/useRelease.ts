@@ -11,6 +11,13 @@ import {
 } from "./release";
 
 // 全站共享一次拉取结果（首屏与下载区复用，避免重复请求）
+//
+// release / started / os 是模块级可变状态，目前无害：三者只在 onMounted 里被写，
+// 而 SSR/vite-ssg 预渲染不跑 onMounted，构建期不会触碰它们。但本模块现在运行在
+// vite-ssg 的并发预渲染进程里（i18n.ts 的 locale 之所以做成 provide/inject 而非模块单例，
+// 就是为了躲开这类跨路由状态污染）——哪天有人为了 SEO 把清单拉取挪进 setup 顶层执行，
+// 这里就会立刻变成 / 与 /en/ 两条预渲染路由互相污染下载数据。改动前请留意这条约束，
+// 不要在此基础上把模块级状态的写入点从 onMounted 挪出去。
 const release = ref<DesktopRelease | null>(null);
 let started = false;
 
