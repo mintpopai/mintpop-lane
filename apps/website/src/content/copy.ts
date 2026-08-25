@@ -7,7 +7,7 @@
 // 一条自查：每句话都问「读者看完会想『那跟我有什么关系』吗」，会就删掉重写。
 
 export const nav = [
-  { href: "#lane", label: "专属线路" },
+  { href: "#lane", label: "专属链路" },
   { href: "#terminal", label: "内置终端" },
   { href: "#faq", label: "常见问题" },
 ] as const;
@@ -19,11 +19,11 @@ export const hero = {
   note: "使用需要账号与有效订阅。",
 } as const;
 
-/** 专属线路 */
+/** 专属链路 */
 export const lane = {
-  kicker: "专属线路",
-  title: "专属线路，独立出口",
-  lede: "多个账号共用一个出口，是账号异常最常见的原因。Lane 为每个账号分配独立线路和固定出口，不与他人共用。",
+  kicker: "专属链路",
+  title: "专属链路，独立出口",
+  lede: "多个账号共用一个出口，是账号异常最常见的原因。Lane 为每个账号分配独立链路和固定出口，不与他人共用。",
   points: [
     {
       title: "不用自己配网络",
@@ -34,7 +34,7 @@ export const lane = {
       body: "每次连上都是同一个出口，不会今天一个地址、明天一个地址。地址老跳，本身就容易被当成异常。",
     },
     {
-      title: "线路的事我们管",
+      title: "链路的事我们管",
       body: "调整、维护、续期都在我们这边处理，你这边什么都不用改。",
     },
   ],
@@ -89,7 +89,7 @@ export const terminal = {
   /** 终端 mock 里逐行打出来的内容 */
   lines: [
     { kind: "prompt" as const, text: "claude" },
-    { kind: "dim" as const, text: "线路已就绪 · 额度已接入" },
+    { kind: "dim" as const, text: "链路已就绪 · 额度已接入" },
     { kind: "out" as const, text: "欢迎回来，从哪里开始？" },
     { kind: "cursor" as const, text: "" },
   ],
@@ -110,7 +110,7 @@ export const steps = {
     },
     {
       title: "开写",
-      body: "线路通了、额度接上了，选个目录就能开工。",
+      body: "链路通了、额度接上了，选个目录就能开工。",
     },
   ],
 } as const;
@@ -160,6 +160,6 @@ export const footer = {
   links: [
     { href: "#download", label: "下载" },
     { href: "#faq", label: "常见问题" },
-    { href: "#lane", label: "专属线路" },
+    { href: "#lane", label: "专属链路" },
   ],
 } as const;

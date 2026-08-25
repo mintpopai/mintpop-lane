@@ -14,7 +14,7 @@ import TheFooter from "./sections/TheFooter.vue";
   <TheHeader />
   <main>
     <HeroSection />
-    <!-- 叙事顺序：省了什么事（专属线路）→ 出问题时怎么办 → 怎么用 → 三步 → 下载 → FAQ -->
+    <!-- 叙事顺序：省了什么事（专属链路）→ 出问题时怎么办 → 怎么用 → 三步 → 下载 → FAQ -->
     <LaneSection />
     <VerifySection />
     <TerminalSection />
