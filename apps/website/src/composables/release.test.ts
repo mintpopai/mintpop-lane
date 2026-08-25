@@ -75,8 +75,8 @@ describe("parseDownloads", () => {
 });
 
 describe("formatSize", () => {
-  it("字节数换算成 MB", () => {
-    expect(formatSize(33_554_432)).toBe("约 32 MB");
+  it("字节数换算成 MB，不带语言相关前缀", () => {
+    expect(formatSize(33_554_432)).toBe("32 MB");
   });
 
   it("拿不到有效体积时给 null，调用方不渲染这一段", () => {

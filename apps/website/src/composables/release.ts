@@ -66,10 +66,11 @@ export function parseDownloads(manifest: unknown): DesktopRelease | null {
   };
 }
 
-/** 字节数转成给人看的近似体积；拿不到有效体积时给 null（调用方不渲染这一段） */
+/** 字节数转成给人看的近似体积；拿不到有效体积时给 null（调用方不渲染这一段）。
+    「约 / ~」这类语言相关的前缀不在这里拼，由调用方按当前语言加，见 copy.ts 的 ui.download.sizePrefix */
 export function formatSize(bytes: number): string | null {
   if (!Number.isFinite(bytes) || bytes <= 0) return null;
-  return `约 ${Math.round(bytes / 1024 / 1024)} MB`;
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
 // 移动端必须先排除再判桌面系统：iPhone/iPad 的 UA 都含 "like Mac OS X"，直接判会误发 .dmg。
