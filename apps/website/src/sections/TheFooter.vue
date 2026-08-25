@@ -1,12 +1,7 @@
-<script setup lang="ts">
-import { REPO_URL } from "../composables/useRelease";
-</script>
-
 <template>
   <footer class="footer">
     <div class="container bar">
       <span>© {{ new Date().getFullYear() }} MintPop</span>
-      <a :href="REPO_URL" target="_blank" rel="noopener">GitHub</a>
     </div>
   </footer>
 </template>

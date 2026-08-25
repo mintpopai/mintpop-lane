@@ -1,7 +1,3 @@
-<script setup lang="ts">
-import { REPO_URL } from "../composables/useRelease";
-</script>
-
 <template>
   <header class="header">
     <div class="container bar">
@@ -12,7 +8,6 @@ import { REPO_URL } from "../composables/useRelease";
       <nav class="nav">
         <a href="#features">特性</a>
         <a href="#download">下载</a>
-        <a :href="REPO_URL" target="_blank" rel="noopener">GitHub</a>
       </nav>
     </div>
   </header>

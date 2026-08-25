@@ -2,13 +2,14 @@
 import { computed } from "vue";
 import { useRelease } from "../composables/useRelease";
 
-const { primaryKey, urlFor, releasesLatest } = useRelease();
+const { primaryKey, platformFor } = useRelease();
 
-/** 主按钮按访客系统给平台直链；识别不出系统时兜底到 Releases 页 */
-const primaryHref = computed(() =>
-  primaryKey.value ? urlFor(primaryKey.value) : releasesLatest,
-);
+// 主按钮按访客系统给平台直链。识别不出系统、或清单还没到手/拉取失败时，
+// 兜底到下载区锚点——那里会如实说明当前状态。不再兜底到 GitHub Releases 页（仓库已私有，那页 404）。
+const primary = computed(() => (primaryKey.value ? platformFor(primaryKey.value) : null));
+const primaryHref = computed(() => primary.value?.url ?? "#download");
 const primaryLabel = computed(() => {
+  if (!primary.value) return "前往下载";
   if (primaryKey.value === "MAC_ARM") return "下载 macOS 版";
   if (primaryKey.value === "WINDOWS") return "下载 Windows 版";
   return "前往下载";

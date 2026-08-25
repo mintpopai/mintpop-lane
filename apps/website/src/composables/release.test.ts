@@ -1,53 +1,88 @@
 import { describe, expect, it } from "vitest";
-import { detectOS, pickDesktopRelease, primaryMatchKey, type Release } from "./release";
+import {
+  detectOS,
+  formatSize,
+  parseDownloads,
+  primaryMatchKey,
+  type DownloadsManifest,
+} from "./release";
 
-function release(tag: string, assets: string[], extra: Partial<Release> = {}): Release {
+function manifest(overrides: Partial<DownloadsManifest> = {}): DownloadsManifest {
   return {
-    tag_name: tag,
-    assets: assets.map((name) => ({
-      name,
-      browser_download_url: `https://example.com/${name}`,
-    })),
-    ...extra,
+    version: "0.4.0",
+    pubDate: "2026-08-24T12:00:00Z",
+    platforms: {
+      "darwin-aarch64": {
+        url: "https://dl.mintpop.ai/lane/v0.4.0/MintPop-Lane_0.4.0_aarch64.dmg",
+        size: 33_554_432,
+      },
+      "windows-x86_64": {
+        url: "https://dl.mintpop.ai/lane/v0.4.0/MintPop-Lane_0.4.0_x64-setup.exe",
+        size: 35_651_584,
+      },
+    },
+    ...overrides,
   };
 }
 
-describe("pickDesktopRelease", () => {
-  it("挑列表里第一个正式版并解析各平台直链", () => {
-    const picked = pickDesktopRelease([
-      release("v0.2.0", ["MintPop Lane_0.2.0_aarch64.dmg", "MintPop Lane_0.2.0_x64-setup.exe"]),
-      release("v0.1.0", ["MintPop Lane_0.1.0_aarch64.dmg"]),
-    ]);
-    expect(picked?.version).toBe("0.2.0");
-    expect(picked?.urls.MAC_ARM).toContain("aarch64.dmg");
-    expect(picked?.urls.WINDOWS).toContain("setup.exe");
+describe("parseDownloads", () => {
+  it("按平台键取出各平台直链与体积，不靠文件名后缀猜", () => {
+    const parsed = parseDownloads(manifest());
+
+    expect(parsed?.version).toBe("0.4.0");
+    expect(parsed?.platforms.MAC_ARM?.url).toContain("aarch64.dmg");
+    expect(parsed?.platforms.MAC_ARM?.size).toBe(33_554_432);
+    expect(parsed?.platforms.WINDOWS?.url).toContain("setup.exe");
   });
 
-  it("跳过预发布与草稿", () => {
-    const picked = pickDesktopRelease([
-      release("v0.3.0-beta.1", ["a_aarch64.dmg"], { prerelease: true }),
-      release("v0.2.9", ["b_aarch64.dmg"], { draft: true }),
-      release("v0.2.0", ["c_aarch64.dmg"]),
-    ]);
-    expect(picked?.version).toBe("0.2.0");
+  it("清单里缺某个平台时该平台给 null，另一个不受影响", () => {
+    const parsed = parseDownloads(
+      manifest({
+        platforms: { "windows-x86_64": { url: "https://example.com/a.exe", size: 1 } },
+      }),
+    );
+
+    expect(parsed?.platforms.MAC_ARM).toBeNull();
+    expect(parsed?.platforms.WINDOWS).not.toBeNull();
   });
 
-  it("windows 优先 exe，无 exe 时回退 msi", () => {
-    const picked = pickDesktopRelease([release("v0.1.0", ["app_x64_zh-CN.msi"])]);
-    expect(picked?.urls.WINDOWS).toContain(".msi");
+  it("体积字段缺失或非数字时降级为 0，不影响直链可用", () => {
+    const parsed = parseDownloads(
+      manifest({
+        platforms: { "darwin-aarch64": { url: "https://example.com/a.dmg" } as never },
+      }),
+    );
+
+    expect(parsed?.platforms.MAC_ARM?.url).toBe("https://example.com/a.dmg");
+    expect(parsed?.platforms.MAC_ARM?.size).toBe(0);
   });
 
-  it("该平台没有对应资产时给 null（由调用方兜底到 Releases 页）", () => {
-    const picked = pickDesktopRelease([release("v0.1.0", ["app_x64-setup.exe"])]);
-    expect(picked?.urls.MAC_ARM).toBeNull();
-    expect(picked?.urls.WINDOWS).not.toBeNull();
+  it("清单形状不对时整体给 null，绝不让 undefined 漏进 href", () => {
+    expect(parseDownloads(null)).toBeNull();
+    expect(parseDownloads("nope")).toBeNull();
+    expect(parseDownloads({})).toBeNull();
+    expect(parseDownloads({ version: "", platforms: {} })).toBeNull();
+    expect(parseDownloads({ version: "0.4.0" })).toBeNull();
   });
 
-  it("列表为空或全是预发布时返回 null", () => {
-    expect(pickDesktopRelease([])).toBeNull();
-    expect(
-      pickDesktopRelease([release("v0.1.0-rc.1", ["a.dmg"], { prerelease: true })]),
-    ).toBeNull();
+  it("平台条目缺 url 时按拿不到处理", () => {
+    const parsed = parseDownloads(
+      manifest({ platforms: { "darwin-aarch64": { size: 123 } as never } }),
+    );
+
+    expect(parsed?.platforms.MAC_ARM).toBeNull();
+  });
+});
+
+describe("formatSize", () => {
+  it("字节数换算成 MB", () => {
+    expect(formatSize(33_554_432)).toBe("约 32 MB");
+  });
+
+  it("拿不到有效体积时给 null，调用方不渲染这一段", () => {
+    expect(formatSize(0)).toBeNull();
+    expect(formatSize(-1)).toBeNull();
+    expect(formatSize(Number.NaN)).toBeNull();
   });
 });
 

@@ -1,17 +1,14 @@
 import { computed, onMounted, ref } from "vue";
 import {
   detectOS,
-  pickDesktopRelease,
+  DOWNLOADS_API,
+  parseDownloads,
   primaryMatchKey,
-  RELEASES_API,
-  RELEASES_LATEST,
   type DesktopRelease,
+  type ManifestPlatform,
   type MatchKey,
   type OS,
 } from "./release";
-
-// 给页脚「GitHub」链接等复用（指向仓库主页 / Releases 页）
-export { REPO_URL, RELEASES_LATEST } from "./release";
 
 // 全站共享一次拉取结果（首屏与下载区复用，避免重复请求）
 const release = ref<DesktopRelease | null>(null);
@@ -24,13 +21,14 @@ async function load() {
   if (started) return;
   started = true;
   try {
-    // 同源反代（prod nginx / dev vite proxy）→ GitHub releases 列表，从中挑最新正式版
-    const res = await fetch(RELEASES_API, { headers: { Accept: "application/json" } });
+    // 同源反代（prod nginx / dev vite proxy）→ dl.mintpop.ai 上的分发清单
+    const res = await fetch(DOWNLOADS_API, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    release.value = pickDesktopRelease(Array.isArray(data) ? data : []);
+    release.value = parseDownloads(await res.json());
   } catch {
-    release.value = null; // 失败：不显示版本号 + 下载兜底到 Releases 页，不影响可用性
+    // 失败：不显示版本号、下载按钮转不可用态。页面其余部分不受影响。
+    // 不再兜底到 GitHub Releases 页——仓库已私有，那个页面对访客同样是 404。
+    release.value = null;
   }
 }
 
@@ -41,11 +39,11 @@ export function useRelease() {
   });
   const version = computed(() => release.value?.version ?? null);
 
-  // 拿到正式版则给真实资产直链；否则（加载中 / 失败 / 该平台无产物）回退 Releases 页
-  function urlFor(key: MatchKey): string {
-    return release.value?.urls[key] ?? RELEASES_LATEST;
+  /** 拿到清单则给该平台的直链与体积；否则 null（调用方渲染成不可用态） */
+  function platformFor(key: MatchKey): ManifestPlatform | null {
+    return release.value?.platforms[key] ?? null;
   }
   const primaryKey = computed(() => primaryMatchKey(os.value));
 
-  return { os, version, urlFor, primaryKey, releasesLatest: RELEASES_LATEST };
+  return { os, version, platformFor, primaryKey };
 }

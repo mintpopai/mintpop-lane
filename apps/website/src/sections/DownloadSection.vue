@@ -1,7 +1,15 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { formatSize } from "../composables/release";
 import { useRelease } from "../composables/useRelease";
 
-const { version, urlFor, releasesLatest } = useRelease();
+const { version, platformFor } = useRelease();
+
+const mac = computed(() => platformFor("MAC_ARM"));
+const win = computed(() => platformFor("WINDOWS"));
+// 体积拿不到（清单缺 size 或还没加载）就不渲染这一段，不出「约 0 MB」
+const macSize = computed(() => formatSize(mac.value?.size ?? 0));
+const winSize = computed(() => formatSize(win.value?.size ?? 0));
 </script>
 
 <template>
@@ -12,23 +20,23 @@ const { version, urlFor, releasesLatest } = useRelease();
         <template v-if="version">
           最新版本 <span class="mono">v{{ version }}</span>
         </template>
-        <template v-else>安装包托管在 GitHub Releases</template>
+        <template v-else>正在获取最新版本…</template>
       </p>
       <div class="grid">
-        <a class="platform" :href="urlFor('MAC_ARM')">
+        <a class="platform" :class="{ 'is-unavailable': !mac }" :href="mac?.url">
           <h3>macOS</h3>
           <p>Apple 芯片（M 系列）</p>
-          <span class="file mono">.dmg</span>
+          <span class="file mono">.dmg<template v-if="macSize"> · {{ macSize }}</template></span>
         </a>
-        <a class="platform" :href="urlFor('WINDOWS')">
+        <a class="platform" :class="{ 'is-unavailable': !win }" :href="win?.url">
           <h3>Windows</h3>
           <p>x64 安装器</p>
-          <span class="file mono">.exe</span>
+          <span class="file mono">.exe<template v-if="winSize"> · {{ winSize }}</template></span>
         </a>
       </div>
       <p class="note">
-        使用需要账号与有效订阅。历史版本见
-        <a :href="releasesLatest" target="_blank" rel="noopener">GitHub Releases</a>。
+        <template v-if="mac || win">使用需要账号与有效订阅。</template>
+        <template v-else>下载链接暂时不可用，请稍后重试。</template>
       </p>
     </div>
   </section>
@@ -76,6 +84,20 @@ h2 {
   transform: translateY(1px);
 }
 
+/* 拿不到直链时的不可用态：无 href 的 <a> 本就不可点，这里把它在视觉上也表达清楚 */
+.platform.is-unavailable {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.platform.is-unavailable:hover {
+  border-color: var(--border);
+}
+
+.platform.is-unavailable:active {
+  transform: none;
+}
+
 .platform h3 {
   font-size: 20px;
 }
@@ -97,10 +119,6 @@ h2 {
   margin-top: 24px;
   font-size: 14px;
   color: var(--ink-3);
-}
-
-.note a {
-  color: var(--brand-text);
 }
 
 @media (max-width: 640px) {
