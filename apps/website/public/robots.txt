@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lane.mintpop.ai/sitemap.xml

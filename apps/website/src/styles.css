@@ -1,25 +1,66 @@
-/* 全站设计基线。品牌 token 取自 mintpop-shop 品牌基线（与 apps/admin/src/styles/base.css 同源）。
-   单主题锁定浅色：品牌系是「白底 + 薄荷绿」，官网刻意不做暗色分支。 */
+/* 全站设计基线。
+ *
+ * 视觉方向：「浅色控制台 + 深色终端井」——主体走品牌浅色系（白 / Cloud + Mint 点缀），
+ * 全站只在「打开就能写」一节铺一块深色终端井，让它成为唯一的视觉重音而非装饰。
+ * 这个浅/深对比不是官网自己发明的：桌面端 tokens.css 里就用 --well 把终端工作区
+ * 与浅色 UI 分开，官网直接沿用同一个值，所见即所得。
+ *
+ * 单主题锁定浅色：品牌系是「白底 + 薄荷绿」（Pop Mark 的爆裂短线本就是黑色、专为浅底设计），
+ * 官网刻意不做暗色分支。
+ */
 :root {
-  --brand: #17d1a7;
-  --brand-deep: #0fb389;
+  /* —— 品牌（INVARIANT，不可改）—— */
+  --mint: #17d1a7;
+  --mint-bright: #1fe3ad;
+  --mint-deep: #0fb389;
+
   /* 薄荷绿明度高，白底上直接当文字/按钮底色对比不足（#0fb389 仅 2.7:1）。
      文字与实心按钮一律用压深后的 4.8:1 档，hover 再深一档 */
   --brand-text: #0a8265;
   --brand-strong: #087257;
+
+  /* —— 文本与面 —— */
   --ink: #0b0b0c;
   --ink-2: #4b5563;
   --ink-3: #6b7280;
   --bg: #ffffff;
-  --bg-mint: #eefaf6;
-  --bg-soft: #f6f8f7;
-  --border: #e5e7eb;
-  --radius: 14px;
+  --bg-soft: #f4f8f6;
+  --bg-mint: #edfaf5;
+  --line: #e5e7eb;
+  --line-mint: #cdeee3;
+
+  /* —— 终端井：与桌面端 styles/tokens.css 的 --well / --well-ink 同值 —— */
+  --well: #101614;
+  --well-2: #182220;
+  --well-ink: #d7e0dc;
+  --well-ink-2: #8fa39c;
+  --well-line: rgba(215, 224, 220, 0.12);
+
+  /* —— 状态（配文字使用，不单独靠颜色传达）—— */
+  --ok: #0a7d62;
+  --ok-soft: #e2f8f1;
+  --warn: #92610b;
+  --warn-soft: #fdf2d3;
+  --danger: #b32020;
+  --danger-soft: #fdeaea;
+  --muted-soft: #f1f3f2;
+
+  /* —— 形状与字体 —— */
+  --radius: 16px;
+  --radius-sm: 10px;
   --radius-button: 10px;
-  --font-display: "Fredoka", "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    sans-serif;
-  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-pill: 999px;
+  --maxw: 1120px;
+
+  /* 西文经 Fontsource 自托管（main.ts import），中文挂在其后走系统回退，
+     不自托管中文 webfont（体积以 MB 计）。全站零外链，含中国大陆在内全球可达。 */
+  --font-display: "Fredoka", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", sans-serif;
+  --font-body: "Space Grotesk", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: light;
 }
 
 * {
@@ -28,25 +69,30 @@
 
 html {
   scroll-behavior: smooth;
+  /* sticky 页头高 68px，锚点跳转时留出它的高度 + 一点余量 */
+  scroll-padding-top: 88px;
 }
 
 body {
   margin: 0;
   font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
   color: var(--ink);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
-  line-height: 1.6;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
   font-family: var(--font-display);
-  line-height: 1.2;
+  line-height: 1.18;
   margin: 0;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 p {
@@ -57,27 +103,89 @@ a {
   color: inherit;
 }
 
-/* 版心：全站统一容器 */
+img {
+  max-width: 100%;
+}
+
+/* 键盘可达：所有可聚焦元素给出可见 focus 环 */
+:focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--bg-mint);
+  color: var(--brand-strong);
+}
+
+/* —— 版心 —— */
 .container {
-  max-width: 1080px;
+  width: 100%;
+  max-width: var(--maxw);
   margin: 0 auto;
   padding: 0 24px;
 }
 
-/* 按钮体系：主按钮实心品牌色，次按钮描边；圆角统一走 --radius-button */
+/* —— 章节节奏：三档，打破「每节都一样高」的平铺感 —— */
+.section {
+  padding: 112px 0;
+}
+
+.section-tight {
+  padding: 80px 0;
+}
+
+.section-soft {
+  background: var(--bg-soft);
+}
+
+.section-line {
+  border-top: 1px solid var(--line);
+}
+
+/* —— 章节头 —— */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--brand-text);
+  margin: 0 0 14px;
+}
+
+.section-title {
+  font-size: clamp(28px, 4vw, 42px);
+  max-width: 18em;
+}
+
+.section-lede {
+  margin-top: 16px;
+  max-width: 40em;
+  font-size: 17px;
+  color: var(--ink-2);
+}
+
+/* —— 按钮 —— */
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 12px 22px;
+  padding: 13px 24px;
   border-radius: var(--radius-button);
+  font-family: inherit;
   font-size: 16px;
   font-weight: 600;
   text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
   transition:
     transform 0.15s ease,
     background 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .btn:active {
@@ -94,30 +202,67 @@ a {
 }
 
 .btn-ghost {
-  border: 1px solid var(--border);
+  border-color: var(--line);
   color: var(--ink);
+  background: transparent;
 }
 
 .btn-ghost:hover {
   border-color: var(--ink-3);
 }
 
-.mono {
-  font-family: var(--font-mono);
+.btn-sm {
+  padding: 9px 16px;
+  font-size: 14px;
 }
 
-/* 首屏入场：只动 opacity/transform；用户偏好减少动效时整段关掉 */
+/* 深色井里的按钮：白底反色，在 #101614 上对比度最高 */
+.btn-on-well {
+  background: var(--well-ink);
+  color: var(--well);
+}
+
+.btn-on-well:hover {
+  background: #ffffff;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+/* —— 药丸标签 —— */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-mint);
+  background: var(--bg-mint);
+  color: var(--brand-strong);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* —— 入场动效：只动 opacity/transform；用户偏好减少动效时整段关掉 —— */
 @media (prefers-reduced-motion: no-preference) {
   .rise {
-    animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .rise-late {
-    animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+  .rise-1 {
+    animation-delay: 0.06s;
+  }
+  .rise-2 {
+    animation-delay: 0.12s;
+  }
+  .rise-3 {
+    animation-delay: 0.2s;
   }
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(16px);
+      transform: translateY(18px);
     }
     to {
       opacity: 1;

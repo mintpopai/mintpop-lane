@@ -2,14 +2,59 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>MintPop Lane · 受控 AI 编码终端</title>
     <meta
       name="description"
-      content="MintPop Lane 桌面端：登录即接入专属链路，自动配好订阅内的 Agent 服务，在内置终端直接开始编码。支持 macOS（Apple 芯片）与 Windows。"
+      content="MintPop Lane 是受控的 AI 编码终端：登录即接入专属出网链路并校验出口，订阅内的 Agent 席位自动配好，在内置终端里直接开始写代码。支持 macOS（Apple 芯片）与 Windows。"
     />
+    <link rel="canonical" href="https://lane.mintpop.ai/" />
     <meta name="theme-color" content="#17d1a7" />
-    <title>MintPop Lane · 受控 AI 编码终端</title>
+
+    <!-- 品牌 favicon（Pop Mark 下采样，见 MintPop 品牌规范） -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/brand/favicon/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/favicon/apple-touch-icon.png" />
+
+    <!-- 社交卡片 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="MintPop Lane" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:url" content="https://lane.mintpop.ai/" />
+    <meta property="og:title" content="MintPop Lane · 受控 AI 编码终端" />
+    <meta
+      property="og:description"
+      content="登录即接入专属出网链路并校验出口，订阅内的 Agent 席位自动配好，在内置终端里直接开始写代码。"
+    />
+    <meta property="og:image" content="https://lane.mintpop.ai/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="MintPop Lane：受控 AI 编码终端" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MintPop Lane · 受控 AI 编码终端" />
+    <meta
+      name="twitter:description"
+      content="登录即接入专属出网链路并校验出口，订阅内的 Agent 席位自动配好，在内置终端里直接开始写代码。"
+    />
+    <meta name="twitter:image" content="https://lane.mintpop.ai/og.png" />
+
+    <!-- 结构化数据：让搜索结果知道这是一个可下载的桌面应用 -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "MintPop Lane",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS (Apple silicon), Windows 10/11 x64",
+        "url": "https://lane.mintpop.ai/",
+        "downloadUrl": "https://lane.mintpop.ai/#download",
+        "description": "受控的 AI 编码终端：登录即接入专属出网链路并校验出口，订阅内的 Agent 席位自动配好，在内置终端里直接开始写代码。",
+        "inLanguage": "zh-CN",
+        "author": { "@type": "Organization", "name": "MintPop", "url": "https://mintpop.ai" }
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -41,6 +41,11 @@ description = "以开发模式启动官网"
 dir = "apps/website"
 run = "pnpm vite"
 
+[tasks.preview-website]
+description = "本地预览官网构建产物（先跑 build-website）"
+dir = "apps/website"
+run = "pnpm vite preview"
+
 [tasks.run-server]
 description = "以开发模式启动服务端（配置读 apps/server/config/application.yml）"
 dir = "apps/server"
