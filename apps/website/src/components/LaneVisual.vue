@@ -1,23 +1,23 @@
 <script setup lang="ts">
 /**
  * 首屏的产品窗口示意：一个应用窗口里同时装着「浅色控制台」与「深色终端井」，
- * 这正是桌面端的真实形态——主页是浅色的链路卡 + 新建会话卡，工作区是深色终端。
+ * 这正是桌面端的真实形态：主页是浅色的线路卡 + 新建会话卡，工作区是深色终端。
  *
  * 手写矢量而非截图：随字体自适应、体积极小、改版不用重截，也不会把真实邮箱/分配号带出来。
- * 里面出现的分配号 7K3M9-QX2FT 是示例值（10 位 Crockford Base32 短码的展示形态）。
+ * 里面出现的 7K3M9-QX2FT 是示例分配号，不是真实数据。
  */
 import LanePathGraphic from "./LanePathGraphic.vue";
 </script>
 
 <template>
-  <div class="window" role="img" aria-label="MintPop Lane 应用界面示意：链路已接入，终端中运行 Agent 会话">
+  <div class="window" role="img" aria-label="MintPop Lane 应用界面示意：线路已接通，终端里正在运行 Agent 会话">
     <!-- 窗口顶栏 -->
     <div class="titlebar">
       <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="title">MintPop Lane</span>
       <span class="status">
         <i class="led" aria-hidden="true"></i>
-        已接入专属链路
+        线路已接通
       </span>
     </div>
 
@@ -37,23 +37,23 @@ import LanePathGraphic from "./LanePathGraphic.vue";
       </div>
 
       <div class="main">
-        <!-- 链路卡：与桌面端主页顶上那张卡同构 -->
+        <!-- 线路卡：与桌面端主页顶上那张卡同构 -->
         <div class="card">
           <div class="card-head">
-            <h3>专属链路</h3>
+            <h3>专属线路</h3>
             <span class="chip mono">7K3M9-QX2FT</span>
           </div>
           <LanePathGraphic variant="active" :labels="false" />
           <p class="card-note">
-            <strong>已接入专属链路</strong>
-            <span>出口校验通过，可以启动会话。</span>
+            <strong>线路已接通</strong>
+            <span>出口正常，可以开始了。</span>
           </p>
         </div>
 
         <!-- 终端井 -->
         <div class="well">
           <pre class="screen mono"><span class="sigil">$</span> claude
-<span class="dim">链路已就绪 · 出口校验通过</span>
+<span class="dim">线路已就绪 · 额度已接入</span>
 欢迎回来，从哪里开始？
 <span class="sigil">›</span> <span class="caret" aria-hidden="true"></span></pre>
         </div>

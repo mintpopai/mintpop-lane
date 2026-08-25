@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 链路三节点图：本机 → 专属链路 → 出口。
+ * 线路三节点图：本机 → 专属线路 → 出口。
  *
- * 这不是装饰，是产品机制（两跳 + 出口校验）的如实呈现——桌面端主页顶上那张图就长这样
- * （见 desktop `src/components/LanePath.vue`）。官网版只是放大、加了标注，形状与配色一致：
- * 哪一跳没走通就在哪一跳上标出来，颜色永远配一个字形（✓ / ✕ / !），不靠颜色单独传达状态。
+ * 这不是装饰：桌面端主页顶上那张图就长这样（见 desktop `src/components/LanePath.vue`），
+ * 官网版只是放大、加了标注，形状与配色一致。哪一段没通就在哪一段上标出来，
+ * 颜色永远配一个字形（✓ / ✕ / !），不靠颜色单独传达状态。
  */
 import { computed } from "vue";
 
@@ -28,30 +28,30 @@ const shapes: Record<
   NonNullable<typeof props.variant>,
   { nodes: [Mark, Mark, Mark]; segs: [Seg, Seg]; aria: string }
 > = {
-  active: { nodes: ["ok", "ok", "ok"], segs: ["on", "on"], aria: "链路状态：已接入专属链路" },
+  active: { nodes: ["ok", "ok", "ok"], segs: ["on", "on"], aria: "线路状态：已接通" },
   connecting: {
     nodes: ["ok", "ok", "pending"],
     segs: ["on", "flow"],
-    aria: "链路状态：正在校验出口线路",
+    aria: "线路状态：正在接通",
   },
   unreachable: {
     nodes: ["ok", "fail", "off"],
     segs: ["broken", "off"],
-    aria: "链路状态：链路不通",
+    aria: "线路状态：连不上",
   },
   mismatch: {
     nodes: ["ok", "ok", "warn"],
     segs: ["on", "warn"],
-    aria: "链路状态：出口校验不通过",
+    aria: "线路状态：出口对不上",
   },
-  off: { nodes: ["ok", "off", "off"], segs: ["off", "off"], aria: "链路状态：尚未配置专属链路" },
+  off: { nodes: ["ok", "off", "off"], segs: ["off", "off"], aria: "线路状态：还没分配线路" },
 };
 
 const shape = computed(() => shapes[props.variant]);
 
 const glyph: Record<Mark, string> = { ok: "✓", fail: "✕", warn: "!", pending: "", off: "" };
-const names = ["本机", "专属链路", "出口"] as const;
-const hints = ["你的电脑", "服务端下发", "只属于你"] as const;
+const names = ["本机", "专属线路", "出口"] as const;
+const hints = ["你的电脑", "专门给你的", "只有你在走"] as const;
 </script>
 
 <template>

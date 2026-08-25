@@ -1,21 +1,17 @@
 <script setup lang="ts">
 /**
- * 处境卡：把桌面端某一种链路处境原样搬到页面上。
- *
- * label / detail / tone / 重试按钮措辞都取自桌面端 `src/link.ts` 的 present 表（见 content/copy.ts），
- * 不在这里另编一套说法——展示的就是用户真正会看到的那句话。
- * 色调永远配一个文字标签使用，不靠颜色单独传达状态。
+ * 状态卡：把应用里某一种状态原样摆出来，让人一眼看到「出问题时它是怎么说话的」。
+ * 色调永远配一个文字标签使用，不靠颜色单独传达。
  */
 import type { Tone } from "../content/copy";
 
 defineProps<{
-  code: string;
   label: string;
   detail: string;
   tone: Tone;
-  /** 重试入口的措辞；空串表示该处境没有重试按钮 */
+  /** 重试入口的措辞；空串表示这种状态不需要你做什么 */
   retry: string;
-  /** 一句话讲清「为什么这一格是这个色调」 */
+  /** 一句话讲清「这时候该谁动手」 */
   why: string;
 }>();
 
@@ -23,17 +19,14 @@ defineProps<{
 const toneLabel: Record<Tone, string> = {
   ok: "就绪",
   warn: "已暂停",
-  danger: "故障",
-  muted: "等待中",
+  danger: "要处理",
+  muted: "等一下",
 };
 </script>
 
 <template>
   <article :class="['card', tone]">
-    <header class="head">
-      <span class="badge">{{ toneLabel[tone] }}</span>
-      <code class="code mono">{{ code }}</code>
-    </header>
+    <span class="badge">{{ toneLabel[tone] }}</span>
 
     <h3 class="label">{{ label }}</h3>
     <p class="detail">{{ detail }}</p>
@@ -70,14 +63,9 @@ const toneLabel: Record<Tone, string> = {
   border-left-color: var(--ink-3);
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
 .badge {
+  align-self: flex-start;
+  margin-bottom: 14px;
   padding: 3px 10px;
   border-radius: var(--radius-pill);
   font-size: 12px;
@@ -101,13 +89,6 @@ const toneLabel: Record<Tone, string> = {
   color: var(--ink-2);
 }
 
-.code {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--ink-3);
-  letter-spacing: 0.02em;
-}
-
 .label {
   font-size: 19px;
 }
@@ -123,7 +104,7 @@ const toneLabel: Record<Tone, string> = {
   padding-top: 18px;
 }
 
-/* 重试入口：画成产品里那个按钮的样子，但它只是展示，不可点 */
+/* 重试入口：画成应用里那个按钮的样子，但它只是展示，不可点 */
 .retry {
   display: inline-block;
   padding: 7px 15px;

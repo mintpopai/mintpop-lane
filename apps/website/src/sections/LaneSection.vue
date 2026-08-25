@@ -13,9 +13,7 @@ import { lane } from "../content/copy";
       <div class="diagram">
         <!-- 图本身按内容收缩，这里给一个上限宽度让两段连线拉开，读起来才像一条「路」 -->
         <LanePathGraphic class="graphic" variant="active" size="lg" />
-        <p class="caption">
-          两跳 + 一次出口校验。这张图就是应用主页顶上那张——哪一跳没走通，就在哪一跳上标出来。
-        </p>
+        <p class="caption">应用里能一直看到这条路的样子，哪一段没通，就在哪一段上标出来。</p>
       </div>
 
       <div class="grid">

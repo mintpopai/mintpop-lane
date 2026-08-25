@@ -21,13 +21,13 @@ const lines = terminal.lines;
 </script>
 
 <template>
-  <div class="well" role="img" aria-label="内置终端示意：已接入专属链路，正在运行 Agent 会话">
+  <div class="well" role="img" aria-label="内置终端示意：线路已接通，正在运行 Agent 会话">
     <div v-if="chrome" class="bar">
       <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="bar-title mono">MintPop Lane</span>
       <span class="state">
         <i class="led" aria-hidden="true"></i>
-        已接入
+        线路正常
       </span>
     </div>
 
