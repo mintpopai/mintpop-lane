@@ -3,14 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>MintPop Lane · 打开就能写代码</title>
-    <meta
-      name="description"
-      content="打开就能写代码，别的都替你办好了。代理、密钥、运行环境这些准备工作 MintPop Lane 都替你做完，登录一次挑个目录就能开始。支持 macOS（Apple 芯片）与 Windows。"
-    />
-    <link rel="canonical" href="https://lane.mintpop.ai/" />
     <meta name="theme-color" content="#17d1a7" />
+
+    <!-- 与语言相关的 head（title / description / canonical / hreflang / og / twitter / JSON-LD）
+         全部由 src/App.vue 的 useHead 按语言输出，这里只留与语言无关的静态项。 -->
 
     <!-- 图标与词标都托管在品牌规范站，首屏就要用：提前把连接建好，省掉一次 DNS + TLS 往返 -->
     <link rel="preconnect" href="https://standards.mintpop.ai" />
@@ -26,43 +22,14 @@
     />
     <link rel="apple-touch-icon" href="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png" />
 
-    <!-- 社交卡片 -->
+    <!-- 社交卡片里与语言无关的部分 -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="MintPop Lane" />
-    <meta property="og:locale" content="zh_CN" />
-    <meta property="og:url" content="https://lane.mintpop.ai/" />
-    <meta property="og:title" content="MintPop Lane · 打开就能写代码" />
-    <meta
-      property="og:description"
-      content="代理、密钥、运行环境这些准备工作都替你做完了。登录一次，挑个项目目录，就能开始写代码。"
-    />
     <meta property="og:image" content="https://lane.mintpop.ai/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="MintPop Lane：打开就能写代码" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="MintPop Lane · 打开就能写代码" />
-    <meta
-      name="twitter:description"
-      content="代理、密钥、运行环境这些准备工作都替你做完了。登录一次，挑个项目目录，就能开始写代码。"
-    />
     <meta name="twitter:image" content="https://lane.mintpop.ai/og.png" />
-
-    <!-- 结构化数据：让搜索结果知道这是一个可下载的桌面应用 -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "MintPop Lane",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "macOS (Apple silicon), Windows 10/11 x64",
-        "url": "https://lane.mintpop.ai/",
-        "downloadUrl": "https://lane.mintpop.ai/#download",
-        "description": "开箱即用的 AI 编码终端：代理、密钥、运行环境都替你配好，登录一次挑个项目目录就能开始写代码。",
-        "inLanguage": "zh-CN",
-        "author": { "@type": "Organization", "name": "MintPop", "url": "https://mintpop.ai" }
-      }
-    </script>
   </head>
   <body>
     <div id="app"></div>
