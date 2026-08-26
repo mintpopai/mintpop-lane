@@ -79,6 +79,9 @@ export interface Copy {
   footer: { tagline: string; links: { href: string; label: string }[] };
   /** 原先散在模板与视觉组件里的零碎串，按出现位置分组收在这里 */
   ui: {
+    /** 联系入口：页头与页脚共用同一份。href 逐语言不同（中文站在 /zh/ 下），
+        故连同链接一起放文案里——它本身就是「随语言而变的内容」，不该在两个组件里各写一遍 */
+    contact: { href: string; label: string; ariaLabel: string };
     header: {
       cta: string;
       navLabel: string;
@@ -309,6 +312,11 @@ const zh: Copy = {
     ],
   },
   ui: {
+    contact: {
+      href: "https://mintpop.ai/zh/contact",
+      label: "联系我们",
+      ariaLabel: "联系我们（在新标签页打开）",
+    },
     header: {
       cta: "下载",
       navLabel: "主导航",
@@ -557,6 +565,11 @@ const en: Copy = {
     ],
   },
   ui: {
+    contact: {
+      href: "https://mintpop.ai/contact",
+      label: "Contact us",
+      ariaLabel: "Contact us (opens in a new tab)",
+    },
     header: {
       cta: "Download",
       navLabel: "Main navigation",

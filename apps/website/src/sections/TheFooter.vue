@@ -22,6 +22,16 @@ const year = new Date().getFullYear();
 
       <nav class="links" :aria-label="t.ui.footer.navLabel">
         <a v-for="l in t.footer.links" :key="l.href" :href="l.href">{{ l.label }}</a>
+        <!-- 跨站到 MintPop 主站，和页内锚点不是一回事，故单列在 v-for 之外，
+             并与页头同一份 t.ui.contact（同一个链接不写两遍）。
+             ≤1040px 顶栏会把联系按钮收起（见 TheHeader.vue 的断点注释），那时这里就是唯一的联系入口。 -->
+        <a
+          :href="t.ui.contact.href"
+          target="_blank"
+          rel="noopener noreferrer"
+          :aria-label="t.ui.contact.ariaLabel"
+          >{{ t.ui.contact.label }}</a
+        >
       </nav>
     </div>
 
@@ -63,9 +73,13 @@ const year = new Date().getFullYear();
   color: var(--mint-bright);
 }
 
+/* 加到 4 项后这一行的最小需求宽是 中文 274px / 英文 345px，而 320px 窄机上版心只有 272px、
+   390px 的 iPhone 也只有 342px——不换行就会整页横向溢出（页头 A1 是同一类问题）。
+   故允许折行，并给一档行间距，免得折下来的那行贴上去。 */
 .links {
   display: flex;
-  gap: 26px;
+  flex-wrap: wrap;
+  gap: 14px 26px;
 }
 
 .links a {

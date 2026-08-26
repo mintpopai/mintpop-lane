@@ -66,6 +66,19 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
         {{ t.ui.header.langToggle }}
       </button>
 
+      <!-- 联系页在 MintPop 主站（mintpop.ai）上，与官网不同域，故用普通 <a> 而非 RouterLink。
+           新标签页打开：看完联系方式回来，官网这一页还在原处（含滚动位置）。
+           样式取描边次级按钮——它是并列入口，不该与实心的下载 CTA 抢注意力。
+           aria-label 里说明「在新标签页打开」，读屏用户不至于被突然的新窗口打断。 -->
+      <a
+        class="btn btn-ghost btn-sm contact"
+        :href="t.ui.contact.href"
+        target="_blank"
+        rel="noopener noreferrer"
+        :aria-label="t.ui.contact.ariaLabel"
+        >{{ t.ui.contact.label }}</a
+      >
+
       <a class="btn btn-primary btn-sm cta" href="#download">{{ t.ui.header.cta }}</a>
     </div>
   </header>
@@ -175,13 +188,27 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   border-color: var(--ink-3);
 }
 
+.contact,
 .cta {
   flex: none;
 }
 
-/* 导航加到 4 项后，整行的最小需求宽变成：中文 800px / 英文 888px（英文项名更宽，
+/* 顶栏按「谁最先让路」分两档收：先收联系按钮，再收导航。
+   联系入口在页脚也有一份，导航项则只此一处，故联系先让路。
+
+   第一档：加上联系按钮后，整行最小需求宽实测为 中文 922px / 英文 999px
+   （英文 "Contact us" 连按钮 108px，比「联系我们」宽 18px，加上 20px 间距共 128px）。
+   卡在 1000px 只剩 1px 余量，字体渲染差个几像素就撑破，故取 1040px 留 41px 余量。 */
+@media (max-width: 1040px) {
+  .contact {
+    display: none;
+  }
+}
+
+/* 第二档：导航加到 4 项后，整行的最小需求宽是 中文 800px / 英文 888px（英文项名更宽，
    "Built-in terminal" 一项就 116px）。原来的 860px 断点只够 3 项，英文页在 861–941px
-   之间会把顶栏撑破，故抬到 920px——英文页 888px 也留得下 33px 余量。 */
+   之间会把顶栏撑破，故抬到 920px——英文页 888px 也留得下 33px 余量。
+   此档联系按钮早已在上一档收起，这里不必再管它。 */
 @media (max-width: 920px) {
   .nav {
     display: none;

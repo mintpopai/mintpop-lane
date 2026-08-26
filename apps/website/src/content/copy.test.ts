@@ -54,3 +54,13 @@ describe("COPY 中英结构一致性", () => {
     expect(errors).toEqual([]);
   });
 });
+
+// 联系入口是跨站到 MintPop 主站的硬编码绝对地址，两条路径只差一个 /zh 段，
+// 上面那条结构测试对「值」是不看的——两边写成同一个 URL 也照样通过。
+// 这里把两条地址钉住：写反了会把中文访客送到英文联系页（反之亦然）。
+describe("联系入口按语言分流", () => {
+  it("中文站去 /zh/contact，英文站去 /contact", () => {
+    expect(COPY.zh.ui.contact.href).toBe("https://mintpop.ai/zh/contact");
+    expect(COPY.en.ui.contact.href).toBe("https://mintpop.ai/contact");
+  });
+});
