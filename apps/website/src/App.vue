@@ -28,15 +28,26 @@ useHead({
   ],
   meta: () => {
     const { title, description } = t.value.meta;
+    // 社交卡片图按语言分两张：og.png 是中文排版，og-en.png 是英文排版。
+    // 这三项原先当「与语言无关」写死在 index.html 里，结果英文页分享出去是中文大图配英文标题，
+    // 图文对不上——而它恰好是英文访客对产品的第一印象。图是二进制资源，
+    // 「英文页不该有中文」那条验收只扫得到 HTML 文本，扫不到它，故当时无声漏了过去。
+    const ogImage = `${SITE}/${locale.value === "zh" ? "og.png" : "og-en.png"}`;
     return [
       { name: "description", content: description },
       { property: "og:title", content: title },
       { property: "og:description", content: description },
       { property: "og:url", content: SITE + localePath(locale.value) },
       { property: "og:locale", content: locale.value === "zh" ? "zh_CN" : "en_US" },
+      // 让社交平台知道另一语言版存在
+      { property: "og:locale:alternate", content: locale.value === "zh" ? "en_US" : "zh_CN" },
+      { property: "og:image", content: ogImage },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
       { property: "og:image:alt", content: title },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
+      { name: "twitter:image", content: ogImage },
     ];
   },
   // 结构化数据也按语言输出：原先静态放 index.html，英文页会带中文 name/description 与 inLanguage

@@ -22,14 +22,12 @@
     />
     <link rel="apple-touch-icon" href="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png" />
 
-    <!-- 社交卡片里与语言无关的部分 -->
+    <!-- 社交卡片里与语言无关的部分。
+         og:image / twitter:image 不在此列——两种语言各有一张排版好的卡片图，
+         已挪进 src/App.vue 的 useHead 按语言输出。 -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="MintPop Lane" />
-    <meta property="og:image" content="https://lane.mintpop.ai/og.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://lane.mintpop.ai/og.png" />
   </head>
   <body>
     <div id="app"></div>

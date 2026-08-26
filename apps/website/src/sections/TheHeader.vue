@@ -192,12 +192,29 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
 }
 
 /* 真实手机视口（iPhone 常见 390px、部分安卓 360px）下，即便 .nav 已隐藏，
-   brand + lang + cta 的最小内容宽仍会顶穿页面（A1）。隐藏 .product（竖线 + "Lane" 文字）
-   省下约 59px；.wordmark（官方词标图）不在此列——是否可在窄屏隐藏属于品牌判断，
-   不在本次修复授权范围内。 */
+   brand + lang + cta 的最小内容宽仍会顶穿页面。先隐藏 .product（竖线 + "Lane" 文字）省下约 59px。 */
 @media (max-width: 520px) {
   .product {
     display: none;
+  }
+}
+
+/* 再窄就连「瓦片 + 词标」这个完整锁定组合都放不下了。实测宽度：瓦片 36 + 间距 14 + 词标 95 = 145px，
+   加上容器留白 48、两处 20 的间距、切换按钮 62、下载按钮左边距 12 与按钮本身，
+   完整组合需要 中文页 369px / 英文页 408px（英文的 "Download" 比「下载」宽 39px，所以英文先撑不住）。
+   .brand 的 overflow: hidden 只保证页面不横向滚动，代价是**词标被拦腰切断**——
+   实测 390px 英文页会渲染成半截的 "mintpo"，这比不显示词标更伤品牌。
+   故在 430px 以下只保留应用瓦片（它同样是品牌规范站上的官方素材，不是用文字排 logo），
+   此时英文页只需 299px，320px 的窄机也放得下。链接的 aria-label 仍说明这是首页入口，读屏不受影响。 */
+@media (max-width: 430px) {
+  .wordmark {
+    display: none;
+  }
+  /* 那 -6px 只为拉近瓦片与词标的实际间距而存在；词标一隐藏它就没了意义，
+     反而会把 .brand 的内容宽压到 30px，被 overflow: hidden 切掉瓦片右缘 6px（圆角与网点缺一块）。
+     这里归零，让瓦片完整显示。 */
+  .app-icon {
+    margin-right: 0;
   }
 }
 </style>
