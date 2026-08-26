@@ -7,7 +7,7 @@ const auth = useAuthStore();
 <template>
   <div class="gate">
     <div class="gate-box">
-      <p class="gate-brand"><span class="wordmark">MintPop</span> Lane 管控后台</p>
+      <p class="gate-brand"><span class="wordmark">MintPop</span> Lane 管理后台</p>
       <h1 class="gate-title">这个账号没有后台权限</h1>
       <p class="gate-text">
         你已经登录成功，但这个账号不是管理员，因此看不到任何数据。

@@ -72,7 +72,7 @@ body {
   z-index: 20;
 }
 
-/* 词标与副题上下两行：「Lane 管控后台」比 shop 的「管理后台」长，
+/* 词标与副题上下两行：「Lane 管理后台」比 shop 的「管理后台」多一截 Lane 前缀，
    横排在 208px 轨道里会折行折在词中间 */
 .rail-brand {
   display: flex;

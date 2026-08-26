@@ -7,7 +7,7 @@ const auth = useAuthStore();
 <template>
   <div class="gate">
     <div class="gate-box">
-      <p class="gate-brand"><span class="wordmark">MintPop</span> Lane 管控后台</p>
+      <p class="gate-brand"><span class="wordmark">MintPop</span> Lane 管理后台</p>
       <h1 class="gate-title">请先登录</h1>
       <p class="gate-text">
         后台的所有页面都需要管理员身份才能访问。点击下方按钮前往统一登录（Logto）完成认证，

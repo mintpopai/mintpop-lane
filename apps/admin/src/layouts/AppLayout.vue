@@ -10,10 +10,10 @@ const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
 </script>
 
 <template>
-  <nav class="admin-rail" aria-label="管控后台">
+  <nav class="admin-rail" aria-label="管理后台">
     <p class="rail-brand">
       <span class="wordmark rail-wordmark">MintPop</span>
-      <span class="rail-kind">Lane 管控后台</span>
+      <span class="rail-kind">Lane 管理后台</span>
     </p>
 
     <div class="rail-nav">
