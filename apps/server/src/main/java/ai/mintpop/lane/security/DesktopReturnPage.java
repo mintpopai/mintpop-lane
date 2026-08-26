@@ -33,6 +33,27 @@ public class DesktopReturnPage {
      */
     static final String APP_ICON = "https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png";
 
+    /**
+     * 自动跳深链前要让出的时间。看着像多余，其实是标签页图标能不能出来的唯一原因：
+     * Chrome 是在文档 load 完成之后才把 &lt;link rel="icon"&gt; 排进下载队列的，
+     * 而跳自定义 scheme 会把这一帧置为「导航中」，把那一步整个掐掉——
+     * 实测（同一张图给 favicon 与页面 &lt;img&gt; 各挂一个查询参数以区分）：
+     * 解析期同步跳、load 里同步跳、load 里 setTimeout 0 跳，favicon 请求都根本不会发出，
+     * 只有页面内的 &lt;img&gt; 正常加载，于是标签页只剩浏览器默认的空白文档图标。
+     * 跨过一帧（约 32ms）即可，这里取 150ms 留足余量，对回跳仍是无感的。
+     * <p>
+     * 用 setTimeout 而不是 requestAnimationFrame：后台标签页里 rAF 会停摆，
+     * 用户在这几十毫秒内切走就再也跳不回应用了；setTimeout 被节流但一定会执行。
+     */
+    private static final int REDIRECT_DELAY_MS = 150;
+
+    /**
+     * 自动跳转的兜底上限，从页面开始解析起算。等 load 是有代价的：它要等那张 65KB 的
+     * 图标下载完，图标域名要是卡住，回跳就跟着一起卡——而回跳是这一页的正事，图标只是锦上添花。
+     * 到点无论 load 来没来都跳，把「图标拿不到」的坏情况限制在这一页自己身上。
+     */
+    private static final int REDIRECT_DEADLINE_MS = 1200;
+
     /** 落地页的两种落点：文案与视觉随之切换，深链参数由调用方拼好传进来 */
     private enum Outcome {
         // 两句写得差不多长：卡片里正好排成两行，配上 text-wrap: balance 断点落在句号后，
@@ -101,12 +122,18 @@ public class DesktopReturnPage {
                 <a class="btn" id="open" href="%s">打开 MintPop Lane</a>
                 <p class="foot">回到应用后，这个页面就可以关掉了。</p>
                 </main>
-                <script>location.href = document.getElementById("open").getAttribute("href");</script>
+                <script>
+                var go = function () { if (go.done) { return; } go.done = 1;
+                location.href = document.getElementById("open").getAttribute("href"); };
+                addEventListener("load", function () { setTimeout(go, %d); });
+                setTimeout(go, %d);
+                </script>
                 </body>
                 </html>
                 """.formatted(
                 escapeHtml(outcome.heading), APP_ICON, APP_ICON, STYLE, outcome.bodyClass,
-                APP_ICON, escapeHtml(outcome.heading), escapeHtml(outcome.hint), escapeHtml(deepLink)));
+                APP_ICON, escapeHtml(outcome.heading), escapeHtml(outcome.hint), escapeHtml(deepLink),
+                REDIRECT_DELAY_MS, REDIRECT_DEADLINE_MS));
     }
 
     /**

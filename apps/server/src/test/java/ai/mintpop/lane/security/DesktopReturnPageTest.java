@@ -51,6 +51,29 @@ class DesktopReturnPageTest {
         assertThat(failure.getContentAsString()).contains(iconLink);
     }
 
+    /**
+     * 光有 &lt;link rel="icon"&gt; 不够：Chrome 是在文档 load 之后才去取标签页图标的，
+     * 跳自定义 scheme 会把那一步整个掐掉。跳转必须等到 load 之后、且再让出至少一帧，
+     * 否则 favicon 请求根本不会发出，标签页只剩浏览器默认的空白文档图标。
+     */
+    @Test
+    @DisplayName("自动跳转等到 load 之后再延时触发，给浏览器留出取标签页图标的时机")
+    void autoRedirectDeferredSoFaviconCanLoad() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        page.renderSuccess(response, "t-abc", "st-1");
+
+        String html = response.getContentAsString();
+        // 不能在解析期同步跳：那样 favicon 一定拿不到
+        assertThat(html).doesNotContain("<script>location.href");
+        // load 之后还要再让出一帧以上；setTimeout 0 实测同样取不到图标
+        assertThat(html).contains("addEventListener(\"load\", function () { setTimeout(go, 150); });");
+        // 等 load 有代价（要等图标下载完），到点无论如何都跳，别让图标域名卡住回跳
+        assertThat(html).contains("setTimeout(go, 1200);");
+        // 两条路径都可能到，跳转必须只发生一次，否则会弹两次「打开应用」
+        assertThat(html).contains("if (go.done) { return; } go.done = 1;");
+    }
+
     @Test
     @DisplayName("失败页：深链带 error=login_failed 与 state")
     void failurePageDeepLinkCarriesErrorFlag() throws Exception {
