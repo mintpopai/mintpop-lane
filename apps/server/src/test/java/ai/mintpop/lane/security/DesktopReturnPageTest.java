@@ -36,6 +36,22 @@ class DesktopReturnPageTest {
     }
 
     @Test
+    @DisplayName("两态都带浏览器图标，且与官网引的是同一张 Lane 应用瓦片")
+    void bothPagesLinkTheSameFaviconAsWebsite() throws Exception {
+        MockHttpServletResponse success = new MockHttpServletResponse();
+        MockHttpServletResponse failure = new MockHttpServletResponse();
+
+        page.renderSuccess(success, "t-abc", "st-1");
+        page.renderFailure(failure, "st-2");
+
+        // 与 apps/website/index.html 的 <link rel="icon"> 逐字同一个地址：官网换图这边跟着变
+        String iconLink = "<link rel=\"icon\" type=\"image/png\" sizes=\"512x512\" href=\""
+                + DesktopReturnPage.APP_ICON + "\">";
+        assertThat(success.getContentAsString()).contains(iconLink);
+        assertThat(failure.getContentAsString()).contains(iconLink);
+    }
+
+    @Test
     @DisplayName("失败页：深链带 error=login_failed 与 state")
     void failurePageDeepLinkCarriesErrorFlag() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
