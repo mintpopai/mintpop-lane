@@ -21,7 +21,27 @@ export interface Copy {
   /** <title> 与 meta description/og，由 App.vue 的 useHead 按语言输出 */
   meta: { title: string; description: string };
   nav: { href: string; label: string }[];
-  hero: { pill: string; title: [string, string]; lede: string; note: string };
+  /** lede 拆两句：断句是语义的（第一句讲环境已配好，第二句讲官方与留存），中英各自控行 */
+  hero: { pill: string; title: [string, string]; lede: [string, string]; note: string };
+  pricing: {
+    kicker: string;
+    title: string;
+    lede: string;
+    /** 两档席位，顺序即展示顺序；第二档是主推档，视觉上更重 */
+    plans: {
+      name: string;
+      badge: string;
+      price: string;
+      /** 划掉的原价 */
+      was: string;
+      quotaLabel: string;
+      quota: string;
+      fit: string;
+    }[];
+    guarantee: { title: string; body: string };
+    /** 两档席位共同的保障：术语 + 说明，排成 dl */
+    assurances: { term: string; body: string }[];
+  };
   lane: { kicker: string; title: string; lede: string; points: { title: string; body: string }[] };
   verify: {
     kicker: string;
@@ -108,15 +128,62 @@ const zh: Copy = {
       "打开就能写代码，别的都替你办好了。代理、密钥、运行环境这些准备工作 MintPop Lane 都替你做完，登录一次挑个目录就能开始。支持 macOS（Apple 芯片）与 Windows。",
   },
   nav: [
+    { href: "#pricing", label: "席位与价格" },
     { href: "#lane", label: "专属链路" },
     { href: "#terminal", label: "内置终端" },
     { href: "#faq", label: "常见问题" },
   ],
   hero: {
-    pill: "支持 macOS 与 Windows",
-    title: ["打开就能写代码，", "别的都替你办好了。"],
-    lede: "用 AI 编码工具之前，代理、密钥、运行环境总得先折腾一遍。这些 Lane 都替你做完了，登录一次，挑个项目目录，就能开始。",
+    pill: "一站式官方 Claude 接入软件",
+    title: ["想用真正的官方 Claude，却不想折腾账号、支付、环境…… 🤯", "MintPop 帮你全部搞定！"],
+    lede: [
+      "所有环境已提前配置完成：IP 接入、时区设置、网络环境、依赖与权限全部到位。",
+      "全程 100% 官方 Claude Code，用量可实时查询，对话内容零留存。",
+    ],
     note: "使用需要账号与有效订阅。",
+  },
+  pricing: {
+    kicker: "席位与价格",
+    title: "两种席位，按用量挑",
+    lede: "两种席位用的都是同一套官方 Claude Code 与自营美国出口，区别只在用量规格。",
+    plans: [
+      {
+        name: "Standard",
+        badge: "限时折扣",
+        price: "$40",
+        was: "$50",
+        quotaLabel: "用量规格",
+        quota: "1.25 倍 PRO",
+        fit: "适用于单项目、常规频率的日常开发。",
+      },
+      {
+        name: "Premium",
+        badge: "限时折扣",
+        price: "$160",
+        was: "$200",
+        quotaLabel: "用量规格",
+        quota: "6.25 倍 PRO ≈ 1.25 倍 Max 5x",
+        fit: "适用于高频调用、多项目并行的重度使用。",
+      },
+    ],
+    guarantee: {
+      title: "售后承诺",
+      body: "如发生封号，经内部调查并走官方申诉流程后：按未使用天数比例退还剩余费用（需扣除 30 美元云服务器、IP 使用及备案等必要杂项成本）。",
+    },
+    assurances: [
+      {
+        term: "自营出口",
+        body: "自有美国公司自营 IP，非第三方转租、非共享池，稳定、干净、可追溯。海外账号与信用卡由我司代为注册和支付。",
+      },
+      {
+        term: "官方可验证",
+        body: "100% 官方 Claude Code，非镜像、非逆向、非第三方接口；可同步官方后台用量，模型版本、功能权限、限流策略与官方完全一致。",
+      },
+      {
+        term: "零信息保留",
+        body: "不对任何对话内容、使用记录做存储或留存，用完即走。",
+      },
+    ],
   },
   lane: {
     kicker: "专属链路",
@@ -299,15 +366,65 @@ const en: Copy = {
       "Open it and start coding — everything else is already handled. MintPop Lane sets up the network, the keys, and the runtime for you. Sign in once, pick a folder, and go. macOS (Apple silicon) and Windows.",
   },
   nav: [
+    { href: "#pricing", label: "Pricing" },
     { href: "#lane", label: "Dedicated lane" },
     { href: "#terminal", label: "Built-in terminal" },
     { href: "#faq", label: "FAQ" },
   ],
   hero: {
-    pill: "macOS and Windows",
-    title: ["Open it and start coding.", "Everything else is handled."],
-    lede: "Before you can use an AI coding tool, there is always a round of setup: the network, the keys, the runtime. Lane has done all of it. Sign in once, pick a project folder, and you are writing code.",
+    pill: "Official Claude, set up end to end",
+    title: [
+      "Want the real official Claude, without wrangling accounts, payments, and environments… 🤯",
+      "MintPop handles all of it!",
+    ],
+    lede: [
+      "Every piece of the environment is configured ahead of time: IP access, time zone, network, dependencies, permissions.",
+      "100% official Claude Code the whole way — check your usage any time, and nothing you type is kept.",
+    ],
     note: "An account and an active subscription are required.",
+  },
+  pricing: {
+    kicker: "Plans & pricing",
+    title: "Two seats — pick by usage",
+    lede: "Both seats run the same official Claude Code over the same US egress we operate ourselves. The only difference is how much usage you get.",
+    plans: [
+      {
+        name: "Standard",
+        badge: "Limited-time",
+        price: "$40",
+        was: "$50",
+        quotaLabel: "Usage tier",
+        quota: "1.25× Pro",
+        fit: "For day-to-day work on a single project at a normal pace.",
+      },
+      {
+        name: "Premium",
+        badge: "Limited-time",
+        price: "$160",
+        was: "$200",
+        quotaLabel: "Usage tier",
+        quota: "6.25× Pro ≈ 1.25× Max 5x",
+        fit: "For heavy use: high call volume, several projects in parallel.",
+      },
+    ],
+    guarantee: {
+      title: "Our guarantee",
+      body: "If your account is banned, we investigate internally and file an official appeal; afterwards we refund the unused portion pro rata by day, less $30 for unavoidable costs (cloud server, IP usage, and registration fees).",
+    },
+    assurances: [
+      {
+        term: "Our own egress",
+        body: "IPs operated by our own US company — not resold from a third party, not a shared pool. Stable, clean, traceable. We register the overseas account and cover the card payment for you.",
+      },
+      {
+        term: "Verifiably official",
+        body: "100% official Claude Code — not a mirror, not reverse-engineered, not a third-party endpoint. Usage syncs with the official console, and model versions, feature access, and rate limits match official exactly.",
+      },
+      {
+        term: "Nothing retained",
+        body: "We store and retain nothing — no conversation content, no usage records. Use it and go.",
+      },
+    ],
   },
   lane: {
     kicker: "Dedicated lane",

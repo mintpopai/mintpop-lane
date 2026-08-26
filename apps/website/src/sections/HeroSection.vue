@@ -33,7 +33,10 @@ const primaryLabel = computed(() => {
           <span class="accent">{{ t.hero.title[1] }}</span>
         </h1>
 
-        <p class="lede rise rise-2">{{ t.hero.lede }}</p>
+        <p class="lede rise rise-2">
+          {{ t.hero.lede[0] }}<br />
+          {{ t.hero.lede[1] }}
+        </p>
 
         <div class="cta rise rise-3">
           <a class="btn btn-primary" :href="primaryHref">{{ primaryLabel }}</a>
@@ -79,7 +82,7 @@ const primaryLabel = computed(() => {
 
 h1 {
   margin-top: 22px;
-  font-size: clamp(40px, 6.4vw, 68px);
+  font-size: clamp(34px, 5.2vw, 56px);
   letter-spacing: -0.025em;
 }
 
@@ -89,7 +92,6 @@ h1 {
 
 .lede {
   margin-top: 24px;
-  max-width: 36em;
   font-size: 18px;
   color: var(--ink-2);
 }

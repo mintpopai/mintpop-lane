@@ -179,7 +179,10 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
   flex: none;
 }
 
-@media (max-width: 860px) {
+/* 导航加到 4 项后，整行的最小需求宽变成：中文 800px / 英文 888px（英文项名更宽，
+   "Built-in terminal" 一项就 116px）。原来的 860px 断点只够 3 项，英文页在 861–941px
+   之间会把顶栏撑破，故抬到 920px——英文页 888px 也留得下 33px 余量。 */
+@media (max-width: 920px) {
   .nav {
     display: none;
   }
