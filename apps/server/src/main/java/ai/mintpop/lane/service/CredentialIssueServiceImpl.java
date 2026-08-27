@@ -14,6 +14,7 @@ import ai.mintpop.lane.repository.OAuthSessionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,7 @@ import java.time.Instant;
  * 席位凭证签发编排：管理员发起签发 → 生成授权链接 → 管理员在浏览器授权后
  * 把 code 贴回 → 服务端经该席位的落地出口兑换凭证并加密落库。
  */
+@Slf4j
 @Service
 public class CredentialIssueServiceImpl implements CredentialIssueService {
 
@@ -125,6 +127,11 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
         int hash = code.indexOf('#');
         String authCode = hash < 0 ? code : code.substring(0, hash);
         String codeState = hash < 0 ? session.getState() : code.substring(hash + 1);
+        // 管理员可能把 A 席位授权页贴回的 code 粘进 B 席位的表单；PKCE 已挡住可利用的攻击变体
+        // （伪造 code 配不上本会话的 verifier），这里校验 state 只为把「粘错窗口」变成明确报错
+        if (!codeState.equals(session.getState())) {
+            throw new BizException(BizCodeEnum.OAUTH_SESSION_INVALID);
+        }
 
         long requested = lifetimeCalculator.secondsFor(subscription.getEndsAt());
         ClaudeOAuthClient.TokenResult result = oauthClient.exchange(land,
@@ -152,9 +159,13 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
      */
     static void validateTokenResult(ClaudeOAuthClient.TokenResult result, long requestedSeconds) {
         if (!result.scope().contains("user:profile")) {
+            log.warn("上游签发的凭证 scope 不足，成为孤儿凭证（不落库不吊销）：tokenUuid={} scope={} expiresIn={}",
+                    result.tokenUuid(), result.scope(), result.expiresIn());
             throw new BizException(BizCodeEnum.CREDENTIAL_SCOPE_INSUFFICIENT);
         }
         if (result.expiresIn() < requestedSeconds * LIFETIME_TOLERANCE) {
+            log.warn("上游签发的凭证有效期被截断，成为孤儿凭证（不落库不吊销）：tokenUuid={} scope={} expiresIn={}",
+                    result.tokenUuid(), result.scope(), result.expiresIn());
             throw new BizException(BizCodeEnum.CREDENTIAL_LIFETIME_TRUNCATED);
         }
     }

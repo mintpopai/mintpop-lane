@@ -9,7 +9,7 @@ ALTER TABLE subscription
     ADD COLUMN credential_token_uuid VARCHAR(64) NULL COMMENT 'Anthropic 侧的 token 唯一标识，供审计与排障',
     ADD COLUMN credential_issued_at TIMESTAMP NULL COMMENT '凭证签发时刻',
     ADD COLUMN credential_expires_at TIMESTAMP NULL COMMENT '凭证到期时刻；应与订阅止期保持同步',
-    ADD COLUMN credential_refresh_cipher VARCHAR(500) NULL COMMENT 'refresh_token 密文；第一版不使用，仅作吊销后备与自动续期预留';
+    ADD COLUMN credential_refresh_cipher TEXT NULL COMMENT 'refresh_token 密文；第一版不使用，仅作吊销后备与自动续期预留（与 credential_cipher 同用 TEXT，密文长度取决于 token 长度，VARCHAR 定长会顶到上限报错）';
 
 -- 授权会话：管理员在浏览器授权与把 code 贴回后台是两次请求，
 -- PKCE 的 code_verifier 必须跨请求留存。不放内存是因为服务端可能多副本，

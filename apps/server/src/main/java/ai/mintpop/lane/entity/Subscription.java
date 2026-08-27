@@ -60,6 +60,7 @@ public class Subscription {
     private String accountEmail;
 
     /** 席位凭据的密文 */
+    @ToString.Exclude
     private String credentialCipher;
 
     /** 服务端实际授予的 scope，空格分隔；为空表示旧式凭证 */

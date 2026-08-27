@@ -7,7 +7,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-/** 订阅的读写口。返回的一律是明文 DTO，密文与 MyBatis-Plus 都被挡在实现之下。 */
+/**
+ * 订阅的读写口。常规读写（find / create / update）一律是明文 DTO，密文与 MyBatis-Plus
+ * 都被挡在实现之下；但 {@link #updateCredential} / {@link #clearCredentialMetadata}
+ * 是写路径上有意为之的例外——它们直接收/清凭证密文，由调用方（CredentialIssueServiceImpl）
+ * 自行完成加密，不经由本仓储做明文转换。
+ */
 public interface SubscriptionRepository {
 
     Optional<SubscriptionDto> findById(Long id);
