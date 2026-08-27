@@ -29,6 +29,8 @@ public record LinkConfigResponse(
             String name,
             AgentType agentType,
             String credential,
+            /** 该凭证的 scope，空格分隔；空串表示旧式凭证，客户端不注入 scope 变量 */
+            String credentialScope,
             Instant endsAt
     ) {
     }

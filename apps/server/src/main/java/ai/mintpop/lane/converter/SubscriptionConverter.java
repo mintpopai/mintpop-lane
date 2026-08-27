@@ -34,6 +34,8 @@ public class SubscriptionConverter {
         // 只读方向映射：写回交给专用的 updateCredential/clearCredentialMetadata，
         // toEntity() 故意不回填它，常规 update() 的 SQL 也不含这一列
         dto.setCredentialExpiresAt(entity.getCredentialExpiresAt());
+        // 同上，只读方向映射：toEntity() 故意不回填它
+        dto.setCredentialScope(entity.getCredentialScope());
         dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());

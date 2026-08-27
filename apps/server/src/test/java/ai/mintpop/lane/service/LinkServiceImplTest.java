@@ -360,6 +360,34 @@ class LinkServiceImplTest {
     }
 
     @Test
+    @DisplayName("下发席位时带上凭证 scope，客户端据此决定要不要注入 scope 环境变量")
+    void carriesCredentialScope() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto subscription = activeSubscription(100L, "sk-ant-test");
+        subscription.setCredentialScope("user:inference user:profile");
+        givenSubscriptions(subscription);
+
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.agentCredentials()).hasSize(1);
+        assertThat(resp.agentCredentials().getFirst().credentialScope())
+                .isEqualTo("user:inference user:profile");
+    }
+
+    @Test
+    @DisplayName("旧式凭证没有 scope，下发空串而非 null：客户端按空串整段跳过注入")
+    void legacyCredentialCarriesEmptyScope() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto subscription = activeSubscription(100L, "sk-ant-test");
+        subscription.setCredentialScope(null);
+        givenSubscriptions(subscription);
+
+        var resp = service.resolveLink(USER_ID);
+
+        assertThat(resp.agentCredentials().getFirst().credentialScope()).isEmpty();
+    }
+
+    @Test
     @DisplayName("心跳：正常用户返回 ACTIVE")
     void heartbeatActiveUserReturnsActive() {
         givenUser(user(UserStatus.ACTIVE));
