@@ -230,9 +230,35 @@ export interface AdminSubscriptionResponse {
   /** 本次分配给用户的账号邮箱，小写；null 表示未录 */
   accountEmail: string | null;
   hasCredential: boolean;
+  /** 凭证到期时刻；未签发过时为 null */
+  credentialExpiresAt: string | null;
+  /** 凭证到期日与订阅止期已脱节（订阅止期改过但凭证没重签），需要重新签发 */
+  credentialStale: boolean;
   remark: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** 发起凭证签发（POST /admin/subscriptions/{id}/credential/authorize-url）的返回 */
+export interface CredentialAuthorizationStart {
+  authUrl: string;
+  sessionId: string;
+  /** 该订阅当前录入的账号邮箱；未录入为 null，此时需要管理员自行确认要登录哪个账号 */
+  accountEmail: string | null;
+  egressIp: string;
+}
+
+/** 兑换凭证（POST /admin/subscriptions/{id}/credential/exchange）的入参 */
+export interface CredentialExchangeRequest {
+  sessionId: string;
+  code: string;
+}
+
+/** 兑换凭证成功后的结果 */
+export interface CredentialIssueResult {
+  accountEmail: string | null;
+  grantedScope: string;
+  expiresAt: string;
 }
 
 /** 分配订阅的入参。只能选现有套餐，agent 类型与止期都由所选套餐决定 */

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { AGENT_TYPE_LABELS } from "../api/types";
+import { AGENT_TYPE, AGENT_TYPE_LABELS } from "../api/types";
 import type {
   AdminSubscriptionResponse,
   AdminUserResponse,
@@ -25,6 +25,7 @@ import {
   type SubscriptionFormModel,
 } from "../utils/subscriptionForm";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import CredentialIssueModal from "./CredentialIssueModal.vue";
 import Modal from "./AdminModal.vue";
 import Select from "./AdminSelect.vue";
 
@@ -43,6 +44,8 @@ const enterprises = ref<EnterpriseResponse[]>([]);
 const submitting = ref(false);
 const pendingDelete = ref<AdminSubscriptionResponse | null>(null);
 const deleting = ref(false);
+/** 正在走签发流程的那一条订阅；非 null 时弹出 CredentialIssueModal */
+const issuingRow = ref<AdminSubscriptionResponse | null>(null);
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -81,6 +84,15 @@ const selectedEnterpriseDomain = computed<string | null>(() => {
 function agentLabel(agentType: string): string {
   return AGENT_TYPE_LABELS[agentType as keyof typeof AGENT_TYPE_LABELS] ?? agentType;
 }
+
+/**
+ * 当前表单针对的是不是 Claude 席位：编辑看被编辑那行的快照，新增看所选套餐的 agent 类型。
+ * Claude 席位的凭证只能靠签发获得，服务端已拒绝手工录入（410037），故凭据输入框要整个换掉。
+ */
+const isClaudeAgent = computed(() => {
+  const agentType = formMode.value === "edit" ? editingRow.value?.agentType : form.value.agentType;
+  return agentType === AGENT_TYPE.CLAUDE;
+});
 
 /** 换 agent 类型后已选套餐与归属企业随之作废，清掉逼着重挑 */
 function onAgentTypeChange(agentType: string | null): void {
@@ -198,6 +210,17 @@ async function submit(): Promise<void> {
   }
 }
 
+function openIssue(subscription: AdminSubscriptionResponse): void {
+  issuingRow.value = subscription;
+}
+
+/** 签发完成：凭据状态与到期时刻都变了，重拉列表；也让父级（用户列表）跟着知会一声 */
+async function onCredentialIssued(): Promise<void> {
+  issuingRow.value = null;
+  await loadList();
+  emit("changed");
+}
+
 async function confirmDelete(): Promise<void> {
   if (!pendingDelete.value) {
     return;
@@ -242,8 +265,19 @@ async function confirmDelete(): Promise<void> {
             <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
               {{ row.hasCredential ? "凭据已录入" : "凭据未录入" }}
             </span>
+            <!-- 凭证到期日与订阅止期脱节：订阅止期改过但凭证没重签，需要显式提醒去重新签发 -->
+            <span v-if="row.credentialStale" class="state" data-state="MISSING">凭证待更新</span>
             <span class="sub-item-gap" />
             <div class="sub-item-actions">
+              <!-- 服务端对非 Claude 类型的签发请求一律拒绝，未认识的类型也不显示，别让点了必错 -->
+              <button
+                v-if="row.agentType === AGENT_TYPE.CLAUDE"
+                type="button"
+                class="admin-link"
+                @click="openIssue(row)"
+              >
+                签发凭证
+              </button>
               <button type="button" class="admin-link" @click="edit(row)">编辑</button>
               <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
             </div>
@@ -272,9 +306,17 @@ async function confirmDelete(): Promise<void> {
               <dt>账号邮箱</dt>
               <dd :class="{ fact: row.accountEmail !== null }">{{ row.accountEmail ?? "未录入" }}</dd>
             </div>
+            <div v-if="row.hasCredential" class="sub-fact">
+              <dt>凭证到期</dt>
+              <dd class="fact">{{ formatDateTime(row.credentialExpiresAt) }}</dd>
+            </div>
             <div v-if="row.remark" class="sub-fact sub-fact-remark">
               <dt>备注</dt>
               <dd>{{ row.remark }}</dd>
+            </div>
+            <div v-if="row.credentialStale" class="sub-fact sub-fact-remark">
+              <dt>提示</dt>
+              <dd>订阅止期已变更，凭证到期日未跟进，需重新签发</dd>
             </div>
           </dl>
         </li>
@@ -393,7 +435,10 @@ async function confirmDelete(): Promise<void> {
         <div class="admin-form-row">
           <div class="admin-field">
             <label for="sub-credential">席位凭据</label>
+            <!-- Claude 席位不再允许手工录入（服务端 410037），换成签发入口的说明 -->
+            <p v-if="isClaudeAgent" class="admin-note">Claude 席位的凭证通过签发获得，不支持手工录入。</p>
             <input
+              v-else
               id="sub-credential"
               v-model="form.credential"
               class="admin-input"
@@ -423,6 +468,13 @@ async function confirmDelete(): Promise<void> {
       :busy="deleting"
       @confirm="confirmDelete()"
       @cancel="pendingDelete = null"
+    />
+
+    <CredentialIssueModal
+      v-if="issuingRow"
+      :subscription="issuingRow"
+      @close="issuingRow = null"
+      @issued="onCredentialIssued()"
     />
   </Modal>
 </template>

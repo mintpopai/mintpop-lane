@@ -131,6 +131,29 @@ describe("createAdminApi", () => {
     ]);
   });
 
+  it("凭证签发两端点路径、方法与 body 正确", async () => {
+    const calls: Array<{ path: string; method?: string; body?: string }> = [];
+    const http: HttpClient = {
+      request: async <T>(path: string, init?: RequestInit) => {
+        calls.push({ path, method: init?.method, body: init?.body as string | undefined });
+        return null as T;
+      },
+    };
+    const api = createAdminApi(http);
+
+    await api.credentialAuthorizeUrl(7);
+    await api.credentialExchange(7, { sessionId: "sess-1", code: "auth-code" });
+
+    expect(calls).toEqual([
+      { path: "/admin/subscriptions/7/credential/authorize-url", method: "POST", body: undefined },
+      {
+        path: "/admin/subscriptions/7/credential/exchange",
+        method: "POST",
+        body: JSON.stringify({ sessionId: "sess-1", code: "auth-code" }),
+      },
+    ]);
+  });
+
   it("分组接口逐个打到正确的路径与方法", async () => {
     const { http, request } = fakeClient();
     const api = createAdminApi(http);

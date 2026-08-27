@@ -3,6 +3,9 @@ import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
   AdminUserResponse,
+  CredentialAuthorizationStart,
+  CredentialExchangeRequest,
+  CredentialIssueResult,
   NodeGroupCreateRequest,
   NodeGroupImportRequest,
   NodeGroupRenameRequest,
@@ -34,6 +37,8 @@ export interface AdminApi {
   createSubscription(userId: number, body: SubscriptionCreateRequest): Promise<number>;
   updateSubscription(id: number, body: SubscriptionUpdateRequest): Promise<void>;
   deleteSubscription(id: number): Promise<void>;
+  credentialAuthorizeUrl(subscriptionId: number): Promise<CredentialAuthorizationStart>;
+  credentialExchange(subscriptionId: number, body: CredentialExchangeRequest): Promise<CredentialIssueResult>;
   previewSub(body: SubPreviewRequest): Promise<SubPreviewNode[]>;
   createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;
   listNodeGroups(): Promise<NodeGroupResponse[]>;
@@ -109,6 +114,17 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deleteSubscription(id) {
       return http.request(`/admin/subscriptions/${id}`, { method: "DELETE" });
+    },
+
+    credentialAuthorizeUrl(subscriptionId) {
+      return http.request(`/admin/subscriptions/${subscriptionId}/credential/authorize-url`, { method: "POST" });
+    },
+
+    credentialExchange(subscriptionId, body) {
+      return http.request(`/admin/subscriptions/${subscriptionId}/credential/exchange`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     },
 
     previewSub(body) {
