@@ -79,7 +79,13 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         s.setStartsAt(startsAt);
         s.setEndsAt(startsAt.plus(plan.getDurationDays(), ChronoUnit.DAYS));
         s.setAccountEmail(accountEmail);
-        s.setCredential(blankToNull(request.getCredential()));
+        String credential = blankToNull(request.getCredential());
+        // Claude 席位的凭证只能走 OAuth 签发；手工录入会绕开签发流程留下来源不明、
+        // 有效期未知的凭证。Codex 走完全不同的凭据体系，签发流程本就不支持它，不受此限。
+        if (credential != null && plan.getAgentType() == AgentType.CLAUDE) {
+            throw new BizException(BizCodeEnum.CREDENTIAL_MANUAL_NOT_ALLOWED);
+        }
+        s.setCredential(credential);
         s.setRemark(request.getRemark());
         return createWithUniqueAssignmentNo(s);
     }
@@ -120,6 +126,10 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         // 凭据留空表示沿用原值：页面上看不到原凭据，不能因为没重填就把它清掉
         String credential = blankToNull(request.getCredential());
         if (credential != null) {
+            // Claude 席位的凭证只能走 OAuth 签发，手工录入一律拒绝；Codex 不受此限，见 create() 同款注释
+            if (s.getAgentType() == AgentType.CLAUDE) {
+                throw new BizException(BizCodeEnum.CREDENTIAL_MANUAL_NOT_ALLOWED);
+            }
             s.setCredential(credential);
         }
         s.setRemark(request.getRemark());
