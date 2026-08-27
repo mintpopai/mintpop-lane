@@ -26,7 +26,7 @@ jobs:
       packages: write
     steps:
       - name: 检出代码
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: 设置 Buildx
         uses: docker/setup-buildx-action@v4
@@ -69,22 +69,38 @@ jobs:
       contents: write
     steps:
       - name: 检出代码
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # COMMIT 模式的变更日志需要全量历史
           fetch-depth: 0
 
-      - name: 解析上一版同前缀 tag
+      - name: 解析上一版同前缀稳定 tag
         id: prev
         env:
+          PREFIX: "admin-"
           TAG: ${{ github.ref_name }}
         run: |
-          prev="$(git tag -l 'admin-v*' --sort=-v:refname \
-            | awk -v cur="$TAG" 'f { print; exit } $0 == cur { f = 1 }')"
+          # shallow clone 下 describe 会静默失准，宁可中止也不产出一份错的变更日志
+          [ "$(git rev-parse --is-shallow-repository)" = "false" ] \
+            || { echo "::error::仓库是 shallow clone，checkout 需 fetch-depth: 0" >&2; exit 1; }
+          # 按提交拓扑回溯最近的同前缀稳定 tag：
+          #   --match   只认本组件、v 后跟数字的 tag        --exclude 排除预发布（如 v0.2.0-rc.1）
+          #   ${TAG}^ 从父提交起找，同 commit 上别的组件 tag 不会干扰
+          prev="$(git describe --tags --abbrev=0 \
+            --match "${PREFIX}v[0-9]*" --exclude "${PREFIX}v*-*" "${TAG}^" 2>/dev/null || true)"
           if [ -z "$prev" ]; then
-            # 首发：无上一版，起点取初始提交 = 全量历史
-            prev="$(git rev-list --max-parents=0 HEAD | tail -1)"
+            # 没找到时区分「真首发」与「异常」，绝不一律退成全量历史
+            others="$(git tag -l "${PREFIX}v[0-9]*" \
+              | grep -E "^${PREFIX}v[0-9]+\.[0-9]+\.[0-9]+$" | grep -vFx "${TAG}" || true)"
+            if [ -n "$others" ]; then
+              echo "::error::存在同前缀稳定 tag 却回溯不到上一版，疑似 tag 不在当前历史或未拉全" >&2
+              printf '%s\n' "$others" >&2
+              exit 1
+            fi
+            prev="$(git rev-list --max-parents=0 "${TAG}" | tail -1)"   # 真首发：起点取初始提交
+            echo "首发，起点取初始提交 ${prev}" >&2
           fi
+          echo "起点 ${prev} → 终点 ${TAG}" >&2
           echo "from=$prev" >> "$GITHUB_OUTPUT"
           # 标题里的版本号要去掉 admin-v 前缀，在这里算好
           echo "version=${TAG#admin-v}" >> "$GITHUB_OUTPUT"
