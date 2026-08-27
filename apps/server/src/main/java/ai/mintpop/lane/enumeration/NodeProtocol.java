@@ -11,6 +11,11 @@ public enum NodeProtocol {
 
     TROJAN(Set.of("password")),
     SOCKS5(Set.of("username", "password")),
+    /**
+     * 标准 HTTP 代理。与 SOCKS5 并列为落地节点可用的两种协议——
+     * 服务端签发凭证时要经落地出口出站，只有标准代理协议连得上。
+     */
+    HTTP(Set.of("username", "password")),
     VMESS(Set.of("uuid")),
     /**
      * 订阅导入的通用透传协议：整份 mihomo 参数（含 type/server/port）作为敏感配置整体加密，

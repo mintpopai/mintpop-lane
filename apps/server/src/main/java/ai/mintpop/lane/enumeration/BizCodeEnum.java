@@ -54,7 +54,8 @@ public enum BizCodeEnum {
     ENTERPRISE_DISABLED(410023, "企业已停用，无法分配订阅"),
     ENTERPRISE_AGENT_TYPE_MISMATCH(410024, "该企业不支持此套餐的 agent 类型"),
     ENTERPRISE_IN_USE(410025, "该企业仍被订阅引用，无法删除"),
-    SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致");
+    SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致"),
+    NODE_PROTOCOL_NOT_ALLOWED(410027, "该协议不能用于此角色的节点");
 
     private final int code;
     private final String message;
