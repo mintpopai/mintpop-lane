@@ -61,7 +61,10 @@ public enum BizCodeEnum {
     CREDENTIAL_EXCHANGE_FAILED(410030, "凭证兑换失败，请确认授权码正确且未过期"),
     CREDENTIAL_REVOKE_FAILED(410031, "凭证吊销失败"),
     LINK_NOT_READY_FOR_ISSUE(410032, "该用户链路尚未配置完整，无法签发凭证"),
-    CREDENTIAL_ISSUE_NOT_SUPPORTED(410033, "该席位类型不支持凭证签发");
+    CREDENTIAL_ISSUE_NOT_SUPPORTED(410033, "该席位类型不支持凭证签发"),
+    CREDENTIAL_SCOPE_INSUFFICIENT(410034, "服务端授予的权限不足，签发中止"),
+    CREDENTIAL_LIFETIME_TRUNCATED(410035, "服务端签发的凭证有效期远短于请求值，签发中止"),
+    OAUTH_SESSION_INVALID(410036, "授权会话不存在或已过期，请重新发起签发");
 
     private final int code;
     private final String message;

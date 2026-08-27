@@ -2,6 +2,7 @@ package ai.mintpop.lane.repository;
 
 import ai.mintpop.lane.dto.SubscriptionDto;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -32,4 +33,18 @@ public interface SubscriptionRepository {
 
     /** 是否还有订阅归属于该企业。企业删除前的引用检查用，企业侧不设外键，靠这里把关 */
     boolean existsByEnterpriseId(Long enterpriseId);
+
+    /**
+     * 一次性写入凭证密文与其全部签发元数据。与 {@link #update} 不同，
+     * 本方法只动这六列，不走整条 DTO 覆盖那条路——避免把签发流程之外、
+     * 调用方手上未必持有的其它字段（如 name、remark）连带覆盖成旧快照。
+     * refreshCipher 可为 null（服务端未下发 refresh_token 时）。
+     */
+    void updateCredential(Long subscriptionId,
+                          String credentialCipher,
+                          String scope,
+                          String tokenUuid,
+                          Instant issuedAt,
+                          Instant expiresAt,
+                          String refreshCipher);
 }

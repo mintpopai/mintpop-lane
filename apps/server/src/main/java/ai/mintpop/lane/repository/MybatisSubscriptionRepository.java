@@ -7,6 +7,7 @@ import ai.mintpop.lane.mapper.SubscriptionMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -86,5 +87,23 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
         }
         return mapper.selectCount(Wrappers.<Subscription>lambdaQuery()
                 .eq(Subscription::getEnterpriseId, enterpriseId)) > 0;
+    }
+
+    @Override
+    public void updateCredential(Long subscriptionId,
+                                 String credentialCipher,
+                                 String scope,
+                                 String tokenUuid,
+                                 Instant issuedAt,
+                                 Instant expiresAt,
+                                 String refreshCipher) {
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getCredentialCipher, credentialCipher)
+                .set(Subscription::getCredentialScope, scope)
+                .set(Subscription::getCredentialTokenUuid, tokenUuid)
+                .set(Subscription::getCredentialIssuedAt, issuedAt)
+                .set(Subscription::getCredentialExpiresAt, expiresAt)
+                .set(Subscription::getCredentialRefreshCipher, refreshCipher));
     }
 }
