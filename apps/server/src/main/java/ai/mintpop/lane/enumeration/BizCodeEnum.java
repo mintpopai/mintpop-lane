@@ -59,7 +59,9 @@ public enum BizCodeEnum {
     EGRESS_IP_MISMATCH(410028, "落地节点实际出口与登记的出口 IP 不一致，请核对节点配置"),
     EGRESS_PROBE_FAILED(410029, "落地节点出口探测失败，请确认该节点当前可用后重试"),
     CREDENTIAL_EXCHANGE_FAILED(410030, "凭证兑换失败，请确认授权码正确且未过期"),
-    CREDENTIAL_REVOKE_FAILED(410031, "凭证吊销失败");
+    CREDENTIAL_REVOKE_FAILED(410031, "凭证吊销失败"),
+    LINK_NOT_READY_FOR_ISSUE(410032, "该用户链路尚未配置完整，无法签发凭证"),
+    CREDENTIAL_ISSUE_NOT_SUPPORTED(410033, "该席位类型不支持凭证签发");
 
     private final int code;
     private final String message;
