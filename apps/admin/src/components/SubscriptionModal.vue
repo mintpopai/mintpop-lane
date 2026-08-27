@@ -99,6 +99,10 @@ function onAgentTypeChange(agentType: string | null): void {
   form.value.agentType = agentType;
   form.value.planId = null;
   form.value.enterpriseId = null;
+  // 凭据框会随类型隐藏/出现（Claude 不支持手工录入），换类型时把旧值一并清掉：
+  // 否则切到 Claude 后输入框消失，但填过的旧值仍在提交载荷里，会被服务端 410037 拒绝，
+  // 而用户对着一个根本看不见的字段完全摸不到头脑
+  form.value.credential = "";
 }
 
 /** 止期推算用的时长：新增取所选套餐，编辑取分配时的快照 */
