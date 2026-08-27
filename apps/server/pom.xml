@@ -149,6 +149,13 @@
       <artifactId>testcontainers-mysql</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- 经落地出口出站的 RestClient 底层：必须是 Reactor Netty（自行实现 SOCKS5 握手，
+         凭据绑定在实例上），不能用 JDK HttpClient（其 SOCKS5 认证走全局
+         java.net.Authenticator.setDefault()，多席位并发签发会互相串认证） -->
+    <dependency>
+      <groupId>io.projectreactor.netty</groupId>
+      <artifactId>reactor-netty-http</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
