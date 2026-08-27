@@ -43,3 +43,15 @@ lane:
     # 32 字节密钥的 Base64。生成：openssl rand -base64 32
     # 换了这个值，库里已有的密文全部解不开，必须重录所有凭据与节点密码
     key: 填入生成的密钥
+
+claude:
+  oauth:
+    # 以下均为 Claude OAuth 端点常量，非密钥，各环境一致，取自 Claude Code CLI 2.1.246 的 prod 配置块
+    client-id: 9d1c250a-e61b-44d9-88ed-5944d1962f5e
+    authorize-url: https://claude.com/cai/oauth/authorize
+    token-url: https://platform.claude.com/v1/oauth/token
+    revoke-url: https://platform.claude.com/v1/oauth/token/revoke
+    redirect-uri: https://platform.claude.com/oauth/code/callback
+    # 最小充分集，不可增删：多要 user:mcp_servers 会被拒发长有效期，少要 user:profile 则方案目的落空
+    scope: "user:profile user:inference"
+    max-expires-in-seconds: 31536000

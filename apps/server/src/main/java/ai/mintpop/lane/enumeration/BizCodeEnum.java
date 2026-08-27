@@ -57,7 +57,9 @@ public enum BizCodeEnum {
     SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致"),
     NODE_PROTOCOL_NOT_ALLOWED(410027, "该协议不能用于此角色的节点"),
     EGRESS_IP_MISMATCH(410028, "落地节点实际出口与登记的出口 IP 不一致，请核对节点配置"),
-    EGRESS_PROBE_FAILED(410029, "落地节点出口探测失败，请确认该节点当前可用后重试");
+    EGRESS_PROBE_FAILED(410029, "落地节点出口探测失败，请确认该节点当前可用后重试"),
+    CREDENTIAL_EXCHANGE_FAILED(410030, "凭证兑换失败，请确认授权码正确且未过期"),
+    CREDENTIAL_REVOKE_FAILED(410031, "凭证吊销失败");
 
     private final int code;
     private final String message;
