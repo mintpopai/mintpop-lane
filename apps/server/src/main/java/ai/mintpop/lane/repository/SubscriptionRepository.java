@@ -47,4 +47,13 @@ public interface SubscriptionRepository {
                           Instant issuedAt,
                           Instant expiresAt,
                           String refreshCipher);
+
+    /**
+     * 清空凭证的全部签发元数据（scope/tokenUuid/issuedAt/expiresAt/refreshCipher），
+     * 凭证密文本身不动。手工录入凭证时调用——手工凭证来源不明、有效期未知，
+     * 继承上一次签发的元数据会让后台显示错误的到期日。与 {@link #updateCredential}
+     * 对称：那个负责写入，这个负责清空，都绕开常规 {@link #update}，
+     * 不占用常规更新路径的 SQL 列，避免把这五列纳入日常更新引入静默覆盖风险。
+     */
+    void clearCredentialMetadata(Long subscriptionId);
 }

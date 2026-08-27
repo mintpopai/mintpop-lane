@@ -27,6 +27,13 @@ public record AdminSubscriptionResponse(
         /** 本次分配给用户的账号邮箱；null 表示未录 */
         String accountEmail,
         boolean hasCredential,
+        /** 凭证到期时刻；null 表示没有凭证，或凭证的签发元数据被清空过（手工录入） */
+        Instant credentialExpiresAt,
+        /**
+         * 凭证到期日是否已与订阅止期脱节（早于或晚于，均超出一天容差）。
+         * true 时后台应提示重新签发——早于会让用户续期后突然断线，晚于则是超发。
+         */
+        boolean credentialStale,
         String remark,
         Instant createdAt,
         Instant updatedAt

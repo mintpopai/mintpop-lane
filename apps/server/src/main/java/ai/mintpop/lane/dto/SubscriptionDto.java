@@ -53,6 +53,15 @@ public class SubscriptionDto {
     @ToString.Exclude
     private String credential;
 
+    /**
+     * 凭证到期时刻；null 表示没有凭证或是签发元数据被清空过的旧式/手工凭证。
+     * 只读方向映射（{@code SubscriptionConverter#toEntity} 不回写它）——
+     * 常规更新走的 update() SQL 本就不含这一列，写入靠专用的
+     * updateCredential/clearCredentialMetadata，这里只是给管理端展示与
+     * 到期一致性判定用的读出口，不参与常规更新覆盖。
+     */
+    private Instant credentialExpiresAt;
+
     private String remark;
 
     private Instant createdAt;
