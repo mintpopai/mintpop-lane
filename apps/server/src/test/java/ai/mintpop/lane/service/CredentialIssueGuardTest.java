@@ -11,11 +11,14 @@ import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.exception.BizException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 class CredentialIssueGuardTest {
 
@@ -84,5 +87,10 @@ class CredentialIssueGuardTest {
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+        // 这是本用例真正要守住的约束：egressIp 判空必须先于 egressIpVerifier.verify()。
+        // mock 对未 stub 的 void 方法默认静默空操作，若顺序被颠倒成先调 verify() 再判空，
+        // 上面的异常断言依然会通过（因为判空分支照样会在 verify() 之后执行并抛出同一个
+        // EGRESS_NOT_ASSIGNED），测试会“假绿”。故必须额外断言 verify() 从未被调用。
+        Mockito.verify(verifier, never()).verify(any());
     }
 }
