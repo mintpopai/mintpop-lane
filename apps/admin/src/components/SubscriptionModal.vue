@@ -262,9 +262,14 @@ async function confirmRevoke(): Promise<void> {
   if (!pendingRevoke.value) {
     return;
   }
+  // 发起吊销前先把这条订阅的标识存好：调用期间/结束后 pendingRevoke 可能已被清空
+  // 或已经指向另一条订阅（管理员对 A 吊销、警示条还没关就去操作 B），警示文案
+  // 必须带上这里捕获的标识，否则常驻提示挂着时会被误当成是「刚才那次操作」的结果
+  const target = pendingRevoke.value;
+  const targetLabel = `订阅「${target.name}」（分配号 ${formatAssignmentNo(target.assignmentNo)}）`;
   revoking.value = true;
   try {
-    const result = await adminApi().credentialRevoke(pendingRevoke.value.id);
+    const result = await adminApi().credentialRevoke(target.id);
     pendingRevoke.value = null;
     if (result.upstreamRevoked) {
       revokeWarning.value = null;
@@ -272,7 +277,7 @@ async function confirmRevoke(): Promise<void> {
     } else {
       // 本地记录已清空，但上游未确认——上游可能仍然有效，不能报成功
       revokeWarning.value =
-        "本地凭证记录已清除，但未收到上游 Anthropic 侧确认吊销成功。该凭证在上游可能仍然有效，" +
+        `${targetLabel}：本地凭证记录已清除，但未收到上游 Anthropic 侧确认吊销成功。该凭证在上游可能仍然有效，` +
         "建议尽快用它实际验证一次是否已失效，不要仅凭这里的操作就当它已经作废。";
     }
     await loadList();
@@ -287,14 +292,16 @@ async function confirmRevoke(): Promise<void> {
 
 <template>
   <Modal :title="`订阅管理：${user.email}`" wide @close="emit('close')">
+    <!-- 常驻提示：吊销未拿到上游确认，不会随 toast 一起在 3 秒后消失，要管理员手动关闭。
+         放在列表/表单切换之外——切到「分配订阅/编辑」表单时它不消失、回列表也不重新出现，
+         不会被误当成是表单那次操作触发的 -->
+    <div v-if="revokeWarning" class="revoke-warn">
+      <p>{{ revokeWarning }}</p>
+      <button type="button" class="admin-link" @click="revokeWarning = null">知道了</button>
+    </div>
+
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
-      <!-- 常驻提示：吊销未拿到上游确认，不会随 toast 一起在 3 秒后消失，要管理员手动关闭 -->
-      <div v-if="revokeWarning" class="revoke-warn">
-        <p>{{ revokeWarning }}</p>
-        <button type="button" class="admin-link" @click="revokeWarning = null">知道了</button>
-      </div>
-
       <div class="admin-toolbar">
         <span v-if="!loading && !loadError" class="sub-count">共 {{ list.length }} 条</span>
         <span class="spacer" />
