@@ -3,8 +3,9 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { AGENT_TYPE, AGENT_TYPE_LABELS } from "../api/types";
+import { AGENT_TYPE, AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
 import type {
+  AdminNodeResponse,
   AdminSubscriptionResponse,
   AdminUserResponse,
   EnterpriseResponse,
@@ -12,11 +13,10 @@ import type {
 } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import CredentialIssueModal from "../components/CredentialIssueModal.vue";
-import PageHead from "../components/PageHead.vue";
 import Select from "../components/AdminSelect.vue";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
-import { formatAssignmentNo, formatDateTime } from "../utils/format";
+import { formatAssignmentNo, formatDate, formatDateTime } from "../utils/format";
 import {
   agentTypeOptions,
   buildSubscriptionCreatePayload,
@@ -29,10 +29,13 @@ import {
   validateSubscriptionForm,
   type SubscriptionFormModel,
 } from "../utils/subscriptionForm";
+import { buildUserPayload, selectableFrontNodes, selectableLandNodes } from "../utils/userForm";
 
 /**
- * 某个用户的订阅管理独立页。从前是用户列表上叠的弹窗，签发/确认再往上叠一层，
- * 套娃体验太差；改成页面后 URL 只携带用户 id，刷新后凭 id 重取用户信息自给自足。
+ * 某个用户的管理独立页：链路资源（第一跳/落地节点）分配 + 订阅管理。
+ * 从前这些都是用户列表上叠的弹窗，签发/确认再往上叠一层，套娃体验太差；
+ * 改成页面后 URL 只携带用户 id，刷新后凭 id 重取用户信息自给自足。
+ * 处置态（停用/吊销）不在这里改——那是列表里的快捷口子。
  */
 const route = useRoute();
 const userId = Number(route.params.id);
@@ -40,6 +43,18 @@ const userId = Number(route.params.id);
 const user = ref<AdminUserResponse | null>(null);
 /** 用户本体取不到（已删除、id 非法）整页没法用，单独一个错误态而不混进列表错误 */
 const userError = ref("");
+
+/** 链路资源表单：初值取自用户当前分配，保存后随重拉的用户刷新 */
+const nodes = ref<AdminNodeResponse[]>([]);
+const frontNodeId = ref<number | null>(null);
+const landNodeId = ref<number | null>(null);
+const savingNodes = ref(false);
+/** 与库里的分配比出来的「有没有改动」：没改动就没有可保存的东西，按钮禁用 */
+const linkDirty = computed(
+  () =>
+    user.value !== null &&
+    (frontNodeId.value !== user.value.frontNodeId || landNodeId.value !== user.value.landNodeId),
+);
 
 const list = ref<AdminSubscriptionResponse[]>([]);
 const loading = ref(true);
@@ -67,6 +82,20 @@ const revokeWarning = ref<string | null>(null);
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const frontOptions = computed(() => [
+  { value: null, label: "不分配" },
+  ...selectableFrontNodes(nodes.value).map((node) => ({ value: node.id, label: node.name })),
+]);
+// 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
+// 原节点就会从下拉里消失、再也切不回去，只能刷新页面丢弃改动重来
+const landOptions = computed(() => [
+  { value: null, label: "暂不分配" },
+  ...selectableLandNodes(nodes.value, user.value?.landNodeId ?? null).map((node) => ({
+    value: node.id,
+    label: `${node.name}（${node.egressIp ?? "未填出口 IP"} · ${node.assignedUserCount ?? 0}/${node.capacity ?? 0}）`,
+  })),
+]);
 
 /** 第一步选 agent 类型：只列有上架套餐的类型 */
 const agentOptions = computed(() => agentTypeOptions(plans.value));
@@ -159,9 +188,43 @@ function reportError(error: unknown, prefix: string): void {
 async function loadUser(): Promise<void> {
   try {
     user.value = await adminApi().getUser(userId);
+    frontNodeId.value = user.value.frontNodeId;
+    landNodeId.value = user.value.landNodeId;
     userError.value = "";
   } catch (error) {
     userError.value = error instanceof BizError ? error.message : (error as Error).message;
+  }
+}
+
+async function loadNodes(): Promise<void> {
+  try {
+    nodes.value = await adminApi().listNodes();
+  } catch (error) {
+    reportError(error, "加载节点失败");
+  }
+}
+
+async function saveNodes(): Promise<void> {
+  if (!user.value) {
+    return;
+  }
+  savingNodes.value = true;
+  try {
+    // 状态原样带回：这个接口是整体保存，但处置态的修改口子在用户列表，这里不动它
+    await adminApi().updateUser(userId, buildUserPayload({
+      id: userId,
+      status: user.value.status,
+      frontNodeId: frontNodeId.value,
+      landNodeId: landNodeId.value,
+    }));
+    showToast("success", "已保存");
+    // 用户（节点名/出口 IP）与节点（落地占用数）都变了，一起重拉
+    await Promise.all([loadUser(), loadNodes()]);
+  } catch (error) {
+    // 410016 落地节点容量已满，由服务端给中文提示
+    reportError(error, "保存失败");
+  } finally {
+    savingNodes.value = false;
   }
 }
 
@@ -200,6 +263,7 @@ onMounted(() => {
     return;
   }
   void loadUser();
+  void loadNodes();
   void loadList();
   void loadPlans();
   void loadEnterprises();
@@ -316,23 +380,22 @@ async function confirmRevoke(): Promise<void> {
     <RouterLink class="admin-link" :to="{ name: 'USERS' }">← 用户列表</RouterLink>
   </nav>
 
-  <PageHead :title="user ? `订阅管理：${user.email}` : '订阅管理'">
-    <template #facts>
-      <template v-if="!loading && !loadError && !userError">
-        共 <span class="fact">{{ list.length }}</span> 条。分配、编辑订阅与 Claude 凭证的签发、吊销都在这里操作。
-      </template>
+  <!-- 页头就是身份卡：邮箱是这个用户的唯一标识，直接做主标题（系统事实，走等宽）；
+       状态徽标贴在旁边，身份事实（角色 / Logto id / 建档时间）摊在下一行。
+       这里不写使用说明——页头讲事实，操作自己长在各自的区里 -->
+  <header class="user-head">
+    <p class="user-head-eyebrow">用户管理</p>
+    <template v-if="user">
+      <div class="user-head-title">
+        <h2 class="page-title fact user-head-email">{{ user.email }}</h2>
+        <span class="state" :data-state="user.status">{{ USER_STATUS_LABELS[user.status] }}</span>
+      </div>
+      <p class="page-facts">
+        {{ USER_ROLE_LABELS[user.role] }} · Logto id <span class="fact">{{ user.subject }}</span> · 建档于
+        <span class="fact">{{ formatDate(user.createdAt) }}</span>
+      </p>
     </template>
-    <template #actions>
-      <button
-        v-if="formMode === 'hidden' && !userError"
-        type="button"
-        class="admin-btn"
-        @click="create()"
-      >
-        分配订阅
-      </button>
-    </template>
-  </PageHead>
+  </header>
 
   <!-- 用户本体取不到（已删除、id 非法）整页没法用，只留错误说明与返回入口 -->
   <p v-if="userError" class="admin-hint error">{{ userError }}</p>
@@ -348,10 +411,41 @@ async function confirmRevoke(): Promise<void> {
 
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
+      <!-- 链路资源：从前在用户列表的编辑弹窗里，随订阅一起收进本页统一管理。
+           两个下拉与保存钮排成一行、底对齐——保存只在有改动时可点，没改动就没有可保存的东西 -->
+      <section class="admin-card link-card">
+        <h4 class="block-title">链路资源</h4>
+        <div class="link-grid">
+          <div class="admin-field">
+            <label for="user-front">第一跳节点</label>
+            <Select id="user-front" v-model="frontNodeId" :options="frontOptions" aria-label="第一跳节点" />
+          </div>
+          <div class="admin-field">
+            <label for="user-land">落地节点</label>
+            <Select id="user-land" v-model="landNodeId" :options="landOptions" aria-label="落地节点" />
+          </div>
+          <button
+            type="button"
+            class="admin-btn"
+            :disabled="savingNodes || !linkDirty"
+            @click="saveNodes()"
+          >
+            {{ savingNodes ? "保存中…" : "保存" }}
+          </button>
+        </div>
+      </section>
+
+      <!-- 区头一行：规模在左、动作在右——「分配订阅」贴着它管的区，不再挂到页头 -->
+      <div class="section-head">
+        <h4 class="block-title">
+          订阅<template v-if="!loading && !loadError"> · 共 <span class="fact">{{ list.length }}</span> 条</template>
+        </h4>
+        <button type="button" class="admin-btn" @click="create()">分配订阅</button>
+      </div>
       <p v-if="loading" class="admin-hint">加载中……</p>
       <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
       <div v-else-if="list.length === 0" class="admin-card">
-        <p class="admin-hint">还没有订阅，点右上角「分配订阅」，先选 Agent 类型再挑套餐。</p>
+        <p class="admin-hint">还没有订阅。点「分配订阅」，先选 Agent 类型再挑套餐。</p>
       </div>
       <!-- 每条订阅通常就一两条，用卡片摊开所有字段，不再塞截断横滚的密表 -->
       <ul v-else class="sub-list">
@@ -431,7 +525,7 @@ async function confirmRevoke(): Promise<void> {
     </template>
 
     <div v-else class="sub-form admin-card">
-      <h4 class="sub-form-title">{{ formMode === "edit" ? "编辑订阅" : "分配订阅" }}</h4>
+      <h4 class="block-title">{{ formMode === "edit" ? "编辑订阅" : "分配订阅" }}</h4>
       <div class="admin-form">
         <div class="admin-form-row">
           <div class="admin-field">
@@ -602,16 +696,79 @@ async function confirmRevoke(): Promise<void> {
   margin-bottom: 12px;
 }
 
-/* 表单独立成卡片承载（弹窗时代由弹窗自身当容器） */
-.sub-form {
-  padding: 20px 24px;
+/* —— 页头（身份卡）—— */
+.user-head {
+  margin-bottom: 28px;
 }
 
-.sub-form-title {
+/* 眉题给页面定性；主标题让位给邮箱本身 */
+.user-head-eyebrow {
+  margin-bottom: 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-secondary);
+}
+
+.user-head-title {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* 邮箱是系统事实：等宽（.fact 已给字体），字号比列表页标题略收一档 */
+.user-head-email {
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+
+/* 链路资源卡与订阅区共用的小节标题 */
+.block-title {
   margin-bottom: 16px;
   font-size: 14px;
   font-weight: 600;
   color: var(--color-ink);
+}
+
+.link-card {
+  padding: 20px 24px;
+}
+
+/* 两个下拉 + 保存钮一行排开、底对齐：36px 的按钮正好与控件同高 */
+.link-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 16px;
+  align-items: end;
+}
+
+/* —— 区头：规模在左、区级动作在右 —— */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 32px 0 12px;
+}
+
+.section-head .block-title {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .link-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .link-grid > .admin-btn {
+    justify-self: end;
+  }
+}
+
+/* 表单独立成卡片承载（弹窗时代由弹窗自身当容器） */
+.sub-form {
+  padding: 20px 24px;
 }
 
 .sub-form-actions {

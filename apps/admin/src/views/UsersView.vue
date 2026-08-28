@@ -2,18 +2,17 @@
 import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
-import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
+import { AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS, USER_STATUS_LABELS } from "../api/types";
+import type { AdminUserResponse, UserStatus } from "../api/types";
 import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
-import UserFormModal from "../components/UserFormModal.vue";
 import { showToast } from "../toast";
 import { formatDate, formatDateTime } from "../utils/format";
+import { buildUserPayload } from "../utils/userForm";
 
 const list = ref<AdminUserResponse[]>([]);
-const nodes = ref<AdminNodeResponse[]>([]);
 const keyword = ref("");
 const subscriptionFilter = ref<boolean | null>(null);
 const page = ref(1);
@@ -21,9 +20,11 @@ const pageSize = ref(20);
 const total = ref(0);
 const loading = ref(true);
 const loadError = ref("");
-const editing = ref<AdminUserResponse | null>(null);
 const pendingDelete = ref<AdminUserResponse | null>(null);
 const deleting = ref(false);
+/** 待二次确认吊销的用户：吊销是终态，与删除同级的破坏性操作 */
+const pendingStatusRevoke = ref<AdminUserResponse | null>(null);
+const statusRevoking = ref(false);
 /** 上一次真正发出去的关键词。空态说法看的是「已生效的筛选」，不是输入框里正在打的字 */
 const appliedKeyword = ref("");
 
@@ -72,14 +73,6 @@ async function loadList(): Promise<void> {
   }
 }
 
-async function loadNodes(): Promise<void> {
-  try {
-    nodes.value = await adminApi().listNodes();
-  } catch (error) {
-    reportError(error, "加载节点失败");
-  }
-}
-
 /** 搜索、筛选、改每页条数都回到第一页 */
 function search(): void {
   page.value = 1;
@@ -109,7 +102,7 @@ async function confirmDelete(): Promise<void> {
     await adminApi().deleteUser(pendingDelete.value.id);
     showToast("success", "已删除");
     pendingDelete.value = null;
-    await refresh();
+    await loadList();
   } catch (error) {
     reportError(error, "删除失败");
   } finally {
@@ -117,17 +110,52 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
-async function refresh(): Promise<void> {
-  await Promise.all([loadList(), loadNodes()]);
+/**
+ * 处置态转换。更新接口是整体保存，节点分配原样带回、只动状态。
+ * toast 文案随动作走（停用→已停用、恢复→已恢复），不说笼统的「状态已更新」。
+ */
+async function changeStatus(row: AdminUserResponse, status: UserStatus, doneText: string): Promise<void> {
+  try {
+    await adminApi().updateUser(
+      row.id,
+      buildUserPayload({ id: row.id, status, frontNodeId: row.frontNodeId, landNodeId: row.landNodeId }),
+    );
+    showToast("success", doneText);
+    await loadList();
+  } catch (error) {
+    reportError(error, "状态更新失败");
+  }
 }
 
-onMounted(refresh);
+/** 吊销是终态（服务端枚举如此定义），不可再转换，所以和删除一样走二次确认；失败时弹窗留着可重试 */
+async function confirmStatusRevoke(): Promise<void> {
+  if (!pendingStatusRevoke.value) {
+    return;
+  }
+  const row = pendingStatusRevoke.value;
+  statusRevoking.value = true;
+  try {
+    await adminApi().updateUser(
+      row.id,
+      buildUserPayload({ id: row.id, status: USER_STATUS.REVOKED, frontNodeId: row.frontNodeId, landNodeId: row.landNodeId }),
+    );
+    showToast("success", "已吊销");
+    pendingStatusRevoke.value = null;
+    await loadList();
+  } catch (error) {
+    reportError(error, "吊销失败");
+  } finally {
+    statusRevoking.value = false;
+  }
+}
+
+onMounted(loadList);
 </script>
 
 <template>
   <PageHead title="用户">
     <template #facts>
-      共 <span class="fact">{{ total }}</span> 人。用户随登录自动建档，这里只管处置态与链路资源分配。
+      共 <span class="fact">{{ total }}</span> 人。用户随登录自动建档；处置与资源分配都从操作列进入。
     </template>
   </PageHead>
 
@@ -202,11 +230,36 @@ onMounted(refresh);
           </td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
-            <!-- 订阅管理是独立页面（弹窗套娃体验太差），这里只做跳转 -->
-            <RouterLink class="admin-link" :to="{ name: 'USER_SUBSCRIPTIONS', params: { id: row.id } }">
-              订阅
+            <!-- 链路资源与订阅都在独立的用户管理页（弹窗套娃体验太差），这里只做跳转 -->
+            <RouterLink class="admin-link" :to="{ name: 'USER_DETAIL', params: { id: row.id } }">
+              管理
             </RouterLink>
-            <button type="button" class="admin-link" @click="editing = row">编辑</button>
+            <!-- 处置态转换按语义给口子：停用可逆、点了就生效；吊销是终态、走二次确认；
+                 已吊销的行没有转换可做，只剩删除 -->
+            <button
+              v-if="row.status === USER_STATUS.ACTIVE"
+              type="button"
+              class="admin-link"
+              @click="changeStatus(row, USER_STATUS.SUSPENDED, '已停用')"
+            >
+              停用
+            </button>
+            <button
+              v-else-if="row.status === USER_STATUS.SUSPENDED"
+              type="button"
+              class="admin-link"
+              @click="changeStatus(row, USER_STATUS.ACTIVE, '已恢复')"
+            >
+              恢复
+            </button>
+            <button
+              v-if="row.status !== USER_STATUS.REVOKED"
+              type="button"
+              class="admin-link danger"
+              @click="pendingStatusRevoke = row"
+            >
+              吊销
+            </button>
             <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
           </td>
         </tr>
@@ -242,12 +295,14 @@ onMounted(refresh);
     <Select v-model="pageSize" prefix="每页" :options="pageSizeOptions" @update:model-value="search()" />
   </div>
 
-  <UserFormModal
-    v-if="editing"
-    :user="editing"
-    :nodes="nodes"
-    @saved="refresh()"
-    @close="editing = null"
+  <ConfirmDialog
+    v-if="pendingStatusRevoke"
+    title="吊销确认"
+    :message="`确认吊销用户「${pendingStatusRevoke.email}」？吊销后其链路立即失效，且为终态、不可再恢复。`"
+    confirm-text="吊销"
+    :busy="statusRevoking"
+    @confirm="confirmStatusRevoke()"
+    @cancel="pendingStatusRevoke = null"
   />
   <ConfirmDialog
     v-if="pendingDelete"

@@ -1,18 +1,26 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AdminSubscriptionResponse, AdminUserResponse, CredentialRevokeResult } from "../api/types";
+import type {
+  AdminNodeResponse,
+  AdminSubscriptionResponse,
+  AdminUserResponse,
+  CredentialRevokeResult,
+  UserSaveRequest,
+} from "../api/types";
 import { showToast } from "../toast";
 import { formatAssignmentNo } from "../utils/format";
-import UserSubscriptionsView from "./UserSubscriptionsView.vue";
+import UserDetailView from "./UserDetailView.vue";
 
 const getUser = vi.fn<(id: number) => Promise<AdminUserResponse>>();
+const listNodes = vi.fn<() => Promise<AdminNodeResponse[]>>(async () => []);
+const updateUser = vi.fn<(id: number, body: UserSaveRequest) => Promise<void>>(async () => undefined);
 const listSubscriptions = vi.fn<(userId: number) => Promise<AdminSubscriptionResponse[]>>();
 const listPlans = vi.fn(async () => []);
 const listEnterprises = vi.fn(async () => []);
 const credentialRevoke = vi.fn<(subscriptionId: number) => Promise<CredentialRevokeResult>>();
 
 vi.mock("../api", () => ({
-  adminApi: () => ({ getUser, listSubscriptions, listPlans, listEnterprises, credentialRevoke }),
+  adminApi: () => ({ getUser, listNodes, updateUser, listSubscriptions, listPlans, listEnterprises, credentialRevoke }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 // 页面从路由参数取用户 id；这里只测页面自身逻辑，不架真路由
@@ -31,6 +39,31 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     landNodeName: null,
     egressIp: null,
     activeSubscriptions: [],
+    createdAt: "2026-08-01T00:00:00Z",
+    updatedAt: "2026-08-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function node(overrides: Partial<AdminNodeResponse> = {}): AdminNodeResponse {
+  return {
+    id: 1,
+    name: "US-01",
+    role: "FRONT",
+    protocol: "TROJAN",
+    serverAddr: "us.example.com",
+    port: 443,
+    extraConfig: {},
+    egressIp: null,
+    egressTimezone: null,
+    status: "ENABLED",
+    remark: null,
+    secretConfigured: true,
+    capacity: null,
+    assignedUserCount: null,
+    groupId: null,
+    groupName: null,
+    sourceType: null,
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
     ...overrides,
@@ -65,6 +98,8 @@ function subscription(overrides: Partial<AdminSubscriptionResponse> = {}): Admin
 beforeEach(() => {
   vi.clearAllMocks();
   getUser.mockResolvedValue(user());
+  // jsdom 不实现 scrollIntoView，AdminSelect 展开面板定位高亮项时会调它
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -97,7 +132,7 @@ function warningText(): string | null {
 
 async function mountView(rows: AdminSubscriptionResponse[]) {
   listSubscriptions.mockResolvedValue(rows);
-  const wrapper = mount(UserSubscriptionsView, {
+  const wrapper = mount(UserDetailView, {
     attachTo: document.body,
     // 返回链接是真路由的事，这里桩掉即可
     global: { stubs: { RouterLink: { template: "<a><slot /></a>" } } },
@@ -106,18 +141,22 @@ async function mountView(rows: AdminSubscriptionResponse[]) {
   return wrapper;
 }
 
-describe("UserSubscriptionsView · 页面骨架", () => {
-  it("按路由里的用户 id 拉取用户，标题带上邮箱", async () => {
+describe("UserDetailView · 页面骨架", () => {
+  it("按路由里的用户 id 拉取用户，页头是身份卡：邮箱做主标题，带状态与身份事实", async () => {
     await mountView([subscription()]);
 
     expect(getUser).toHaveBeenCalledWith(3);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("订阅管理：zhang@acme.com"));
+    await vi.waitFor(() => expect(document.querySelector(".user-head-email")?.textContent).toContain("zhang@acme.com"));
+    expect(document.querySelector(".user-head")?.textContent).toContain("用户管理");
+    // 身份事实：状态徽标 + Logto id
+    expect(document.querySelector(".user-head .state")?.textContent).toContain("正常");
+    expect(document.querySelector(".user-head")?.textContent).toContain("sub-3");
   });
 
   it("用户拉取失败时整页降级为错误提示，不再露出分配入口", async () => {
     getUser.mockRejectedValue(new Error("用户不存在"));
     listSubscriptions.mockResolvedValue([]);
-    mount(UserSubscriptionsView, {
+    mount(UserDetailView, {
       attachTo: document.body,
       global: { stubs: { RouterLink: { template: "<a><slot /></a>" } } },
     });
@@ -127,7 +166,7 @@ describe("UserSubscriptionsView · 页面骨架", () => {
   });
 });
 
-describe("UserSubscriptionsView · 吊销凭证", () => {
+describe("UserDetailView · 吊销凭证", () => {
   it("仅 Claude 且已录入凭证的订阅才显示「吊销凭证」按钮", async () => {
     await mountView([
       subscription({ id: 1, agentType: "CLAUDE", hasCredential: true }),
@@ -225,5 +264,53 @@ describe("UserSubscriptionsView · 吊销凭证", () => {
     expect(warningText()).toContain(rowA.name);
     expect(warningText()).toContain(formatAssignmentNo(rowA.assignmentNo));
     expect(warningText()).not.toContain(formatAssignmentNo(rowB.assignmentNo));
+  });
+});
+
+describe("UserDetailView · 链路资源", () => {
+  /** AdminSelect 的触发按钮按 aria-label 找；面板 Teleport 到 body，选项从 document 上取 */
+  function selectTrigger(label: string): DOMWrapper<Element> {
+    const btn = document.querySelector(`button[aria-label="${label}"]`);
+    if (!btn) {
+      throw new Error(`下拉未找到：${label}`);
+    }
+    return new DOMWrapper(btn);
+  }
+
+  it("没有改动时保存按钮禁用——没有可保存的东西", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3, egressIp: "1.2.3.4" }),
+    ]);
+    await mountView([]);
+    // 等两个下拉都回显出当前分配，说明用户与节点都已加载完
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
+
+    expect(buttonByText("保存").attributes("disabled")).toBeDefined();
+  });
+
+  it("换落地节点后保存提交新节点 id，用户处置态原样透传——这页不动状态，状态在用户列表切换", async () => {
+    getUser.mockResolvedValue(user({ status: "SUSPENDED", frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
+
+    await selectTrigger("落地节点").trigger("click");
+    const option = queryAll("li").find((li) => li.text().includes("LAND-新宿"));
+    if (!option) {
+      throw new Error("选项未找到：LAND-新宿");
+    }
+    await option.trigger("click");
+    await buttonByText("保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(3, { status: "SUSPENDED", frontNodeId: 1, landNodeId: 12 }),
+    );
   });
 });
