@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS, USER_STATUS_LABELS } from "../api/types";
+import { AGENT_TYPE_LABELS, USER_ROLE, USER_ROLE_LABELS, USER_STATUS, USER_STATUS_LABELS } from "../api/types";
 import type { AdminUserResponse, UserStatus } from "../api/types";
 import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -234,33 +234,36 @@ onMounted(loadList);
             <RouterLink class="admin-link" :to="{ name: 'USER_DETAIL', params: { id: row.id } }">
               管理
             </RouterLink>
-            <!-- 处置态转换按语义给口子：停用可逆、点了就生效；吊销是终态、走二次确认；
-                 已吊销的行没有转换可做，只剩删除 -->
-            <button
-              v-if="row.status === USER_STATUS.ACTIVE"
-              type="button"
-              class="admin-link"
-              @click="changeStatus(row, USER_STATUS.SUSPENDED, '已停用')"
-            >
-              停用
-            </button>
-            <button
-              v-else-if="row.status === USER_STATUS.SUSPENDED"
-              type="button"
-              class="admin-link"
-              @click="changeStatus(row, USER_STATUS.ACTIVE, '已恢复')"
-            >
-              恢复
-            </button>
-            <button
-              v-if="row.status !== USER_STATUS.REVOKED"
-              type="button"
-              class="admin-link danger"
-              @click="pendingStatusRevoke = row"
-            >
-              吊销
-            </button>
-            <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+            <!-- 管理员账号受保护：不允许停用、吊销、删除（后端同样拒绝，这里不给口子），
+                 只保留「管理」做资源分配。普通成员的处置态转换按语义给口子：
+                 停用可逆、点了就生效；吊销是终态、走二次确认；已吊销的行没有转换可做，只剩删除 -->
+            <template v-if="row.role !== USER_ROLE.ADMIN">
+              <button
+                v-if="row.status === USER_STATUS.ACTIVE"
+                type="button"
+                class="admin-link"
+                @click="changeStatus(row, USER_STATUS.SUSPENDED, '已停用')"
+              >
+                停用
+              </button>
+              <button
+                v-else-if="row.status === USER_STATUS.SUSPENDED"
+                type="button"
+                class="admin-link"
+                @click="changeStatus(row, USER_STATUS.ACTIVE, '已恢复')"
+              >
+                恢复
+              </button>
+              <button
+                v-if="row.status !== USER_STATUS.REVOKED"
+                type="button"
+                class="admin-link danger"
+                @click="pendingStatusRevoke = row"
+              >
+                吊销
+              </button>
+              <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+            </template>
           </td>
         </tr>
       </tbody>

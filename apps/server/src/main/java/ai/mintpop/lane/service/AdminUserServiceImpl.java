@@ -6,6 +6,8 @@ import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeRole;
+import ai.mintpop.lane.enumeration.UserRole;
+import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -90,6 +92,11 @@ public class AdminUserServiceImpl implements AdminUserService {
     public void update(Long id, UserSaveRequest request) {
         UserDto user = userRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
+        // 管理员账号受保护：处置态（停用/吊销）一律拒绝，只放行保持 ACTIVE 的资源分配。
+        // 管理员是进入管理端的唯一钥匙，处置掉最后一个管理员等于把自己锁在门外。
+        if (user.getRole() == UserRole.ADMIN && request.getStatus() != UserStatus.ACTIVE) {
+            throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
+        }
 
         if (request.getFrontNodeId() != null) {
             validateNode(request.getFrontNodeId(), NodeRole.FRONT);
@@ -106,7 +113,12 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Override
     public void delete(Long id) {
-        userRepository.findById(id).orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
+        UserDto user = userRepository.findById(id)
+                .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
+        // 管理员账号受保护，不允许删除（理由见 update 里的说明）
+        if (user.getRole() == UserRole.ADMIN) {
+            throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
+        }
         userRepository.deleteById(id);
     }
 
