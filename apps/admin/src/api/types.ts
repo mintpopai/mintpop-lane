@@ -261,6 +261,16 @@ export interface CredentialIssueResult {
   expiresAt: string;
 }
 
+/**
+ * 吊销凭证（POST /admin/subscriptions/{id}/credential/revoke）的返回。
+ * 无论上游是否吊销成功，本地凭证与全部签发元数据都会被清空；
+ * upstreamRevoked 只表示上游 Anthropic 是否确认吊销成功——为 false 时
+ * 该凭证在上游侧可能仍然有效，界面必须如实区分，不能都说成「已吊销」。
+ */
+export interface CredentialRevokeResult {
+  upstreamRevoked: boolean;
+}
+
 /** 分配订阅的入参。只能选现有套餐，agent 类型与止期都由所选套餐决定 */
 export interface SubscriptionCreateRequest {
   planId: number;

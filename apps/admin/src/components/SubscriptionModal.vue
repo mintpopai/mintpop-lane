@@ -46,6 +46,15 @@ const pendingDelete = ref<AdminSubscriptionResponse | null>(null);
 const deleting = ref(false);
 /** 正在走签发流程的那一条订阅；非 null 时弹出 CredentialIssueModal */
 const issuingRow = ref<AdminSubscriptionResponse | null>(null);
+/** 待二次确认吊销的那一条订阅 */
+const pendingRevoke = ref<AdminSubscriptionResponse | null>(null);
+const revoking = ref(false);
+/**
+ * 「上游未确认吊销成功」的常驻提示：这是一个尚未验证的假设（用 access_token
+ * 能否真的吊销掉 Anthropic 侧凭证），toast 3 秒就消失、承载不了这句需要管理员
+ * 认真读完的说明，故单独留一块不自动消失、要手动关闭的提示
+ */
+const revokeWarning = ref<string | null>(null);
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -242,12 +251,50 @@ async function confirmDelete(): Promise<void> {
     deleting.value = false;
   }
 }
+
+/**
+ * 吊销确认后调用后端。无论上游是否吊销成功，本地凭证与全部签发元数据都会被
+ * 清空，所以列表一律要重拉；但 upstreamRevoked 决定说给管理员听的是哪句话——
+ * 这正是要验证的假设（access_token 能否真的吊销上游凭证），两种结果绝不能
+ * 都说成「已吊销」，否则管理员没法通过界面看出验证结果。
+ */
+async function confirmRevoke(): Promise<void> {
+  if (!pendingRevoke.value) {
+    return;
+  }
+  revoking.value = true;
+  try {
+    const result = await adminApi().credentialRevoke(pendingRevoke.value.id);
+    pendingRevoke.value = null;
+    if (result.upstreamRevoked) {
+      revokeWarning.value = null;
+      showToast("success", "凭证已吊销");
+    } else {
+      // 本地记录已清空，但上游未确认——上游可能仍然有效，不能报成功
+      revokeWarning.value =
+        "本地凭证记录已清除，但未收到上游 Anthropic 侧确认吊销成功。该凭证在上游可能仍然有效，" +
+        "建议尽快用它实际验证一次是否已失效，不要仅凭这里的操作就当它已经作废。";
+    }
+    await loadList();
+    emit("changed");
+  } catch (error) {
+    reportError(error, "吊销失败");
+  } finally {
+    revoking.value = false;
+  }
+}
 </script>
 
 <template>
   <Modal :title="`订阅管理：${user.email}`" wide @close="emit('close')">
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
+      <!-- 常驻提示：吊销未拿到上游确认，不会随 toast 一起在 3 秒后消失，要管理员手动关闭 -->
+      <div v-if="revokeWarning" class="revoke-warn">
+        <p>{{ revokeWarning }}</p>
+        <button type="button" class="admin-link" @click="revokeWarning = null">知道了</button>
+      </div>
+
       <div class="admin-toolbar">
         <span v-if="!loading && !loadError" class="sub-count">共 {{ list.length }} 条</span>
         <span class="spacer" />
@@ -281,6 +328,15 @@ async function confirmDelete(): Promise<void> {
                 @click="openIssue(row)"
               >
                 签发凭证
+              </button>
+              <!-- 没有凭证就没什么可吊销的；非 Claude 类型也不显示，理由同上面「签发凭证」 -->
+              <button
+                v-if="row.agentType === AGENT_TYPE.CLAUDE && row.hasCredential"
+                type="button"
+                class="admin-link danger"
+                @click="pendingRevoke = row"
+              >
+                吊销凭证
               </button>
               <button type="button" class="admin-link" @click="edit(row)">编辑</button>
               <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
@@ -474,6 +530,16 @@ async function confirmDelete(): Promise<void> {
       @cancel="pendingDelete = null"
     />
 
+    <ConfirmDialog
+      v-if="pendingRevoke"
+      title="吊销凭证确认"
+      :message="`确认吊销订阅「${pendingRevoke.name}」（分配号 ${formatAssignmentNo(pendingRevoke.assignmentNo)}）的凭证？凭证将被清除且不可恢复，该席位在重新签发前无法开会话。`"
+      confirm-text="吊销"
+      :busy="revoking"
+      @confirm="confirmRevoke()"
+      @cancel="pendingRevoke = null"
+    />
+
     <CredentialIssueModal
       v-if="issuingRow"
       :subscription="issuingRow"
@@ -505,6 +571,27 @@ async function confirmDelete(): Promise<void> {
 .sub-count {
   font-size: 13px;
   color: var(--color-ink-secondary);
+}
+
+/* 吊销未拿到上游确认的常驻提示，与 CredentialIssueModal 的 .issue-warn 同一套琥珀色
+   语义——都是「需要人停下来确认」，不用绿色/红色，避免读成完全成功或完全失败 */
+.revoke-warn {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px 20px;
+  border-radius: var(--radius-card);
+  border: 1px solid color-mix(in srgb, #b4720b 35%, var(--color-border));
+  background: color-mix(in srgb, #b4720b 10%, #ffffff);
+}
+
+.revoke-warn p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-ink);
 }
 
 /* —— 订阅卡片列表 —— */
