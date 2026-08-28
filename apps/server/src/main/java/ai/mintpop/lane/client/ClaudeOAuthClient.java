@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClientResponseException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
 
 /** 与 Anthropic OAuth 端点的全部交互。所有出站请求都经调用方指定的落地节点。 */
@@ -74,9 +75,7 @@ public class ClaudeOAuthClient {
         );
         JsonNode json = postJson(land, properties.getTokenUrl(), body, BizCodeEnum.CREDENTIAL_EXCHANGE_FAILED);
         long expiresIn = json.path("expires_in").asLong(0);
-        Instant issuedAt = json.hasNonNull("issued_at")
-                ? Instant.ofEpochSecond(json.get("issued_at").asLong())
-                : Instant.now();
+        Instant issuedAt = parseIssuedAt(json.path("issued_at"));
         return new TokenResult(
                 json.path("access_token").asText(""),
                 json.path("refresh_token").asText(""),
@@ -85,6 +84,27 @@ public class ClaudeOAuthClient {
                 issuedAt,
                 json.path("token_uuid").asText("")
         );
+    }
+
+    /**
+     * 解析 issued_at。上游实际返回的是 ISO-8601 字符串，数字（epoch 秒）分支只作兼容保留。
+     * 关键约束：无法识别时必须回退当前时间，绝不能产出 epoch 0——曾因对字符串节点调
+     * {@code asLong()}（静默返回 0）把 1970-01-01 00:00:00 写进 TIMESTAMP 列，
+     * 越过 MySQL 的下限（1970-01-01 00:00:01）当场报错，且此时上游已签出 token，
+     * 每次失败都留下一个孤儿凭证。
+     */
+    private static Instant parseIssuedAt(JsonNode node) {
+        if (node.canConvertToLong() && node.asLong() > 0) {
+            return Instant.ofEpochSecond(node.asLong());
+        }
+        if (node.isTextual()) {
+            try {
+                return Instant.parse(node.asText());
+            } catch (DateTimeParseException e) {
+                log.warn("issued_at 形态无法识别，回退当前时间：{}", node.asText());
+            }
+        }
+        return Instant.now();
     }
 
     /**

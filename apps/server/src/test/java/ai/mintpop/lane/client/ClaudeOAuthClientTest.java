@@ -128,6 +128,36 @@ class ClaudeOAuthClientTest {
     }
 
     @Test
+    @DisplayName("issued_at 为 ISO-8601 字符串时按字符串解析：上游实际返回的就是这种形态")
+    void exchangeParsesIsoStringIssuedAt() {
+        server.expect(requestTo("https://platform.claude.com/v1/oauth/token"))
+                .andRespond(withSuccess("""
+                        {"access_token": "at-1", "refresh_token": "rt-1", "scope": "user:profile user:inference", "expires_in": 3600, "issued_at": "2026-08-28T08:42:48.894Z", "token_uuid": "uuid-1"}
+                        """, MediaType.APPLICATION_JSON));
+
+        TokenResult result = client.exchange(land,
+                new ExchangeCommand("auth-code", "state-1", "verifier-1", 3600L));
+
+        assertThat(result.issuedAt()).isEqualTo(Instant.parse("2026-08-28T08:42:48.894Z"));
+    }
+
+    @Test
+    @DisplayName("issued_at 形态无法识别时回退当前时间：asLong 的静默 0 曾把 1970-01-01 写进 TIMESTAMP 列，越过 MySQL 下限炸成内部错误")
+    void exchangeFallsBackIssuedAtWhenUnrecognized() {
+        server.expect(requestTo("https://platform.claude.com/v1/oauth/token"))
+                .andRespond(withSuccess("""
+                        {"access_token": "at-1", "refresh_token": "rt-1", "scope": "user:profile user:inference", "expires_in": 3600, "issued_at": "not-a-timestamp", "token_uuid": "uuid-1"}
+                        """, MediaType.APPLICATION_JSON));
+
+        Instant before = Instant.now();
+        TokenResult result = client.exchange(land,
+                new ExchangeCommand("auth-code", "state-1", "verifier-1", 3600L));
+        Instant after = Instant.now();
+
+        assertThat(result.issuedAt()).isBetween(before.minus(1, ChronoUnit.SECONDS), after.plus(1, ChronoUnit.SECONDS));
+    }
+
+    @Test
     @DisplayName("上游返回非 2xx 时报凭证兑换失败，而不是把原始错误裸抛出去")
     void exchangeFailureReportsCredentialExchangeFailed() {
         server.expect(requestTo("https://platform.claude.com/v1/oauth/token"))
