@@ -131,6 +131,14 @@ describe("createAdminApi", () => {
     ]);
   });
 
+  it("getUser 按 id 打到单用户详情端点", async () => {
+    const { http, request } = fakeClient();
+
+    await createAdminApi(http).getUser(7);
+
+    expect(request).toHaveBeenCalledWith("/admin/users/7");
+  });
+
   it("凭证签发、吊销端点路径、方法与 body 正确", async () => {
     const calls: Array<{ path: string; method?: string; body?: string }> = [];
     const http: HttpClient = {

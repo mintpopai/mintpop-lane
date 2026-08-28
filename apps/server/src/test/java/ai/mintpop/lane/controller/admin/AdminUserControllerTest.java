@@ -114,6 +114,19 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("按 id 查单个用户，带在期订阅摘要；不存在报 410006")
+    void getSingleUser() throws Exception {
+        mockMvc.perform(get("/api/admin/users/" + memberWithSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.email").value("logto-m1@test.example"))
+                .andExpect(jsonPath("$.data.frontNodeName").value("FRONT-1"))
+                .andExpect(jsonPath("$.data.activeSubscriptions[0].agentType").value("CLAUDE"));
+
+        mockMvc.perform(get("/api/admin/users/99999").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(410006));
+    }
+
+    @Test
     @DisplayName("按有无在期订阅筛选")
     void filterByActiveSubscription() throws Exception {
         mockMvc.perform(get("/api/admin/users").param("hasActiveSubscription", "true")

@@ -8,7 +8,6 @@ import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
-import SubscriptionModal from "../components/SubscriptionModal.vue";
 import UserFormModal from "../components/UserFormModal.vue";
 import { showToast } from "../toast";
 import { formatDate, formatDateTime } from "../utils/format";
@@ -23,7 +22,6 @@ const total = ref(0);
 const loading = ref(true);
 const loadError = ref("");
 const editing = ref<AdminUserResponse | null>(null);
-const subscriptionTarget = ref<AdminUserResponse | null>(null);
 const pendingDelete = ref<AdminUserResponse | null>(null);
 const deleting = ref(false);
 /** 上一次真正发出去的关键词。空态说法看的是「已生效的筛选」，不是输入框里正在打的字 */
@@ -204,7 +202,10 @@ onMounted(refresh);
           </td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
-            <button type="button" class="admin-link" @click="subscriptionTarget = row">订阅</button>
+            <!-- 订阅管理是独立页面（弹窗套娃体验太差），这里只做跳转 -->
+            <RouterLink class="admin-link" :to="{ name: 'USER_SUBSCRIPTIONS', params: { id: row.id } }">
+              订阅
+            </RouterLink>
             <button type="button" class="admin-link" @click="editing = row">编辑</button>
             <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
           </td>
@@ -248,7 +249,6 @@ onMounted(refresh);
     @saved="refresh()"
     @close="editing = null"
   />
-  <SubscriptionModal v-if="subscriptionTarget" :user="subscriptionTarget" @changed="refresh()" @close="subscriptionTarget = null" />
   <ConfirmDialog
     v-if="pendingDelete"
     title="删除确认"

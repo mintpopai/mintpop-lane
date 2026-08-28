@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { AGENT_TYPE, AGENT_TYPE_LABELS } from "../api/types";
@@ -9,6 +10,10 @@ import type {
   EnterpriseResponse,
   PlanResponse,
 } from "../api/types";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
+import CredentialIssueModal from "../components/CredentialIssueModal.vue";
+import PageHead from "../components/PageHead.vue";
+import Select from "../components/AdminSelect.vue";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
 import { formatAssignmentNo, formatDateTime } from "../utils/format";
@@ -24,13 +29,17 @@ import {
   validateSubscriptionForm,
   type SubscriptionFormModel,
 } from "../utils/subscriptionForm";
-import ConfirmDialog from "./ConfirmDialog.vue";
-import CredentialIssueModal from "./CredentialIssueModal.vue";
-import Modal from "./AdminModal.vue";
-import Select from "./AdminSelect.vue";
 
-const props = defineProps<{ user: AdminUserResponse }>();
-const emit = defineEmits<{ close: []; changed: [] }>();
+/**
+ * 某个用户的订阅管理独立页。从前是用户列表上叠的弹窗，签发/确认再往上叠一层，
+ * 套娃体验太差；改成页面后 URL 只携带用户 id，刷新后凭 id 重取用户信息自给自足。
+ */
+const route = useRoute();
+const userId = Number(route.params.id);
+
+const user = ref<AdminUserResponse | null>(null);
+/** 用户本体取不到（已删除、id 非法）整页没法用，单独一个错误态而不混进列表错误 */
+const userError = ref("");
 
 const list = ref<AdminSubscriptionResponse[]>([]);
 const loading = ref(true);
@@ -147,10 +156,19 @@ function reportError(error: unknown, prefix: string): void {
   showToast("error", error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`);
 }
 
+async function loadUser(): Promise<void> {
+  try {
+    user.value = await adminApi().getUser(userId);
+    userError.value = "";
+  } catch (error) {
+    userError.value = error instanceof BizError ? error.message : (error as Error).message;
+  }
+}
+
 async function loadList(): Promise<void> {
   loading.value = true;
   try {
-    list.value = await adminApi().listSubscriptions(props.user.id);
+    list.value = await adminApi().listSubscriptions(userId);
     loadError.value = "";
   } catch (error) {
     loadError.value = error instanceof BizError ? error.message : (error as Error).message;
@@ -176,6 +194,12 @@ async function loadEnterprises(): Promise<void> {
 }
 
 onMounted(() => {
+  if (!Number.isInteger(userId)) {
+    userError.value = "无效的用户编号";
+    loading.value = false;
+    return;
+  }
+  void loadUser();
   void loadList();
   void loadPlans();
   void loadEnterprises();
@@ -210,12 +234,11 @@ async function submit(): Promise<void> {
     if (mode === "edit") {
       await adminApi().updateSubscription(form.value.id as number, buildSubscriptionUpdatePayload(form.value));
     } else {
-      await adminApi().createSubscription(props.user.id, buildSubscriptionCreatePayload(form.value));
+      await adminApi().createSubscription(userId, buildSubscriptionCreatePayload(form.value));
     }
     showToast("success", "已保存");
     formMode.value = "hidden";
     await loadList();
-    emit("changed");
   } catch (error) {
     reportError(error, "保存失败");
   } finally {
@@ -227,11 +250,10 @@ function openIssue(subscription: AdminSubscriptionResponse): void {
   issuingRow.value = subscription;
 }
 
-/** 签发完成：凭据状态与到期时刻都变了，重拉列表；也让父级（用户列表）跟着知会一声 */
+/** 签发完成：凭据状态与到期时刻都变了，重拉列表 */
 async function onCredentialIssued(): Promise<void> {
   issuingRow.value = null;
   await loadList();
-  emit("changed");
 }
 
 async function confirmDelete(): Promise<void> {
@@ -244,7 +266,6 @@ async function confirmDelete(): Promise<void> {
     showToast("success", "已删除");
     pendingDelete.value = null;
     await loadList();
-    emit("changed");
   } catch (error) {
     reportError(error, "删除失败");
   } finally {
@@ -281,7 +302,6 @@ async function confirmRevoke(): Promise<void> {
         "建议尽快用它实际验证一次是否已失效，不要仅凭这里的操作就当它已经作废。";
     }
     await loadList();
-    emit("changed");
   } catch (error) {
     reportError(error, "吊销失败");
   } finally {
@@ -291,7 +311,33 @@ async function confirmRevoke(): Promise<void> {
 </script>
 
 <template>
-  <Modal :title="`订阅管理：${user.email}`" wide @close="emit('close')">
+  <!-- 面包屑式返回：这页从用户列表进来，也回用户列表去 -->
+  <nav class="back-line">
+    <RouterLink class="admin-link" :to="{ name: 'USERS' }">← 用户列表</RouterLink>
+  </nav>
+
+  <PageHead :title="user ? `订阅管理：${user.email}` : '订阅管理'">
+    <template #facts>
+      <template v-if="!loading && !loadError && !userError">
+        共 <span class="fact">{{ list.length }}</span> 条。分配、编辑订阅与 Claude 凭证的签发、吊销都在这里操作。
+      </template>
+    </template>
+    <template #actions>
+      <button
+        v-if="formMode === 'hidden' && !userError"
+        type="button"
+        class="admin-btn"
+        @click="create()"
+      >
+        分配订阅
+      </button>
+    </template>
+  </PageHead>
+
+  <!-- 用户本体取不到（已删除、id 非法）整页没法用，只留错误说明与返回入口 -->
+  <p v-if="userError" class="admin-hint error">{{ userError }}</p>
+
+  <template v-else>
     <!-- 常驻提示：吊销未拿到上游确认，不会随 toast 一起在 3 秒后消失，要管理员手动关闭。
          放在列表/表单切换之外——切到「分配订阅/编辑」表单时它不消失、回列表也不重新出现，
          不会被误当成是表单那次操作触发的 -->
@@ -302,12 +348,6 @@ async function confirmRevoke(): Promise<void> {
 
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
-      <div class="admin-toolbar">
-        <span v-if="!loading && !loadError" class="sub-count">共 {{ list.length }} 条</span>
-        <span class="spacer" />
-        <button type="button" class="admin-btn" @click="create()">分配订阅</button>
-      </div>
-
       <p v-if="loading" class="admin-hint">加载中……</p>
       <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
       <div v-else-if="list.length === 0" class="admin-card">
@@ -390,7 +430,7 @@ async function confirmRevoke(): Promise<void> {
       </ul>
     </template>
 
-    <div v-else class="sub-form">
+    <div v-else class="sub-form admin-card">
       <h4 class="sub-form-title">{{ formMode === "edit" ? "编辑订阅" : "分配订阅" }}</h4>
       <div class="admin-form">
         <div class="admin-form-row">
@@ -553,13 +593,18 @@ async function confirmRevoke(): Promise<void> {
       @close="issuingRow = null"
       @issued="onCredentialIssued()"
     />
-  </Modal>
+  </template>
 </template>
 
 <style scoped>
-/* 表单是独立视图（与列表整屏切换），不需要再与上方内容做分隔 */
+/* 返回入口贴在页头上方，和标题拉开一点距离即可 */
+.back-line {
+  margin-bottom: 12px;
+}
+
+/* 表单独立成卡片承载（弹窗时代由弹窗自身当容器） */
 .sub-form {
-  margin-top: 4px;
+  padding: 20px 24px;
 }
 
 .sub-form-title {
@@ -573,11 +618,6 @@ async function confirmRevoke(): Promise<void> {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-}
-
-.sub-count {
-  font-size: 13px;
-  color: var(--color-ink-secondary);
 }
 
 /* 吊销未拿到上游确认的常驻提示，与 CredentialIssueModal 的 .issue-warn 同一套琥珀色

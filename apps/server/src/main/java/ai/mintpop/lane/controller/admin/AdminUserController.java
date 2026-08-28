@@ -35,6 +35,12 @@ public class AdminUserController {
         return ApiResponse.success(adminUserService.page(keyword, hasActiveSubscription, pageNo, pageSize));
     }
 
+    /** 单个用户详情：管理端「用户订阅」独立页刷新后凭 URL 里的 id 重取用户信息 */
+    @GetMapping("/{id}")
+    public ApiResponse<AdminUserResponse> get(@PathVariable Long id) {
+        return ApiResponse.success(adminUserService.get(id));
+    }
+
     @PutMapping("/{id}")
     public ApiResponse<Void> update(@PathVariable Long id, @Valid @RequestBody UserSaveRequest request) {
         adminUserService.update(id, request);

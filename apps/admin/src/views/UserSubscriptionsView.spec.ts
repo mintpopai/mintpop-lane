@@ -3,17 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminSubscriptionResponse, AdminUserResponse, CredentialRevokeResult } from "../api/types";
 import { showToast } from "../toast";
 import { formatAssignmentNo } from "../utils/format";
-import SubscriptionModal from "./SubscriptionModal.vue";
+import UserSubscriptionsView from "./UserSubscriptionsView.vue";
 
+const getUser = vi.fn<(id: number) => Promise<AdminUserResponse>>();
 const listSubscriptions = vi.fn<(userId: number) => Promise<AdminSubscriptionResponse[]>>();
 const listPlans = vi.fn(async () => []);
 const listEnterprises = vi.fn(async () => []);
 const credentialRevoke = vi.fn<(subscriptionId: number) => Promise<CredentialRevokeResult>>();
 
 vi.mock("../api", () => ({
-  adminApi: () => ({ listSubscriptions, listPlans, listEnterprises, credentialRevoke }),
+  adminApi: () => ({ getUser, listSubscriptions, listPlans, listEnterprises, credentialRevoke }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
+// 页面从路由参数取用户 id；这里只测页面自身逻辑，不架真路由
+vi.mock("vue-router", () => ({ useRoute: () => ({ params: { id: "3" } }) }));
 
 function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
   return {
@@ -61,14 +64,16 @@ function subscription(overrides: Partial<AdminSubscriptionResponse> = {}): Admin
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getUser.mockResolvedValue(user());
 });
 
 afterEach(() => {
-  // AdminModal 用 Teleport 挂到 body，测试间要清掉，不然下一次挂载撞上上一次残留的 DOM
+  // ConfirmDialog / CredentialIssueModal 用 Teleport 挂到 body，测试间要清掉，
+  // 不然下一次挂载撞上上一次残留的 DOM
   document.body.innerHTML = "";
 });
 
-/** AdminModal 用 Teleport 挂到 body，游离节点里的内容 wrapper.find 够不着，须从 document 上取 */
+/** 弹窗用 Teleport 挂到 body，游离节点里的内容 wrapper.find 够不着，须从 document 上取 */
 function queryAll(selector: string): DOMWrapper<Element>[] {
   return Array.from(document.querySelectorAll(selector)).map((el) => new DOMWrapper(el));
 }
@@ -90,19 +95,41 @@ function warningText(): string | null {
   return document.querySelector(".revoke-warn p")?.textContent ?? null;
 }
 
-async function mountModal(rows: AdminSubscriptionResponse[]) {
+async function mountView(rows: AdminSubscriptionResponse[]) {
   listSubscriptions.mockResolvedValue(rows);
-  const wrapper = mount(SubscriptionModal, {
+  const wrapper = mount(UserSubscriptionsView, {
     attachTo: document.body,
-    props: { user: user() },
+    // 返回链接是真路由的事，这里桩掉即可
+    global: { stubs: { RouterLink: { template: "<a><slot /></a>" } } },
   });
   await vi.waitFor(() => expect(document.querySelectorAll(".sub-item")).toHaveLength(rows.length));
   return wrapper;
 }
 
-describe("SubscriptionModal · 吊销凭证", () => {
+describe("UserSubscriptionsView · 页面骨架", () => {
+  it("按路由里的用户 id 拉取用户，标题带上邮箱", async () => {
+    await mountView([subscription()]);
+
+    expect(getUser).toHaveBeenCalledWith(3);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("订阅管理：zhang@acme.com"));
+  });
+
+  it("用户拉取失败时整页降级为错误提示，不再露出分配入口", async () => {
+    getUser.mockRejectedValue(new Error("用户不存在"));
+    listSubscriptions.mockResolvedValue([]);
+    mount(UserSubscriptionsView, {
+      attachTo: document.body,
+      global: { stubs: { RouterLink: { template: "<a><slot /></a>" } } },
+    });
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("用户不存在"));
+    expect(buttonExists("分配订阅")).toBe(false);
+  });
+});
+
+describe("UserSubscriptionsView · 吊销凭证", () => {
   it("仅 Claude 且已录入凭证的订阅才显示「吊销凭证」按钮", async () => {
-    await mountModal([
+    await mountView([
       subscription({ id: 1, agentType: "CLAUDE", hasCredential: true }),
       subscription({ id: 2, agentType: "CLAUDE", hasCredential: false }),
       subscription({ id: 3, agentType: "CODEX", hasCredential: true }),
@@ -114,7 +141,7 @@ describe("SubscriptionModal · 吊销凭证", () => {
 
   it("点击后需二次确认，确认后才调用吊销接口", async () => {
     const row = subscription();
-    await mountModal([row]);
+    await mountView([row]);
     credentialRevoke.mockResolvedValue({ upstreamRevoked: true });
 
     await buttonByText("吊销凭证").trigger("click");
@@ -133,7 +160,7 @@ describe("SubscriptionModal · 吊销凭证", () => {
 
   it("upstreamRevoked 为 true：提示明确说「已吊销」，不留常驻告警", async () => {
     const row = subscription();
-    await mountModal([row]);
+    await mountView([row]);
     credentialRevoke.mockResolvedValue({ upstreamRevoked: true });
     listSubscriptions.mockResolvedValue([{ ...row, hasCredential: false }]);
 
@@ -146,7 +173,7 @@ describe("SubscriptionModal · 吊销凭证", () => {
 
   it("upstreamRevoked 为 false：不能报笼统的成功，必须提示上游可能仍然有效，且带上该订阅的标识", async () => {
     const row = subscription();
-    await mountModal([row]);
+    await mountView([row]);
     credentialRevoke.mockResolvedValue({ upstreamRevoked: false });
     listSubscriptions.mockResolvedValue([{ ...row, hasCredential: false }]);
 
@@ -174,7 +201,7 @@ describe("SubscriptionModal · 吊销凭证", () => {
   it("归因不会串：吊销 A 拿到常驻警示后，对 B 做别的操作，警示仍标注的是 A 而不是 B", async () => {
     const rowA = subscription({ id: 1, name: "Claude 月付 A", assignmentNo: "AAAAABBBBB" });
     const rowB = subscription({ id: 2, name: "Claude 月付 B", assignmentNo: "CCCCCDDDDD" });
-    await mountModal([rowA, rowB]);
+    await mountView([rowA, rowB]);
     credentialRevoke.mockResolvedValue({ upstreamRevoked: false });
     listSubscriptions.mockResolvedValue([{ ...rowA, hasCredential: false }, rowB]);
 

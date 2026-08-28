@@ -12,6 +12,9 @@ public interface AdminUserService {
      */
     PageResult<AdminUserResponse> page(String keyword, Boolean hasActiveSubscription, long pageNo, long pageSize);
 
+    /** 按 id 查单个用户；管理端「用户订阅」页刷新后要能凭 URL 里的 id 自给自足。 */
+    AdminUserResponse get(Long id);
+
     void update(Long id, UserSaveRequest request);
 
     void delete(Long id);

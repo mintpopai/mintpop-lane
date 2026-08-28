@@ -63,6 +63,21 @@ public class AdminUserServiceImpl implements AdminUserService {
         return new PageResult<>(records, page.total(), page.pageNo(), page.pageSize());
     }
 
+    @Override
+    public AdminUserResponse get(Long id) {
+        UserDto user = userRepository.findById(id)
+                .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
+        Map<Long, ProxyNodeDto> nodes = nodeRepository.findAll(null).stream()
+                .collect(Collectors.toMap(ProxyNodeDto::getId, Function.identity()));
+        Instant now = clock.instant();
+        List<AdminUserResponse.ActiveSubscriptionBrief> briefs = subscriptionRepository.findByUserId(id).stream()
+                .filter(s -> s.isActiveAt(now))
+                .map(s -> new AdminUserResponse.ActiveSubscriptionBrief(
+                        s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()))
+                .toList();
+        return toResponse(user, nodes, briefs);
+    }
+
     /**
      * 容量校验与写入必须同事务：validateLandAvailable 里的节点行锁把同一节点的
      * 并发分配串行化，锁要一直握到 update 落库提交。隔离级别用 READ_COMMITTED——

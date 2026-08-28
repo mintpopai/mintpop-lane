@@ -28,6 +28,7 @@ import type {
 
 export interface AdminApi {
   pageUsers(query: UserPageQuery): Promise<PageResult<AdminUserResponse>>;
+  getUser(id: number): Promise<AdminUserResponse>;
   updateUser(id: number, body: UserSaveRequest): Promise<void>;
   deleteUser(id: number): Promise<void>;
   listNodes(role?: NodeRole): Promise<AdminNodeResponse[]>;
@@ -73,6 +74,10 @@ export function createAdminApi(http: HttpClient): AdminApi {
       params.set("pageNo", String(query.pageNo));
       params.set("pageSize", String(query.pageSize));
       return http.request(`/admin/users?${params.toString()}`);
+    },
+
+    getUser(id) {
+      return http.request(`/admin/users/${id}`);
     },
 
     updateUser(id, body) {

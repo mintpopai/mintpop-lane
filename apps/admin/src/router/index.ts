@@ -13,6 +13,7 @@ import LoginView from "../views/LoginView.vue";
 import NodesView from "../views/NodesView.vue";
 import PlansView from "../views/PlansView.vue";
 import UsersView from "../views/UsersView.vue";
+import UserSubscriptionsView from "../views/UserSubscriptionsView.vue";
 
 /**
  * 两个依赖都做成可选入参：api 让守卫可被注入假实现，history 让测试用内存历史。
@@ -37,6 +38,12 @@ export function createAppRouter(
         children: [
           { path: "", redirect: { name: "USERS" } },
           { path: "users", name: "USERS", component: UsersView },
+          // 单个用户的订阅管理独立成页：弹窗里再叠签发/确认弹窗的套娃体验太差
+          {
+            path: "users/:id/subscriptions",
+            name: "USER_SUBSCRIPTIONS",
+            component: UserSubscriptionsView,
+          },
           { path: "nodes", name: "NODES", component: NodesView },
           { path: "plans", name: "PLANS", component: PlansView },
           { path: "enterprises", name: "ENTERPRISES", component: EnterprisesView },
