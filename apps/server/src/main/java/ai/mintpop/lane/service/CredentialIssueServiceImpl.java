@@ -153,6 +153,46 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
         return new IssueResult(subscription.getAccountEmail(), result.scope(), expiresAt);
     }
 
+    @Override
+    @Transactional
+    public boolean revokeCredential(Long subscriptionId) {
+        SubscriptionDto subscription = subscriptionRepository.findById(subscriptionId)
+                .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
+        if (subscription.getCredential() == null || subscription.getCredential().isBlank()) {
+            throw new BizException(BizCodeEnum.CREDENTIAL_NOT_FOUND);
+        }
+
+        ProxyNodeDto land = findLandNode(subscription.getUserId());
+        boolean upstreamRevoked = false;
+        if (land == null) {
+            // 链路可能已被拆除（用户解绑落地节点），此时无法经该出口发起吊销；
+            // 管理员的清理意图仍应被执行，只跳过上游调用、不抛异常
+            log.warn("吊销凭证跳过上游调用：落地节点不可用，本地已清理，上游凭证可能仍然有效：subscriptionId={}",
+                    subscriptionId);
+        } else {
+            String accessToken = cipher.decrypt(subscription.getCredential());
+            upstreamRevoked = oauthClient.revoke(land, accessToken);
+            if (upstreamRevoked) {
+                log.info("吊销凭证成功：subscriptionId={}", subscriptionId);
+            } else {
+                // ⚠️ access_token 吊销尚未实测有效，见 ClaudeOAuthClient.revoke；
+                // 失败不代表本地保留凭证是对的，仍按管理员意图清空，只是不能静默假装吊销成功
+                log.warn("吊销凭证失败：本地已清理，上游可能仍然有效：subscriptionId={}", subscriptionId);
+            }
+        }
+
+        subscriptionRepository.clearCredential(subscriptionId);
+        return upstreamRevoked;
+    }
+
+    /** 取该用户当前绑定的落地节点；用户不存在、未绑定落地节点、节点已被删除都统一按「不可用」处理 */
+    private ProxyNodeDto findLandNode(Long userId) {
+        return userRepository.findById(userId)
+                .map(UserDto::getLandNodeId)
+                .flatMap(nodeRepository::findById)
+                .orElse(null);
+    }
+
     /**
      * 校验服务端实际给了什么。上游随时可能收紧策略，
      * 静默接受一个残缺凭证比签发失败更糟 —— 前者要等用户报「Fable 又不见了」才会发现。

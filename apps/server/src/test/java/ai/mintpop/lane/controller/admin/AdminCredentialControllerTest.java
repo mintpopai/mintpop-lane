@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 席位凭证签发的管理端接口——这两个接口能签出席位账号的真实凭证，
+ * 席位凭证签发与吊销的管理端接口——这些接口能签出/吊销席位账号的真实凭证，
  * 鉴权边界是本测试唯一要覆盖的东西：非管理员身份一律拒绝。
  */
 @AutoConfigureMockMvc
@@ -99,6 +99,21 @@ class AdminCredentialControllerTest extends MysqlTestBase {
                         .header("Authorization", bearer(memberId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"sessionId\":\"s\",\"code\":\"c\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("未带任何身份时，吊销凭证被拒")
+    void revokeRequiresAuthentication() throws Exception {
+        mockMvc.perform(post("/api/admin/subscriptions/" + subscriptionId + "/credential/revoke"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("以普通成员身份吊销凭证被拒：非管理员没有权限触达该接口")
+    void revokeRequiresAdminRole() throws Exception {
+        mockMvc.perform(post("/api/admin/subscriptions/" + subscriptionId + "/credential/revoke")
+                        .header("Authorization", bearer(memberId)))
                 .andExpect(status().isForbidden());
     }
 }

@@ -118,4 +118,17 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
                 .set(Subscription::getCredentialExpiresAt, null)
                 .set(Subscription::getCredentialRefreshCipher, null));
     }
+
+    @Override
+    public void clearCredential(Long subscriptionId) {
+        // 与 clearCredentialMetadata 的区别只在多清 credentialCipher 这一列：吊销要连凭证密文本身一起清掉
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getCredentialCipher, null)
+                .set(Subscription::getCredentialScope, null)
+                .set(Subscription::getCredentialTokenUuid, null)
+                .set(Subscription::getCredentialIssuedAt, null)
+                .set(Subscription::getCredentialExpiresAt, null)
+                .set(Subscription::getCredentialRefreshCipher, null));
+    }
 }

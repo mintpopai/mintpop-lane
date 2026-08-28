@@ -14,6 +14,7 @@ import ai.mintpop.lane.request.SubscriptionCreateRequest;
 import ai.mintpop.lane.request.SubscriptionUpdateRequest;
 import ai.mintpop.lane.response.AdminSubscriptionResponse;
 import ai.mintpop.lane.util.AssignmentNo;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 
+@Slf4j
 @Service
 public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
 
@@ -37,15 +39,18 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
     private final EnterpriseRepository enterpriseRepository;
+    private final CredentialIssueService credentialIssueService;
 
     public AdminSubscriptionServiceImpl(SubscriptionRepository subscriptionRepository,
                                         UserRepository userRepository,
                                         PlanRepository planRepository,
-                                        EnterpriseRepository enterpriseRepository) {
+                                        EnterpriseRepository enterpriseRepository,
+                                        CredentialIssueService credentialIssueService) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.planRepository = planRepository;
         this.enterpriseRepository = enterpriseRepository;
+        this.credentialIssueService = credentialIssueService;
     }
 
     @Override
@@ -146,8 +151,17 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
 
     @Override
     public void delete(Long id) {
-        subscriptionRepository.findById(id)
+        SubscriptionDto subscription = subscriptionRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
+        // 提前退订是本流程最重要的真实场景：尽力吊销上游凭证，但吊销失败绝不阻塞删除——
+        // 管理员删除订阅的意图必须被执行，吊销只是顺手做的清理
+        if (subscription.getCredential() != null && !subscription.getCredential().isBlank()) {
+            try {
+                credentialIssueService.revokeCredential(id);
+            } catch (Exception e) {
+                log.warn("删除订阅前吊销凭证失败，不阻塞删除：subscriptionId={}", id, e);
+            }
+        }
         subscriptionRepository.deleteById(id);
     }
 

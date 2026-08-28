@@ -65,7 +65,8 @@ public enum BizCodeEnum {
     CREDENTIAL_SCOPE_INSUFFICIENT(410034, "服务端授予的权限不足，签发中止"),
     CREDENTIAL_LIFETIME_TRUNCATED(410035, "服务端签发的凭证有效期远短于请求值，签发中止"),
     OAUTH_SESSION_INVALID(410036, "授权会话不存在或已过期，请重新发起签发"),
-    CREDENTIAL_MANUAL_NOT_ALLOWED(410037, "Claude 席位的凭证只能通过签发获得，不支持手工录入");
+    CREDENTIAL_MANUAL_NOT_ALLOWED(410037, "Claude 席位的凭证只能通过签发获得，不支持手工录入"),
+    CREDENTIAL_NOT_FOUND(410038, "该席位尚未录入凭证，无需吊销");
 
     private final int code;
     private final String message;

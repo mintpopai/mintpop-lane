@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -30,6 +31,156 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CredentialIssueServiceImplTest {
+
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-08-27T00:00:00Z"), ZoneOffset.UTC);
+
+    /** 构造一个只关心吊销路径的 service：签发相关的协作者一律给不会被用到的 mock */
+    private CredentialIssueServiceImpl newServiceForRevoke(SubscriptionRepository subscriptionRepository,
+                                                            UserRepository userRepository,
+                                                            ProxyNodeRepository nodeRepository,
+                                                            ClaudeOAuthClient oauthClient,
+                                                            CredentialCipher cipher) {
+        return new CredentialIssueServiceImpl(
+                subscriptionRepository, userRepository, nodeRepository,
+                mock(OAuthSessionRepository.class), mock(CredentialIssueGuard.class),
+                mock(CredentialLifetimeCalculator.class), oauthClient,
+                mock(ClaudeOAuthProperties.class), mock(PkceGenerator.class), cipher, CLOCK);
+    }
+
+    @Test
+    @DisplayName("上游吊销成功：本地被清空、返回 true")
+    void revokeSucceedsUpstream() {
+        SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        ProxyNodeRepository nodeRepository = mock(ProxyNodeRepository.class);
+        ClaudeOAuthClient oauthClient = mock(ClaudeOAuthClient.class);
+        CredentialCipher cipher = mock(CredentialCipher.class);
+
+        Long subscriptionId = 1L;
+        SubscriptionDto subscription = new SubscriptionDto();
+        subscription.setId(subscriptionId);
+        subscription.setUserId(2L);
+        subscription.setCredential("cipher-token");
+        when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
+
+        UserDto user = new UserDto();
+        user.setId(2L);
+        user.setLandNodeId(3L);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+
+        ProxyNodeDto land = new ProxyNodeDto();
+        land.setId(3L);
+        when(nodeRepository.findById(3L)).thenReturn(Optional.of(land));
+
+        when(cipher.decrypt("cipher-token")).thenReturn("sk-ant-oat01-x");
+        when(oauthClient.revoke(land, "sk-ant-oat01-x")).thenReturn(true);
+
+        CredentialIssueServiceImpl service = newServiceForRevoke(
+                subscriptionRepository, userRepository, nodeRepository, oauthClient, cipher);
+
+        boolean result = service.revokeCredential(subscriptionId);
+
+        assertThat(result).isTrue();
+        verify(subscriptionRepository).clearCredential(subscriptionId);
+    }
+
+    @Test
+    @DisplayName("上游吊销失败：本地仍被清空、返回 false——失败不静默，交给返回值与日志暴露")
+    void revokeFailsUpstreamButClearsLocal() {
+        SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        ProxyNodeRepository nodeRepository = mock(ProxyNodeRepository.class);
+        ClaudeOAuthClient oauthClient = mock(ClaudeOAuthClient.class);
+        CredentialCipher cipher = mock(CredentialCipher.class);
+
+        Long subscriptionId = 1L;
+        SubscriptionDto subscription = new SubscriptionDto();
+        subscription.setId(subscriptionId);
+        subscription.setUserId(2L);
+        subscription.setCredential("cipher-token");
+        when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
+
+        UserDto user = new UserDto();
+        user.setId(2L);
+        user.setLandNodeId(3L);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+
+        ProxyNodeDto land = new ProxyNodeDto();
+        land.setId(3L);
+        when(nodeRepository.findById(3L)).thenReturn(Optional.of(land));
+
+        when(cipher.decrypt("cipher-token")).thenReturn("sk-ant-oat01-x");
+        when(oauthClient.revoke(land, "sk-ant-oat01-x")).thenReturn(false);
+
+        CredentialIssueServiceImpl service = newServiceForRevoke(
+                subscriptionRepository, userRepository, nodeRepository, oauthClient, cipher);
+
+        boolean result = service.revokeCredential(subscriptionId);
+
+        assertThat(result).isFalse();
+        verify(subscriptionRepository).clearCredential(subscriptionId);
+    }
+
+    @Test
+    @DisplayName("落地节点不存在（链路已被拆除）：不抛异常、跳过上游调用、本地仍清空、返回 false")
+    void revokeSkipsUpstreamWhenLandNodeUnavailable() {
+        SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        ProxyNodeRepository nodeRepository = mock(ProxyNodeRepository.class);
+        ClaudeOAuthClient oauthClient = mock(ClaudeOAuthClient.class);
+        CredentialCipher cipher = mock(CredentialCipher.class);
+
+        Long subscriptionId = 1L;
+        SubscriptionDto subscription = new SubscriptionDto();
+        subscription.setId(subscriptionId);
+        subscription.setUserId(2L);
+        subscription.setCredential("cipher-token");
+        when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
+
+        UserDto user = new UserDto();
+        user.setId(2L);
+        user.setLandNodeId(3L);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(user));
+        // 用户仍登记着落地节点 id，但节点本身已不存在（如被管理员删除）
+        when(nodeRepository.findById(3L)).thenReturn(Optional.empty());
+
+        CredentialIssueServiceImpl service = newServiceForRevoke(
+                subscriptionRepository, userRepository, nodeRepository, oauthClient, cipher);
+
+        boolean result = service.revokeCredential(subscriptionId);
+
+        assertThat(result).isFalse();
+        verify(oauthClient, never()).revoke(any(), any());
+        verify(subscriptionRepository).clearCredential(subscriptionId);
+    }
+
+    @Test
+    @DisplayName("该席位尚未录入凭证：拒绝吊销，报 CREDENTIAL_NOT_FOUND")
+    void revokeRejectsWhenNoCredential() {
+        SubscriptionRepository subscriptionRepository = mock(SubscriptionRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        ProxyNodeRepository nodeRepository = mock(ProxyNodeRepository.class);
+        ClaudeOAuthClient oauthClient = mock(ClaudeOAuthClient.class);
+        CredentialCipher cipher = mock(CredentialCipher.class);
+
+        Long subscriptionId = 1L;
+        SubscriptionDto subscription = new SubscriptionDto();
+        subscription.setId(subscriptionId);
+        subscription.setUserId(2L);
+        subscription.setCredential(null);
+        when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
+
+        CredentialIssueServiceImpl service = newServiceForRevoke(
+                subscriptionRepository, userRepository, nodeRepository, oauthClient, cipher);
+
+        assertThatThrownBy(() -> service.revokeCredential(subscriptionId))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.CREDENTIAL_NOT_FOUND);
+
+        verify(subscriptionRepository, never()).clearCredential(any());
+        verify(oauthClient, never()).revoke(any(), any());
+    }
 
     @Test
     @DisplayName("服务端授予的 scope 缺 user:profile 时拒绝落库：静默接受残缺凭证比失败更糟")
