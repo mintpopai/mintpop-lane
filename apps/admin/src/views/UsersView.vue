@@ -234,36 +234,47 @@ onMounted(loadList);
             <RouterLink class="admin-link" :to="{ name: 'USER_DETAIL', params: { id: row.id } }">
               管理
             </RouterLink>
-            <!-- 管理员账号受保护：不允许停用、吊销、删除（后端同样拒绝，这里不给口子），
-                 只保留「管理」做资源分配。普通成员的处置态转换按语义给口子：
-                 停用可逆、点了就生效；吊销是终态、走二次确认；已吊销的行没有转换可做，只剩删除 -->
-            <template v-if="row.role !== USER_ROLE.ADMIN">
-              <button
-                v-if="row.status === USER_STATUS.ACTIVE"
-                type="button"
-                class="admin-link"
-                @click="changeStatus(row, USER_STATUS.SUSPENDED, '已停用')"
-              >
-                停用
-              </button>
-              <button
-                v-else-if="row.status === USER_STATUS.SUSPENDED"
-                type="button"
-                class="admin-link"
-                @click="changeStatus(row, USER_STATUS.ACTIVE, '已恢复')"
-              >
-                恢复
-              </button>
-              <button
-                v-if="row.status !== USER_STATUS.REVOKED"
-                type="button"
-                class="admin-link danger"
-                @click="pendingStatusRevoke = row"
-              >
-                吊销
-              </button>
-              <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
-            </template>
+            <!-- 处置态转换按语义给口子：停用可逆、点了就生效；吊销是终态、走二次确认；
+                 已吊销的行没有转换可做，只剩删除。
+                 管理员账号受保护（后端同样拒绝）：按钮照常渲染但禁用——隐藏会让操作列
+                 错位、也让人猜不到「为什么这行没有」，禁用 + title 把原因说在原地 -->
+            <button
+              v-if="row.status === USER_STATUS.ACTIVE"
+              type="button"
+              class="admin-link"
+              :disabled="row.role === USER_ROLE.ADMIN"
+              :title="row.role === USER_ROLE.ADMIN ? '管理员账号受保护，不允许停用' : undefined"
+              @click="changeStatus(row, USER_STATUS.SUSPENDED, '已停用')"
+            >
+              停用
+            </button>
+            <button
+              v-else-if="row.status === USER_STATUS.SUSPENDED"
+              type="button"
+              class="admin-link"
+              @click="changeStatus(row, USER_STATUS.ACTIVE, '已恢复')"
+            >
+              恢复
+            </button>
+            <button
+              v-if="row.status !== USER_STATUS.REVOKED"
+              type="button"
+              class="admin-link danger"
+              :disabled="row.role === USER_ROLE.ADMIN"
+              :title="row.role === USER_ROLE.ADMIN ? '管理员账号受保护，不允许吊销' : undefined"
+              @click="pendingStatusRevoke = row"
+            >
+              吊销
+            </button>
+            <button
+              type="button"
+              class="admin-link danger"
+              :disabled="row.role === USER_ROLE.ADMIN"
+              :title="row.role === USER_ROLE.ADMIN ? '管理员账号受保护，不允许删除' : undefined"
+              @click="pendingDelete = row"
+            >
+              删除
+            </button>
           </td>
         </tr>
       </tbody>
