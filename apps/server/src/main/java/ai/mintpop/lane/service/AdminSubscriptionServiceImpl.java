@@ -16,7 +16,9 @@ import ai.mintpop.lane.response.AdminSubscriptionResponse;
 import ai.mintpop.lane.util.AssignmentNo;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -27,6 +29,9 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
 
     /** 分配号撞唯一键后的重试次数上限，见 createWithUniqueAssignmentNo */
     private static final int ASSIGNMENT_NO_MAX_ATTEMPTS = 5;
+
+    /** 允许的偏差：签发时给了一天缓冲，判定时同样容忍一天 */
+    private static final Duration CREDENTIAL_SYNC_TOLERANCE = Duration.ofDays(1);
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
@@ -74,7 +79,13 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         s.setStartsAt(startsAt);
         s.setEndsAt(startsAt.plus(plan.getDurationDays(), ChronoUnit.DAYS));
         s.setAccountEmail(accountEmail);
-        s.setCredential(blankToNull(request.getCredential()));
+        String credential = blankToNull(request.getCredential());
+        // Claude 席位的凭证只能走 OAuth 签发；手工录入会绕开签发流程留下来源不明、
+        // 有效期未知的凭证。Codex 走完全不同的凭据体系，签发流程本就不支持它，不受此限。
+        if (credential != null && plan.getAgentType() == AgentType.CLAUDE) {
+            throw new BizException(BizCodeEnum.CREDENTIAL_MANUAL_NOT_ALLOWED);
+        }
+        s.setCredential(credential);
         s.setRemark(request.getRemark());
         return createWithUniqueAssignmentNo(s);
     }
@@ -98,6 +109,7 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     }
 
     @Override
+    @Transactional
     public void update(Long id, SubscriptionUpdateRequest request) {
         SubscriptionDto s = subscriptionRepository.findById(id)
                 .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
@@ -114,10 +126,22 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         // 凭据留空表示沿用原值：页面上看不到原凭据，不能因为没重填就把它清掉
         String credential = blankToNull(request.getCredential());
         if (credential != null) {
+            // Claude 席位的凭证只能走 OAuth 签发，手工录入一律拒绝；Codex 不受此限，见 create() 同款注释
+            if (s.getAgentType() == AgentType.CLAUDE) {
+                throw new BizException(BizCodeEnum.CREDENTIAL_MANUAL_NOT_ALLOWED);
+            }
             s.setCredential(credential);
         }
         s.setRemark(request.getRemark());
         subscriptionRepository.update(s);
+        if (credential != null) {
+            // 手工录入的凭证来源不明、有效期未知，不得继承上一次签发的元数据，
+            // 否则后台会显示「还有半年到期」而实际凭证可能早已失效。
+            // 清空 scope 后客户端自动退回旧式行为（不注入 CLAUDE_CODE_OAUTH_SCOPES），语义正确。
+            // 走专用的 clearCredentialMetadata，不占用上面常规 update() 的 SQL 列
+            // （那五列本就不在常规更新路径里，避免把它们纳入日常更新引入静默覆盖风险）。
+            subscriptionRepository.clearCredentialMetadata(id);
+        }
     }
 
     @Override
@@ -172,6 +196,26 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
                 s.getPlanId(), s.getName(), s.getPlanDurationDays(), s.getPlanPrice(), s.getPlanCurrency(),
                 s.getStartsAt(), s.getEndsAt(), s.getAccountEmail(),
                 s.getCredential() != null && !s.getCredential().isBlank(),
+                s.getCredentialExpiresAt(),
+                isCredentialStale(s.getCredentialExpiresAt(), s.getEndsAt()),
                 s.getRemark(), s.getCreatedAt(), s.getUpdatedAt());
+    }
+
+    /**
+     * 凭证到期日是否已与订阅止期脱节。
+     *
+     * 当前系统没有独立的「续订」：套餐与时长分配后不可改，止期随起期重算，
+     * 换套餐则删除后重新分配。所以事实上的续期就是改起期，
+     * 触发点因此是「止期变化」而非某个续订事件。
+     *
+     * 两个方向都要管：凭证早于订阅到期会让用户续了期却突然断掉；
+     * 凭证晚于订阅到期则是超发，正是本次要堵的漏洞。
+     */
+    static boolean isCredentialStale(Instant credentialExpiresAt, Instant endsAt) {
+        if (credentialExpiresAt == null || endsAt == null) {
+            return false;
+        }
+        Instant expected = endsAt.plus(CREDENTIAL_SYNC_TOLERANCE);
+        return Duration.between(expected, credentialExpiresAt).abs().compareTo(CREDENTIAL_SYNC_TOLERANCE) > 0;
     }
 }

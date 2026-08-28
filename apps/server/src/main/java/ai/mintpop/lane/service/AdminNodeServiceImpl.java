@@ -50,6 +50,10 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         if (request.getProtocol() == NodeProtocol.MIHOMO) {
             throw new BizException(BizCodeEnum.PARAM_INVALID);
         }
+        // 角色与协议必须匹配：落地节点要供服务端出站，协议集比前置节点窄
+        if (!request.getRole().allows(request.getProtocol())) {
+            throw new BizException(BizCodeEnum.NODE_PROTOCOL_NOT_ALLOWED);
+        }
 
         if (nodeRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_NAME_DUPLICATED);
@@ -90,6 +94,10 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         // 反向同理：其它协议的节点也不许改成 MIHOMO
         if (request.getProtocol() == NodeProtocol.MIHOMO) {
             throw new BizException(BizCodeEnum.PARAM_INVALID);
+        }
+        // 角色与协议必须匹配：落地节点要供服务端出站，协议集比前置节点窄
+        if (!request.getRole().allows(request.getProtocol())) {
+            throw new BizException(BizCodeEnum.NODE_PROTOCOL_NOT_ALLOWED);
         }
 
         validateSecretKeysNotInExtraConfig(request);

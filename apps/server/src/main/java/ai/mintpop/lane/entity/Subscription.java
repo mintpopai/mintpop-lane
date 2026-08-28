@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -59,7 +60,24 @@ public class Subscription {
     private String accountEmail;
 
     /** 席位凭据的密文 */
+    @ToString.Exclude
     private String credentialCipher;
+
+    /** 服务端实际授予的 scope，空格分隔；为空表示旧式凭证 */
+    private String credentialScope;
+
+    /** Anthropic 侧 token 标识，审计用 */
+    private String credentialTokenUuid;
+
+    /** 凭证签发时刻 */
+    private Instant credentialIssuedAt;
+
+    /** 凭证到期时刻 */
+    private Instant credentialExpiresAt;
+
+    /** refresh_token 密文。第一版不使用，排除出 toString */
+    @ToString.Exclude
+    private String credentialRefreshCipher;
 
     private String remark;
 

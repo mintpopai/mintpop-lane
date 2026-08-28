@@ -5,7 +5,12 @@ import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.entity.Subscription;
 import org.springframework.stereotype.Component;
 
-/** 订阅的 entity ↔ dto 转换。席位凭据的加解密只发生在这里。 */
+/**
+ * 订阅的 entity ↔ dto 转换。读路径（{@link #toDto}/{@link #toEntity}）的加解密收口在这里；
+ * 写路径另有 {@code SubscriptionRepository.updateCredential}/{@code clearCredentialMetadata}
+ * 两个直接收密文的元数据专用方法（由 CredentialIssueServiceImpl 注入 CredentialCipher 自行加密），
+ * 是有意为之的例外，不经过本转换器。
+ */
 @Component
 public class SubscriptionConverter {
 
@@ -31,6 +36,11 @@ public class SubscriptionConverter {
         dto.setEndsAt(entity.getEndsAt());
         dto.setAccountEmail(entity.getAccountEmail());
         dto.setCredential(decrypt(entity.getCredentialCipher()));
+        // 只读方向映射：写回交给专用的 updateCredential/clearCredentialMetadata，
+        // toEntity() 故意不回填它，常规 update() 的 SQL 也不含这一列
+        dto.setCredentialExpiresAt(entity.getCredentialExpiresAt());
+        // 同上，只读方向映射：toEntity() 故意不回填它
+        dto.setCredentialScope(entity.getCredentialScope());
         dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());

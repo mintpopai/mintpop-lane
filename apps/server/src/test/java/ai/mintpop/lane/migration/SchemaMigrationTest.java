@@ -351,4 +351,60 @@ class SchemaMigrationTest extends MysqlTestBase {
                 """, Integer.class);
         assertThat(uniqueOnAssignment).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("V13 迁移给 subscription 加五个凭证签发元数据列：全部可空，带注释")
+    void v13MigrationAddsSubscriptionCredentialOauthColumns() {
+        Integer newCols = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name IN ('credential_scope', 'credential_token_uuid', 'credential_issued_at',
+                                      'credential_expires_at', 'credential_refresh_cipher')
+                  AND is_nullable = 'YES'
+                """, Integer.class);
+        assertThat(newCols).isEqualTo(5);
+
+        var scopeColumn = jdbc.queryForMap("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'credential_scope'
+                """);
+        assertThat((String) scopeColumn.get("column_comment")).contains("旧式凭证");
+
+        var refreshColumn = jdbc.queryForMap("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'credential_refresh_cipher'
+                """);
+        assertThat((String) refreshColumn.get("column_comment")).contains("refresh_token 密文");
+    }
+
+    @Test
+    @DisplayName("V13 迁移建出 oauth_session 表：session_id 唯一、subscription_id 有普通索引、表带注释")
+    void v13MigrationCreatesOauthSessionTable() {
+        String tableComment = jdbc.queryForObject("""
+                SELECT table_comment FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = 'oauth_session'
+                """, String.class);
+        assertThat(tableComment).contains("授权会话");
+
+        Integer uniqueOnSessionId = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'oauth_session'
+                  AND column_name = 'session_id' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnSessionId).isEqualTo(1);
+
+        Integer indexOnSubscriptionId = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'oauth_session'
+                  AND index_name = 'idx_oauth_session_subscription'
+                """, Integer.class);
+        assertThat(indexOnSubscriptionId).isEqualTo(1);
+
+        var codeVerifierColumn = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'oauth_session' AND column_name = 'code_verifier_cipher'
+                """);
+        assertThat((String) codeVerifierColumn.get("column_comment")).contains("PKCE");
+        assertThat(codeVerifierColumn.get("is_nullable")).isEqualTo("NO");
+    }
 }

@@ -54,7 +54,18 @@ public enum BizCodeEnum {
     ENTERPRISE_DISABLED(410023, "企业已停用，无法分配订阅"),
     ENTERPRISE_AGENT_TYPE_MISMATCH(410024, "该企业不支持此套餐的 agent 类型"),
     ENTERPRISE_IN_USE(410025, "该企业仍被订阅引用，无法删除"),
-    SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致");
+    SUBSCRIPTION_ACCOUNT_DOMAIN_MISMATCH(410026, "账号邮箱域名与归属企业域名不一致"),
+    NODE_PROTOCOL_NOT_ALLOWED(410027, "该协议不能用于此角色的节点"),
+    EGRESS_IP_MISMATCH(410028, "落地节点实际出口与登记的出口 IP 不一致，请核对节点配置"),
+    EGRESS_PROBE_FAILED(410029, "落地节点出口探测失败，请确认该节点当前可用后重试"),
+    CREDENTIAL_EXCHANGE_FAILED(410030, "凭证兑换失败，请确认授权码正确且未过期"),
+    CREDENTIAL_REVOKE_FAILED(410031, "凭证吊销失败"),
+    LINK_NOT_READY_FOR_ISSUE(410032, "该用户链路尚未配置完整，无法签发凭证"),
+    CREDENTIAL_ISSUE_NOT_SUPPORTED(410033, "该席位类型不支持凭证签发"),
+    CREDENTIAL_SCOPE_INSUFFICIENT(410034, "服务端授予的权限不足，签发中止"),
+    CREDENTIAL_LIFETIME_TRUNCATED(410035, "服务端签发的凭证有效期远短于请求值，签发中止"),
+    OAUTH_SESSION_INVALID(410036, "授权会话不存在或已过期，请重新发起签发"),
+    CREDENTIAL_MANUAL_NOT_ALLOWED(410037, "Claude 席位的凭证只能通过签发获得，不支持手工录入");
 
     private final int code;
     private final String message;

@@ -80,6 +80,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     private Long adminId;
     private Long memberId;
     private Long monthlyPlanId;
+    /** Codex 套餐：凭据只能手工录入，专供仍需带凭据断言（hasCredential/防泄露）的用例复用 */
+    private Long codexMonthlyPlanId;
 
     private String bearer(Long userId) {
         return "Bearer " + sessionTokenService.issue(userId, Duration.ofMinutes(10));
@@ -149,12 +151,14 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, frontId, null);
         memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, frontId, null);
         monthlyPlanId = createPlan("Claude 月付", AgentType.CLAUDE, 30, "99.99", true);
+        codexMonthlyPlanId = createPlan("Codex 月付（凭据测试）", AgentType.CODEX, 30, "99.99", true);
     }
 
     @Test
     @DisplayName("从套餐分配：名称/时长/价格快照落到订阅上，止期自动算，分配号是 32 位十六进制")
     void createFromPlanSnapshotsAndComputesEnd() throws Exception {
-        String body = json(createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-x"));
+        // 用 Codex 套餐：本用例还要断言凭据落库且不回显泄露，而 Claude 席位凭据只能走 OAuth 签发、不接受手工录入
+        String body = json(createRequest(codexMonthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-x"));
 
         mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId))
@@ -165,9 +169,9 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
         mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data[0].agentType").value("CLAUDE"))
-                .andExpect(jsonPath("$.data[0].name").value("Claude 月付"))
-                .andExpect(jsonPath("$.data[0].planId").value(monthlyPlanId))
+                .andExpect(jsonPath("$.data[0].agentType").value("CODEX"))
+                .andExpect(jsonPath("$.data[0].name").value("Codex 月付（凭据测试）"))
+                .andExpect(jsonPath("$.data[0].planId").value(codexMonthlyPlanId))
                 .andExpect(jsonPath("$.data[0].planDurationDays").value(30))
                 .andExpect(jsonPath("$.data[0].planPrice").value(99.99))
                 .andExpect(jsonPath("$.data[0].planCurrency").value("USD"))
@@ -278,8 +282,10 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("更新只改起期/凭据/备注：止期按快照时长重算，套餐与名称不动，留空凭据沿用原值")
     void updateRecomputesEndAndKeepsPlan() throws Exception {
+        // 用 Codex 套餐：本用例还要断言凭据留空沿用原值（hasCredential 仍为 true），
+        // 而 Claude 席位凭据只能走 OAuth 签发、创建时手工录入本就不被允许
         Long id = createSubscription(memberId,
-                createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-x"));
+                createRequest(codexMonthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-x"));
 
         String update = json(updateRequest("2026-09-01T00:00:00Z", null, "顺延一个月"));
         mockMvc.perform(put("/api/admin/subscriptions/" + id).header("Authorization", bearer(adminId))
@@ -288,8 +294,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
         mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
                         .header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.data[0].name").value("Claude 月付"))
-                .andExpect(jsonPath("$.data[0].planId").value(monthlyPlanId))
+                .andExpect(jsonPath("$.data[0].name").value("Codex 月付（凭据测试）"))
+                .andExpect(jsonPath("$.data[0].planId").value(codexMonthlyPlanId))
                 .andExpect(jsonPath("$.data[0].startsAt", containsString("2026-09-01T00:00:00")))
                 .andExpect(jsonPath("$.data[0].endsAt", containsString("2026-10-01T00:00:00")))
                 .andExpect(jsonPath("$.data[0].remark").value("顺延一个月"))
@@ -331,8 +337,9 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("删除订阅后列表变空")
     void deleteSubscription() throws Exception {
+        // 凭据与本用例无关（只验证删除后列表为空），留空即可，避免撞上 Claude 席位不许手工录入凭据的新规则
         Long id = createSubscription(memberId,
-                createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-x"));
+                createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null));
 
         mockMvc.perform(delete("/api/admin/subscriptions/" + id).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
@@ -585,5 +592,59 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
                         .header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(jsonPath("$.code").value(410024));
+    }
+
+    @Test
+    @DisplayName("创建 Claude 订阅时带手工凭据报 410037：Claude 席位凭据只能走 OAuth 签发")
+    void createRejectsManualCredentialForClaudePlan() throws Exception {
+        String body = json(createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-manual"));
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(jsonPath("$.code").value(410037));
+    }
+
+    @Test
+    @DisplayName("创建 Codex 订阅时带手工凭据放行：Codex 不走 OAuth 签发体系")
+    void createAllowsManualCredentialForCodexPlan() throws Exception {
+        String body = json(createRequest(codexMonthlyPlanId, "2026-08-01T00:00:00Z", "codex-manual"));
+
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("更新 Claude 订阅时带手工凭据报 410037，凭据留空则正常放行")
+    void updateRejectsManualCredentialForClaudePlanButAllowsBlank() throws Exception {
+        Long subscriptionId = createSubscription(memberId,
+                createRequest(monthlyPlanId, "2026-08-01T00:00:00Z", null));
+
+        Map<String, Object> withCredential = updateRequest("2026-08-01T00:00:00Z", "sk-ant-manual", "改凭据");
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(withCredential)))
+                .andExpect(jsonPath("$.code").value(410037));
+
+        Map<String, Object> blankCredential = updateRequest("2026-08-01T00:00:00Z", null, "只改备注");
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(blankCredential)))
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("更新 Codex 订阅时带手工凭据放行：Codex 不受此限")
+    void updateAllowsManualCredentialForCodexPlan() throws Exception {
+        Long subscriptionId = createSubscription(memberId,
+                createRequest(codexMonthlyPlanId, "2026-08-01T00:00:00Z", null));
+
+        Map<String, Object> body = updateRequest("2026-08-01T00:00:00Z", "codex-manual", "改凭据");
+        mockMvc.perform(put("/api/admin/subscriptions/" + subscriptionId)
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

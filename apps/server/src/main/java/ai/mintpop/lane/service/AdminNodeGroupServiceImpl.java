@@ -195,6 +195,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
             } else {
                 ProxyNodeDto node = new ProxyNodeDto();
                 node.setName(uniqueNodeName(selected));
+                // 订阅导入的节点一律是前置节点：机场几乎不提供 HTTP 代理，
+                // 且落地节点需要独占的干净出口 IP，共享节点不合适
                 node.setRole(NodeRole.FRONT);
                 node.setProtocol(NodeProtocol.MIHOMO);
                 node.setServerAddr(sub.serverAddr());
