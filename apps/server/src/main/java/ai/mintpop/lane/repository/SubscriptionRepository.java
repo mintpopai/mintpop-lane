@@ -61,4 +61,13 @@ public interface SubscriptionRepository {
      * 不占用常规更新路径的 SQL 列，避免把这五列纳入日常更新引入静默覆盖风险。
      */
     void clearCredentialMetadata(Long subscriptionId);
+
+    /**
+     * 清空凭证密文本身与其全部签发元数据（credentialCipher 连同 {@link #clearCredentialMetadata}
+     * 清的那五列一并置空）。用于吊销：管理员点吊销的意图是「这个席位不该再有凭证」，
+     * 无论上游吊销是否成功，本地都不应继续留着它、也不应继续下发给客户端。
+     * 与 {@link #clearCredentialMetadata} 的区别只在多清 credentialCipher 这一列，
+     * 同样绕开常规 {@link #update}，不占用常规更新路径的 SQL 列。
+     */
+    void clearCredential(Long subscriptionId);
 }

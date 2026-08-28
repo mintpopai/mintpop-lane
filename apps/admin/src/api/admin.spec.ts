@@ -131,7 +131,7 @@ describe("createAdminApi", () => {
     ]);
   });
 
-  it("凭证签发两端点路径、方法与 body 正确", async () => {
+  it("凭证签发、吊销端点路径、方法与 body 正确", async () => {
     const calls: Array<{ path: string; method?: string; body?: string }> = [];
     const http: HttpClient = {
       request: async <T>(path: string, init?: RequestInit) => {
@@ -143,6 +143,7 @@ describe("createAdminApi", () => {
 
     await api.credentialAuthorizeUrl(7);
     await api.credentialExchange(7, { sessionId: "sess-1", code: "auth-code" });
+    await api.credentialRevoke(7);
 
     expect(calls).toEqual([
       { path: "/admin/subscriptions/7/credential/authorize-url", method: "POST", body: undefined },
@@ -151,6 +152,7 @@ describe("createAdminApi", () => {
         method: "POST",
         body: JSON.stringify({ sessionId: "sess-1", code: "auth-code" }),
       },
+      { path: "/admin/subscriptions/7/credential/revoke", method: "POST", body: undefined },
     ]);
   });
 

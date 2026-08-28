@@ -40,7 +40,9 @@ class AdminSubscriptionCredentialGuardTest {
                                                      UserRepository userRepository,
                                                      PlanRepository planRepository,
                                                      EnterpriseRepository enterpriseRepository) {
-        return new AdminSubscriptionServiceImpl(subscriptionRepository, userRepository, planRepository, enterpriseRepository);
+        // 本测试类只覆盖手工凭据的收紧规则，与吊销无关，注入一个不会被用到的 mock 即可
+        return new AdminSubscriptionServiceImpl(subscriptionRepository, userRepository, planRepository,
+                enterpriseRepository, mock(CredentialIssueService.class));
     }
 
     private Plan planOf(AgentType agentType) {
