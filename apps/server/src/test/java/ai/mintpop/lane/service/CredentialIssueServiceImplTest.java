@@ -60,7 +60,9 @@ class CredentialIssueServiceImplTest {
         SubscriptionDto subscription = new SubscriptionDto();
         subscription.setId(subscriptionId);
         subscription.setUserId(2L);
-        subscription.setCredential("cipher-token");
+        // DTO 里的 credential 已是明文：读路径的解密收口在 SubscriptionConverter.toDto，
+        // 吊销不得再解密一次（真实 token 含 '-'，二次解密会在 Base64 解码处炸掉）
+        subscription.setCredential("sk-ant-oat01-x");
         when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
 
         UserDto user = new UserDto();
@@ -72,7 +74,6 @@ class CredentialIssueServiceImplTest {
         land.setId(3L);
         when(nodeRepository.findById(3L)).thenReturn(Optional.of(land));
 
-        when(cipher.decrypt("cipher-token")).thenReturn("sk-ant-oat01-x");
         when(oauthClient.revoke(land, "sk-ant-oat01-x")).thenReturn(true);
 
         CredentialIssueServiceImpl service = newServiceForRevoke(
@@ -82,6 +83,7 @@ class CredentialIssueServiceImplTest {
 
         assertThat(result).isTrue();
         verify(subscriptionRepository).clearCredential(subscriptionId);
+        verify(cipher, never()).decrypt(any());
     }
 
     @Test
@@ -97,7 +99,8 @@ class CredentialIssueServiceImplTest {
         SubscriptionDto subscription = new SubscriptionDto();
         subscription.setId(subscriptionId);
         subscription.setUserId(2L);
-        subscription.setCredential("cipher-token");
+        // 同 revokeSucceedsUpstream：DTO 里已是明文，吊销路径不得再解密
+        subscription.setCredential("sk-ant-oat01-x");
         when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
 
         UserDto user = new UserDto();
@@ -109,7 +112,6 @@ class CredentialIssueServiceImplTest {
         land.setId(3L);
         when(nodeRepository.findById(3L)).thenReturn(Optional.of(land));
 
-        when(cipher.decrypt("cipher-token")).thenReturn("sk-ant-oat01-x");
         when(oauthClient.revoke(land, "sk-ant-oat01-x")).thenReturn(false);
 
         CredentialIssueServiceImpl service = newServiceForRevoke(

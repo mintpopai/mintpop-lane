@@ -170,8 +170,9 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
             log.warn("吊销凭证跳过上游调用：落地节点不可用，本地已清理，上游凭证可能仍然有效：subscriptionId={}",
                     subscriptionId);
         } else {
-            String accessToken = cipher.decrypt(subscription.getCredential());
-            upstreamRevoked = oauthClient.revoke(land, accessToken);
+            // DTO 里的 credential 已被 SubscriptionConverter.toDto 解密成明文，这里直接用；
+            // 再解密一次会在 Base64 解码处炸掉（真实 token 含 '-'）
+            upstreamRevoked = oauthClient.revoke(land, subscription.getCredential());
             if (upstreamRevoked) {
                 log.info("吊销凭证成功：subscriptionId={}", subscriptionId);
             } else {
