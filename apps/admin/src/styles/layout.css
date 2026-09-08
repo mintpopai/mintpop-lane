@@ -19,7 +19,7 @@
      role-badge / status-tag，lane 收口成一个通用类。 */
 
 :root {
-  /* 深墨：只给浮层类小面积对象（toast、选中 chip、pill、焦点环），不铺成面 */
+  /* 深墨：只给浮层类小面积对象（toast、选中 chip、pill、焦点环），不铺成面；唯一例外是登录页左面板 */
   --counter-deep: #0f1a16;
   --counter-danger: #b3341f;
   --counter-danger-deep: #932a19;
@@ -788,49 +788,123 @@ body {
   vertical-align: -1px;
 }
 
-/* —— gate：登录引导 / 无权限 / 登录错误。与后台同一套浅色材质：
-   Cloud 底 + 一张白卡，不另起一个深色世界 —— */
+/* —— gate：登录引导 / 无权限 / 登录错误。左右分屏：左边深墨品牌面板讲「这是什么」，
+   右边白底只放登录动作。骨架在 components/GateShell.vue，各闸门页只填右边的标题、说明与按钮。
+   与 meetu / 另一个 mintpop 管理端同一版式，移植时只换面板文案与字标。
+   深墨在这里是全站唯一铺成面的地方（见文件头「深墨只给小面积」的说明）：登录页在后台之外，
+   用一整块深色把「门口」和「屋里」分开，进门后再回到浅色。 —— */
 .gate {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(360px, 5fr) minmax(0, 6fr);
   min-height: 100vh;
-  padding: 24px;
-  background: var(--color-bg-cloud);
+  background: var(--color-bg);
+}
+
+/* 左面板：三段纵向分布——顶部 kicker、中部一句话、底部一行脚注。
+   底纹是一层从右下角透出的极淡品牌绿光，不用图片 */
+.gate-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  padding: clamp(28px, 4vw, 48px) clamp(28px, 5vw, 64px);
+  background:
+    radial-gradient(120% 90% at 100% 100%, rgba(23, 209, 167, 0.14), transparent 60%),
+    var(--counter-deep);
+  color: #e8f0ec;
+  overflow: hidden;
+}
+
+.gate-kicker {
+  font-size: 13px;
+  font-weight: 500;
+  color: #9db2aa;
+}
+
+/* 标题固定两行（模板里就是两句），不交给浏览器自动折行 */
+.gate-tagline {
+  font-size: clamp(30px, 3.4vw, 46px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+/* 唯一的亮点：一条品牌绿横条，从标题下方伸出去、冲出面板右缘 */
+.gate-stroke {
+  display: block;
+  width: calc(100% + clamp(28px, 5vw, 64px));
+  height: 10px;
+  margin: 28px 0 24px;
+  border-radius: 999px 0 0 999px;
+  background: var(--color-brand);
+}
+
+.gate-tagline-sub {
+  max-width: 24em;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #9db2aa;
+}
+
+.gate-foot {
+  padding-left: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 13px;
+  line-height: 1.6;
+  color: #9db2aa;
+}
+
+.gate-foot a {
+  color: #e8f0ec;
+  text-decoration: none;
+}
+
+.gate-foot a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+/* 右侧：内容在剩余空间里垂直居中 */
+.gate-main {
+  display: grid;
+  padding: 48px clamp(24px, 6vw, 96px);
 }
 
 .gate-box {
-  max-width: 460px;
-  padding: 40px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  align-self: center;
 }
 
+/* 字标 + 「管理后台」，与导航轨顶部同一组合、放大一档 */
 .gate-brand {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 14px;
   color: var(--color-ink-secondary);
 }
 
 .gate-brand .wordmark {
-  font-size: 20px;
+  font-size: 30px;
   font-weight: 600;
   color: var(--color-brand-deep);
 }
 
 .gate-title {
-  margin-top: 24px;
+  margin-top: 40px;
   font-size: 28px;
   font-weight: 600;
+  line-height: 1.2;
   letter-spacing: -0.01em;
   color: var(--color-ink);
 }
 
 .gate-text {
-  margin-top: 12px;
+  margin-top: 8px;
   font-size: 14px;
   line-height: 1.75;
   color: var(--color-ink-secondary);
@@ -845,24 +919,38 @@ body {
   display: flex;
   align-items: center;
   gap: 20px;
-  margin-top: 28px;
+  margin-top: 32px;
 }
 
-/* 与后台主按钮同一个语言，只是尺寸放大一档 */
+/* 与后台主按钮同一个语言，只是撑满宽、尺寸放大一档（44px） */
 .gate-btn {
-  padding: 12px 24px;
+  flex: 1;
+  height: 44px;
+  padding: 0 24px;
   border: none;
   border-radius: var(--radius-button);
   background: var(--color-brand);
   color: var(--counter-deep);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .gate-btn:hover {
   background: var(--color-brand-deep);
+}
+
+.gate-link {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--color-ink-secondary);
+  text-decoration: none;
+}
+
+.gate-link:hover {
+  color: var(--color-ink);
 }
 
 /* —— 质量地板：焦点态 ——
@@ -979,5 +1067,42 @@ body {
 
   .admin-form-row {
     grid-template-columns: 1fr;
+  }
+}
+
+/* —— 登录页窄屏：面板收成顶部一条深色横带，只留 kicker 与一句话；脚注让位给登录动作 —— */
+@media (max-width: 640px) {
+  .gate {
+    grid-template-columns: 1fr;
+  }
+
+  .gate-panel {
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .gate-tagline {
+    font-size: 24px;
+  }
+
+  .gate-stroke {
+    height: 6px;
+    margin: 16px 0 12px;
+  }
+
+  .gate-foot {
+    display: none;
+  }
+
+  .gate-main {
+    padding: 32px 24px 40px;
+  }
+
+  .gate-box {
+    align-self: start;
+  }
+
+  .gate-title {
+    margin-top: 28px;
   }
 }
