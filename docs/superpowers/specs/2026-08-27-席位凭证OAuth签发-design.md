@@ -231,7 +231,9 @@ LAND 的全部价值是 `egress_ip`。抗审查责任始终在 FRONT。
 
 要解决的问题：**用户可能只买一个月，但凭证签了一年**。订阅到期后他仍握有可用凭证。
 
-⚠️ 前提认知：**用户能拿到凭证明文**。会话内一句 `env | grep CLAUDE` 就能看到完整 token，复制到任何机器都能用。环境变量注入这条路上无法防住这件事 —— 既有的 setup-token 方案同样如此，且是满 365 天。因此下面两层手段的目标不是「防止泄露」，而是**压缩泄露的价值窗口**。
+⚠️ 前提认知：**用户能拿到凭证明文**，复制到任何机器都能用。环境变量注入这条路上无法防住这件事 —— 既有的 setup-token 方案同样如此，且是满 365 天。因此下面两层手段的目标不是「防止泄露」，而是**压缩泄露的价值窗口**。
+
+取值路径需注意（2026-08-29 实测 claude 2.1.251）：**会话内 `env | grep CLAUDE` 已经看不到 token**——claude 在 spawn 子进程（Bash 工具、`!` 命令）时会 `delete process.env.CLAUDE_CODE_OAUTH_TOKEN`，并按一张敏感变量名单（含 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 等）过滤。但这只堵住了「经 agent 自己的子进程」这一条路，**结论不变**：macOS 上 `ps eww -p <会话 claude 的 pid>` 可读到同用户进程的完整初始环境，token 与代理口令都在其中。不要据此以为凭证已经不可导出。
 
 ### 9.1 有效期跟随订阅时长（主防线）
 
@@ -344,6 +346,17 @@ POST https://platform.claude.com/v1/oauth/token/revoke
 1. 为一个链路完整的 Claude 席位走完签发流程，`credential_scope` 落库为 `user:inference user:profile`，`credential_expires_at` **与该订阅的 `endsAt` 相差约一天**（而非固定一年）
 2. 该席位起会话，客户端 debug 日志出现 `[Bootstrap] Fetch ok`（而非 `Skipped: 403`）
 3. 会话内 `/model` 列表包含 Fable 5
+   > ⚠️ **运维前提（2026-08-29 实测踩过）：席位账号所属组织必须开启 usage credits**
+   > （claude.ai → Admin settings → Usage → 「Turn on usage credits」），**余额可以为 $0**。
+   > 这一步与本方案无关、也不是计费问题，但不做就会让「列表里看得见 Fable，选了却用不了」：
+   > 关闭时上游返回 `overage-disabled-reason: org_level_disabled`，而 CLI 放行白名单只认
+   > `org_level_disabled_until` / `org_spend_cap_reached` / `out_of_credits`，于是 consent 闸恒不放行；
+   > 同时弹窗给出「继续」需要 `overagesEnabled`，也不满足 —— **死锁**。开启后 reason 变
+   > `out_of_credits`（落进白名单），弹窗出现「继续」，点一次即通。
+   > Fable 消耗的是套餐内含的 `7d_oi` 周窗口（响应头 `anthropic-ratelimit-unified-7d_oi-*`），
+   > **不动用 credits**；余额为 0 时超额请求被上游直接拒绝，无扣费风险。
+   > 判定手段：用席位 token 打一次 `/v1/messages` 要 `claude-fable-5`，看是否 200 且带 `7d_oi` 头 ——
+   > 200 即说明额度正常、问题在客户端闸门而非授权。
 4. 旧式凭证（`credential_scope` 为空）的席位行为与改动前逐字相同
 5. 链路不完整的席位签发被守卫拒绝，且探测失败与 IP 不符给出可区分的报错
 6. 落地节点保存 trojan/vmess 协议被拒；订阅导入的节点一律落为 `FRONT`
