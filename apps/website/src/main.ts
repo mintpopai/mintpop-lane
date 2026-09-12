@@ -17,15 +17,24 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import { ViteSSG } from "vite-ssg";
 import App from "./App.vue";
+import GuidePage from "./pages/GuidePage.vue";
 import HomePage from "./pages/HomePage.vue";
+import { ROUTE_PATHS } from "./routes";
 import "./styles.css";
 
-// / 与 /en/ 是同一页的两个语言版本（locale 由路由派生，见 i18n.ts），
-// 各自预渲染成一份 HTML、分别被搜索引擎收录。
-// 以后加页面：pages/ 下建组件 + 这里加路由，构建即多出一份预渲染 HTML。
+// / 与 /en/ 是同一页的两个语言版本（locale 由路由派生，见 i18n.ts）；
+// 指南页两条动态路由，具体 slug 由 includedRoutes 展开、逐条预渲染。
+// 以后加指南：content/guides/ 下建文件 + 注册表加一行，这里不用动。
 const routes = [
   { path: "/", component: HomePage },
   { path: "/en", component: HomePage },
+  { path: "/guides/:slug", component: GuidePage },
+  { path: "/en/guides/:slug", component: GuidePage },
 ];
 
 export const createApp = ViteSSG(App, { routes });
+
+// vite-ssg 只会自动预渲染静态路径；动态路由要在这里展开成具体路径（与 sitemap 同源，见 routes.ts）
+export function includedRoutes(): string[] {
+  return ROUTE_PATHS;
+}

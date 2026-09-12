@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- / 与 /en/ 是同一页的中英两个语言版本（hreflang 关系在页面 head 里声明） -->
+<!-- 与 src/routes.ts 的 ROUTE_PATHS 一一对应（routes.test.ts 钉住集合相等）。
+     / 与 /en/、各指南的两种语言互为 hreflang 关系，在页面 head 里声明。 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://lane.mintpop.ai/</loc>
@@ -10,5 +11,45 @@
     <loc>https://lane.mintpop.ai/en/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/guides/claude-code-in-china/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/en/guides/claude-code-in-china/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/guides/why-claude-accounts-get-banned/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/en/guides/why-claude-accounts-get-banned/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/guides/official-claude-code-vs-relay/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/en/guides/official-claude-code-vs-relay/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/guides/stable-chatgpt-codex/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lane.mintpop.ai/en/guides/stable-chatgpt-codex/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>
 </urlset>
