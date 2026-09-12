@@ -75,7 +75,9 @@ export interface Copy {
     note: string;
     unavailable: string;
   };
-  faq: { kicker: string; title: string; items: { q: string; a: string }[] };
+  faq: { kicker: string; title: string; items: { q: string; a: string; more?: { href: string; label: string } }[] };
+  /** 首页「延伸阅读」区块的头；条目本身来自 content/guides 注册表，不在这里重复维护 */
+  guides: { kicker: string; title: string; lede: string };
   footer: { tagline: string; links: { href: string; label: string }[] };
   /** 原先散在模板与视觉组件里的零碎串，按出现位置分组收在这里 */
   ui: {
@@ -128,9 +130,9 @@ export interface Copy {
 
 const zh: Copy = {
   meta: {
-    title: "MintPop Lane · 打开就能写代码",
+    title: "稳定使用官方 Claude Code：账号、订阅、专属出口一站搞定 | MintPop Lane",
     description:
-      "打开就能写代码，别的都替你办好了。代理、密钥、运行环境这些准备工作 MintPop Lane 都替你做完，登录一次挑个目录就能开始。支持 macOS（Apple 芯片）与 Windows。",
+      "为想稳定使用 Claude Code 的开发者准备：官方账号与订阅代办、独立固定的自营美国出口降低封号风险、内置终端免配置，登录一次挑个目录就能写代码。支持 macOS（Apple 芯片）与 Windows。ChatGPT Codex 接入规划中。",
   },
   nav: [
     { href: "#pricing", label: "席位与价格" },
@@ -140,7 +142,7 @@ const zh: Copy = {
   ],
   hero: {
     pill: "一站式官方 Claude 接入软件",
-    title: ["想用真正的官方 Claude，却不想折腾账号、支付、环境…… 🤯", "MintPop 帮你全部搞定！"],
+    title: ["想稳定使用官方 Claude Code，却不想折腾账号、支付、环境…… 🤯", "MintPop 帮你全部搞定！"],
     lede: [
       "所有环境已提前配置完成：IP 接入、时区设置、网络环境、依赖与权限全部到位。",
       "全程 100% 官方 Claude Code，用量可实时查询，对话内容零留存。",
@@ -303,7 +305,26 @@ const zh: Copy = {
         q: "在中国大陆能用吗？",
         a: "能。登录这一步会跟着你自己的系统代理走，之后的流量走你的专属出口。",
       },
+      {
+        q: "Claude 账号为什么会被封？Lane 怎么降低风险？",
+        a: "常见诱因是多个账号共用一个出口、出口地址频繁变化、支付信息与使用地区不一致。Lane 给每个账号独立且固定的自营出口，账号与支付统一代办，从源头移除这几条。",
+        more: { href: "/guides/why-claude-accounts-get-banned/", label: "看完整的封号原因与避免方法" },
+      },
+      {
+        q: "支持 ChatGPT / Codex 吗？",
+        a: "目前只接入 Claude Code。Codex 在规划中，上线后会自动出现在应用里，不用升级或改配置。",
+        more: { href: "/guides/stable-chatgpt-codex/", label: "了解 ChatGPT / Codex 的现状" },
+      },
+      {
+        q: "和自己订阅 Claude Pro 有什么区别？",
+        a: "用的同样是官方 Claude Code，区别在于账号、支付、出口、终端环境都不用自己弄，用量按席位规格给：Standard 为 1.25 倍 PRO，Premium 为 6.25 倍 PRO。",
+      },
     ],
+  },
+  guides: {
+    kicker: "延伸阅读",
+    title: "想稳定用 Claude，先弄清这几件事",
+    lede: "四篇短指南：国内怎么用、账号为什么会被封、官方与镜像的区别，以及 ChatGPT / Codex 的现状。",
   },
   footer: {
     tagline: "Pop into something fresh.",
@@ -372,9 +393,9 @@ const zh: Copy = {
 
 const en: Copy = {
   meta: {
-    title: "MintPop Lane · Open it and start coding",
+    title: "Stable, official Claude Code access: account, subscription and dedicated exit handled | MintPop Lane",
     description:
-      "Open it and start coding — everything else is already handled. MintPop Lane sets up the network, the keys, and the runtime for you. Sign in once, pick a folder, and go. macOS (Apple silicon) and Windows.",
+      "Official Claude Code that keeps working: account and subscription handled for you, a dedicated fixed US exit to cut ban risk, and a ready-to-use terminal. macOS (Apple silicon) and Windows. Codex support is planned.",
   },
   nav: [
     { href: "#pricing", label: "Pricing" },
@@ -385,7 +406,7 @@ const en: Copy = {
   hero: {
     pill: "Official Claude, set up end to end",
     title: [
-      "Want the real official Claude, without wrangling accounts, payments, and environments… 🤯",
+      "Want stable, official Claude Code without wrangling accounts, payments and environments… 🤯",
       "MintPop handles all of it!",
     ],
     lede: [
@@ -557,7 +578,26 @@ const en: Copy = {
         q: "Do I need my own API key or proxy?",
         a: "No. Your subscription's credits and your dedicated lane are both built in — there is no key to paste and no proxy to configure.",
       },
+      {
+        q: "Why do Claude accounts get banned, and how does Lane lower the risk?",
+        a: "The usual triggers are many accounts sharing one exit, an exit address that keeps changing, and billing details that do not match the region of use. Lane gives every account its own fixed exit on IPs we operate and handles the account and payment, removing those triggers at the source.",
+        more: { href: "/en/guides/why-claude-accounts-get-banned/", label: "Read the full guide on bans" },
+      },
+      {
+        q: "Do you support ChatGPT / Codex?",
+        a: "Claude Code only, for now. Codex support is planned and will appear inside the app when it ships, with no upgrade or configuration on your side.",
+        more: { href: "/en/guides/stable-chatgpt-codex/", label: "Where ChatGPT / Codex stands" },
+      },
+      {
+        q: "How is this different from subscribing to Claude Pro myself?",
+        a: "It is the same official Claude Code. The difference is that the account, payment, exit and terminal environment are all handled, and usage comes by seat: Standard at 1.25× PRO, Premium at 6.25× PRO.",
+      },
     ],
+  },
+  guides: {
+    kicker: "Guides",
+    title: "Before you decide, four things worth knowing",
+    lede: "Short guides on using Claude Code from China, why accounts get banned, official versus relay, and where ChatGPT / Codex stands.",
   },
   footer: {
     tagline: "Pop into something fresh.",

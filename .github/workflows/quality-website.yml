@@ -28,26 +28,40 @@ jobs:
           DIST=apps/website/dist
           fail=0
 
-          if ! grep -q "Open it and start coding" "$DIST/en/index.html"; then
-            echo "断言失败：$DIST/en/index.html 未含英文标题 'Open it and start coding'（英文页可能被渲染成中文/空壳）"
+          # 英文标题片段来自 copy.ts 的 en.meta.title；改标题时同步改这里
+          EN_TITLE="Stable, official Claude Code access"
+
+          if ! grep -q "$EN_TITLE" "$DIST/en/index.html"; then
+            echo "断言失败：$DIST/en/index.html 未含英文标题 '$EN_TITLE'（英文页可能被渲染成中文/空壳）"
             fail=1
           fi
 
-          if grep -q "Open it and start coding" "$DIST/index.html"; then
-            echo "断言失败：$DIST/index.html（中文页）含英文标题 'Open it and start coding'（locale 在并发预渲染中串台）"
+          if grep -q "$EN_TITLE" "$DIST/index.html"; then
+            echo "断言失败：$DIST/index.html（中文页）含英文标题 '$EN_TITLE'（locale 在并发预渲染中串台）"
             fail=1
           fi
 
-          zh_title_count=$(grep -o '<title>' "$DIST/index.html" | wc -l | tr -d ' ')
-          if [ "$zh_title_count" != "1" ]; then
-            echo "断言失败：$DIST/index.html 的 <title> 出现 $zh_title_count 次，应为 1 次（head 被重复叠加）"
+          # 每份预渲染 HTML 恰好一个 <title>（head 被重复叠加时会变成 2 个），且英文页 lang="en"、中文页 lang="zh-CN"
+          pages=$(find "$DIST" -name index.html | sort)
+          count=$(printf '%s\n' "$pages" | wc -l | tr -d ' ')
+          if [ "$count" -lt 10 ]; then
+            echo "断言失败：只找到 $count 份 index.html，应至少 10 份（首页 2 + 指南 4×2）"
             fail=1
           fi
-
-          en_title_count=$(grep -o '<title>' "$DIST/en/index.html" | wc -l | tr -d ' ')
-          if [ "$en_title_count" != "1" ]; then
-            echo "断言失败：$DIST/en/index.html 的 <title> 出现 $en_title_count 次，应为 1 次（head 被重复叠加）"
-            fail=1
-          fi
+          for f in $pages; do
+            n=$(grep -o '<title>' "$f" | wc -l | tr -d ' ')
+            if [ "$n" != "1" ]; then
+              echo "断言失败：$f 的 <title> 出现 $n 次，应为 1 次"
+              fail=1
+            fi
+            case "$f" in
+              "$DIST"/en/*) want='lang="en"' ;;
+              *)            want='lang="zh-CN"' ;;
+            esac
+            if ! grep -q "$want" "$f"; then
+              echo "断言失败：$f 未含 $want（语言与路径不符）"
+              fail=1
+            fi
+          done
 
           exit $fail

@@ -1,7 +1,27 @@
 <script setup lang="ts">
+import { useHead } from "@unhead/vue";
 import { useI18n } from "../i18n";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+
+// FAQ 结构化数据：让搜索结果直接展开问答（富摘要）。只用 q / a 纯文本，不带 more 链接。
+useHead({
+  script: () => [
+    {
+      type: "application/ld+json",
+      innerHTML: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        inLanguage: locale.value === "zh" ? "zh-CN" : "en",
+        mainEntity: t.value.faq.items.map((item) => ({
+          "@type": "Question",
+          name: item.q,
+          acceptedAnswer: { "@type": "Answer", text: item.a },
+        })),
+      }),
+    },
+  ],
+});
 </script>
 
 <template>
@@ -17,7 +37,11 @@ const { t } = useI18n();
             <span class="q">{{ item.q }}</span>
             <span class="sign" aria-hidden="true"></span>
           </summary>
-          <p class="a">{{ item.a }}</p>
+          <div class="a">
+            <p>{{ item.a }}</p>
+            <!-- 延伸阅读：答案讲到一半的话题，指南页里有完整版；站内链接走 RouterLink 免整页刷新 -->
+            <RouterLink v-if="item.more" :to="item.more.href" class="more">{{ item.more.label }} →</RouterLink>
+          </div>
         </details>
       </div>
     </div>
@@ -95,6 +119,23 @@ details[open] .q {
   max-width: 46em;
   color: var(--ink-2);
   font-size: 15.5px;
+}
+
+.a p {
+  margin: 0;
+}
+
+.more {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--brand-text);
+  text-decoration: none;
+}
+
+.more:hover {
+  color: var(--brand-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {
