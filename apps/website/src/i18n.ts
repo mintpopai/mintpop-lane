@@ -21,6 +21,17 @@ export function localePath(l: Locale): string {
   return l === "zh" ? "/" : "/en/";
 }
 
+/** 同一页面换语言：/ ↔ /en/，/guides/x/ ↔ /en/guides/x/。
+    输出恒以 / 结尾——与 nginx 目录形态、canonical 一致；预渲染期 route.path 不带尾斜杠，这里统一补上。
+    只做前缀替换，不碰 hash / query（调用方自己带）。 */
+export function switchLocalePath(path: string, to: Locale): string {
+  // 先剥掉英文前缀得到「语言无关」的路径（/en → ""、/en/guides/x → /guides/x）
+  const bare = localeFromPath(path) === "en" ? path.slice("/en".length) : path;
+  const withSlash = bare === "" || bare === "/" ? "/" : bare.endsWith("/") ? bare : `${bare}/`;
+  if (to === "zh") return withSlash;
+  return withSlash === "/" ? "/en/" : `/en${withSlash}`;
+}
+
 /** 只在用户手动切换语言时写入；回访时 App.vue 据此把 / 跳到 /en/。
     调用方必须保证在浏览器里执行（onMounted 之后），构建期没有 localStorage。
     iOS「阻止所有 Cookie」等隐私模式下访问 localStorage 不是「读不到」而是直接抛
