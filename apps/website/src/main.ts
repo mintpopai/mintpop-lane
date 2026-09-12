@@ -19,7 +19,8 @@ import { ViteSSG } from "vite-ssg";
 import App from "./App.vue";
 import GuidePage from "./pages/GuidePage.vue";
 import HomePage from "./pages/HomePage.vue";
-import { ROUTE_PATHS } from "./routes";
+import { localeFromPath, switchLocalePath } from "./i18n";
+import { ROUTE_PATHS, canonicalPath } from "./routes";
 import "./styles.css";
 
 // / 与 /en/ 是同一页的两个语言版本（locale 由路由派生，见 i18n.ts）；
@@ -32,7 +33,21 @@ const routes = [
   { path: "/en/guides/:slug", component: GuidePage },
 ];
 
-export const createApp = ViteSSG(App, { routes });
+export const createApp = ViteSSG(App, {
+  routes,
+  // 站内跳转（首页 → 指南、FAQ 的延伸阅读）默认会停在原滚动位置，落到长文页底部：
+  // - 浏览器前进/后退恢复原位；
+  // - 带锚点滚到锚点；
+  // - 同一页面换语言留在原处（顶栏的中 / EN，见 TheHeader.vue 的 B2.2）；
+  // - 其余一律回到页顶，且用 instant：styles.css 给 html 设了 scroll-behavior: smooth，
+  //   不指定就会从旧页底部「平滑滚」到新页顶部，像是页面自己在动。
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.hash) return { el: to.hash };
+    if (switchLocalePath(from.path, localeFromPath(to.path)) === canonicalPath(to.path)) return false;
+    return { top: 0, behavior: "instant" };
+  },
+});
 
 // vite-ssg 只会自动预渲染静态路径；动态路由要在这里展开成具体路径（与 sitemap 同源，见 routes.ts）
 export function includedRoutes(): string[] {
