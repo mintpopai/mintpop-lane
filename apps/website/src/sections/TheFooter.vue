@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { useI18n } from "../i18n";
+import { GUIDES } from "../content/guides";
+import { localePath, useI18n } from "../i18n";
+import { guidePath } from "../routes";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const year = new Date().getFullYear();
 </script>
 
@@ -21,7 +23,11 @@ const year = new Date().getFullYear();
       </div>
 
       <nav class="links" :aria-label="t.ui.footer.navLabel">
-        <a v-for="l in t.footer.links" :key="l.href" :href="l.href">{{ l.label }}</a>
+        <a v-for="l in t.footer.links" :key="l.href" :href="localePath(locale) + l.href">{{ l.label }}</a>
+        <!-- 指南页内链：全站每页都能到达四篇指南，这是搜索引擎发现与传递权重的主要路径 -->
+        <RouterLink v-for="g in GUIDES" :key="g.slug" :to="guidePath(locale, g.slug)">{{
+          g.copy[locale].navLabel
+        }}</RouterLink>
         <!-- 跨站到 MintPop 主站，和页内锚点不是一回事，故单列在 v-for 之外，
              并与页头同一份 t.ui.contact（同一个链接不写两遍）。
              ≤1040px 顶栏会把联系按钮收起（见 TheHeader.vue 的断点注释），那时这里就是唯一的联系入口。 -->

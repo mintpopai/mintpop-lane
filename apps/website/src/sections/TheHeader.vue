@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { localePath, rememberLocale, useI18n } from "../i18n";
+import { localePath, rememberLocale, switchLocalePath, useI18n } from "../i18n";
 
 const { t, locale } = useI18n();
 const router = useRouter();
 const route = useRoute();
 
-// 语言切换 = 路由跳转（/ ↔ /en/），URL 即语言；同时记住偏好，供回访时 App.vue 自动跳转。
+// 语言切换 = 同一页面换语言（/ ↔ /en/、指南页互切），URL 即语言；同时记住偏好，供回访时 App.vue 自动跳转。
 // 带上当前 hash：否则滚到 FAQ 时点切换会被扔回页顶（B2.2）
 function toggleLocale() {
   const next = locale.value === "zh" ? "en" : "zh";
   rememberLocale(next);
-  router.push({ path: localePath(next), hash: route.hash });
+  router.push({ path: switchLocalePath(route.path, next), hash: route.hash });
 }
 
 /** 滚过首屏就给顶栏加边框与更实的底：不滚动时让它彻底融进 Hero 的留白里 */
@@ -57,7 +57,8 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
       </RouterLink>
 
       <nav class="nav" :aria-label="t.ui.header.navLabel">
-        <a v-for="item in t.nav" :key="item.href" :href="item.href">{{ item.label }}</a>
+        <!-- 锚点带首页前缀：指南页上也能回到首页对应区块；在首页上 /#pricing 与 #pricing 都是页内跳转 -->
+        <a v-for="item in t.nav" :key="item.href" :href="localePath(locale) + item.href">{{ item.label }}</a>
       </nav>
 
       <!-- 放在 .nav 外面：<860px 时 .nav 整个 display:none，
@@ -79,7 +80,7 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
         >{{ t.ui.contact.label }}</a
       >
 
-      <a class="btn btn-primary btn-sm cta" href="#download">{{ t.ui.header.cta }}</a>
+      <a class="btn btn-primary btn-sm cta" :href="`${localePath(locale)}#download`">{{ t.ui.header.cta }}</a>
     </div>
   </header>
 </template>

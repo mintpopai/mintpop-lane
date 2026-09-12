@@ -105,6 +105,8 @@ export interface Copy {
       sizePrefix: string;
     };
     footer: { navLabel: string };
+    /** 指南页壳子文案（正文在 content/guides/） */
+    guide: { home: string; updated: string; faqTitle: string };
     lane: { caption: string };
     visual: {
       ariaLabel: string;
@@ -339,6 +341,7 @@ const zh: Copy = {
       sizePrefix: "约 ",
     },
     footer: { navLabel: "页脚导航" },
+    guide: { home: "首页", updated: "更新于", faqTitle: "本篇常见问题" },
     lane: { caption: "应用里能一直看到链路的状态，哪一段没通，就在哪一段上标出来。" },
     visual: {
       ariaLabel: "MintPop Lane 应用界面示意：链路已接通，终端里正在运行 Agent 会话",
@@ -592,6 +595,7 @@ const en: Copy = {
       sizePrefix: "~",
     },
     footer: { navLabel: "Footer navigation" },
+    guide: { home: "Home", updated: "Updated", faqTitle: "Questions about this guide" },
     lane: {
       caption:
         "The app shows lane status at all times — whichever segment is down is marked right there.",
