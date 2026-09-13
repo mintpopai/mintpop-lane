@@ -7,7 +7,6 @@ import {
   nodeToForm,
   parseScalar,
   syncEgressIpFromServerAddr,
-  syncEgressTimezoneFromLookup,
   validateNodeForm,
   PROTOCOL_SECRET_KEYS,
   type NodeFormModel,
@@ -120,9 +119,9 @@ describe("validateNodeForm", () => {
     expect(validateNodeForm(makeForm({ role: "FRONT", capacity: null }))).toEqual([]);
   });
 
-  it("IPv4 与 IPv6 字面量都放行", () => {
-    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10" }))).toEqual([]);
-    expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1" }))).toEqual([]);
+  it("IPv4 与 IPv6 字面量都放行（配上时区，两者成对）", () => {
+    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "Asia/Tokyo" }))).toEqual([]);
+    expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1", egressTimezone: "Asia/Tokyo" }))).toEqual([]);
   });
 
   it("切到第一跳后不再校验已隐藏的出口 IP / 出口时区残值——提交时它们会被置 null", () => {
@@ -136,9 +135,15 @@ describe("validateNodeForm", () => {
     );
   });
 
-  it("出口时区留空或填合法时区名都放行", () => {
-    expect(validateNodeForm(makeForm({ egressTimezone: "" }))).toEqual([]);
-    expect(validateNodeForm(makeForm({ egressTimezone: "Asia/Tokyo" }))).toEqual([]);
+  it("登记了出口 IP 就必须有时区——改 IP 会清空时区，忘了回车检测不给保存", () => {
+    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "" }))).toContain(
+      "出口时区未填：在出口 IP 栏按回车自动识别，或手动填写",
+    );
+  });
+
+  it("未登记出口 IP 时时区可留空；填了合法时区名放行", () => {
+    expect(validateNodeForm(makeForm({ egressIp: "", egressTimezone: "" }))).toEqual([]);
+    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "Asia/Tokyo" }))).toEqual([]);
   });
 });
 
@@ -210,42 +215,6 @@ describe("syncEgressIpFromServerAddr", () => {
     const form = makeForm({ role: "FRONT", serverAddr: "203.0.113.10", egressIp: "" });
 
     expect(syncEgressIpFromServerAddr(form, "").egressIp).toBe("");
-  });
-});
-
-describe("syncEgressTimezoneFromLookup", () => {
-  it("落地节点时区为空时，用查询结果预填", () => {
-    const form = makeForm({ egressTimezone: "" });
-
-    expect(syncEgressTimezoneFromLookup(form, "Asia/Tokyo", "").egressTimezone).toBe("Asia/Tokyo");
-  });
-
-  it("时区若还等于上一次的预填值，跟随新查询结果更新", () => {
-    const form = makeForm({ egressTimezone: "Asia/Tokyo" });
-
-    expect(syncEgressTimezoneFromLookup(form, "America/Los_Angeles", "Asia/Tokyo").egressTimezone).toBe(
-      "America/Los_Angeles",
-    );
-  });
-
-  it("时区已被手工改过（与上一次预填值不同）就不动它", () => {
-    const form = makeForm({ egressTimezone: "Asia/Shanghai" });
-
-    expect(syncEgressTimezoneFromLookup(form, "America/Los_Angeles", "Asia/Tokyo").egressTimezone).toBe(
-      "Asia/Shanghai",
-    );
-  });
-
-  it("第一跳节点不预填——出口时区是落地节点的属性", () => {
-    const form = makeForm({ role: "FRONT", egressTimezone: "" });
-
-    expect(syncEgressTimezoneFromLookup(form, "Asia/Tokyo", "").egressTimezone).toBe("");
-  });
-
-  it("查询结果为空（GeoIP 查不到）时不动表单", () => {
-    const form = makeForm({ egressTimezone: "" });
-
-    expect(syncEgressTimezoneFromLookup(form, null, "").egressTimezone).toBe("");
   });
 });
 

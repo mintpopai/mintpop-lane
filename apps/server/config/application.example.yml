@@ -44,6 +44,19 @@ lane:
     # 换了这个值，库里已有的密文全部解不开，必须重录所有凭据与节点密码
     key: 填入生成的密钥
 
+# —— 通知（飞书群自定义机器人）——feishu 段可选：不配 webhook 则不推送（巡检仍照常跑）——
+# 目前推送的事件：落地出口 IP 已变更——管理端改了出口 IP（含检测后一键回填）、
+# 或定时巡检发现实际出口与登记不一致并自动回填，都在库改完之后推一张卡片
+# 获取方式：飞书群设置 → 群机器人 → 添加「自定义机器人」，安全设置勾选「签名校验」
+notify:
+  feishu:
+    webhook-url: 填机器人webhook地址（https://open.feishu.cn/open-apis/bot/v2/hook/ 开头）
+    secret: 填签名校验密钥
+  egress-check:
+    # 出口 IP 巡检间隔（上一轮结束到下一轮开始），Spring Boot 时长写法；启动后先等这么久再跑首轮。
+    # 回填出口 IP 时，出口时区同步按新 IP 重新解析（GeoIP 走 ipwho.is，服务端需能访问它）
+    interval: 1h
+
 claude:
   oauth:
     # 以下均为 Claude OAuth 端点常量，非密钥，各环境一致，取自 Claude Code CLI 2.1.246 的 prod 配置块

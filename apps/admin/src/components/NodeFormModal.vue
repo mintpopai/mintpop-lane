@@ -12,7 +12,6 @@ import {
   isIpLiteral,
   nodeToForm,
   syncEgressIpFromServerAddr,
-  syncEgressTimezoneFromLookup,
   validateNodeForm,
   type NodeFormModel,
 } from "../utils/nodeForm";
@@ -36,28 +35,60 @@ watch(
   },
 );
 
-// 上一次预填进表单的时区值；据此区分「还是预填的」与「管理员手工改过」
-const lastPrefilledTimezone = ref("");
+/** 出口时区识别的进度；文案与颜色都由它派生 */
+type TimezoneDetectState = "IDLE" | "PENDING" | "DETECTING" | "INVALID_IP" | "NOT_FOUND" | "DONE";
+const timezoneDetect = ref<TimezoneDetectState>("IDLE");
 
-// 出口 IP 变成合法 IP 字面量时查 GeoIP 预填时区；查询失败静默降级为人工填写
+// 出口 IP 一有改动（手敲或由地址带入）就清空时区：旧时区对新 IP 多半是错的，留着比空着更危险。
+// 不在这里自动查 GeoIP——半截 IP 查不出东西，等管理员填好按回车再查（见 detectEgressTimezone）
 watch(
   () => form.value.egressIp,
-  async (egressIp) => {
-    const ip = egressIp.trim();
-    if (form.value.role !== "LAND" || !isIpLiteral(ip)) {
+  () => {
+    if (form.value.role !== "LAND") {
       return;
     }
-    const timezone = await lookupIpTimezone(ip);
-    // 等待期间出口 IP 又改了：这份结果已过期，丢弃（后一次改动自有它自己的查询）
-    if (form.value.egressIp.trim() !== ip) {
-      return;
-    }
-    form.value = syncEgressTimezoneFromLookup(form.value, timezone, lastPrefilledTimezone.value);
-    if (timezone !== null && form.value.egressTimezone === timezone) {
-      lastPrefilledTimezone.value = timezone;
-    }
+    form.value.egressTimezone = "";
+    timezoneDetect.value = "PENDING";
   },
 );
+
+/** 回车触发：先校验 IP 格式，通过再按 IP 查 GeoIP 填时区；查到的值管理员仍可改 */
+async function detectEgressTimezone(): Promise<void> {
+  const ip = form.value.egressIp.trim();
+  if (!isIpLiteral(ip)) {
+    timezoneDetect.value = "INVALID_IP";
+    return;
+  }
+  timezoneDetect.value = "DETECTING";
+  const timezone = await lookupIpTimezone(ip);
+  // 等待期间出口 IP 又改了：这份结果已过期，丢弃（watch 已把状态重置为 PENDING）
+  if (form.value.egressIp.trim() !== ip) {
+    return;
+  }
+  if (timezone === null) {
+    timezoneDetect.value = "NOT_FOUND";
+    return;
+  }
+  form.value.egressTimezone = timezone;
+  timezoneDetect.value = "DONE";
+}
+
+const timezoneHint = computed(() => {
+  switch (timezoneDetect.value) {
+    case "PENDING":
+      return "出口 IP 已改动，时区已清空。填好后按回车检测时区";
+    case "DETECTING":
+      return "正在按出口 IP 识别时区…";
+    case "INVALID_IP":
+      return `「${form.value.egressIp.trim()}」不是合法的 IP 地址，改好后再按回车`;
+    case "NOT_FOUND":
+      return "未能识别该 IP 的时区，请手动填写";
+    case "DONE":
+      return "已按出口 IP 识别时区，不对可手动改";
+    default:
+      return "";
+  }
+});
 
 // IANA 时区名的补全候选；datalist 只是提示，不限制手工输入
 const timeZoneOptions = Intl.supportedValuesOf("timeZone");
@@ -198,8 +229,17 @@ async function submit(): Promise<void> {
             id="node-egress"
             v-model="form.egressIp"
             class="admin-input fact"
-            placeholder="地址填 IP 时自动带入，可改"
+            placeholder="地址填 IP 时自动带入，回车检测时区"
+            @keydown.enter.prevent="detectEgressTimezone()"
           />
+          <p
+            v-if="timezoneHint"
+            id="node-egress-hint"
+            class="admin-note"
+            :data-tone="timezoneDetect === 'INVALID_IP' ? 'DANGER' : undefined"
+          >
+            {{ timezoneHint }}
+          </p>
         </div>
         <div class="admin-field">
           <label for="node-egress-tz">出口时区</label>
@@ -208,7 +248,7 @@ async function submit(): Promise<void> {
             v-model="form.egressTimezone"
             class="admin-input fact"
             list="iana-timezones"
-            placeholder="出口 IP 填好后自动识别，可改"
+            placeholder="出口 IP 栏回车后填入，可改"
           />
           <datalist id="iana-timezones">
             <option v-for="tz in timeZoneOptions" :key="tz" :value="tz" />

@@ -4,6 +4,7 @@ import ai.mintpop.lane.client.EgressIpVerifier;
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
@@ -13,6 +14,7 @@ import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
 import ai.mintpop.lane.response.NodeProbeResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -22,9 +24,11 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AdminNodeServiceImpl implements AdminNodeService {
 
@@ -32,13 +36,16 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     private final UserRepository userRepository;
     private final NodeGroupRepository groupRepository;
     private final EgressIpVerifier.EgressProbe egressProbe;
+    private final NodeNotifyService nodeNotifyService;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
-                                 NodeGroupRepository groupRepository, EgressIpVerifier.EgressProbe egressProbe) {
+                                 NodeGroupRepository groupRepository, EgressIpVerifier.EgressProbe egressProbe,
+                                 NodeNotifyService nodeNotifyService) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.groupRepository = groupRepository;
         this.egressProbe = egressProbe;
+        this.nodeNotifyService = nodeNotifyService;
     }
 
     @Override
@@ -113,6 +120,8 @@ public class AdminNodeServiceImpl implements AdminNodeService {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
 
+        String previousEgressIp = node.getEgressIp();
+        String previousEgressTimezone = node.getEgressTimezone();
         apply(node, request);
         // 敏感键留空表示沿用原值：管理端页面上本就看不到原密码，不能因为没重填就被清掉
         if (request.getSecret() != null && !request.getSecret().isEmpty()) {
@@ -122,6 +131,18 @@ public class AdminNodeServiceImpl implements AdminNodeService {
             nodeRepository.update(node);
             return null;
         });
+        // 出口 IP 改了（含检测后一键回填、首次登记、清空）才通知，且只在库已改完之后。
+        // 时区按提交值写入：管理端表单在改 IP 时已按 GeoIP 联动预填，管理员也可以自己改，服务端不越权覆盖
+        // try-catch 兜底任务「提交」阶段的异常（如停机中执行器已关闭）：@Async 只消化执行中的异常，
+        // 提交失败会同步冒回本线程，不能让它把一次已成功的更新变成 500
+        if (!Objects.equals(previousEgressIp, node.getEgressIp())) {
+            try {
+                nodeNotifyService.notifyEgressIpChanged(node, previousEgressIp, previousEgressTimezone,
+                        EgressIpChangeSource.ADMIN);
+            } catch (Exception e) {
+                log.warn("出口 IP 变更通知任务提交失败（库已改完）nodeId={}", id, e);
+            }
+        }
     }
 
     @Override

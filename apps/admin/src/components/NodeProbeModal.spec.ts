@@ -119,11 +119,29 @@ describe("NodeProbeModal", () => {
       status: "ENABLED",
       remark: "备注",
     });
-    // 已有时区不动，不去查 GeoIP
-    expect(lookupIpTimezone).not.toHaveBeenCalled();
+    // 出口 IP 变了要按新 IP 查一次 GeoIP；这里查不到（mock 回 null），原时区保留
+    expect(lookupIpTimezone).toHaveBeenCalledWith("198.51.100.9");
     await vi.waitFor(() => expect(wrapper.emitted("saved")).toBeTruthy());
     expect(wrapper.emitted("close")).toBeTruthy();
     expect(showToast).toHaveBeenCalledWith("success", expect.stringContaining("198.51.100.9"));
+  });
+
+  it("填入新出口 IP 时按 GeoIP 查到时区：时区跟着新 IP 一起覆盖", async () => {
+    probeNode.mockResolvedValue(
+      probeResult({ actualEgressIp: "198.51.100.9", registeredEgressIp: "203.0.113.7", matched: false }),
+    );
+    updateNode.mockResolvedValue();
+    lookupIpTimezone.mockResolvedValue("Asia/Singapore");
+    mountModal(landNode({ egressTimezone: "Asia/Tokyo" }));
+
+    await vi.waitFor(() => expect(query("#probe-verdict").text()).toContain("不一致"));
+    await query("button.admin-btn").trigger("click");
+
+    await vi.waitFor(() => expect(updateNode).toHaveBeenCalledTimes(1));
+    expect(updateNode.mock.calls[0][1]).toMatchObject({
+      egressIp: "198.51.100.9",
+      egressTimezone: "Asia/Singapore",
+    });
   });
 
   it("未登记出口 IP 且时区为空：填入时顺带按 GeoIP 预填时区", async () => {

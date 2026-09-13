@@ -57,10 +57,9 @@ async function fillEgressIp(): Promise<void> {
     // 复用表单的「行 → 请求」组装：密码留空即沿用原值，其余字段原样提交
     const payload = buildNodePayload(nodeToForm(props.node));
     payload.egressIp = actualIp;
-    // 时区已填的不动；为空时按 GeoIP 预填一次，与表单里的联动一致，查不到就留空
-    if (payload.egressTimezone === null) {
-      payload.egressTimezone = await lookupIpTimezone(actualIp);
-    }
+    // 出口 IP 变了时区要跟着变：按新 IP 查 GeoIP 覆盖时区（与表单改 IP 时的联动、服务端巡检回填一致）；
+    // 查不到就保留原时区，管理员可事后在表单里改
+    payload.egressTimezone = (await lookupIpTimezone(actualIp)) ?? payload.egressTimezone;
     await adminApi().updateNode(props.node.id, payload);
     showToast("success", `已把出口 IP 填为 ${actualIp}`);
     emit("saved");

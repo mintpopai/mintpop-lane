@@ -653,6 +653,11 @@ body {
   color: var(--color-ink-secondary);
 }
 
+/* 说明行里要管理员先去改正的那种（格式错了、填错了），用危险色与普通说明区分 */
+.admin-note[data-tone='DANGER'] {
+  color: var(--counter-danger);
+}
+
 /* —— 视图切换 tab：换的是「看哪一批数据」，是一次换页，不是叠加的筛选条件。
    所以它不能长成 chip 的样子——两层都是药丸时，谁管辖谁读不出来。
    当前项用的指示条与导航轨当前项同款（2px、brand-deep），全站只有一种「你在这里」 —— */

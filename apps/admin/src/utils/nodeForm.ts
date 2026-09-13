@@ -181,6 +181,11 @@ export function validateNodeForm(form: NodeFormModel): string[] {
     if (egressTimezone && !isIanaTimeZone(egressTimezone)) {
       errors.push(`出口时区「${egressTimezone}」不是合法的 IANA 时区名`);
     }
+    // 出口 IP 与时区成对：登记了 IP 就必须有时区，否则下发给桌面端的时区与实际出口错位。
+    // 改 IP 时表单会把时区清空，忘了回车检测就会走到这里
+    if (egressIp && !egressTimezone) {
+      errors.push("出口时区未填：在出口 IP 栏按回车自动识别，或手动填写");
+    }
   }
 
   // 容量是落地专属概念，且服务端校验 @Min(1)；分数/空值在这里先拦下
@@ -245,26 +250,6 @@ export function syncEgressIpFromServerAddr(form: NodeFormModel, previousServerAd
     return form;
   }
   return { ...form, egressIp: serverAddr };
-}
-
-/**
- * GeoIP 查询返回后同步出口时区的预填：只在时区为空、或仍等于上一次预填值
- * （说明此前也是预填的）时写入；管理员手工改过的值绝不覆盖。
- * 查询失败（fetchedTimezone 为 null）不动表单，降级为人工填写。
- */
-export function syncEgressTimezoneFromLookup(
-  form: NodeFormModel,
-  fetchedTimezone: string | null,
-  previousPrefill: string,
-): NodeFormModel {
-  if (form.role !== "LAND" || !fetchedTimezone) {
-    return form;
-  }
-  const egressTimezone = form.egressTimezone.trim();
-  if (egressTimezone !== "" && egressTimezone !== previousPrefill) {
-    return form;
-  }
-  return { ...form, egressTimezone: fetchedTimezone };
 }
 
 export function buildNodePayload(form: NodeFormModel): NodeSaveRequest {
