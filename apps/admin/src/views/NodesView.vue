@@ -10,6 +10,7 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import FilterChips from "../components/FilterChips.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
+import NodeProbeModal from "../components/NodeProbeModal.vue";
 import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import ViewTabs from "../components/ViewTabs.vue";
@@ -24,6 +25,8 @@ const modalOpen = ref(false);
 const editing = ref<AdminNodeResponse | null>(null);
 const pendingDelete = ref<AdminNodeResponse | null>(null);
 const deleting = ref(false);
+/** 正在做连通性检测的落地节点；弹窗打开即探测 */
+const probingNode = ref<AdminNodeResponse | null>(null);
 
 // —— 分组 ——
 const groupList = ref<NodeGroupResponse[]>([]);
@@ -340,6 +343,10 @@ onMounted(load);
           </td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
+            <!-- 检测只对落地节点开放：前置节点走加密协议，服务端没内核连不了 -->
+            <button v-if="currentRole === 'LAND'" type="button" class="admin-link" @click="probingNode = row">
+              检测
+            </button>
             <button type="button" class="admin-link" @click="edit(row)">编辑</button>
             <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
           </td>
@@ -355,6 +362,7 @@ onMounted(load);
     @saved="load()"
     @close="modalOpen = false"
   />
+  <NodeProbeModal v-if="probingNode" :node="probingNode" @saved="load()" @close="probingNode = null" />
   <ConfirmDialog
     v-if="pendingDelete"
     title="删除确认"

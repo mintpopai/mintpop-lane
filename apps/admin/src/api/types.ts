@@ -178,6 +178,22 @@ export interface UserSaveRequest {
   landNodeId: number | null;
 }
 
+/** 落地节点连通性检测结果；「不通」也是正常返回（reachable=false + error），不是请求错误 */
+export interface NodeProbeResponse {
+  /** 经该节点能否访问公网 */
+  reachable: boolean;
+  /** 探测耗时（毫秒）；不通时是失败前耗掉的时间 */
+  latencyMs: number;
+  /** 探测到的实际出口 IP；不通时为 null */
+  actualEgressIp: string | null;
+  /** 节点上登记的出口 IP；未填为 null */
+  registeredEgressIp: string | null;
+  /** 实际与登记是否一致；任一侧缺失（未登记 / 不通）时为 null */
+  matched: boolean | null;
+  /** 不通的原因摘要；连通时为 null */
+  error: string | null;
+}
+
 export interface NodeSaveRequest {
   name: string;
   role: NodeRole;

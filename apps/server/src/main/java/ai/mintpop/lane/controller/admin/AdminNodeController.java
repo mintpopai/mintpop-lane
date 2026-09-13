@@ -4,6 +4,7 @@ import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
 import ai.mintpop.lane.response.ApiResponse;
+import ai.mintpop.lane.response.NodeProbeResponse;
 import ai.mintpop.lane.service.AdminNodeService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -49,5 +50,11 @@ public class AdminNodeController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         adminNodeService.delete(id);
         return ApiResponse.success();
+    }
+
+    /** 经落地节点探测连通性与实际出口 IP。是一次会出网的动作，故用 POST 而非 GET */
+    @PostMapping("/{id}/probe")
+    public ApiResponse<NodeProbeResponse> probe(@PathVariable Long id) {
+        return ApiResponse.success(adminNodeService.probe(id));
     }
 }

@@ -11,6 +11,7 @@ import type {
   NodeGroupImportRequest,
   NodeGroupRenameRequest,
   NodeGroupResponse,
+  NodeProbeResponse,
   NodeRole,
   NodeSaveRequest,
   PageResult,
@@ -35,6 +36,8 @@ export interface AdminApi {
   createNode(body: NodeSaveRequest): Promise<number>;
   updateNode(id: number, body: NodeSaveRequest): Promise<void>;
   deleteNode(id: number): Promise<void>;
+  /** 经落地节点探测连通性与实际出口 IP；只对 LAND 节点开放 */
+  probeNode(id: number): Promise<NodeProbeResponse>;
   listSubscriptions(userId: number): Promise<AdminSubscriptionResponse[]>;
   createSubscription(userId: number, body: SubscriptionCreateRequest): Promise<number>;
   updateSubscription(id: number, body: SubscriptionUpdateRequest): Promise<void>;
@@ -102,6 +105,9 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deleteNode(id) {
       return http.request(`/admin/nodes/${id}`, { method: "DELETE" });
+    },
+    probeNode(id) {
+      return http.request(`/admin/nodes/${id}/probe`, { method: "POST" });
     },
 
     listSubscriptions(userId) {

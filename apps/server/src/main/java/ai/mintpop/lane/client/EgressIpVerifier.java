@@ -29,9 +29,9 @@ public class EgressIpVerifier {
         this.probe = probe;
     }
 
-    /** 生产用构造：经落地代理请求 IP 回显服务 */
-    public static EgressIpVerifier over(LandProxyClientFactory factory) {
-        return new EgressIpVerifier(land -> {
+    /** 生产用探测实现：经落地代理请求 IP 回显服务。验证器与管理端的连通性检测共用这一份 */
+    public static EgressProbe probeOver(LandProxyClientFactory factory) {
+        return land -> {
             String body = factory.create(land)
                     .get()
                     .uri(IP_ECHO_URL)
@@ -41,7 +41,7 @@ public class EgressIpVerifier {
                 throw new IllegalStateException("IP 回显服务返回空响应");
             }
             return body.trim();
-        });
+        };
     }
 
     public void verify(ProxyNodeDto land) {

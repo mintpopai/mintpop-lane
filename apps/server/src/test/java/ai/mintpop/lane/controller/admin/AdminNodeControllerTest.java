@@ -1,6 +1,8 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.client.EgressIpVerifier;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -16,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
@@ -56,6 +59,10 @@ class AdminNodeControllerTest extends MysqlTestBase {
 
     @Autowired
     private SessionTokenService sessionTokenService;
+
+    /** 探测实现替换成假的：控制器测试不真正经代理出网 */
+    @MockitoBean
+    private EgressIpVerifier.EgressProbe egressProbe;
 
     private DatabaseFixtures fixtures;
     private Long adminId;
@@ -551,5 +558,32 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(110001));
 
         assertThat(nodeRepository.findById(id).orElseThrow().getProtocol()).isEqualTo(NodeProtocol.TROJAN);
+    }
+
+    @Test
+    @DisplayName("检测落地节点：返回连通性、实际出口 IP 与登记值的比对结果")
+    void probeLandNodeReportsEgressIp() throws Exception {
+        Long landId = fixtures.createLandNode("LAND-探测", "203.0.113.7");
+        org.mockito.Mockito.when(egressProbe.currentEgressIp(org.mockito.ArgumentMatchers.any()))
+                .thenReturn("198.51.100.9");
+
+        mockMvc.perform(post("/api/admin/nodes/" + landId + "/probe").header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.reachable").value(true))
+                .andExpect(jsonPath("$.data.actualEgressIp").value("198.51.100.9"))
+                .andExpect(jsonPath("$.data.registeredEgressIp").value("203.0.113.7"))
+                .andExpect(jsonPath("$.data.matched").value(false))
+                .andExpect(jsonPath("$.data.error").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("检测前置节点被拒：服务端无法直连其协议")
+    void probeFrontNodeIsRejected() throws Exception {
+        Long frontId = fixtures.createFrontNode("FRONT-探测");
+
+        mockMvc.perform(post("/api/admin/nodes/" + frontId + "/probe").header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(BizCodeEnum.NODE_PROBE_UNSUPPORTED.getCode()));
     }
 }

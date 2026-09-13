@@ -1,5 +1,6 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.client.EgressIpVerifier;
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
@@ -11,6 +12,7 @@ import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
+import ai.mintpop.lane.response.NodeProbeResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -29,12 +31,14 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
     private final NodeGroupRepository groupRepository;
+    private final EgressIpVerifier.EgressProbe egressProbe;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
-                                 NodeGroupRepository groupRepository) {
+                                 NodeGroupRepository groupRepository, EgressIpVerifier.EgressProbe egressProbe) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.groupRepository = groupRepository;
+        this.egressProbe = egressProbe;
     }
 
     @Override
@@ -128,6 +132,44 @@ public class AdminNodeServiceImpl implements AdminNodeService {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
         nodeRepository.deleteById(id);
+    }
+
+    @Override
+    public NodeProbeResponse probe(Long id) {
+        ProxyNodeDto node = nodeRepository.findById(id)
+                .orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
+        // 前置节点跑 trojan/vmess 等加密协议，服务端不带 mihomo 内核连不上，探测只对落地节点有意义
+        if (node.getRole() != NodeRole.LAND) {
+            throw new BizException(BizCodeEnum.NODE_PROBE_UNSUPPORTED);
+        }
+
+        String registered = node.getEgressIp();
+        long startedAt = System.nanoTime();
+        String actual;
+        try {
+            actual = egressProbe.currentEgressIp(node);
+        } catch (Exception e) {
+            // 不通是检测要给出的答案，不是请求本身出错：正常返回并带上原因，页面据此展示
+            long latencyMs = elapsedMillis(startedAt);
+            return new NodeProbeResponse(false, latencyMs, null, registered, null, describe(e));
+        }
+        long latencyMs = elapsedMillis(startedAt);
+        Boolean matched = registered == null ? null : registered.equals(actual);
+        return new NodeProbeResponse(true, latencyMs, actual, registered, matched, null);
+    }
+
+    private static long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000;
+    }
+
+    /** 取异常链上最内层的说明：Netty 的代理失败通常裹在 ResourceAccessException 里，外层信息不可读 */
+    private static String describe(Throwable e) {
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        return message == null || message.isBlank() ? root.getClass().getSimpleName() : message;
     }
 
     /**

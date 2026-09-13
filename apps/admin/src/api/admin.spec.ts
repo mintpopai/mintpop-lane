@@ -95,6 +95,14 @@ describe("createAdminApi", () => {
     expect(request).toHaveBeenNthCalledWith(3, "/admin/nodes/3", { method: "DELETE" });
   });
 
+  it("节点检测是会出网的动作，走 POST 到 /probe 子路径", async () => {
+    const { http, request } = fakeClient();
+
+    await createAdminApi(http).probeNode(3);
+
+    expect(request).toHaveBeenCalledWith("/admin/nodes/3/probe", { method: "POST" });
+  });
+
   it("订阅四端点路径与方法正确", async () => {
     const calls: Array<{ path: string; method?: string }> = [];
     const http: HttpClient = {

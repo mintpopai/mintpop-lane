@@ -3,6 +3,7 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
+import ai.mintpop.lane.response.NodeProbeResponse;
 
 import java.util.List;
 
@@ -17,4 +18,7 @@ public interface AdminNodeService {
     void update(Long id, NodeSaveRequest request);
 
     void delete(Long id);
+
+    /** 经落地节点探测实际出口 IP 并与登记值比对；只对 LAND 节点开放 */
+    NodeProbeResponse probe(Long id);
 }
