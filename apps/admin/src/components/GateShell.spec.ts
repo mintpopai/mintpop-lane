@@ -42,13 +42,22 @@ describe("GateShell", () => {
     );
   });
 
-  it("车道横条是纯图形：不进无障碍树，也不含任何文案", () => {
-    const lanes = mount(GateShell).get(".gate-lanes");
+  it("气泡场是纯装饰：不进无障碍树，也不含任何文案", () => {
+    const bubbles = mount(GateShell).get(".gate-bubbles");
 
-    expect(lanes.attributes("aria-hidden")).toBe("true");
-    expect(lanes.text()).toBe("");
-    expect(lanes.findAll(".gate-lane")).toHaveLength(9);
-    expect(lanes.findAll(".gate-lane-live")).toHaveLength(1);
+    expect(bubbles.attributes("aria-hidden")).toBe("true");
+    expect(bubbles.text()).toBe("");
+    // 16 枚：CSS 按 nth-child 逐枚分配位置/尺寸/节奏，数量改了要同步改样式
+    expect(bubbles.findAll(".gate-bubble")).toHaveLength(16);
+  });
+
+  // 气泡场铺满整条带子当背景，品牌块压在它上层——这样气泡是从标记与 slogan 身后升上来的
+  it("品牌块与气泡场是分开的两层", () => {
+    const panel = mount(GateShell).get(".gate-panel");
+
+    expect(panel.find(".gate-brand-block .gate-avatar").exists()).toBe(true);
+    expect(panel.find(".gate-brand-block .gate-slogan").exists()).toBe(true);
+    expect(panel.find(".gate-brand-block .gate-bubble").exists()).toBe(false);
   });
 
   it("闸门页不写宣传语：带子里除 slogan 外没有别的文案", () => {

@@ -26,6 +26,12 @@
   /* 焦点绿：品牌绿压暗到刚好够 3:1（白 3.53、Cloud 3.30） */
   --counter-focus: #0a9b73;
 
+  /* 闸门页入场的两条缓动：pop 越过 1 再落回（弹一下，与气泡同一种语感），
+     out 是普通的减速收尾。分开两条是因为「弹」只给该弹的东西——图标、印章；
+     文字和按钮跟着弹会显得聒噪 */
+  --counter-ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --counter-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
   --font-fact: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --rail-width: 208px;
 }
@@ -795,11 +801,38 @@ body {
 
 /* —— gate：登录引导 / 无权限 / 登录错误。主次按「登录卡是主角」排：主区占七成多、
    Cloud 底、卡浮在正中且内容居中；品牌标识与站点地址退到左上/左下当 page chrome；
-   右侧一条窄深墨带讲母品牌：车道横条 + 组织标记 + slogan，整块双居中。骨架在 components/GateShell.vue，
+   右侧一条窄深墨带讲母品牌：气泡场 + 组织标记 + slogan。骨架在 components/GateShell.vue，
    各闸门页只填卡里的标题、说明与按钮。
+   右侧带子里是一层气泡场 + 组织标记 + slogan（见本段末尾的品牌带小节）。
    与 meetu / 另一个 mintpop 管理端同一版式，移植时只换产品图标与那行产品名。
    深墨在这里是全站唯一铺成面的地方（见文件头「深墨只给小面积」的说明）：登录页在后台
    之外，用一条深色把「门口」和「屋里」分开，进门后再回到浅色。 —— */
+/* 闸门页的两条入场曲线。整页是一次错峰进场：卡落位 → 图标弹出 → 标题 → 说明 → 按钮
+   → 两处 chrome，各元素在自己的规则里写 delay。全部带 both，见 .gate-box 处的说明 */
+@keyframes gate-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gate-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .gate {
   display: grid;
   /* 带宽是定值不是比例——照飞书 .web-login-right 的 width: 520px（左区 flex: 1 吃剩余）。
@@ -824,6 +857,8 @@ body {
 .gate-brand {
   font-size: 14px;
   color: var(--color-ink-secondary);
+  /* 两处 chrome 最后淡入：它们是页脚注类信息，抢在卡前面出现就喧宾夺主了 */
+  animation: gate-fade-up 0.5s var(--counter-ease-out) 0.52s both;
 }
 
 /* 左下角 chrome */
@@ -831,6 +866,7 @@ body {
   align-self: end;
   font-size: 13px;
   color: var(--color-ink-secondary);
+  animation: gate-fade-up 0.5s var(--counter-ease-out) 0.58s both;
 }
 
 .gate-foot a {
@@ -861,6 +897,10 @@ body {
   box-shadow:
     0 4px 8px rgba(15, 26, 22, 0.03),
     0 3px 6px rgba(15, 26, 22, 0.05);
+  /* 卡先落位，卡里的东西再逐个进来（各元素自己的 delay）。
+     both 是关键：reduced-motion 下全局把时长压到 0.01ms，有 both 才是「直接停在终态」，
+     没有就会闪回初始态、元素等于消失 */
+  animation: gate-fade-up 0.55s var(--counter-ease-out) both;
 }
 
 /* 正文长的页（排障说明）放宽一档：360px 的内容宽只能排十七八个中文，
@@ -877,6 +917,8 @@ body {
   width: 128px;
   height: 128px;
   border-radius: 32px;
+  /* 卡里唯一「弹」出来的东西：它是视觉主体，也呼应右侧气泡的语感 */
+  animation: gate-pop-in 0.6s var(--counter-ease-pop) 0.14s both;
 }
 
 /* 字号照飞书 .base-title-title / .base-title-subtitle 量的：24/600/32，14/400/20。
@@ -886,6 +928,7 @@ body {
   font-weight: 600;
   line-height: 32px;
   color: var(--color-ink);
+  animation: gate-fade-up 0.5s var(--counter-ease-out) 0.24s both;
 }
 
 .gate-text {
@@ -893,6 +936,12 @@ body {
   font-size: 14px;
   line-height: 20px;
   color: var(--color-ink-secondary);
+  animation: gate-fade-up 0.5s var(--counter-ease-out) 0.32s both;
+}
+
+/* 排障页有两段正文，第二段再晚一档，读起来是一句一句递上来的 */
+.gate-text + .gate-text {
+  animation-delay: 0.38s;
 }
 
 /* 副标题里点名关键信息（用哪种账号），与飞书那句「请使用 <strong>豆包/飞书移动端</strong> 扫码」同构 */
@@ -919,6 +968,8 @@ body {
   justify-content: center;
   gap: 20px;
   margin-top: 48px;
+  /* 压轴：按钮最后到位，视线正好停在它上面 */
+  animation: gate-fade-up 0.5s var(--counter-ease-out) 0.44s both;
 }
 
 /* 与后台主按钮同一个语言，只是撑满宽、尺寸放大一档（48px） */
@@ -934,11 +985,23 @@ body {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
+/* hover 抬起 1px + 一圈品牌绿柔光；按下压回去。位移只给 1px——
+   它是整页唯一的主动作，手感要有回应，但闸门页不是游戏界面，弹过头就轻浮了 */
 .gate-btn:hover {
   background: var(--color-brand-deep);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(23, 209, 167, 0.3);
+}
+
+.gate-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(23, 209, 167, 0.22);
 }
 
 .gate-link {
@@ -952,13 +1015,13 @@ body {
   color: var(--color-ink);
 }
 
-/* —— 右侧品牌带：一组车道横条。左对齐、右端参差、整体向右延伸，读起来是几条线路
-   而不是一块斑马纹。底纹是一层从右下角透出的极淡品牌绿光，不用图片。
-   右侧不留 padding：最长的那条因此贴到屏幕边缘，看着是被裁断、还在往外走 —— */
+/* —— 右侧品牌带：一层气泡场 + 品牌块。演的是品牌语本身——Pop（气泡升到顶上啵地破开）
+   into something fresh（薄荷绿的汽水泡）。气泡场铺满整条带子当背景，品牌块压在上层，
+   所以气泡是从组织标记与 slogan 身后升上来的，整条带读起来是一杯汽水，
+   而不是「一块图形 + 一块文字」。结构在 components/GateShell.vue —— */
 /* ⚠️ 版式的要害是双居中，不是上下留白的数值：飞书那条带里「插画 + slogan + 副标题」
-   是作为一整块在带子中水平垂直都居中的，文字也居中对齐。
-   这里同构：车道组（视觉物）在上、组织标记 + slogan 在下，整块居中，上下各余约五分之一。
-   左对齐贴边、整块贴顶、整块沉底这三种都试过，都不对。 */
+   是作为一整块在带子中水平垂直都居中的，文字也居中对齐。这里同构：
+   品牌块（组织标记 + slogan）整块居中，气泡场是它背后的一层，不参与这个居中。 */
 .gate-panel {
   position: relative;
   display: flex;
@@ -972,14 +1035,23 @@ body {
   overflow: hidden;
 }
 
+/* 品牌块：气泡场之上的一层。z-index 只为压住气泡，气泡再密也不会糊住 slogan */
+.gate-brand-block {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 /* 组织标记：白底方图，在深墨上自成一枚印章。它是带子里唯一的具象物，
-   尺寸压在 56px——再大就会跟主车道抢「唯一亮点」这个位置 */
+   尺寸压在 64px——再大就会跟 slogan 抢位置。入场跟着气泡的语感「弹」一下出来 */
 .gate-avatar {
-  margin-top: clamp(40px, 6vh, 64px);
   width: 64px;
   height: 64px;
   border-radius: 16px;
   flex-shrink: 0;
+  animation: gate-pop-in 0.6s var(--counter-ease-pop) 0.3s both;
 }
 
 /* 品牌 slogan：带子里唯一的文案，英文原文、居中对齐。
@@ -994,78 +1066,293 @@ body {
   line-height: 1.3;
   letter-spacing: -0.01em;
   color: #ffffff;
+  animation: gate-fade-up 0.6s var(--counter-ease-out) 0.42s both;
 }
 
-/* 车道组：整块跟着品牌块一起居中，所以自身高度由内容定（不再 flex: 1 铺满），
-   每条也居中对齐——左对齐会把整块拽回贴边的读法 */
-.gate-lanes {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(24px, 3.8vh, 36px);
-  width: 100%;
+/* 气泡场：铺满整条带子的背景层，纯装饰。
+   ⚠️ container-type: size 不是随手加的——升起的位移要跨「整条带子的高度」，
+   而 transform 的百分比相对元素自身（气泡只有十几 px），所以必须有一个能表达
+   「容器高度」的单位。用 100vh 的话，排障页正文长、带子高过一屏时气泡会提前在半空破裂；
+   cqh 直接量的就是这一层的高度，永远准。本层是 inset: 0 的绝对定位层，尺寸由定位决定
+   而非内容，套 size containment 没有循环依赖的风险 */
+.gate-bubbles {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  pointer-events: none;
 }
 
-.gate-lane {
-  height: 6px;
-  border-radius: 999px;
+/* 一枚气泡分三层，各管一件事，免得多条动画抢同一个 transform：
+   · 本元素   —— 纵向升起（匀速）
+   · ::before —— 泡体：横向轻摆 + 淡入淡出 + 末段胀大破开
+   · ::after  —— 破裂环：全程隐形，只在破开那一刻闪一圈扩散的细环
+   三层共用 --dur / --delay，时间线自然对齐（自定义属性会继承给伪元素）。
+   起点 top: 100% 在带子下缘之外，升满 100cqh 正好到上缘 */
+.gate-bubble {
+  position: absolute;
+  top: 100%;
+  left: var(--x);
+  width: var(--size);
+  height: var(--size);
+  margin-left: calc(var(--size) / -2);
+  animation: gate-bubble-rise var(--dur) linear var(--delay) infinite;
+  will-change: transform;
 }
 
-/* 主车道：全页唯一的亮点，也是最长的一条。它嵌在这组线正中（第 5 条）而不是压在最上，
-   读起来才是「其中一条路被点亮」，而不是一根标题下划线。
-   （原先它冲出面板右缘、右端不收圆角；整块改双居中后那个设定不成立了，已去掉） */
-.gate-lane-live {
-  height: 10px;
-  background: var(--color-brand);
+.gate-bubble::before,
+.gate-bubble::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
 }
 
-/* 长度跨度拉到 38%–100%：都排在 80% 以上的话就齐成一个方块，参差白设了。
-   顺序也刻意不单调，单调递减会塌成一个渐变三角。亮度在主车道处到峰、向两端衰减，
-   所以它看着是这组线里被点亮的那一条。
-   只排 9 条：车道区只占带子三分之一高，条数再多就挤成斑马纹了 */
-
-.gate-lane:nth-child(1) {
-  width: 62%;
-  background: rgba(255, 255, 255, 0.05);
+/* 泡体：左上一点高光 + 薄荷绿的体色 + 一圈内描边，凑出汽水泡的玻璃感 */
+.gate-bubble::before {
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.3) 30%,
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at 50% 58%,
+      rgba(78, 255, 214, 1),
+      rgba(23, 209, 167, 0.62) 62%,
+      rgba(23, 209, 167, 0.3)
+    );
+  /* 内描边勾出泡壁，外面一圈柔光让它在深墨上「亮着」——
+     ⚠️ 这两个值别再往下压：初版按 0.38 内描边 + 无外发光 + alpha 0.18–0.34 做，
+     在 #0f1a16 上整片糊成灰点，看着像屏幕脏了，完全读不出是气泡 */
+  box-shadow:
+    inset 0 0 0 1px rgba(160, 255, 235, 0.7),
+    0 0 16px rgba(23, 209, 167, 0.55);
+  animation: gate-bubble-body var(--dur) ease-in-out var(--delay) infinite;
 }
 
-.gate-lane:nth-child(2) {
-  width: 88%;
-  background: rgba(255, 255, 255, 0.072);
+/* 破裂环：比泡体大一圈，破开时向外扩散 */
+.gate-bubble::after {
+  inset: -2px;
+  border: 1px solid rgba(23, 209, 167, 0.85);
+  opacity: 0;
+  animation: gate-bubble-burst var(--dur) ease-out var(--delay) infinite;
 }
 
-.gate-lane:nth-child(3) {
-  width: 44%;
-  background: rgba(255, 255, 255, 0.095);
+/* 升起：外层只管纵向，匀速——气泡上浮本来就是匀速的，加缓动反而假 */
+@keyframes gate-bubble-rise {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(-100cqh);
+  }
 }
 
-.gate-lane:nth-child(4) {
-  width: 94%;
-  background: rgba(255, 255, 255, 0.115);
+/* 泡体：6% 冒头、中段左右轻摆、88% 胀一下、100% 啵开。
+   30%/55% 两帧刻意不写 opacity——两端都是 --alpha，中间恒定，只让 transform 在摆 */
+@keyframes gate-bubble-body {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(0.5);
+  }
+
+  6% {
+    opacity: var(--alpha);
+    transform: translateX(calc(var(--drift) * 0.4)) scale(1);
+  }
+
+  30% {
+    transform: translateX(calc(var(--drift) * -1)) scale(1.02);
+  }
+
+  55% {
+    transform: translateX(var(--drift)) scale(0.98);
+  }
+
+  78% {
+    opacity: var(--alpha);
+    transform: translateX(calc(var(--drift) * -0.5)) scale(1.04);
+  }
+
+  88% {
+    opacity: var(--alpha);
+    transform: translateX(0) scale(1.14);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(0) scale(2.3);
+  }
 }
 
-.gate-lane:nth-child(5) {
-  width: 100%;
+/* 破裂环：86% 之前完全隐形，之后闪一下扩散出去。它单独成层就是为了这 14% */
+@keyframes gate-bubble-burst {
+  0%,
+  86% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+
+  92% {
+    opacity: 0.5;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
 }
 
-.gate-lane:nth-child(6) {
-  width: 82%;
-  background: rgba(255, 255, 255, 0.108);
+/* 16 枚气泡逐枚配参数：横向位置岔开不排队，直径 6–20px、时长 8–13.5s 各不相同，
+   延迟一律取负值——页面一打开半空中就已经有气泡在飘，不用空等一整轮。
+   数量是在真机上比出来的：12 枚在 520×770 的带子里稀成零星几个点，不像一杯汽水；
+   16 枚正好。alpha 跟直径走（大的亮、小的暗，读起来才有前后景），压在 0.44–0.82 这一档——
+   再亮会盖过 slogan，再暗就回到「灰点」那版了。
+   数量与这里的条数绑定，改 GateShell.vue 里的 <span> 个数就要同步改这一段 */
+.gate-bubble:nth-child(1) {
+  --x: 10%;
+  --size: 14px;
+  --dur: 11s;
+  --delay: -2s;
+  --drift: 10px;
+  --alpha: 0.72;
 }
 
-.gate-lane:nth-child(7) {
-  width: 56%;
-  background: rgba(255, 255, 255, 0.085);
+.gate-bubble:nth-child(2) {
+  --x: 24%;
+  --size: 8px;
+  --dur: 9s;
+  --delay: -6s;
+  --drift: -8px;
+  --alpha: 0.56;
 }
 
-.gate-lane:nth-child(8) {
-  width: 90%;
-  background: rgba(255, 255, 255, 0.062);
+.gate-bubble:nth-child(3) {
+  --x: 38%;
+  --size: 20px;
+  --dur: 13s;
+  --delay: -9s;
+  --drift: 12px;
+  --alpha: 0.82;
 }
 
-.gate-lane:nth-child(9) {
-  width: 38%;
-  background: rgba(255, 255, 255, 0.04);
+.gate-bubble:nth-child(4) {
+  --x: 52%;
+  --size: 10px;
+  --dur: 10s;
+  --delay: -1s;
+  --drift: -10px;
+  --alpha: 0.64;
+}
+
+.gate-bubble:nth-child(5) {
+  --x: 66%;
+  --size: 16px;
+  --dur: 12s;
+  --delay: -7s;
+  --drift: 9px;
+  --alpha: 0.72;
+}
+
+.gate-bubble:nth-child(6) {
+  --x: 80%;
+  --size: 7px;
+  --dur: 8.5s;
+  --delay: -4s;
+  --drift: -7px;
+  --alpha: 0.5;
+}
+
+.gate-bubble:nth-child(7) {
+  --x: 92%;
+  --size: 12px;
+  --dur: 11.5s;
+  --delay: -10s;
+  --drift: 11px;
+  --alpha: 0.58;
+}
+
+.gate-bubble:nth-child(8) {
+  --x: 5%;
+  --size: 9px;
+  --dur: 9.5s;
+  --delay: -5s;
+  --drift: -9px;
+  --alpha: 0.54;
+}
+
+.gate-bubble:nth-child(9) {
+  --x: 31%;
+  --size: 13px;
+  --dur: 12.5s;
+  --delay: -3s;
+  --drift: 8px;
+  --alpha: 0.68;
+}
+
+.gate-bubble:nth-child(10) {
+  --x: 45%;
+  --size: 6px;
+  --dur: 8s;
+  --delay: -8s;
+  --drift: -6px;
+  --alpha: 0.46;
+}
+
+.gate-bubble:nth-child(11) {
+  --x: 59%;
+  --size: 18px;
+  --dur: 13.5s;
+  --delay: -11s;
+  --drift: 13px;
+  --alpha: 0.78;
+}
+
+.gate-bubble:nth-child(12) {
+  --x: 73%;
+  --size: 11px;
+  --dur: 10.5s;
+  --delay: -6.5s;
+  --drift: -11px;
+  --alpha: 0.62;
+}
+
+.gate-bubble:nth-child(13) {
+  --x: 17%;
+  --size: 15px;
+  --dur: 12.2s;
+  --delay: -4.5s;
+  --drift: 9px;
+  --alpha: 0.6;
+}
+
+.gate-bubble:nth-child(14) {
+  --x: 86%;
+  --size: 9px;
+  --dur: 9.2s;
+  --delay: -7.5s;
+  --drift: -8px;
+  --alpha: 0.5;
+}
+
+.gate-bubble:nth-child(15) {
+  --x: 63%;
+  --size: 7px;
+  --dur: 8.8s;
+  --delay: -2.5s;
+  --drift: 7px;
+  --alpha: 0.44;
+}
+
+.gate-bubble:nth-child(16) {
+  --x: 40%;
+  --size: 12px;
+  --dur: 11.8s;
+  --delay: -9.5s;
+  --drift: -10px;
+  --alpha: 0.56;
 }
 
 /* —— 质量地板：焦点态 ——
@@ -1092,7 +1379,17 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    /* delay 也要归零：只压时长的话，闸门页那串错峰入场会变成「等半秒、再一个个跳出来」，
+       比渐现还刺眼——这一档要的是「立刻就位」，不是「瞬间播放但照样排队」 */
+    animation-delay: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* 入场类动画被上面压成瞬时后会停在终态（都写了 fill-mode: both），照常可读；
+     气泡场不行——它是无限循环的，压成一轮瞬时只会留下一屏破裂到一半的残影。
+     它纯属气氛，这档直接撤掉最干净 */
+  .gate-bubbles {
+    display: none;
   }
 }
 
