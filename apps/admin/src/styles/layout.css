@@ -911,22 +911,60 @@ body {
   color: var(--color-ink-secondary);
 }
 
-/* 左下角 chrome */
+/* 左下角 chrome：站点地址。原先是一句 13px 的灰字直接躺在 Cloud 上——没有形，
+   在这一大片空地里读起来像没清干净的残留。现在给它一枚胶囊，与左上角那套品牌锁定
+   组合在对角上成对：一头是「这是谁家的产品」，另一头是「这是哪个站」。
+   · 域名走等宽（--font-fact）：它属于「系统生成的事实」那一类，与全站邮箱 / ID /
+     地址同一张脸（见文件头第 1 条）。
+   · 绿在浅底上只做底色不做文字（文件头第 2 条：#17D1A7 对白只有 2.7:1）——
+     所以底是 10% 的薄荷、字是深墨，对比度十几比一，字号压到 12px 也照样看得清。
+   · 前面那颗小球是右侧带子里的气泡收到 8px 的样子，两处同一个母题；
+     它也顺带把「这是个可点的东西」说清楚，不必再靠下划线。 */
 .gate-foot {
   align-self: end;
-  font-size: 13px;
-  color: var(--color-ink-secondary);
   animation: gate-fade-up 0.5s var(--counter-ease-out) 0.58s both;
 }
 
 .gate-foot a {
-  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(23, 209, 167, 0.12);
+  /* 用一圈极淡的同色描边定轮廓，而不是把底色加浓：Cloud 底上光靠 12% 的薄荷
+     会糊成一团淡绿，胶囊的形就散了（与登录卡「1px 定轮廓 + 极淡投影」同一手法） */
+  box-shadow: 0 0 0 1px rgba(15, 179, 137, 0.16);
+  font-family: var(--font-fact);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--counter-deep);
   text-decoration: none;
+  transition:
+    background 0.18s var(--counter-ease-out),
+    box-shadow 0.18s var(--counter-ease-out);
 }
 
+/* 那颗气泡：高光偏左上，才是个球而不是个点（与 .gate-bubble 的做法同源，只是不动） */
+.gate-foot a::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 32% 30%,
+    #7df0d4,
+    var(--color-brand) 58%,
+    var(--color-brand-deep)
+  );
+}
+
+/* 悬停只加深一档底色、外面补一圈同色描边，不改字色也不加下划线：
+   它仍是 chrome，鼠标过去要有回应，但不该亮到跟登录按钮抢 */
 .gate-foot a:hover {
-  color: var(--color-ink);
-  text-decoration: underline;
+  background: rgba(23, 209, 167, 0.2);
+  box-shadow: 0 0 0 1px rgba(15, 179, 137, 0.32);
 }
 
 /* 登录卡：页面唯一的焦点，内容居中对齐。
