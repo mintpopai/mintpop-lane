@@ -81,11 +81,11 @@ body {
   padding: 0 12px 24px;
 }
 
-/* 词标是 logotype，对比度豁免；取值与商城 header 一致 */
+/* 品牌字标用 standards.mintpop.ai 的 wordmark 图，不手写；高度与 shop 管理端导航轨同档 */
 .rail-wordmark {
-  font-size: 21px;
-  font-weight: 600;
-  color: var(--color-brand-deep);
+  height: 22px;
+  width: auto;
+  display: block;
 }
 
 .rail-kind {
@@ -884,19 +884,33 @@ body {
   align-self: center;
 }
 
-/* 字标 + 「管理后台」，与导航轨顶部同一组合、放大一档 */
+/* 产品图标 + 字标 + 「Lane 管理后台」：图标与浏览器标签页同一张，字标用 standards.mintpop.ai
+   的 wordmark 图、不手写；与 shop 管理端登录页同一组合 */
 .gate-brand {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   font-size: 14px;
   color: var(--color-ink-secondary);
 }
 
-.gate-brand .wordmark {
-  font-size: 30px;
-  font-weight: 600;
-  color: var(--color-brand-deep);
+.gate-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.gate-brand-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gate-wordmark {
+  height: 28px;
+  width: auto;
+  display: block;
 }
 
 .gate-title {

@@ -12,7 +12,11 @@ const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
 <template>
   <nav class="admin-rail" aria-label="管理后台">
     <p class="rail-brand">
-      <span class="wordmark rail-wordmark">MintPop</span>
+      <img
+        class="rail-wordmark"
+        src="https://standards.mintpop.ai/assets/brand/wordmark/mintpop-wordmark-dark.png"
+        alt="MintPop"
+      />
       <span class="rail-kind">Lane 管理后台</span>
     </p>
 

@@ -29,7 +29,3 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 品牌词标专用字体 */
-.wordmark {
-  font-family: "Fredoka", "Inter", sans-serif;
-}

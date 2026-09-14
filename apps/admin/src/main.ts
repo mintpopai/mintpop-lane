@@ -5,7 +5,6 @@ import { createPinia } from "pinia";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
-import "@fontsource/fredoka/600.css";
 // 等宽只用于「系统生成的事实」（邮箱 / ID / 时间戳 / IP），排版即信息，见 layout.css
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";

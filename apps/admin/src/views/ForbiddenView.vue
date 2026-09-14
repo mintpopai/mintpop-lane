@@ -8,12 +8,15 @@ const auth = useAuthStore();
 <template>
   <GateShell>
     <h1 class="gate-title">这个账号没有后台权限</h1>
-    <p class="gate-text">
-      你已经登录成功，但这个账号不是管理员，因此看不到任何数据。
-      需要开通请联系系统管理员——授予管理员要直接改数据库，页面上没有这个入口。
+    <!-- 直接打开本页（公开路由，守卫不探 /api/me）时拿不到邮箱，就不点名 -->
+    <p v-if="auth.email" class="gate-text">
+      当前登录的是 <span class="fact">{{ auth.email }}</span
+      >。找系统管理员把它设为管理员，或换个账号登录。
     </p>
+    <p v-else class="gate-text">找系统管理员把这个账号设为管理员，或换个账号登录。</p>
     <div class="gate-actions">
       <button type="button" class="gate-btn" @click="auth.signOut()">退出登录</button>
+      <a class="gate-link" href="https://lane.mintpop.ai">返回官网</a>
     </div>
   </GateShell>
 </template>
