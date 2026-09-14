@@ -212,6 +212,9 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
                 s.getCredential() != null && !s.getCredential().isBlank(),
                 s.getCredentialExpiresAt(),
                 isCredentialStale(s.getCredentialExpiresAt(), s.getEndsAt()),
+                // 只有明确探测到「未开启」才报：null 表示旧式/手工凭证或签发时没拉到 profile，
+                // 那属于不知道，不是知道它关着
+                Boolean.FALSE.equals(s.getCredentialExtraUsageEnabled()),
                 s.getRemark(), s.getCreatedAt(), s.getUpdatedAt());
     }
 

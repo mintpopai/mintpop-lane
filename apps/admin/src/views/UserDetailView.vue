@@ -459,6 +459,8 @@ async function confirmRevoke(): Promise<void> {
             </span>
             <!-- 凭证到期日与订阅止期脱节：订阅止期改过但凭证没重签，需要显式提醒去重新签发 -->
             <span v-if="row.credentialStale" class="state" data-state="MISSING">凭证待更新</span>
+            <!-- 组织没开 usage credits：凭证本身有效，只是该席位的 Fable 5 用不了 -->
+            <span v-if="row.extraUsageDisabled" class="state" data-state="MISSING">Fable 不可用</span>
             <span class="sub-item-gap" />
             <div class="sub-item-actions">
               <!-- 服务端对非 Claude 类型的签发请求一律拒绝，未认识的类型也不显示，别让点了必错 -->
@@ -518,6 +520,14 @@ async function confirmRevoke(): Promise<void> {
             <div v-if="row.credentialStale" class="sub-fact sub-fact-remark">
               <dt>提示</dt>
               <dd>订阅止期已变更，凭证到期日未跟进，需重新签发</dd>
+            </div>
+            <div v-if="row.extraUsageDisabled" class="sub-fact sub-fact-remark">
+              <dt>提示</dt>
+              <dd>
+                签发时该账号所属组织未开启 usage credits，此席位的 Fable 5 无法使用。
+                请到 claude.ai 的 Admin settings → Usage 打开「Turn on usage
+                credits」，余额可以为 0（Fable 走套餐内含额度，不消耗 credits）。
+              </dd>
             </div>
           </dl>
         </li>

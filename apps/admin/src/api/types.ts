@@ -250,6 +250,11 @@ export interface AdminSubscriptionResponse {
   credentialExpiresAt: string | null;
   /** 凭证到期日与订阅止期已脱节（订阅止期改过但凭证没重签），需要重新签发 */
   credentialStale: boolean;
+  /**
+   * 席位所属组织未开启 usage credits，该席位的 Fable 5 不可用（凭证本身仍有效）。
+   * 仅在签发时明确探测到「未开启」才为 true；旧式/手工凭证无从得知，一律 false。
+   */
+  extraUsageDisabled: boolean;
   remark: string | null;
   createdAt: string;
   updatedAt: string;

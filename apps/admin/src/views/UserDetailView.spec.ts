@@ -88,6 +88,7 @@ function subscription(overrides: Partial<AdminSubscriptionResponse> = {}): Admin
     hasCredential: true,
     credentialExpiresAt: "2026-08-31T00:00:00Z",
     credentialStale: false,
+    extraUsageDisabled: false,
     remark: "",
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
@@ -151,6 +152,23 @@ describe("UserDetailView · 页面骨架", () => {
     // 身份事实：状态徽标 + Logto id
     expect(document.querySelector(".user-head .state")?.textContent).toContain("正常");
     expect(document.querySelector(".user-head")?.textContent).toContain("sub-3");
+  });
+
+  // 组织没开 usage credits 时凭证本身有效、只是 Fable 用不了，必须显式说出来——
+  // 否则只能等用户来报「Fable 又不见了」才发现，而那要靠逐层排查才定位得到
+  it("组织未开 usage credits 时标注「Fable 不可用」，并给出具体的开启路径", async () => {
+    await mountView([subscription({ extraUsageDisabled: true })]);
+
+    const item = document.querySelector(".sub-item")!;
+    expect(item.textContent).toContain("Fable 不可用");
+    expect(item.textContent).toContain("usage credits");
+    expect(item.textContent).toContain("Admin settings");
+  });
+
+  it("未探测到该状态时不报警：旧式/手工凭证无从得知，不能当成「知道它关着」", async () => {
+    await mountView([subscription({ extraUsageDisabled: false })]);
+
+    expect(document.querySelector(".sub-item")?.textContent).not.toContain("Fable 不可用");
   });
 
   it("用户拉取失败时整页降级为错误提示，不再露出分配入口", async () => {

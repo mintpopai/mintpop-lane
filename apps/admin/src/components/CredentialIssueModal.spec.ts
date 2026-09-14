@@ -32,6 +32,7 @@ function subscription(overrides: Partial<AdminSubscriptionResponse> = {}): Admin
     hasCredential: false,
     credentialExpiresAt: null,
     credentialStale: false,
+    extraUsageDisabled: false,
     remark: "",
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
