@@ -70,6 +70,19 @@ public class SubscriptionDto {
      */
     private String credentialScope;
 
+    /**
+     * 席位账号所属组织的 UUID；null 表示没拿到（旧式/手工凭证，或签发时 profile 拉取失败）。
+     * 与 credentialScope 同一套只读约定：写入靠专用的 updateCredentialOrg/clearCredentialMetadata，
+     * 这里只是给链路配置下发用的读出口。
+     */
+    private String credentialOrgUuid;
+
+    /**
+     * 签发时该组织是否已开启 usage credits；null 表示未知（同上）。
+     * 为 false 时客户端的 Fable 同意预置不会生效，管理端据此提示管理员去开启。
+     */
+    private Boolean credentialExtraUsageEnabled;
+
     private String remark;
 
     private Instant createdAt;

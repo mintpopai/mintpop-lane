@@ -108,15 +108,26 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
     }
 
     @Override
+    public void updateCredentialOrg(Long subscriptionId, String orgUuid, Boolean extraUsageEnabled) {
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getCredentialOrgUuid, orgUuid)
+                .set(Subscription::getCredentialExtraUsageEnabled, extraUsageEnabled));
+    }
+
+    @Override
     public void clearCredentialMetadata(Long subscriptionId) {
-        // 与 updateCredential 对称：那个写入五列元数据，这个清空同样五列，凭证密文本身不动
+        // 与 updateCredential/updateCredentialOrg 对称：那两个负责写入，这个清空它们写的全部列，
+        // 凭证密文本身不动。组织身份必须一并清掉——手工换了凭证，旧组织的同意记录就对不上人了
         mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
                 .eq(Subscription::getId, subscriptionId)
                 .set(Subscription::getCredentialScope, null)
                 .set(Subscription::getCredentialTokenUuid, null)
                 .set(Subscription::getCredentialIssuedAt, null)
                 .set(Subscription::getCredentialExpiresAt, null)
-                .set(Subscription::getCredentialRefreshCipher, null));
+                .set(Subscription::getCredentialRefreshCipher, null)
+                .set(Subscription::getCredentialOrgUuid, null)
+                .set(Subscription::getCredentialExtraUsageEnabled, null));
     }
 
     @Override
@@ -129,6 +140,8 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
                 .set(Subscription::getCredentialTokenUuid, null)
                 .set(Subscription::getCredentialIssuedAt, null)
                 .set(Subscription::getCredentialExpiresAt, null)
-                .set(Subscription::getCredentialRefreshCipher, null));
+                .set(Subscription::getCredentialRefreshCipher, null)
+                .set(Subscription::getCredentialOrgUuid, null)
+                .set(Subscription::getCredentialExtraUsageEnabled, null));
     }
 }

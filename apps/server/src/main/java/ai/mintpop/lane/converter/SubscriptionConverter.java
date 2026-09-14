@@ -41,6 +41,9 @@ public class SubscriptionConverter {
         dto.setCredentialExpiresAt(entity.getCredentialExpiresAt());
         // 同上，只读方向映射：toEntity() 故意不回填它
         dto.setCredentialScope(entity.getCredentialScope());
+        // 组织身份两列同属只读方向：写入靠专用的 updateCredentialOrg/clearCredentialMetadata
+        dto.setCredentialOrgUuid(entity.getCredentialOrgUuid());
+        dto.setCredentialExtraUsageEnabled(entity.getCredentialExtraUsageEnabled());
         dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());

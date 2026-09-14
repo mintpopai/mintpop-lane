@@ -26,6 +26,12 @@ public class ClaudeOAuthProperties {
 
     private String redirectUri = "https://platform.claude.com/oauth/code/callback";
 
+    /**
+     * 席位账号 profile。注意域名与上面几个不同：授权与兑换在 platform.claude.com，
+     * 而 profile 挂在 api.anthropic.com（CLI 用的就是这个，其 BASE_API_URL 即此域名）。
+     */
+    private String profileUrl = "https://api.anthropic.com/api/oauth/profile";
+
     /** 最小充分集，不可增删，见类注释 */
     private String scope = "user:profile user:inference";
 

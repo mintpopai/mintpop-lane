@@ -31,6 +31,19 @@ public class ClaudeOAuthClient {
                                long expiresIn, Instant issuedAt, String tokenUuid) {
     }
 
+    /**
+     * 席位账号的组织身份，取自 /api/oauth/profile。
+     * orgUuid 为空表示没拿到（拉取失败或上游未返回该字段），调用方据此跳过下发。
+     */
+    public record ProfileResult(String orgUuid, boolean extraUsageEnabled) {
+
+        public static final ProfileResult EMPTY = new ProfileResult("", false);
+
+        public boolean isPresent() {
+            return orgUuid != null && !orgUuid.isBlank();
+        }
+    }
+
     /** 与 CLI 一致：token 端点的请求由 axios 发出 */
     private static final String TOKEN_USER_AGENT = "axios/1.13.6";
 
@@ -105,6 +118,42 @@ public class ClaudeOAuthClient {
             }
         }
         return Instant.now();
+    }
+
+    /**
+     * 拉取该凭证所属账号的 profile，取出客户端预置 Fable 计费同意所需的组织身份。
+     *
+     * <p>为什么由服务端来拉：客户端要在 claude 启动<b>之前</b>把同意记录写进
+     * {@code ~/.claude.json}，而那条记录的键是组织 UUID —— 彼时 CLI 还没拉过 profile，
+     * 客户端本地要么没有这个值、要么残留的属于用户自己的账号。故在此取得并随链路配置下发。
+     *
+     * <p>失败不抛异常：profile 拉不到只影响「能不能替用户免去一次弹窗」，
+     * 不该让整个凭证签发失败 —— 凭证本身此刻已经拿到手了。调用方按空结果落库即可。
+     */
+    public ProfileResult fetchProfile(ProxyNodeDto land, String accessToken) {
+        try {
+            String response = clientFactory.create(land)
+                    .get()
+                    .uri(properties.getProfileUrl())
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Authorization", "Bearer " + accessToken)
+                    .header("User-Agent", TOKEN_USER_AGENT)
+                    .retrieve()
+                    .body(String.class);
+            if (response == null || response.isBlank()) {
+                log.warn("拉取 Claude profile 返回空正文，本次不下发组织身份");
+                return ProfileResult.EMPTY;
+            }
+            JsonNode organization = objectMapper.readTree(response).path("organization");
+            return new ProfileResult(
+                    organization.path("uuid").asText(""),
+                    // 缺字段时按 false 处理：拿不准就当没开，让管理端把提示显出来，
+                    // 好过静默当成已开、等用户来报「Fable 用不了」
+                    organization.path("has_extra_usage_enabled").asBoolean(false));
+        } catch (Exception e) {
+            log.warn("拉取 Claude profile 失败，本次不下发组织身份（不影响凭证签发）", e);
+            return ProfileResult.EMPTY;
+        }
     }
 
     /**

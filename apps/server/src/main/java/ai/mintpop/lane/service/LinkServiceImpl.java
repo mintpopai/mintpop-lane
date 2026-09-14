@@ -80,6 +80,7 @@ public class LinkServiceImpl implements LinkService {
                         s.getId(), s.getAssignmentNo(), s.getName(), s.getAgentType(),
                         s.getCredential(),
                         s.getCredentialScope() == null ? "" : s.getCredentialScope(),
+                        s.getCredentialOrgUuid() == null ? "" : s.getCredentialOrgUuid(),
                         s.getEndsAt()))
                 .toList();
 

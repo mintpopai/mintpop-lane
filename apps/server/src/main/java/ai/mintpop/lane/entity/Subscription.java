@@ -79,6 +79,12 @@ public class Subscription {
     @ToString.Exclude
     private String credentialRefreshCipher;
 
+    /** 席位账号所属组织的 UUID，客户端据此预置 Fable 计费同意；为空则退回弹窗 */
+    private String credentialOrgUuid;
+
+    /** 签发时该组织是否已开启 usage credits；为 false 时 Fable 预置不生效，管理端应提示 */
+    private Boolean credentialExtraUsageEnabled;
+
     private String remark;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)

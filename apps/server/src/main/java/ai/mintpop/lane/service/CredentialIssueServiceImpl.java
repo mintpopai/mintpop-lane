@@ -148,6 +148,23 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
                 result.issuedAt(),
                 expiresAt,
                 result.refreshToken().isEmpty() ? null : cipher.encrypt(result.refreshToken()));
+
+        // 凭证已落库，接着取席位账号的组织身份：客户端要用它替用户预置 Fable 的计费同意，
+        // 免去那个依赖 5 秒超时查询、在受控链路上经常点不出「继续」的弹窗。
+        // 这一步失败不回滚——凭证本身已经拿到手且有效，组织身份缺失只是退回弹窗。
+        ClaudeOAuthClient.ProfileResult profile = oauthClient.fetchProfile(land, result.accessToken());
+        if (profile.isPresent()) {
+            subscriptionRepository.updateCredentialOrg(
+                    subscriptionId, profile.orgUuid(), profile.extraUsageEnabled());
+            if (!profile.extraUsageEnabled()) {
+                // 前提不成立时预置无效：组织没开 usage credits 时上游返回的
+                // overage-disabled-reason 是 org_level_disabled，不在 CLI 的放行白名单里，
+                // 同意记录写了也白写。留日志 + 管理端提示，别让它变成只能靠排查才发现的状态
+                log.warn("席位所属组织未开启 usage credits，该席位的 Fable 5 将不可用："
+                        + "subscriptionId={} orgUuid={}", subscriptionId, profile.orgUuid());
+            }
+        }
+
         sessionRepository.deleteBySessionId(sessionId);
 
         return new IssueResult(subscription.getAccountEmail(), result.scope(), expiresAt);

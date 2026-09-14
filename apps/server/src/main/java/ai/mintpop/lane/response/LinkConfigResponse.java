@@ -31,6 +31,12 @@ public record LinkConfigResponse(
             String credential,
             /** 该凭证的 scope，空格分隔；空串表示旧式凭证，客户端不注入 scope 变量 */
             String credentialScope,
+            /**
+             * 席位账号所属组织的 UUID。客户端在会话启动前用它替用户记下 Fable 5 的计费同意
+             * （那条记录按组织分键，键必须与 CLI 自己拉 profile 得到的组织逐字一致）；
+             * 空串表示没拿到，客户端跳过预置、退回弹窗。
+             */
+            String credentialOrgUuid,
             Instant endsAt
     ) {
     }
