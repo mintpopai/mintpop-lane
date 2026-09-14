@@ -7,14 +7,14 @@ const auth = useAuthStore();
 </script>
 
 <template>
-  <GateShell>
+  <GateShell wide>
     <h1 class="gate-title">登录未能完成</h1>
-    <p class="gate-text">
+    <p class="gate-text gate-text-long">
       浏览器在登录页与管理后台之间来回跳转，说明登录握手回来后会话没有生效。
       常见原因：服务端与 Logto 的应用配置不匹配、会话签名密钥被更换、
       或浏览器拒收会话 Cookie（例如未走 HTTPS、管理端与接口不同源）。
     </p>
-    <p class="gate-text">请先确认上述配置，再重试；仍不行请联系系统管理员看服务端日志。</p>
+    <p class="gate-text gate-text-long">请先确认上述配置，再重试；仍不行请联系系统管理员看服务端日志。</p>
     <div class="gate-actions">
       <button type="button" class="gate-btn" @click="auth.signIn()">重试登录</button>
     </div>
