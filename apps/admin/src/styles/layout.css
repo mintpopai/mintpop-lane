@@ -33,6 +33,9 @@
   --counter-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   --font-fact: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 品牌展示字体：只给品牌锁定组合里的产品名用（闸门页左上角的「Lane」），与官网
+     --font-display 同一套。西文经 Fontsource 自托管（main.ts import），不外链 */
+  --font-display: "Fredoka", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --rail-width: 208px;
 }
 
@@ -852,13 +855,60 @@ body {
   background: var(--color-bg-cloud);
 }
 
-/* 左上角 chrome：只写产品名。产品图标归登录卡当视觉主体（.gate-mark），
-   母品牌归右侧带子的组织标记——三处各说一样东西，都不重复 */
+/* 左上角 chrome：官网首页顶栏那套品牌锁定组合（瓦片 + 词标 + 分隔线 + 产品名），
+   尺寸与间距逐项照 website 的 TheHeader.vue .brand 抄，登录页与官网看起来是同一处门。
+   它只是 chrome，登录卡仍是主角——所以最后淡入，且不加悬停/链接态 */
 .gate-brand {
-  font-size: 14px;
-  color: var(--color-ink-secondary);
+  display: flex;
+  /* 它是 .gate-main 这个 grid 的一行，默认会被拉满整列；收成内容宽，
+     免得看不见的空盒子挡住别的东西 */
+  justify-self: start;
+  align-items: center;
+  gap: 14px;
   /* 两处 chrome 最后淡入：它们是页脚注类信息，抢在卡前面出现就喧宾夺主了 */
   animation: gate-fade-up 0.5s var(--counter-ease-out) 0.52s both;
+}
+
+/* 瓦片自带约 20% 安全区（图形真身比外框小一圈），故取 36px——比 26px 的词标高一档，
+   两者的「视觉重量」才对得上；右侧负外边距抵掉那圈留白，让它与词标的实际间距回到 14px。
+   不切圆角：原图自带，与官网保持同一张脸（登录卡里的 .gate-mark 是 128px 的大图，
+   那里才需要按 iOS 比例补圆角） */
+.gate-brand-icon {
+  display: block;
+  width: 36px;
+  height: 36px;
+  margin-right: -6px;
+}
+
+/* 词标是原图抠出的透明底 PNG：等比缩放，不加描边/阴影/圆角，高度不低于 20px。
+   浅底 Cloud 上用深字版 */
+.gate-brand-wordmark {
+  display: block;
+  height: 26px;
+  width: auto;
+}
+
+/* 产品名与品牌词标之间用一条细分隔线，避免读成「mintpoplane」一个词 */
+.gate-brand-text {
+  font-family: var(--font-display);
+  padding-left: 14px;
+  border-left: 1px solid var(--color-border);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+/* 「管理后台」：产品名后的身份说明，小一号、灰一档、不加粗——降到与左下角站点地址
+   同一档的 chrome，Lane 才仍是这行里唯一的主角。这四个字不必另设字体：中文本就不在
+   Fredoka 的字符集里，会落到 --font-display 栈里的 PingFang，与界面其余中文同一张脸 */
+.gate-brand-kind {
+  margin-left: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--color-ink-secondary);
 }
 
 /* 左下角 chrome */

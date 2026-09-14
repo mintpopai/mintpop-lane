@@ -8,6 +8,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@fontsource/fredoka':
+        specifier: 5.3.0
+        version: 5.3.0
       '@fontsource/ibm-plex-mono':
         specifier: 5.3.0
         version: 5.3.0

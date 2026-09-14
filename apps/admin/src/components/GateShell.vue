@@ -2,17 +2,18 @@
 // 闸门页（登录引导 / 无权限 / 登录错误）共用的骨架。主次按「登录卡是主角」排：
 //
 // · 主区占七成多，Cloud 底，登录卡浮在正中，内容居中对齐——页面上唯一的焦点。
-// · 左上角 chrome 讲产品：只写「Lane 管理后台」。产品图标改由登录卡当视觉主体（见
-//   LoginView 的 .gate-mark），左上角再挂一枚小的就是同一张图一大一小说两遍。
-//   站点地址退到左下角，两处都是灰色小字，成对。
+// · 左上角 chrome 讲产品：与官网首页顶栏同一套品牌锁定组合——应用瓦片 + 官方词标
+//   + 分隔线 + 产品名「Lane」，后面再缀一个小一号、灰一档的「管理后台」说明这是哪。
+//   品牌部分一律用词标图、不用文字排 logo（品牌规范 INVARIANT），尺寸与间距照官网
+//   TheHeader.vue 的 .brand 抄，两处对齐。站点地址退到左下角，与左上角成对。
 // · 右侧一条窄的深墨带讲母品牌：一层气泡场 + MintPop 组织标记 + slogan。
 //   气泡场是整条带子的背景层（铺满、绝对定位），品牌块压在它上层、在带子里双居中——
 //   气泡从标记与 slogan 身后升上来、在顶部啵地破开，整条带读起来是一杯汽水，
 //   而不是「一块图形 + 一块文字」。它演的是品牌语本身：Pop（气泡破裂）into
 //   something fresh（薄荷、汽水）。气泡只是气氛，说不清自己是什么，所以品牌必须在场。
 //
-// 两边分工不交叉：左上角只出现 Lane，带子里只出现 MintPop，同一个标识不说两遍
-//（组织标记那张图本身就是 mintpop 字样，所以左上角不再挂横版词标）。
+// 左上角的词标（横版 mintpop 字样）与带子里的组织标记（方形印章）是母品牌的两种形态，
+// 不是同一张图：一处认路（这是谁家的产品），一处造气氛（深墨带上的品牌印章）。
 // 闸门页只回答「这是哪」与「怎么进」，产品能干什么属于官网，不在门口讲。
 // 样式在 styles/layout.css 的 gate 段。
 
@@ -25,7 +26,30 @@ defineProps<{
 <template>
   <div class="gate">
     <main class="gate-main">
-      <p class="gate-brand"><span class="gate-brand-text">Lane 管理后台</span></p>
+      <!-- 品牌锁定组合，与官网首页顶栏逐项对齐。瓦片 alt 留空：它与紧随其后的词标说的是
+           同一件事，读屏念两遍反而啰嗦。标了尺寸，图没到之前不抖版 -->
+      <p class="gate-brand">
+        <img
+          class="gate-brand-icon"
+          src="https://standards.mintpop.ai/assets/products/lane/lane-app-cloud.png"
+          alt=""
+          width="36"
+          height="36"
+        />
+        <img
+          class="gate-brand-wordmark"
+          src="https://standards.mintpop.ai/assets/brand/wordmark/mintpop-wordmark-dark.png"
+          alt="MintPop"
+          width="106"
+          height="29"
+        />
+        <span class="gate-brand-text">
+          Lane
+          <!-- 「管理后台」是身份说明不是产品名，跟在 Lane 后面小一号、灰一档：
+               品牌锁定组合照旧读作官网首页那一个 Lane，进门的人也知道这是后台 -->
+          <span class="gate-brand-kind">管理后台</span>
+        </span>
+      </p>
 
       <div class="gate-box" :class="{ 'gate-box-wide': wide }">
         <slot />
