@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import GateShell from "./GateShell.vue";
 
 describe("GateShell", () => {
@@ -43,9 +43,56 @@ describe("GateShell", () => {
     expect(avatar.attributes("src")).toContain("brand/avatar.png");
     expect(avatar.attributes("alt")).toBe("MintPop");
     // 标了尺寸，图没到之前不抖版
-    expect(avatar.attributes("width")).toBe("64");
-    expect(avatar.attributes("height")).toBe("64");
+    expect(avatar.attributes("width")).toBe("80");
+    expect(avatar.attributes("height")).toBe("80");
     expect(wrapper.get(".gate-panel .gate-slogan").text()).toBe("Pop into something fresh");
+  });
+
+  // slogan 是逐字打出来的，但「打」只是视觉：整句任何时候都完整地在 DOM 里，
+  // 读屏与复制拿到的是完整品牌语，不受动画进度影响
+  it("slogan 演打字机：真身整句始终可读，打字层逐字推进且不进无障碍树", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const wrapper = mount(GateShell);
+      const real = wrapper.get(".gate-panel .gate-slogan-real");
+      const typed = wrapper.get(".gate-panel .gate-slogan-typed");
+
+      expect(real.text()).toBe("Pop into something fresh");
+      // 同一句话若两层都进无障碍树，读屏会念两遍
+      expect(typed.attributes("aria-hidden")).toBe("true");
+      // 起打前打字层是空的（末尾那枚光标不含文字）
+      expect(typed.text()).toBe("");
+
+      // 640ms 起打、每字 46ms：推进三个字符的时间，正好打出 "Pop"
+      await vi.advanceTimersByTimeAsync(640 + 46 * 3);
+      expect(typed.text()).toBe("Pop");
+
+      // 再往后推到整句打完，计时器自己停住，不会越过整句继续切片
+      await vi.advanceTimersByTimeAsync(46 * 40);
+      expect(typed.text()).toBe("Pop into something fresh");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // 动效敏感的人不该被逐字动画伺候：这一档直接把整句给到，光标由 CSS 撤掉
+  it("prefers-reduced-motion 档不演打字，挂载即给全文", async () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal("matchMedia", matchMedia);
+
+    try {
+      const wrapper = mount(GateShell);
+      // 全文是在 onMounted 里一次性写进 ref 的，等一帧让它落到 DOM 上
+      await wrapper.vm.$nextTick();
+
+      expect(matchMedia).toHaveBeenCalledWith("(prefers-reduced-motion: reduce)");
+      expect(wrapper.get(".gate-panel .gate-slogan-typed").text()).toBe(
+        "Pop into something fresh",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("卡片默认窄、wide 时放宽一档", () => {
@@ -73,6 +120,8 @@ describe("GateShell", () => {
     expect(panel.find(".gate-brand-block .gate-bubble").exists()).toBe(false);
   });
 
+  // 带子里的文字只有 slogan 一句：打字层此刻还没起打（是空的），
+  // 所以整条带子的文本就是真身那一句
   it("闸门页不写宣传语：带子里除 slogan 外没有别的文案", () => {
     expect(mount(GateShell).get(".gate-panel").text()).toBe("Pop into something fresh");
   });

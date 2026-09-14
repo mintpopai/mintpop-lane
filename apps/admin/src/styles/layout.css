@@ -1095,28 +1095,74 @@ body {
 }
 
 /* 组织标记：白底方图，在深墨上自成一枚印章。它是带子里唯一的具象物，
-   尺寸压在 64px——再大就会跟 slogan 抢位置。入场跟着气泡的语感「弹」一下出来 */
+   也是这一块的主角，所以比 slogan 重一档：80px 见方，约是 slogan 字号的三倍——
+   印章当头、句子在下托着，比两者尺寸拉不开时那种「图小字大」的头重脚轻稳。
+   圆角照 iOS 瓦片的比例（≈0.25 边长）给到 20px，与左上角那张瓦片是同一张脸。
+   入场跟着气泡的语感「弹」一下出来 */
 .gate-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
   flex-shrink: 0;
   animation: gate-pop-in 0.6s var(--counter-ease-pop) 0.3s both;
 }
 
-/* 品牌 slogan：带子里唯一的文案，英文原文、居中对齐。
-   断行交给浏览器，不写死 <br>——带宽是 clamp 出来的，硬断在窄一档的屏上会出现孤字行 */
+/* 品牌 slogan：带子里唯一的文案，英文原文。字体走品牌展示体（Fredoka，圆头圆脑，
+   与气泡同一路语感），字重 600——main.ts 只引了这一个字重，别在这儿写别的数值，
+   否则会退回合成粗体。
+   ⚠️ 字号是定值不是 clamp：带子固定 520px 宽（见 .gate 的 grid），vw 在这儿量的是
+   整个视口、与带宽无关，缩放起来只会让字和带子对不上。26px 的 Fredoka 排这 24 个
+   字符约 350px，留得下两侧内边距，不必再靠断行救。
+   打字机分两层，见下方 .gate-slogan-real / .gate-slogan-typed。整句锁成一行：
+   换行会让光标跳回行首，读起来就不像在打字了 */
 .gate-slogan {
-  margin-top: 24px;
+  position: relative;
+  margin-top: 26px;
+  white-space: nowrap;
   text-align: center;
-  /* 让浏览器把各行排匀，免得末行只剩 "fresh" 一个孤字 */
-  text-wrap: balance;
-  font-size: clamp(22px, 1.9vw, 28px);
+  font-family: var(--font-display);
+  font-size: 26px;
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.01em;
   color: #ffffff;
   animation: gate-fade-up 0.6s var(--counter-ease-out) 0.42s both;
+}
+
+/* 真身：整句始终在，只是字色透明。它负责撑出盒子的宽高（打字时尺寸才恒定，
+   句子不会一边打一边左右晃），也是读屏念的、鼠标能选中复制的那一份 */
+.gate-slogan-real {
+  color: transparent;
+}
+
+/* 打字层：与真身同一个盒子、同一套排版，压在它上面只画已打出的部分。
+   text-align 必须改回 left——盒子宽是整句的宽，还按 center 排的话，
+   每打出一个字都会把已有的字往两边推 */
+.gate-slogan-typed {
+  position: absolute;
+  inset: 0;
+  text-align: left;
+  color: #ffffff;
+}
+
+/* 光标：跟在已打出的字后面的一竖，薄荷绿（与气泡同色），半秒一闪。
+   打完不撤走——它是这条带子唯一还在动的「人味」，与身后不停冒的气泡凑成一对 */
+.gate-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.12em;
+  border-radius: 1px;
+  background: var(--color-brand);
+  animation: gate-caret-blink 1s steps(2, start) infinite;
+}
+
+/* steps(2, start) 把这一条切成「亮半秒、灭半秒」，不做渐隐——终端光标不淡入淡出 */
+@keyframes gate-caret-blink {
+  to {
+    opacity: 0;
+  }
 }
 
 /* 气泡场：铺满整条带子的背景层，纯装饰。
@@ -1439,6 +1485,12 @@ body {
      气泡场不行——它是无限循环的，压成一轮瞬时只会留下一屏破裂到一半的残影。
      它纯属气氛，这档直接撤掉最干净 */
   .gate-bubbles {
+    display: none;
+  }
+
+  /* 同理：光标闪烁是无限循环的，这一档留着它只会是一根常亮的竖条，
+     而 slogan 在这一档本就是一次性给全文、没有「正在打字」这回事，撤掉最干净 */
+  .gate-caret {
     display: none;
   }
 }
