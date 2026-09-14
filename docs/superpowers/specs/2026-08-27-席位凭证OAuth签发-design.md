@@ -1,8 +1,9 @@
 # 席位凭证 OAuth 签发设计
 
-**日期**：2026-08-27
-**涉及仓库**：`mintpop-lane/apps/server`（主体）、`mintpop-lane-desktop`（两个字段）
-**状态**：待评审
+**日期**：2026-08-27（§13 增补于 2026-09-14）
+**涉及仓库**：`mintpop-lane/apps/server`（主体）、`mintpop-lane-desktop`、`mintpop-lane/apps/admin`（§13）
+**状态**：已实现。上线后发现 scope 只解决了「看得见 Fable」，还有一道独立的客户端计费闸门
+挡着「用得了 Fable」，处置见 **§13**
 
 ## 一、背景
 
@@ -357,6 +358,8 @@ POST https://platform.claude.com/v1/oauth/token/revoke
    > **不动用 credits**；余额为 0 时超额请求被上游直接拒绝，无扣费风险。
    > 判定手段：用席位 token 打一次 `/v1/messages` 要 `claude-fable-5`，看是否 200 且带 `7d_oi` 头 ——
    > 200 即说明额度正常、问题在客户端闸门而非授权。
+   > **本条只够判定「额度正常」，不等于用户真的能用** —— 完整的闸门机制、客户端预置方案
+   > 与追加的验收项见 **§13**。
 4. 旧式凭证（`credential_scope` 为空）的席位行为与改动前逐字相同
 5. 链路不完整的席位签发被守卫拒绝，且探测失败与 IP 不符给出可区分的报错
 6. 落地节点保存 trojan/vmess 协议被拒；订阅导入的节点一律落为 `FRONT`
@@ -364,3 +367,138 @@ POST https://platform.claude.com/v1/oauth/token/revoke
 8. 一个短周期订阅（如 7 天）签发后，凭证有效期与订阅同步
 9. 改动订阅 `startsAt` 使 `endsAt` 前后移动，该席位均被标记为「凭证待更新」
 10. 手工录入凭证后，五个元数据列被清空，该席位行为退回旧式（客户端不注入 scope 变量）
+
+---
+
+## 十三、增补（2026-09-14）：Fable 5 的计费闸门与客户端预置
+
+**状态**：已实现并提交（desktop `9703032`、server `9142a7d`、admin `2fd3559`），端到端验证待做。
+
+### 13.1 问题：scope 解决了 bootstrap，没解决 consent
+
+本方案上线后，`/model` 里确实出现了 Fable 5 —— §12 验收第 2、3 条都过了，证明
+`user:profile` scope 生效、bootstrap 拿到了 `additional_model_options`。**但用户依然用不了它**：
+选中 Fable 会弹出一个计费同意弹窗，要求先同意「超出内含额度后使用 usage credits」，
+而那个「继续」选项经常点不出来，要反复重试十几次才碰上一次。
+
+这是一道**独立于本方案之外**的客户端闸门。当初设计时不知道它存在，验收清单里
+「`/model` 列表包含 Fable 5」这一条也因此不足以说明用户真的能用。
+
+### 13.2 判定链（逆向 claude 2.1.251 实得）
+
+```
+弹窗 ⇔ qce() 为真 ⇔ Zdn() 为假
+  qce() = !uz() && !Zdn()                    // uz(): tier ∈ credits_only_tiers(["enterprise"])，team 不中
+  Zdn() = (fze() && owe()) || cM() || !Ote()  // cM(): 非 firstParty，席位会话恒假
+  Ote() = C2() || <进程内锁存>
+    C2()  ← cachedGrowthBookFeatures.tengu_saffron_lattice
+    fze() ← fableOverageConsentV2[<org uuid>] === true
+    owe() ← cachedExtraUsageDisabledReason ∈
+              { org_level_disabled_until, org_spend_cap_reached, out_of_credits }
+```
+
+弹窗里第二个选项的文案则另由一次**实时查询**决定：
+
+```
+ye = J ? "Continue with Fable 5" : … : "Set up usage credits on claude.ai"
+J  = !blocked && (余额>0 || 余额===null)     // 数据来自 /api/oauth/organizations/:org/prepaid/credits
+```
+
+**那个查询超时仅 5 秒，且失败被 `.catch(() => null)` 静默吞成「没有 credits」。**
+席位会话的全部流量走两跳受控链路，实测该请求 TLS 握手要 2.8~7.9 秒、五次里两次直接超时
+—— 这就是「要重试好几次」的确切机制。跨过闸门后弹窗不再渲染，该查询也就不会发出
+（它挂在弹窗自身的 loading effect 上）。
+
+### 13.3 为什么写 `fableOverageConsentV2`，而不是另外两个字段
+
+三个字段都在 `~/.claude.json` 里，但性质截然不同 —— **这是本节最该记住的一条**：
+
+| 字段 | 本质 | 会不会被覆盖 |
+|---|---|---|
+| `tengu_saffron_lattice` | GrowthBook 下发的实验配置 | **会**。`getAllFeatures()` 一旦拿到远程值就彻底忽略本地缓存 |
+| `cachedExtraUsageDisabledReason` | 组织 credits 状态的本地副本 | **会**。每次响应头都刷新 |
+| `fableOverageConsentV2` | **用户点没点过那个「继续」** | **不会**。服务端从不下发它 |
+
+第三个是例外，因为它根本不是服务端数据：全二进制只有两处引用 —— `fze()` 读、`Ie()` 在用户
+点击时写。我们写它等价于替用户点了那一下，**而这本来就是它唯一的来源**。
+
+前两个都实地试过并被证伪：写进去之后被上游刷回原值，闸门照旧。走过的弯路记在这里，
+省得后来者重走。
+
+### 13.4 硬前提：组织必须开启 usage credits
+
+`owe()` 的白名单里没有 `org_level_disabled`（注意与 `org_level_disabled_until` 只差一个后缀）。
+组织**关闭** usage credits 时上游返回的正是前者，于是 `owe()` 恒假，同意记录写得再全也没用。
+开启后 reason 变为 `out_of_credits`，落进白名单，闸门才谈得上放行 —— **余额可以是 0**。
+
+这个前提不由客户端硬撑（伪造 reason 会被响应头刷掉，没有意义），而是：
+签发时探测 → 落库 `credential_extra_usage_enabled` → 管理端显式提示（见 13.7）。
+
+### 13.5 安全边界：跳过的是知情同意 UI，不是授权闸门
+
+**准入判定在服务端、每请求一次，客户端改不了也绕不过。** 实测铁证：在组织**尚未**开启
+credits、客户端还被弹窗死死拦住的时候，用同一个凭证直打 API：
+
+```
+POST /v1/messages  { "model": "claude-fable-5", … }
+→ HTTP 200，{"model":"claude-fable-5", …}
+   anthropic-ratelimit-unified-7d_oi-status: allowed      ← 套餐内含 Fable 的专属周窗口
+   anthropic-ratelimit-unified-7d_oi-utilization: 0.01
+   anthropic-ratelimit-unified-overage-status: rejected   ← credits 不可用，但根本用不着
+```
+
+即 Fable 走的是**套餐内含额度**，不消耗 credits；没有内含额度的账号（Pro、Team standard）
+跳过弹窗照样会被服务端拒绝。我们没让任何账号获得它本来没有的权限。
+
+弹窗的本职是**知情同意**（「内含额度用完后会花组织的钱」），不是准入控制。
+
+### 13.6 已知代价
+
+1. **这等于代用户做了一次计费同意。** 若组织确实充值了 credits，内含额度耗尽后会真扣钱。
+   产品上已决定默认承担（理由：「用户进来就该能用 Fable」）；余额为 0 时上游直接
+   `rejected`，扣费在物理上不会发生。
+2. **额度耗尽时用户看到的是 API 层拒绝**，而非那个友好弹窗。
+3. **依赖 CLI 内部字段，升级可能失效** —— 失效只退回弹窗，**绝不能阻断会话**。
+   这是 `pty/prepare.rs` 全部写入都尽力而为、失败只记录的原因。
+
+### 13.7 落地
+
+**数据模型**（补 §5.1）：`subscription` 再增两列（`V14__credential_org.sql`），均可空：
+
+| 列 | 说明 |
+|---|---|
+| `credential_org_uuid` | 席位账号所属组织的 UUID，客户端据此写同意记录 |
+| `credential_extra_usage_enabled` | 签发时该组织是否已开 usage credits；false 时预置不生效 |
+
+**签发流程**（补 §6.2）：凭证落库后，经**同一个落地节点**调 `GET /api/oauth/profile`
+（注意域名是 `api.anthropic.com`，与授权/兑换的 `platform.claude.com` 不同），取
+`organization.uuid` 与 `organization.has_extra_usage_enabled` 落库。
+**这一步失败不回滚签发** —— 凭证此刻已经拿到手且有效，组织身份缺失只是让客户端退回弹窗。
+
+**为什么必须服务端来取**：客户端要在 claude 启动**之前**写同意记录，而那条记录按组织 UUID
+分键；彼时 CLI 还没拉过 profile，客户端本地要么没有这个值、要么残留的属于用户自己的账号
+（`~/.claude.json` 是与用户自己的 claude 共用的）。
+
+**客户端改动**（补 §8）：`AgentCredential` 增 `credentialOrgUuid`（`#[serde(default)]`
+退化空串）；`pty/agent.rs` 的 `prepare` 由单个钩子改为钩子表 `&[fn(&PrepareContext)]`，
+新增一项在会话前把该组织写入 `fableOverageConsentV2`。该表**按组织分键、写入为追加**，
+与用户自己账号的记录天然并存、互不覆盖。org_uuid 为空则跳过并记录日志。
+
+**管理端**（补 §9.3 的提醒体系）：`extraUsageDisabled` 为真时，订阅行标注「Fable 不可用」
+并给出开启路径。**仅在明确探测到「未开启」时才提示** —— null 表示旧式/手工凭证或没拉到
+profile，那是不知道，不是知道它关着。
+
+### 13.8 对验收的补充
+
+§12 第 3 条「会话内 `/model` 列表包含 Fable 5」**不足以判定用户真的能用**，需追加：
+
+11. 组织已开 usage credits 的席位，新开会话选 Fable **不弹任何窗**、直接可用
+12. 组织未开 usage credits 时，管理端该席位显示「Fable 不可用」及开启路径
+13. 旧式凭证（无 `credential_org_uuid`）的席位行为与本次改动前逐字相同（退回弹窗）
+
+### 13.9 与之无关、但同一次排查暴露出的问题
+
+席位链路到 `api.anthropic.com` 的 **TLS 握手实测 2.8~7.9 秒，五次里两次超时**（mihomo 在
+5 秒放弃连接）。它不只影响这个弹窗 —— agent 的**每一次新建连接**都在挨这个延迟。
+本节的方案只是让 Fable 不再被它绊住，**链路本身的丢包/选路问题需要单独排查**，
+否则用户感受到的仍是「lane 里的 claude 又慢又爱抽风」。
