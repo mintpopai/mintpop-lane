@@ -13,6 +13,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -173,5 +178,44 @@ class SubscriptionRepositoryTest extends MysqlTestBase {
         SubscriptionDto read = subscriptionRepository.findById(id).orElseThrow();
         assertThat(read.getBoundDeviceId()).isNull();
         assertThat(read.getBoundAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("bindDeviceIfUnbound 并发安全：两台设备真并发抢绑同一份未绑定订阅，恰好一个成功，且落库的正是那个赢家")
+    void bindDeviceIfUnboundIsSafeUnderConcurrentAttempts() throws Exception {
+        Long id = fixtures.createSubscription(userId, AgentType.CLAUDE, "席位 A",
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
+        long deviceA = 201L;
+        long deviceB = 202L;
+        Instant now = Instant.parse("2026-09-01T00:00:00Z");
+
+        // 两个线程各自独立调用注入的 subscriptionRepository bean——MyBatis 的 SqlSessionTemplate
+        // 是线程安全的，每次调用都从连接池各取一条连接，两个线程因此真的是两条独立数据库连接在竞争同一行，
+        // 不是同一条连接顺序执行。本测试类（以及 MysqlTestBase 全体既有用例）都没有 @Transactional，
+        // 每次仓储调用都是各自 autocommit 的独立语句，没有测试事务把两个线程困在一起或彼此隔离的问题。
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> attemptA = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return subscriptionRepository.bindDeviceIfUnbound(id, deviceA, now);
+            });
+            Future<Boolean> attemptB = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return subscriptionRepository.bindDeviceIfUnbound(id, deviceB, now);
+            });
+
+            boolean resultA = attemptA.get(10, TimeUnit.SECONDS);
+            boolean resultB = attemptB.get(10, TimeUnit.SECONDS);
+
+            // 只断言「一真一假」还不够：还要证明库里最终落的绑定，就是返回 true 的那个线程绑的设备
+            assertThat(List.of(resultA, resultB)).containsExactlyInAnyOrder(true, false);
+            long winnerDeviceId = resultA ? deviceA : deviceB;
+
+            SubscriptionDto read = subscriptionRepository.findById(id).orElseThrow();
+            assertThat(read.getBoundDeviceId()).isEqualTo(winnerDeviceId);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

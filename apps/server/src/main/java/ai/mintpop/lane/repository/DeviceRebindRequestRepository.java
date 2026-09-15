@@ -18,10 +18,10 @@ public interface DeviceRebindRequestRepository {
 
     Optional<DeviceRebindRequest> findById(Long id);
 
-    /** 按状态查，按创建时间倒序 */
+    /** 按状态查，按创建时间倒序；同一秒创建的以 id 倒序兜底，顺序是确定的 */
     List<DeviceRebindRequest> findByStatus(RebindRequestStatus status);
 
-    /** 全部申请，按创建时间倒序 */
+    /** 全部申请，按创建时间倒序；同一秒创建的以 id 倒序兜底，顺序是确定的 */
     List<DeviceRebindRequest> findAll();
 
     /** 某用户全部待处理的申请。下发链路配置时用它算每条席位的 pendingRequest */

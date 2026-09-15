@@ -1,7 +1,6 @@
 package ai.mintpop.lane.repository;
 
 import ai.mintpop.lane.entity.DeviceRebindRequest;
-import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.RebindRequestStatus;
 import ai.mintpop.lane.support.DatabaseFixtures;
