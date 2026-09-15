@@ -1,6 +1,7 @@
 package ai.mintpop.lane.response;
 
 import ai.mintpop.lane.enumeration.AgentType;
+import ai.mintpop.lane.enumeration.DeviceBinding;
 
 import java.time.Instant;
 import java.util.List;
@@ -8,7 +9,8 @@ import java.util.Map;
 
 /**
  * 下发给客户端的链路配置。字段名与客户端 LinkConfig 逐字对应。
- * agentCredentials 为该用户全部「在期且已录凭据」的订阅；
+ * agentCredentials 为该用户全部「在期且已录凭据」的订阅——**绑定关系不参与这一层过滤**：
+ * 绑在别处的席位照列，只是凭据置空。滤掉它们，用户会看到「我明明买了，席位却凭空消失」。
  * 注入哪份由用户建会话时选择，客户端遇到不认识的 agentType 一律忽略。
  */
 public record LinkConfigResponse(
@@ -37,6 +39,15 @@ public record LinkConfigResponse(
              * 空串表示没拿到，客户端跳过预置、退回弹窗。
              */
             String credentialOrgUuid,
+            /**
+             * 这份席位相对本次请求那台设备的绑定关系。**凭据是否下发跟着它走**：
+             * 只有 BOUND_HERE 的 credential 有值，另两种一律是空串
+             */
+            DeviceBinding deviceBinding,
+            /** 绑在别处时，那台设备的主机名，供客户端告诉用户「它在哪」；其余情况为空串 */
+            String boundDeviceName,
+            /** 发起本次请求的这台设备是否已为该订阅提过换机申请且尚未被处理 */
+            boolean pendingRequest,
             Instant endsAt
     ) {
     }

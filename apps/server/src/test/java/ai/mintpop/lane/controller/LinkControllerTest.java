@@ -1,7 +1,9 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -15,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
+import java.time.Instant;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
@@ -43,7 +46,13 @@ class LinkControllerTest extends MysqlTestBase {
     private SubscriptionRepository subscriptionRepository;
 
     @Autowired
+    private UserDeviceRepository userDeviceRepository;
+
+    @Autowired
     private SessionTokenService sessionTokenService;
+
+    /** 全用例统一用这台设备的机器码请求头，与下方 setUp 里登记、绑定的那台设备一致 */
+    private static final String DEVICE_ID = "a".repeat(64);
 
     private Long user1Id;
     private Long user2Id;
@@ -61,6 +70,12 @@ class LinkControllerTest extends MysqlTestBase {
         Long land2 = fixtures.createLandNode("LAND-2", "8.8.8.8");
         user1Id = fixtures.createActiveUser("logto-user-1", front, land1, "sk-ant-test-1");
         user2Id = fixtures.createUser("logto-user-2", MEMBER, REVOKED, front, land2);
+
+        // 把 user1 的席位绑到请求头所用的这台设备上，模拟「已完成绑定」的正常态——
+        // 未绑定的订阅不下发凭据，见 LinkServiceImplTest 的绑定关系用例
+        UserDevice device = userDeviceRepository.upsert(user1Id, DEVICE_ID, "测试设备", "macos", "MacBook", Instant.now());
+        Long subscriptionId = subscriptionRepository.findByUserId(user1Id).getFirst().getId();
+        subscriptionRepository.bindDeviceIfUnbound(subscriptionId, device.getId(), Instant.now());
     }
 
     @Test
@@ -74,7 +89,8 @@ class LinkControllerTest extends MysqlTestBase {
     @DisplayName("正常用户拿到链路配置，业务码为 0")
     void activeUserGetsLinkConfig() throws Exception {
         mockMvc.perform(get("/api/link/config")
-                        .header("Authorization", bearer(user1Id)))
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Device-Id", DEVICE_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.front.type").value("trojan"))
@@ -90,9 +106,20 @@ class LinkControllerTest extends MysqlTestBase {
     @DisplayName("已吊销用户拿不到链路，HTTP 仍为 200 但业务码非 0")
     void revokedUserCannotGetLink() throws Exception {
         mockMvc.perform(get("/api/link/config")
-                        .header("Authorization", bearer(user2Id)))
+                        .header("Authorization", bearer(user2Id))
+                        .header("X-Device-Id", DEVICE_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(310003))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("不带机器码请求头时被拒，业务码 310007")
+    void missingDeviceIdHeaderRejected() throws Exception {
+        mockMvc.perform(get("/api/link/config")
+                        .header("Authorization", bearer(user1Id)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(310007))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 
