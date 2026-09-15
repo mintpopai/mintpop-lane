@@ -41,6 +41,7 @@ function subscription(
     credentialExpiresAt: null,
     credentialStale: false,
     extraUsageDisabled: false,
+    boundDevice: null,
     remark: "",
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",

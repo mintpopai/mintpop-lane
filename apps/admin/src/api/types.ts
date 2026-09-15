@@ -80,6 +80,24 @@ export const AGENT_TYPE_LABELS: Record<AgentType, string> = {
   CODEX: "Codex",
 };
 
+/** 换机申请状态。取值与服务端 RebindRequestStatus 逐字一致 */
+export const REBIND_REQUEST_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  SUPERSEDED: "SUPERSEDED",
+} as const;
+export type RebindRequestStatus =
+  (typeof REBIND_REQUEST_STATUS)[keyof typeof REBIND_REQUEST_STATUS];
+
+/** 状态 → 中文标签。SUPERSEDED 是「用户又提了新申请，这条自动作废」，不是管理员拒的 */
+export const REBIND_REQUEST_STATUS_LABELS: Record<RebindRequestStatus, string> = {
+  PENDING: "待处理",
+  APPROVED: "已同意",
+  REJECTED: "已拒绝",
+  SUPERSEDED: "已作废",
+};
+
 /** 统一返回体。HTTP 一律 200，成败只看 code */
 export interface ApiResponse<T> {
   code: number;
@@ -228,6 +246,18 @@ export interface UserPageQuery {
   pageSize: number;
 }
 
+/** 一台已知设备的展示信息。机器码本身不下发到管理端——管理员靠这三样辨认是哪台机器 */
+export interface DeviceBrief {
+  name: string;
+  os: string;
+  model: string;
+}
+
+/** 订阅当前绑定的设备。未绑定时整个对象为 null，不是字段为空 */
+export interface BoundDevice extends DeviceBrief {
+  boundAt: string;
+}
+
 /**
  * 管理端的订阅视图。凭据只回传有没有录，本体一个字符不出现。
  * 套餐信息（名称/时长/价格/币种）是分配时的快照，套餐后续改动不影响这里。
@@ -263,6 +293,8 @@ export interface AdminSubscriptionResponse {
    * 仅在签发时明确探测到「未开启」才为 true；旧式/手工凭证无从得知，一律 false。
    */
   extraUsageDisabled: boolean;
+  /** 当前绑定的设备；null 表示这份订阅还没在任何设备上用过 */
+  boundDevice: BoundDevice | null;
   remark: string | null;
   createdAt: string;
   updatedAt: string;
@@ -298,6 +330,29 @@ export interface CredentialIssueResult {
  */
 export interface CredentialRevokeResult {
   upstreamRevoked: boolean;
+}
+
+/** 一条换机申请。用户邮箱、套餐名、分配号由服务端联查后一并下发，管理端不再二次取数 */
+export interface AdminDeviceRebindRequestResponse {
+  id: number;
+  /** 申请号，飞书卡片里引用的就是它 */
+  requestNo: string;
+  subscriptionId: number;
+  /** 订阅已被删除时为空串，不是占位文案 */
+  subscriptionName: string;
+  /** 订阅已被删除时为空串，不是占位文案 */
+  assignmentNo: string;
+  userId: number;
+  userEmail: string;
+  /** 申请时绑定的设备；此前从未绑定过则为 null */
+  fromDevice: DeviceBrief | null;
+  /** 申请要换到的设备；对应设备行事后被删除时为 null（服务端 doc：唯一成因是设备行已删，不是“从未绑定”） */
+  toDevice: DeviceBrief | null;
+  reason: string | null;
+  status: RebindRequestStatus;
+  createdAt: string;
+  /** 处理时刻；PENDING 时为 null */
+  decidedAt: string | null;
 }
 
 /** 分配订阅的入参。只能选现有套餐，agent 类型与止期都由所选套餐决定 */
