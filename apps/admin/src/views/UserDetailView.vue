@@ -14,9 +14,10 @@ import type {
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import CredentialIssueModal from "../components/CredentialIssueModal.vue";
 import Select from "../components/AdminSelect.vue";
+import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
-import { formatAssignmentNo, formatDate, formatDateTime } from "../utils/format";
+import { deviceLabel, formatAssignmentNo, formatDate, formatDateTime } from "../utils/format";
 import {
   agentTypeOptions,
   buildSubscriptionCreatePayload,
@@ -102,6 +103,7 @@ const revokeWarning = ref<string | null>(null);
 /** 待二次确认解绑的那一条订阅。解绑与有没有换机申请无关：丢机、离职收回、手动重置都走它 */
 const pendingUnbind = ref<AdminSubscriptionResponse | null>(null);
 const unbinding = ref(false);
+const rebind = useRebindStore();
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -442,6 +444,10 @@ async function confirmUnbind(): Promise<void> {
     pendingUnbind.value = null;
     showToast("success", "已解绑，该订阅可在任意设备上重新绑定");
     await loadList();
+    // 服务端会把这份订阅的待处理换机申请一并作废，导航轨的角标却是另一份数据：
+    // 不在这里推一把，角标就会一直挂着一条刚被作废的待办，只有整页刷新才消得掉。
+    // 这页只是顺手通知一声，不接手队列页的任何职责
+    await rebind.refresh();
   } catch (error) {
     reportError(error, "解绑失败");
   } finally {
@@ -661,11 +667,7 @@ async function confirmUnbind(): Promise<void> {
             <div class="sub-fact">
               <dt>绑定设备</dt>
               <dd :class="{ fact: row.boundDevice !== null }">
-                {{
-                  row.boundDevice
-                    ? `${row.boundDevice.name}（${row.boundDevice.os} · ${row.boundDevice.model}）`
-                    : "未绑定"
-                }}
+                {{ row.boundDevice ? deviceLabel(row.boundDevice) : "未绑定" }}
               </dd>
             </div>
             <div v-if="row.boundDevice" class="sub-fact">
@@ -873,7 +875,7 @@ async function confirmUnbind(): Promise<void> {
     <ConfirmDialog
       v-if="pendingUnbind"
       title="解绑设备"
-      :message="`确认解除订阅「${pendingUnbind.name}」（分配号 ${formatAssignmentNo(pendingUnbind.assignmentNo)}）与设备「${pendingUnbind.boundDevice?.name}」的绑定？解绑后它可以在任意设备上重新绑定；该订阅若有待处理的换机申请，也会一并作废。`"
+      :message="`确认解除订阅「${pendingUnbind.name}」（分配号 ${formatAssignmentNo(pendingUnbind.assignmentNo)}）与设备「${pendingUnbind.boundDevice?.name}」的绑定？原设备会当场失去这个席位：服务端下发的链路配置随即变成「未绑定」并停止下发凭据，用户要在客户端重新确认绑定后才能再开会话。解绑后它可以在任意设备上重新绑定；该订阅若有待处理的换机申请，也会一并作废。`"
       confirm-text="解绑"
       :busy="unbinding"
       @confirm="confirmUnbind()"
