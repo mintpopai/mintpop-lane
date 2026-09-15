@@ -1,6 +1,7 @@
 package ai.mintpop.lane.config;
 
 import ai.mintpop.lane.client.StripeGateway;
+import ai.mintpop.lane.service.OrderNotifyService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -18,9 +19,9 @@ public class PaymentConfig {
         return stripeGateway::cancelPaymentIntent;
     }
 
-    /** 首次入账成功后的回调。Task 8 接飞书通知，这里先空实现占位 */
+    /** 首次入账成功后（事务已提交）推飞书；@Async 在 OrderNotifyService 上，这里只是转发 */
     @Bean
-    Consumer<String> orderSettledListener() {
-        return orderNo -> { };
+    Consumer<String> orderSettledListener(OrderNotifyService orderNotifyService) {
+        return orderNotifyService::notifyOrderPaid;
     }
 }
