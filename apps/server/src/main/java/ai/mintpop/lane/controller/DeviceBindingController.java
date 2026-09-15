@@ -4,6 +4,7 @@ import ai.mintpop.lane.request.DeviceBindRequest;
 import ai.mintpop.lane.request.DeviceRebindCreateRequest;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.service.DeviceBindingService;
+import ai.mintpop.lane.service.DeviceRebindNotifyService;
 import ai.mintpop.lane.util.DeviceId;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -17,8 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 用户侧的设备绑定接口。身份取自会话 token，设备取自 X-Device-Id 请求头，两者都不由请求体自报。
- *
- * <p>换机申请提交后的通知推送（飞书卡片）是 Task 6 的职责，本接口只负责把申请落库。
  */
 @Slf4j
 @RestController
@@ -26,9 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class DeviceBindingController {
 
     private final DeviceBindingService deviceBindingService;
+    private final DeviceRebindNotifyService deviceRebindNotifyService;
 
-    public DeviceBindingController(DeviceBindingService deviceBindingService) {
+    public DeviceBindingController(DeviceBindingService deviceBindingService,
+                                   DeviceRebindNotifyService deviceRebindNotifyService) {
         this.deviceBindingService = deviceBindingService;
+        this.deviceRebindNotifyService = deviceRebindNotifyService;
     }
 
     @PostMapping("/bind")
@@ -47,7 +49,12 @@ public class DeviceBindingController {
                                            @PathVariable("id") Long subscriptionId,
                                            @RequestHeader(value = "X-Device-Id", required = false) String deviceId,
                                            @Valid @RequestBody DeviceRebindCreateRequest body) {
-        deviceBindingService.requestRebind(userId, subscriptionId, DeviceId.normalize(deviceId), body);
+        Long requestId = deviceBindingService.requestRebind(
+                userId, subscriptionId, DeviceId.normalize(deviceId), body);
+        // 通知调用必须留在这里、不能挪进 requestRebind 内部：requestRebind 是 @Transactional，
+        // 事务要等它返回才真正提交；在这里调用时事务已提交，@Async 通知重查必见那一行。
+        // 挪进服务内部会让通知在事务仍未提交时就可能跑起来、查库查不到，只在高并发下偶发出现。
+        deviceRebindNotifyService.notifyRebindRequested(requestId);
         return ApiResponse.success();
     }
 }

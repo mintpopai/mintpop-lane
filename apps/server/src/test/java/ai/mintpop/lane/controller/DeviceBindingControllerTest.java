@@ -5,6 +5,7 @@ import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.service.DeviceRebindNotifyService;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
@@ -23,6 +25,10 @@ import java.time.temporal.ChronoUnit;
 
 import static ai.mintpop.lane.enumeration.AgentType.CLAUDE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -59,6 +65,10 @@ class DeviceBindingControllerTest extends MysqlTestBase {
 
     @Autowired
     private SessionTokenService sessionTokenService;
+
+    /** 通知是否真被触发只由 controller 接线决定，替身掉真正发飞书卡片这一步 */
+    @MockitoBean
+    private DeviceRebindNotifyService deviceRebindNotifyService;
 
     /** 大写混杂，专门用来验证归一化后的值才落库、才用于匹配 */
     private static final String DEVICE_ID_MIXED_CASE = "A".repeat(32) + "b".repeat(32);
@@ -198,5 +208,35 @@ class DeviceBindingControllerTest extends MysqlTestBase {
                 "SELECT COUNT(*) FROM device_rebind_request WHERE subscription_id = ? AND status = 'PENDING'",
                 Long.class, subscriptionId);
         assertThat(count).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("换机申请成功恰好触发一次通知（带新申请的 id）；失败（未绑在别处）一次都不触发")
+    void requestRebindTriggersNotifyExactlyOnceOnSuccessAndNeverOnFailure() throws Exception {
+        // 未绑在别处：报 510009，通知一次都不该发——申请压根没落库
+        mockMvc.perform(post("/api/subscriptions/" + subscriptionId + "/device/rebind-requests")
+                        .header("Authorization", bearer(ownerId))
+                        .header("X-Device-Id", DEVICE_ID_MIXED_CASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bindBodyJson()))
+                .andExpect(jsonPath("$.code").value(510009));
+        verify(deviceRebindNotifyService, never()).notifyRebindRequested(any());
+
+        // 绑到旧设备后，在新设备上提换机申请，应当成功且恰好通知一次
+        UserDevice oldDevice = userDeviceRepository.upsert(
+                ownerId, OTHER_DEVICE_ID, "旧电脑", "windows", "", Instant.now());
+        subscriptionRepository.bindDeviceIfUnbound(subscriptionId, oldDevice.getId(), Instant.now());
+
+        mockMvc.perform(post("/api/subscriptions/" + subscriptionId + "/device/rebind-requests")
+                        .header("Authorization", bearer(ownerId))
+                        .header("X-Device-Id", DEVICE_ID_MIXED_CASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"月白的 MacBook\",\"os\":\"macos 26.6.1\",\"model\":\"Mac17,9\",\"reason\":\"换了新电脑\"}"))
+                .andExpect(jsonPath("$.code").value(0));
+
+        Long newRequestId = jdbc.queryForObject(
+                "SELECT id FROM device_rebind_request WHERE subscription_id = ? AND status = 'PENDING'",
+                Long.class, subscriptionId);
+        verify(deviceRebindNotifyService, times(1)).notifyRebindRequested(newRequestId);
     }
 }
