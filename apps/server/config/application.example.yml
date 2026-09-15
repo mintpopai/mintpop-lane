@@ -50,6 +50,23 @@ egress-check:
   # 回填出口 IP 时，出口时区同步按新 IP 重新解析（GeoIP 走 ipwho.is，服务端需能访问它）
   interval: 10m
 
+# —— 订单 ——
+order:
+  # 待支付订单的支付时限（分钟）：超时由读到它的入口懒惰置为已过期，不再受理支付
+  expire-minutes: 30
+
+# —— 支付（Stripe）——整段可选：不配 secret-key 与 publishable-key 时控制台的支付入口自动禁用，其它功能不受影响
+# 密钥在 Stripe Dashboard → Developers → API keys；webhook 密钥在 Developers → Webhooks 建端点后取得，
+# 端点地址 https://<控制台域名>/api/v1/payment/webhook/stripe，只订阅 payment_intent.succeeded 与 payment_intent.payment_failed。
+# 本地联调用 stripe listen（mise run webhook-listen）打印的 whsec_ 密钥，Dashboard 那把只用于线上。
+payment:
+  stripe:
+    secret-key: 填入 sk_ 开头的 secret key
+    publishable-key: 填入 pk_ 开头的 publishable key
+    webhook-secret: 填入 whsec_ 开头的 webhook 签名密钥
+    # 启用的支付方式（我方命名：card / alipay / wxpay），逗号分隔；收款币种按套餐币种走，不在这里配
+    supported-types: card,alipay,wxpay
+
 # —— 通知（飞书群自定义机器人）——整段可选：不配 webhook 则不推送（上面的巡检与自动回填仍照常跑）——
 # 目前推送的事件：落地出口 IP 已变更——管理端改了出口 IP（含检测后一键回填）、
 # 或定时巡检发现实际出口与登记不一致并自动回填，都在库改完之后推一张卡片

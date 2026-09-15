@@ -156,6 +156,13 @@
       <groupId>io.projectreactor.netty</groupId>
       <artifactId>reactor-netty-http</artifactId>
     </dependency>
+
+    <!-- Stripe 官方 SDK：PaymentIntent 创建/检索/取消与 webhook 验签，只在 StripeGateway 一处使用 -->
+    <dependency>
+      <groupId>com.stripe</groupId>
+      <artifactId>stripe-java</artifactId>
+      <version>33.4.2</version>
+    </dependency>
   </dependencies>
 
   <build>

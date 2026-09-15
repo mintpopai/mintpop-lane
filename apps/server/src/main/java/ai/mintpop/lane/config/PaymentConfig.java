@@ -1,16 +1,20 @@
 package ai.mintpop.lane.config;
 
+import ai.mintpop.lane.client.StripeGateway;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.function.Consumer;
 
-/** 支付相关装配。撤 intent 的动作在 Task 5 接上 StripeGateway，这里先给一个空实现占位 */
+/**
+ * 支付装配：把「撤 Stripe 侧 intent」这个动作做成一个函数 bean 交给订单模块——
+ * OrderService / OrderExpiryService 因此不直接依赖 Stripe SDK，测试里可换成记录器。
+ */
 @Configuration
 public class PaymentConfig {
 
     @Bean
-    Consumer<String> intentCanceller() {
-        return intentId -> { };
+    Consumer<String> intentCanceller(StripeGateway stripeGateway) {
+        return stripeGateway::cancelPaymentIntent;
     }
 }
