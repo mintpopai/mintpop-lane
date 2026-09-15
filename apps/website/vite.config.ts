@@ -26,8 +26,8 @@ export default defineConfig({
     },
   },
   test: {
-    // 下载逻辑是纯函数，node 环境即可，不依赖 jsdom
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    // 组件测试要挂 DOM，与管理端统一用 jsdom（纯逻辑那几个 spec 在 jsdom 下照样跑）
+    environment: "jsdom",
+    include: ["src/**/*.spec.ts"],
   },
 });

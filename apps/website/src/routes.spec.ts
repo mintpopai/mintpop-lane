@@ -1,3 +1,8 @@
+// @vitest-environment node
+//
+// 本文件要按 import.meta.url 去磁盘上读 sitemap.xml，而 jsdom 环境下 import.meta.url 是 http 协议、
+// readFileSync 收不下；这一个 spec 单独钉回 node 环境（默认 jsdom 见 vite.config.ts）。
+
 // sitemap 是手写的，路由是从注册表生成的——两者一旦漂移（新指南忘加 sitemap、或 sitemap 里残留旧 URL），
 // 搜索引擎要么收录不到、要么抓到 404。这里把两边的 URL 集合钉成完全相等。
 import { readFileSync } from "node:fs";

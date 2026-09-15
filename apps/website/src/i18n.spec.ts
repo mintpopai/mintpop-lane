@@ -1,24 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { localeFromPath, localePath, rememberLocale, savedLocale, switchLocalePath } from "./i18n";
+import { installMemoryStorage } from "./testing";
 
-// node 26 默认不提供 localStorage（要 --localstorage-file 才开），这里给一个最小内存实现。
-// 仍用 node 环境而不是 jsdom：本文件测的都是纯逻辑，为一个 getItem 引整套 DOM 不划算。
-function memoryStorage(): Storage {
-  const store = new Map<string, string>();
-  return {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, v),
-    removeItem: (k: string) => void store.delete(k),
-    clear: () => store.clear(),
-    key: (i: number) => [...store.keys()][i] ?? null,
-    get length() {
-      return store.size;
-    },
-  };
-}
-
+// 语言偏好读写 localStorage，而 jsdom 这边根本没有它——换一份内存实现，理由见 installMemoryStorage
 beforeEach(() => {
-  vi.stubGlobal("localStorage", memoryStorage());
+  installMemoryStorage();
 });
 
 describe("localeFromPath", () => {

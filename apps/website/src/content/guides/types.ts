@@ -1,5 +1,5 @@
 // 指南页的内容模型。每篇指南一个文件，导出 Record<Locale, GuideCopy>；
-// interface 强制中英字段齐全，数组条数由 guides.test.ts 的结构比对兜底。
+// interface 强制中英字段齐全，数组条数由 guides.spec.ts 的结构比对兜底。
 //
 // 写法取向与 copy.ts 一致：先给结论，说用户能感觉到的，不解释实现。
 // 每篇只押一组搜索意图（见 docs/website-seo.md 的关键词地图），不要一篇里什么都讲。

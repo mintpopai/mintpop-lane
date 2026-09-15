@@ -1,7 +1,7 @@
 // 中英文案的结构比对：interface 只能保证 zh / en 两侧字段齐全，保证不了数组条数一致——
 // 比如中文 faq.items 写 5 条、英文写 4 条，照样编译通过、照样上线。
 // 这里递归比对结构（数组长度、对象 key 集合），不比较文案内容本身（中英文案本就该不同）。
-// copy.test.ts 与 guides.test.ts 共用。
+// copy.spec.ts 与 guides.spec.ts 共用。
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
