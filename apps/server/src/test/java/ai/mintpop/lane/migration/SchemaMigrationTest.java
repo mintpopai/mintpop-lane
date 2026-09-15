@@ -442,7 +442,8 @@ class SchemaMigrationTest extends MysqlTestBase {
 
     @Test
     @DisplayName("V17 迁移建出 device_rebind_request 表：表注释落库，request_no 唯一，status 带注释，"
-            + "from_device_id 可空而 to_device_id 非空（此前未绑定 vs 本次申请改绑到的设备）")
+            + "from_device_id 可空而 to_device_id 非空（此前未绑定 vs 本次申请改绑到的设备），"
+            + "user_id 外键为 ON DELETE CASCADE")
     void v17MigrationCreatesDeviceRebindRequestTable() {
         String tableComment = jdbc.queryForObject("""
                 SELECT table_comment FROM information_schema.tables
@@ -476,6 +477,14 @@ class SchemaMigrationTest extends MysqlTestBase {
                   AND column_name = 'to_device_id'
                 """, String.class);
         assertThat(toDeviceNullable).isEqualTo("NO");
+
+        // 与 fk_user_device_user 一样级联：不级联的话，凡提过换机申请的用户都删不掉——
+        // 管理端删用户会撞上这个外键直接失败
+        String deleteRule = jdbc.queryForObject("""
+                SELECT delete_rule FROM information_schema.referential_constraints
+                WHERE constraint_schema = DATABASE() AND constraint_name = 'fk_device_rebind_user'
+                """, String.class);
+        assertThat(deleteRule).isEqualTo("CASCADE");
     }
 
     @Test

@@ -25,6 +25,7 @@ CREATE TABLE user_device
     updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间（UTC）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_device (user_id, device_id),
+    -- 级联删：设备记录只对它归属的那个用户有意义，人没了，这些行既无人可查也无处可用
     CONSTRAINT fk_user_device_user FOREIGN KEY (user_id) REFERENCES app_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT = '用户的已知设备：机器码与供管理员辨认的设备信息';
@@ -43,7 +44,7 @@ CREATE TABLE device_rebind_request
     id              BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
     request_no      VARCHAR(32) NOT NULL COMMENT '申请号：DR + yyyyMMddHHmmss + 6 位随机数字；飞书卡片与工单里引用它',
     subscription_id BIGINT      NOT NULL COMMENT '申请改绑的订阅，弱引用 subscription(id)',
-    user_id         BIGINT      NOT NULL COMMENT '申请人，引用 app_user',
+    user_id         BIGINT      NOT NULL COMMENT '申请人，引用 app_user；删用户级联删申请',
     from_device_id  BIGINT      NULL COMMENT '申请时绑定的设备 id，弱引用 user_device(id)；此前未绑定则为 NULL',
     to_device_id    BIGINT      NOT NULL COMMENT '申请改绑到的设备 id，弱引用 user_device(id)，即提交申请那台机器',
     reason          VARCHAR(255) NULL COMMENT '用户填的理由，可空——不强制填写，强制只会逼出没有信息量的字符',
@@ -56,6 +57,8 @@ CREATE TABLE device_rebind_request
     UNIQUE KEY uk_device_rebind_request_no (request_no),
     KEY idx_device_rebind_status (status, created_at),
     KEY idx_device_rebind_subscription (subscription_id, status),
-    CONSTRAINT fk_device_rebind_user FOREIGN KEY (user_id) REFERENCES app_user (id)
+    -- 与 fk_user_device_user 同样级联删：申请是「某人想把自己的订阅挪到自己另一台机器上」，
+    -- 用户一删就再无意义；不级联的话删用户会被这里的外键挡住而失败（管理端删用户直接报错）
+    CONSTRAINT fk_device_rebind_user FOREIGN KEY (user_id) REFERENCES app_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT = '换机申请：用户在新设备上请求把订阅改绑过来，由管理员裁决';

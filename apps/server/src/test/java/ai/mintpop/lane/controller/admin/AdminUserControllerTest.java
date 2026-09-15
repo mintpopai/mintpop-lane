@@ -1,11 +1,16 @@
 package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.entity.DeviceRebindRequest;
 import ai.mintpop.lane.enumeration.AgentType;
+import ai.mintpop.lane.enumeration.RebindRequestStatus;
 import ai.mintpop.lane.enumeration.UserStatus;
+import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.util.RebindRequestNo;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
@@ -57,6 +62,12 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Autowired
     private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
+    private UserDeviceRepository userDeviceRepository;
+
+    @Autowired
+    private DeviceRebindRequestRepository rebindRequestRepository;
 
     @Autowired
     private SessionTokenService sessionTokenService;
@@ -267,6 +278,30 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         assertThat(userRepository.findById(memberWithSubId)).isEmpty();
         assertThat(subscriptionRepository.findByUserId(memberWithSubId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("删除提过换机申请的用户：级联删掉设备与申请，不被外键挡住")
+    void deleteUserCascadesDevicesAndRebindRequests() throws Exception {
+        Instant now = Instant.now();
+        Long deviceRowId = userDeviceRepository
+                .upsert(memberWithSubId, "d".repeat(64), "旧电脑", "macos 26", "", now).getId();
+        DeviceRebindRequest request = new DeviceRebindRequest();
+        request.setRequestNo(RebindRequestNo.generate(now));
+        request.setSubscriptionId(subscriptionRepository.findByUserId(memberWithSubId).getFirst().getId());
+        request.setUserId(memberWithSubId);
+        request.setFromDeviceId(null);
+        request.setToDeviceId(deviceRowId);
+        request.setStatus(RebindRequestStatus.PENDING);
+        Long requestId = rebindRequestRepository.create(request);
+
+        // 换机申请的外键若不是 ON DELETE CASCADE，这里会直接被数据库挡下、返回 110002
+        mockMvc.perform(delete("/api/admin/users/" + memberWithSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(memberWithSubId)).isEmpty();
+        assertThat(rebindRequestRepository.findById(requestId)).isEmpty();
+        assertThat(userDeviceRepository.findById(deviceRowId)).isEmpty();
     }
 
     @Test
