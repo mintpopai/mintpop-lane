@@ -7,7 +7,7 @@ maven = "3.9.16"
 # —— 安装 ——
 [tasks.install]
 description = "安装全部组件依赖"
-depends = ["install-admin", "install-website", "install-server"]
+depends = ["install-admin", "install-console", "install-website", "install-server"]
 
 [tasks.install-admin]
 description = "安装管理端前端依赖"
@@ -16,6 +16,14 @@ flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker
 '''
 # 不设 dir：pnpm 工作区的安装动作天然发生在仓库根，用 --filter 限定只装管理端这一个包
 run = "pnpm install --filter @mintpop/lane-admin ${usage_frozen:+--frozen-lockfile}"
+
+[tasks.install-console]
+description = "安装控制台前端依赖"
+usage = '''
+flag "--frozen" help="按 lockfile 精确安装、不更新 lockfile（CI/Docker 用）"
+'''
+# 不设 dir：pnpm 工作区的安装动作天然发生在仓库根，用 --filter 限定只装控制台这一个包
+run = "pnpm install --filter @mintpop/lane-console ${usage_frozen:+--frozen-lockfile}"
 
 [tasks.install-website]
 description = "安装官网前端依赖"
@@ -36,6 +44,11 @@ description = "以开发模式启动管理端"
 dir = "apps/admin"
 run = "pnpm vite"
 
+[tasks.run-console]
+description = "以开发模式启动控制台（端口 5175）"
+dir = "apps/console"
+run = "pnpm vite"
+
 [tasks.run-website]
 description = "以开发模式启动官网"
 dir = "apps/website"
@@ -51,10 +64,19 @@ description = "以开发模式启动服务端（配置读 apps/server/config/app
 dir = "apps/server"
 run = "mvn spring-boot:run"
 
+[tasks.webhook-listen]
+description = "本地联调：用 Stripe CLI 把测试事件转发到本机服务端（需自行安装 stripe CLI 并 stripe login）"
+run = "stripe listen --forward-to localhost:8080/api/v1/payment/webhook/stripe --events payment_intent.succeeded,payment_intent.payment_failed"
+
 # —— 构建 ——
 [tasks.build-admin]
 description = "构建管理端静态产物到 apps/admin/dist"
 dir = "apps/admin"
+run = "pnpm vite build"
+
+[tasks.build-console]
+description = "构建控制台静态产物到 apps/console/dist"
+dir = "apps/console"
 run = "pnpm vite build"
 
 [tasks.build-website]
@@ -72,6 +94,11 @@ description = "构建管理端镜像（apps/admin/Dockerfile，mise 多阶段）
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
 run = "docker build -f apps/admin/Dockerfile -t mintpop-lane-admin:local ."
 
+[tasks.image-console]
+description = "构建控制台镜像（apps/console/Dockerfile，mise 多阶段）"
+# 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
+run = "docker build -f apps/console/Dockerfile -t mintpop-lane-console:local ."
+
 [tasks.image-website]
 description = "构建官网镜像（apps/website/Dockerfile，mise 多阶段）"
 # 不设 dir：默认在仓库根（mise.toml 所在地）运行，末尾 . 即仓库根 context
@@ -86,6 +113,11 @@ run = "docker build -f apps/server/Dockerfile -t mintpop-lane-server:local ."
 [tasks.test-admin]
 description = "跑管理端单元测试"
 dir = "apps/admin"
+run = "pnpm vitest run"
+
+[tasks.test-console]
+description = "跑控制台单元测试"
+dir = "apps/console"
 run = "pnpm vitest run"
 
 [tasks.test-website]
@@ -106,6 +138,16 @@ run = ["pnpm eslint . --max-warnings 0", "pnpm prettier --check .", "pnpm vue-ts
 [tasks.format-admin]
 description = "按 prettier 重排管理端代码（lint-admin 里 --check 那步的修复版）"
 dir = "apps/admin"
+run = "pnpm prettier --write ."
+
+[tasks.lint-console]
+description = "检查控制台代码风格、格式与类型"
+dir = "apps/console"
+run = ["pnpm eslint . --max-warnings 0", "pnpm prettier --check .", "pnpm vue-tsc --noEmit"]
+
+[tasks.format-console]
+description = "按 prettier 重排控制台代码（lint-console 里 --check 那步的修复版）"
+dir = "apps/console"
 run = "pnpm prettier --write ."
 
 [tasks.lint-website]
@@ -143,6 +185,14 @@ arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
 arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
 '''
 run = './scripts/release.sh admin "${usage_arg1:-}" "${usage_arg2:-}"'
+
+[tasks.release-console]
+description = "为控制台打 tag 并推送，触发发版流水线"
+usage = '''
+arg "[arg1]" help="版本号（如 v0.2.0）或更新说明；按形状判定"
+arg "[arg2]" help="更新说明（第一个参数为版本号时使用）"
+'''
+run = './scripts/release.sh console "${usage_arg1:-}" "${usage_arg2:-}"'
 
 [tasks.release-website]
 description = "为官网打 tag 并推送，触发发版流水线"
