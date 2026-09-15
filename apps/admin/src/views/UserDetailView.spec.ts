@@ -422,6 +422,26 @@ describe("UserDetailView · 备注", () => {
     expect(buttonInCard(".remark-card", "保存").attributes("disabled")).toBeDefined();
   });
 
+  it("输入框硬卡在 50 字——备注是一眼读完的一句话，长过这个尺度不该往这里塞", async () => {
+    getUser.mockResolvedValue(user());
+    await mountView([]);
+    await vi.waitFor(() => expect(document.querySelector("#user-remark")).not.toBeNull());
+
+    expect(remarkInput().attributes("maxlength")).toBe("50");
+  });
+
+  it("给出字数提示：maxlength 是硬截断，没有反馈会让人以为键盘坏了", async () => {
+    getUser.mockResolvedValue(user({ remark: "老客户" }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户"));
+
+    const counter = document.querySelector(".remark-card .remark-count");
+    expect(counter?.textContent).toContain("3 / 50");
+
+    await remarkInput().setValue("老客户，续费谈过");
+    expect(document.querySelector(".remark-card .remark-count")?.textContent).toContain("8 / 50");
+  });
+
   it("改了备注后保存，处置态与链路分配原样带回", async () => {
     getUser.mockResolvedValue(user({ status: "SUSPENDED", frontNodeId: 1, landNodeId: 11 }));
     listNodes.mockResolvedValue([

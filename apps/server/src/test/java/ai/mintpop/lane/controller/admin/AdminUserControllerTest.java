@@ -313,12 +313,26 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("备注超 255 字报参数错误 110001")
+    @DisplayName("备注超 50 字报参数错误 110001")
     void tooLongRemarkReportsParamError() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", frontId, null, "备".repeat(256)))))
+                        .content(json(updateRequest("ACTIVE", frontId, null, "备".repeat(51)))))
                 .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("备注正好 50 字仍可保存——上限是 50，不是 49")
+    void remarkAtExactlyFiftyCharsIsAccepted() throws Exception {
+        String atLimit = "备".repeat(50);
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, atLimit))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.remark").value(atLimit));
     }
 
     @Test

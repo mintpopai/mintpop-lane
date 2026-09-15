@@ -243,7 +243,14 @@ onMounted(loadList);
             </template>
             <span v-else class="muted">无</span>
           </td>
-          <td class="muted">{{ row.remark || PLACEHOLDER }}</td>
+          <!-- 备注是自由文本，直接铺在单元格里会把整张表越撑越长。
+               截断挂在内层 span 上而不是 td：auto 表格布局下浏览器可以不理会
+               td 的 max-width。没写备注时不挂 title——悬浮弹出一个「—」只会让人莫名其妙 -->
+          <td class="muted">
+            <span class="remark-cell" :title="row.remark || undefined">
+              {{ row.remark || PLACEHOLDER }}
+            </span>
+          </td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
             <!-- 链路资源与订阅都在独立的用户管理页（弹窗套娃体验太差），这里只做跳转 -->
@@ -352,5 +359,16 @@ onMounted(loadList);
 <style scoped>
 .search {
   width: 280px;
+}
+
+/* 备注单行截断成省略号，完整内容靠 title 悬浮看。
+   inline-block 才让 max-width 生效；vertical-align 兜住 inline-block 的基线偏移，
+   否则这一格会比同行其它格矮一点、行高被撑开 */
+.remark-cell {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 </style>

@@ -61,6 +61,12 @@ const linkDirty = computed(
     (frontNodeId.value !== user.value.frontNodeId || landNodeId.value !== user.value.landNodeId),
 );
 
+/**
+ * 备注字数上限，与服务端 UserSaveRequest 的 @Size 同值。
+ * 备注要的是「一眼读完的一句话」，长过这个尺度的内容不该往这里塞。
+ */
+const REMARK_MAX_LENGTH = 50;
+
 /** 备注表单：与链路资源分开保存——两件事互不相干，一起保存会让人分不清动了什么 */
 const remark = ref("");
 const savingRemark = ref(false);
@@ -496,13 +502,17 @@ async function confirmRevoke(): Promise<void> {
         <h4 class="block-title">备注</h4>
         <div class="remark-grid">
           <!-- 不再另起 label：卡标题已经说了「备注」，label 只会把同一件事说第二遍。
-               a11y 由 aria-label 承担，说明交给 placeholder -->
+               a11y 由 aria-label 承担，说明交给 placeholder。
+               label 的位置改放字数提示——maxlength 是硬截断，打满后直接打不进去、
+               毫无反馈，会让人以为键盘坏了；提示占着 label 那一行，输入框与保存钮
+               照旧底对齐 -->
           <div class="admin-field">
+            <p class="remark-count">{{ remark.length }} / {{ REMARK_MAX_LENGTH }}</p>
             <input
               id="user-remark"
               v-model="remark"
               class="admin-input"
-              maxlength="255"
+              :maxlength="REMARK_MAX_LENGTH"
               placeholder="只有管理端可见，不下发给用户；如「老客户」「试用期，月底回访」"
               aria-label="备注"
             />
@@ -866,6 +876,16 @@ async function confirmRevoke(): Promise<void> {
 .remark-card {
   padding: 20px 24px;
   margin-top: 16px;
+}
+
+/* 字数提示顶在输入框上方、占着 label 那一行的位置，右对齐贴着输入框右缘。
+   tabular-nums 让位数变化时数字不左右抖动 */
+.remark-count {
+  margin: 0;
+  text-align: right;
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 一个输入框 + 保存钮一行排开、底对齐，与链路资源卡同一种读法 */
