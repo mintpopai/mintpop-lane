@@ -527,6 +527,12 @@ body {
   margin-left: 6px;
 }
 
+/* 已支付行的订阅去向说明：跟在状态徽标后面的一小段补充文字，不单独占一行 */
+.order-note {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
 /* —— 控件 ——
    按钮、输入框、下拉、chip 并排出现在工具条里，必须严格同高：统一 18px 行高
    + 8px 纵向内边距 + 1px 描边 = 36px，不靠 min-height 兜 */
