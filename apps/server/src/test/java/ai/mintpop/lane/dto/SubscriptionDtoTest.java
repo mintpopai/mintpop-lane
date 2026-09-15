@@ -9,16 +9,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SubscriptionDtoTest {
 
-    @Test
-    @DisplayName("在期判定：起含止不含，按 UTC 绝对时刻比较")
-    void startInclusiveEndExclusive() {
-        SubscriptionDto s = new SubscriptionDto();
-        s.setStartsAt(Instant.parse("2026-08-01T00:00:00Z"));
-        s.setEndsAt(Instant.parse("2026-09-01T00:00:00Z"));
+    private static final Instant NOW = Instant.parse("2026-09-15T00:00:00Z");
 
-        assertThat(s.isActiveAt(Instant.parse("2026-07-31T23:59:59Z"))).isFalse();
-        assertThat(s.isActiveAt(Instant.parse("2026-08-01T00:00:00Z"))).isTrue();   // 起：含
-        assertThat(s.isActiveAt(Instant.parse("2026-08-31T23:59:59Z"))).isTrue();
-        assertThat(s.isActiveAt(Instant.parse("2026-09-01T00:00:00Z"))).isFalse();  // 止：不含
+    @Test
+    @DisplayName("起止都在时按「起含止不含」判定在期")
+    void activeWithinWindow() {
+        SubscriptionDto s = new SubscriptionDto();
+        s.setStartsAt(NOW.minusSeconds(1));
+        s.setEndsAt(NOW.plusSeconds(1));
+        assertThat(s.isActiveAt(NOW)).isTrue();
+        s.setEndsAt(NOW);
+        assertThat(s.isActiveAt(NOW)).isFalse();
+    }
+
+    @Test
+    @DisplayName("待开通（起止为空）永远不算在期，也不抛空指针")
+    void pendingIsNeverActive() {
+        SubscriptionDto s = new SubscriptionDto();
+        assertThat(s.isActiveAt(NOW)).isFalse();
+        s.setStartsAt(NOW.minusSeconds(1));
+        assertThat(s.isActiveAt(NOW)).isFalse();
     }
 }

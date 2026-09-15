@@ -238,6 +238,7 @@ class CredentialIssueServiceImplTest {
         SubscriptionDto subscription = new SubscriptionDto();
         subscription.setId(subscriptionId);
         subscription.setUserId(2L);
+        subscription.setStartsAt(clock.instant().minusSeconds(86400));
         subscription.setEndsAt(clock.instant().plusSeconds(86400));
         when(subscriptionRepository.findById(subscriptionId)).thenReturn(Optional.of(subscription));
 

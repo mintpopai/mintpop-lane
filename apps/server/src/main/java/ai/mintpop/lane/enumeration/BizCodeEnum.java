@@ -5,7 +5,7 @@ import lombok.Getter;
 
 /**
  * 业务错误码。6 位分段：前两位为模块号，后四位为段内序号。
- * 11 通用/系统，21 认证与身份，31 链路。
+ * 11 通用/系统，21 认证与身份，31 链路，41 管理端，51 用户自助。
  */
 @Getter
 @AllArgsConstructor
@@ -68,7 +68,17 @@ public enum BizCodeEnum {
     CREDENTIAL_MANUAL_NOT_ALLOWED(410037, "Claude 席位的凭证只能通过签发获得，不支持手工录入"),
     CREDENTIAL_NOT_FOUND(410038, "该席位尚未录入凭证，无需吊销"),
     ADMIN_USER_PROTECTED(410039, "管理员账号受保护，不允许停用、吊销或删除"),
-    NODE_PROBE_UNSUPPORTED(410040, "只有落地节点支持出口检测，前置节点的协议服务端无法直连");
+    NODE_PROBE_UNSUPPORTED(410040, "只有落地节点支持出口检测，前置节点的协议服务端无法直连"),
+    SUBSCRIPTION_NOT_ACTIVATED(410041, "订阅尚未开通，请先填写起期"),
+
+    /* 用户自助（控制台） */
+    PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),
+    ORDER_NOT_FOUND(510002, "订单不存在"),
+    ORDER_NOT_PAYABLE(510003, "订单当前不可支付"),
+    ORDER_NOT_CANCELLABLE(510004, "订单当前不可取消"),
+    PAYMENT_NOT_CONFIGURED(510005, "支付功能未配置"),
+    PAYMENT_GATEWAY_ERROR(510006, "支付网关异常，请稍后重试"),
+    USER_NOT_ACTIVE(510007, "账号当前不可购买");
 
     private final int code;
     private final String message;

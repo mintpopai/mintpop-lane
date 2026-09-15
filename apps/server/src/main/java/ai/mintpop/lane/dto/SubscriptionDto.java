@@ -89,8 +89,19 @@ public class SubscriptionDto {
 
     private Instant updatedAt;
 
-    /** 在期判定：起含止不含。判定点在拉链路与心跳里，纯查询、无定时任务 */
+    /**
+     * 在期判定：起含止不含。起止任一为空即「待开通」（自助购买建出、管理员尚未填起期），
+     * 永远不算在期——它既不下发凭据，也不进任何「在期订阅」聚合。
+     */
     public boolean isActiveAt(Instant now) {
+        if (startsAt == null || endsAt == null) {
+            return false;
+        }
         return !now.isBefore(startsAt) && now.isBefore(endsAt);
+    }
+
+    /** 是否待开通：起止时间尚未由管理员填写 */
+    public boolean isPendingActivation() {
+        return startsAt == null || endsAt == null;
     }
 }

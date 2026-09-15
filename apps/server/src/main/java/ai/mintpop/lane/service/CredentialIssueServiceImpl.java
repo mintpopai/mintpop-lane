@@ -75,6 +75,10 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
     public AuthorizationStart startAuthorization(Long subscriptionId) {
         SubscriptionDto subscription = subscriptionRepository.findById(subscriptionId)
                 .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
+        // 待开通订阅没有止期，算不出凭证有效期；也不该在管理员填起期之前就把凭证签出去
+        if (subscription.isPendingActivation()) {
+            throw new BizException(BizCodeEnum.SUBSCRIPTION_NOT_ACTIVATED);
+        }
         UserDto user = userRepository.findById(subscription.getUserId())
                 .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
         ProxyNodeDto front = user.getFrontNodeId() == null ? null
@@ -118,6 +122,10 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
 
         SubscriptionDto subscription = subscriptionRepository.findById(subscriptionId)
                 .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
+        // 会话建立后订阅被删重建的窗口极小，但 lifetimeCalculator.secondsFor(null) 会 NPE，防御性拦住
+        if (subscription.isPendingActivation()) {
+            throw new BizException(BizCodeEnum.SUBSCRIPTION_NOT_ACTIVATED);
+        }
         UserDto user = userRepository.findById(subscription.getUserId())
                 .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
         ProxyNodeDto land = nodeRepository.findById(user.getLandNodeId())

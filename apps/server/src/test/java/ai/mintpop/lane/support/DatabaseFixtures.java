@@ -43,6 +43,7 @@ public class DatabaseFixtures {
     /** 清空全部业务表。外键约束在清库期间临时关掉，顺序因此不敏感。 */
     public void clearAll() {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbc.execute("TRUNCATE TABLE plan_order");
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
