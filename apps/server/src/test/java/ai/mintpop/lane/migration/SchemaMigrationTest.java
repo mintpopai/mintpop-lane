@@ -407,4 +407,100 @@ class SchemaMigrationTest extends MysqlTestBase {
         assertThat((String) codeVerifierColumn.get("column_comment")).contains("PKCE");
         assertThat(codeVerifierColumn.get("is_nullable")).isEqualTo("NO");
     }
+
+    @Test
+    @DisplayName("V17 迁移建出 user_device 表：表注释落库，device_id 是非空 CHAR(64) 并带注释，"
+            + "(user_id, device_id) 唯一键存在，user_id 外键为 ON DELETE CASCADE")
+    void v17MigrationCreatesUserDeviceTable() {
+        String tableComment = jdbc.queryForObject("""
+                SELECT table_comment FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = 'user_device'
+                """, String.class);
+        assertThat(tableComment).contains("设备");
+
+        var deviceIdColumn = jdbc.queryForMap("""
+                SELECT column_type, column_comment, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'user_device' AND column_name = 'device_id'
+                """);
+        assertThat((String) deviceIdColumn.get("column_type")).isEqualTo("char(64)");
+        assertThat((String) deviceIdColumn.get("column_comment")).contains("机器码");
+        assertThat(deviceIdColumn.get("is_nullable")).isEqualTo("NO");
+
+        Integer uniqueKeyColumns = jdbc.queryForObject("""
+                SELECT COUNT(DISTINCT column_name) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'user_device'
+                  AND index_name = 'uk_user_device' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueKeyColumns).isEqualTo(2);
+
+        String deleteRule = jdbc.queryForObject("""
+                SELECT delete_rule FROM information_schema.referential_constraints
+                WHERE constraint_schema = DATABASE() AND constraint_name = 'fk_user_device_user'
+                """, String.class);
+        assertThat(deleteRule).isEqualTo("CASCADE");
+    }
+
+    @Test
+    @DisplayName("V17 迁移建出 device_rebind_request 表：表注释落库，request_no 唯一，status 带注释，"
+            + "from_device_id 可空而 to_device_id 非空（此前未绑定 vs 本次申请改绑到的设备）")
+    void v17MigrationCreatesDeviceRebindRequestTable() {
+        String tableComment = jdbc.queryForObject("""
+                SELECT table_comment FROM information_schema.tables
+                WHERE table_schema = DATABASE() AND table_name = 'device_rebind_request'
+                """, String.class);
+        assertThat(tableComment).contains("换机申请");
+
+        Integer uniqueOnRequestNo = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'device_rebind_request'
+                  AND column_name = 'request_no' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnRequestNo).isEqualTo(1);
+
+        String statusComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'device_rebind_request' AND column_name = 'status'
+                """, String.class);
+        assertThat(statusComment).contains("PENDING");
+
+        String fromDeviceNullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'device_rebind_request'
+                  AND column_name = 'from_device_id'
+                """, String.class);
+        assertThat(fromDeviceNullable).isEqualTo("YES");
+
+        String toDeviceNullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'device_rebind_request'
+                  AND column_name = 'to_device_id'
+                """, String.class);
+        assertThat(toDeviceNullable).isEqualTo("NO");
+    }
+
+    @Test
+    @DisplayName("V17 迁移给 subscription 加 bound_device_id/bound_at：均可空、带中文注释、不设外键（弱引用，"
+            + "解绑与删设备都允许悬空）")
+    void v17MigrationAddsSubscriptionBoundDeviceColumns() {
+        var boundDeviceIdColumn = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'bound_device_id'
+                """);
+        assertThat((String) boundDeviceIdColumn.get("column_comment")).contains("未绑定");
+        assertThat(boundDeviceIdColumn.get("is_nullable")).isEqualTo("YES");
+
+        var boundAtColumn = jdbc.queryForMap("""
+                SELECT column_comment, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'subscription' AND column_name = 'bound_at'
+                """);
+        assertThat((String) boundAtColumn.get("column_comment")).contains("绑定时刻");
+        assertThat(boundAtColumn.get("is_nullable")).isEqualTo("YES");
+
+        Integer foreignKeys = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.key_column_usage
+                WHERE table_schema = DATABASE() AND table_name = 'subscription'
+                  AND column_name IN ('bound_device_id', 'bound_at') AND referenced_table_name IS NOT NULL
+                """, Integer.class);
+        assertThat(foreignKeys).isZero();
+    }
 }
