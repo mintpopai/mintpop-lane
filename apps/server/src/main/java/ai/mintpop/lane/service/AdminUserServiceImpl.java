@@ -106,6 +106,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.setStatus(request.getStatus());
         user.setFrontNodeId(request.getFrontNodeId());
         user.setLandNodeId(request.getLandNodeId());
+        user.setRemark(request.getRemark());
         // subject/email/role 不从入参取，沿用库里的值（邮箱是身份标识，由登录同步维护，管理端不提供改动入口）
 
         userRepository.update(user);
@@ -172,6 +173,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 land == null ? null : land.getName(),
                 land == null ? null : land.getEgressIp(),
                 activeSubscriptions,
+                user.getRemark(),
                 user.getCreatedAt(),
                 user.getUpdatedAt());
     }

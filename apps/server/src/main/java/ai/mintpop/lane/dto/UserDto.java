@@ -31,6 +31,9 @@ public class UserDto {
     /** 第二跳落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
 
+    /** 备注，管理员自用说明；null 表示没写 */
+    private String remark;
+
     private Instant createdAt;
 
     private Instant updatedAt;

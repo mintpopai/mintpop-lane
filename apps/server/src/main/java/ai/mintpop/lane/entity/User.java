@@ -37,6 +37,9 @@ public class User {
     /** 落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
 
+    /** 备注，管理员自用说明；null 或空表示没写 */
+    private String remark;
+
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant createdAt;
 

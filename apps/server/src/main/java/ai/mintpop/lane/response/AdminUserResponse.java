@@ -22,6 +22,8 @@ public record AdminUserResponse(
         String egressIp,
         /** 在期订阅摘要，供列表一眼看出这个人开了什么、到什么时候 */
         List<ActiveSubscriptionBrief> activeSubscriptions,
+        /** 备注，管理员自用说明；没写时为 null。只出现在管理端，不下发给用户侧 */
+        String remark,
         Instant createdAt,
         Instant updatedAt
 ) {

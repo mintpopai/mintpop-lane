@@ -2,6 +2,7 @@ package ai.mintpop.lane.request;
 
 import ai.mintpop.lane.enumeration.UserStatus;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -22,4 +23,11 @@ public class UserSaveRequest {
 
     /** 落地节点 id，null 表示不分配 */
     private Long landNodeId;
+
+    /**
+     * 备注，管理员自用说明；null 表示清空。
+     * 这个接口是整体保存，调用方每次都要把现值带回来，否则会被这次提交抹掉。
+     */
+    @Size(max = 255)
+    private String remark;
 }

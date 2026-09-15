@@ -49,6 +49,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     landNodeName: null,
     egressIp: null,
     activeSubscriptions: [],
+    remark: null,
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
     ...overrides,
@@ -130,6 +131,17 @@ function buttonByText(text: string): DOMWrapper<Element> {
   const btn = queryAll("button").find((b) => b.text() === text);
   if (!btn) {
     throw new Error(`按钮未找到：${text}`);
+  }
+  return btn;
+}
+
+/** 某张卡片内、文案为 text 的按钮。页面上「保存」不止一个，必须按卡片圈定 */
+function buttonInCard(cardSelector: string, text: string): DOMWrapper<Element> {
+  const btn = Array.from(document.querySelectorAll(`${cardSelector} button`))
+    .map((el) => new DOMWrapper(el))
+    .find((b) => b.text() === text);
+  if (!btn) {
+    throw new Error(`${cardSelector} 里没有「${text}」按钮`);
   }
   return btn;
 }
@@ -326,7 +338,7 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
     await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
 
-    expect(buttonByText("保存").attributes("disabled")).toBeDefined();
+    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeDefined();
   });
 
   it("换落地节点后保存提交新节点 id，用户处置态原样透传——这页不动状态，状态在用户列表切换", async () => {
@@ -345,14 +357,118 @@ describe("UserDetailView · 链路资源", () => {
       throw new Error("选项未找到：LAND-新宿");
     }
     await option.trigger("click");
-    await buttonByText("保存").trigger("click");
+    await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
         frontNodeId: 1,
         landNodeId: 12,
+        remark: "",
       }),
+    );
+  });
+
+  it("改链路时备注原样带回，不会把管理员写的备注顺手清掉", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11, remark: "老客户" }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
+
+    await selectTrigger("落地节点").trigger("click");
+    const option = queryAll("li").find((li) => li.text().includes("LAND-新宿"));
+    if (!option) {
+      throw new Error("选项未找到：LAND-新宿");
+    }
+    await option.trigger("click");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ remark: "老客户" })),
+    );
+  });
+});
+
+describe("UserDetailView · 备注", () => {
+  function remarkInput(): DOMWrapper<HTMLInputElement> {
+    const input = document.querySelector<HTMLInputElement>("#user-remark");
+    if (!input) {
+      throw new Error("备注输入框未找到");
+    }
+    return new DOMWrapper(input);
+  }
+
+  it("回显服务端已有的备注", async () => {
+    getUser.mockResolvedValue(user({ remark: "老客户，续费谈过" }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户，续费谈过"));
+  });
+
+  it("没写过备注时输入框是空的，不是「null」这四个字", async () => {
+    getUser.mockResolvedValue(user({ remark: null }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe(""));
+  });
+
+  it("没有改动时保存按钮禁用——没有可保存的东西", async () => {
+    getUser.mockResolvedValue(user({ remark: "老客户" }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户"));
+
+    expect(buttonInCard(".remark-card", "保存").attributes("disabled")).toBeDefined();
+  });
+
+  it("改了备注后保存，处置态与链路分配原样带回", async () => {
+    getUser.mockResolvedValue(user({ status: "SUSPENDED", frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
+
+    await remarkInput().setValue("试用期，月底回访");
+    await buttonInCard(".remark-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(3, {
+        status: "SUSPENDED",
+        frontNodeId: 1,
+        landNodeId: 11,
+        remark: "试用期，月底回访",
+      }),
+    );
+    expect(showToast).toHaveBeenCalledWith("success", "已保存");
+  });
+
+  it("清空备注也算改动，能提交出去", async () => {
+    getUser.mockResolvedValue(user({ remark: "写错了" }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe("写错了"));
+
+    await remarkInput().setValue("");
+    await buttonInCard(".remark-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ remark: "" })),
+    );
+  });
+
+  it("保存失败时把服务端说法原样提示出来", async () => {
+    getUser.mockResolvedValue(user({ remark: "" }));
+    updateUser.mockRejectedValueOnce(new Error("timeout"));
+    await mountView([]);
+    await vi.waitFor(() => expect(document.querySelector("#user-remark")).not.toBeNull());
+
+    await remarkInput().setValue("随手记");
+    await buttonInCard(".remark-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("error", "保存备注失败：timeout"),
     );
   });
 });

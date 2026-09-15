@@ -127,6 +127,8 @@ export interface AdminUserResponse {
   egressIp: string | null;
   /** 在期订阅摘要，一眼看出这个人开了什么、到什么时候 */
   activeSubscriptions: ActiveSubscriptionBrief[];
+  /** 管理员自用说明，没写时为 null */
+  remark: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -176,6 +178,8 @@ export interface UserSaveRequest {
   status: UserStatus;
   frontNodeId: number | null;
   landNodeId: number | null;
+  /** 管理员自用说明，空串表示没写。整体保存接口，不带就等于清空 */
+  remark: string;
 }
 
 /** 落地节点连通性检测结果；「不通」也是正常返回（reachable=false + error），不是请求错误 */

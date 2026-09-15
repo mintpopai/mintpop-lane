@@ -17,6 +17,7 @@ public class UserConverter {
         dto.setStatus(entity.getStatus());
         dto.setFrontNodeId(entity.getFrontNodeId());
         dto.setLandNodeId(entity.getLandNodeId());
+        dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
@@ -31,6 +32,7 @@ public class UserConverter {
         entity.setStatus(dto.getStatus());
         entity.setFrontNodeId(dto.getFrontNodeId());
         entity.setLandNodeId(dto.getLandNodeId());
+        entity.setRemark(dto.getRemark());
         return entity;
     }
 }

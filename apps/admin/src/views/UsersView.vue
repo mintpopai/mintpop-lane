@@ -15,8 +15,8 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
 import { showToast } from "../toast";
-import { formatDate, formatDateTime } from "../utils/format";
-import { buildUserPayload } from "../utils/userForm";
+import { PLACEHOLDER, formatDate, formatDateTime } from "../utils/format";
+import { buildUserPayload, userToForm } from "../utils/userForm";
 
 const list = ref<AdminUserResponse[]>([]);
 const keyword = ref("");
@@ -120,7 +120,8 @@ async function confirmDelete(): Promise<void> {
 }
 
 /**
- * 处置态转换。更新接口是整体保存，节点分配原样带回、只动状态。
+ * 处置态转换。更新接口是整体保存，除状态外的一切（节点分配、备注）由 userToForm
+ * 摊平原样带回——漏带哪个字段就等于顺手把它清空了。
  * toast 文案随动作走（停用→已停用、恢复→已恢复），不说笼统的「状态已更新」。
  */
 async function changeStatus(
@@ -129,15 +130,7 @@ async function changeStatus(
   doneText: string,
 ): Promise<void> {
   try {
-    await adminApi().updateUser(
-      row.id,
-      buildUserPayload({
-        id: row.id,
-        status,
-        frontNodeId: row.frontNodeId,
-        landNodeId: row.landNodeId,
-      }),
-    );
+    await adminApi().updateUser(row.id, buildUserPayload({ ...userToForm(row), status }));
     showToast("success", doneText);
     await loadList();
   } catch (error) {
@@ -155,12 +148,7 @@ async function confirmStatusRevoke(): Promise<void> {
   try {
     await adminApi().updateUser(
       row.id,
-      buildUserPayload({
-        id: row.id,
-        status: USER_STATUS.REVOKED,
-        frontNodeId: row.frontNodeId,
-        landNodeId: row.landNodeId,
-      }),
+      buildUserPayload({ ...userToForm(row), status: USER_STATUS.REVOKED }),
     );
     showToast("success", "已吊销");
     pendingStatusRevoke.value = null;
@@ -187,7 +175,7 @@ onMounted(loadList);
     <input
       v-model="keyword"
       class="admin-input search"
-      placeholder="按邮箱或 Logto user id 搜索"
+      placeholder="按邮箱、Logto user id 或备注搜索"
       @keyup.enter="search()"
     />
     <button type="button" class="admin-btn-ghost" @click="search()">搜索</button>
@@ -225,6 +213,7 @@ onMounted(loadList);
           <th>落地节点</th>
           <th>出口 IP</th>
           <th>在期订阅</th>
+          <th>备注</th>
           <th>更新时间</th>
           <th>操作</th>
         </tr>
@@ -254,6 +243,7 @@ onMounted(loadList);
             </template>
             <span v-else class="muted">无</span>
           </td>
+          <td class="muted">{{ row.remark || PLACEHOLDER }}</td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
             <!-- 链路资源与订阅都在独立的用户管理页（弹窗套娃体验太差），这里只做跳转 -->

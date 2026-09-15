@@ -36,6 +36,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     landNodeName: null,
     egressIp: null,
     activeSubscriptions: [],
+    remark: null,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-02T03:04:05Z",
     ...overrides,
@@ -131,6 +132,7 @@ describe("UsersView 处置态转换", () => {
       status: "SUSPENDED",
       frontNodeId: null,
       landNodeId: null,
+      remark: "",
     });
     expect(showToast).toHaveBeenCalledWith("success", "已停用");
     expect(wrapper.findComponent(ConfirmDialog).exists()).toBe(false);
@@ -158,7 +160,21 @@ describe("UsersView 处置态转换", () => {
       status: "SUSPENDED",
       frontNodeId: 4,
       landNodeId: 7,
+      remark: "",
     });
+  });
+
+  it("改状态时备注也原样带回——整体保存接口，不带就等于顺手清空", async () => {
+    pageUsers.mockResolvedValue(page([user({ remark: "老客户，续费谈过" })]));
+    const wrapper = await render();
+
+    await action(wrapper, 0, "停用").trigger("click");
+    await flushPromises();
+
+    expect(updateUser).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ remark: "老客户，续费谈过" }),
+    );
   });
 
   it("已吊销是终态，只剩删除一个口子", async () => {
@@ -260,6 +276,12 @@ describe("UsersView 搜索与筛选", () => {
     expect(pageUsers).toHaveBeenLastCalledWith(
       expect.objectContaining({ keyword: "zhang@acme.com" }),
     );
+  });
+
+  it("搜索框写明备注也能搜——不写的话没人会想到拿备注找人", async () => {
+    const wrapper = await render();
+
+    expect(wrapper.get(".admin-input.search").attributes("placeholder")).toContain("备注");
   });
 
   it("回车也能搜", async () => {
@@ -396,5 +418,21 @@ describe("UsersView 表格内容", () => {
     const row = wrapper.findAll("tbody tr")[0];
     expect(row.findAll("td")[5].text()).toBe("未分配");
     expect(row.findAll("td")[7].text()).toBe("无");
+  });
+
+  it("备注列照仓里惯例排在「更新时间」前一格", async () => {
+    pageUsers.mockResolvedValue(page([user({ remark: "试用期" })]));
+    const wrapper = await render();
+
+    const headers = wrapper.findAll("thead th").map((th) => th.text());
+    expect(headers[8]).toBe("备注");
+    expect(headers[9]).toBe("更新时间");
+    expect(wrapper.findAll("tbody tr")[0].findAll("td")[8].text()).toBe("试用期");
+  });
+
+  it("没写备注时显示占位符，不留一格空白让人以为漏渲染了", async () => {
+    const wrapper = await render();
+
+    expect(wrapper.findAll("tbody tr")[0].findAll("td")[8].text()).toBe("—");
   });
 });

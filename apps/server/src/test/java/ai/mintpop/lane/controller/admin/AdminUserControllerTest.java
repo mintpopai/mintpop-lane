@@ -78,12 +78,17 @@ class AdminUserControllerTest extends MysqlTestBase {
         return objectMapper.writeValueAsString(body);
     }
 
-    /** 可变 Map：部分用例要放 null 值，Map.of 不允许。接口收窄为处置态+节点 */
+    /** 可变 Map：部分用例要放 null 值，Map.of 不允许。接口收窄为处置态+节点+备注 */
     private Map<String, Object> updateRequest(String status, Long front, Long land) {
+        return updateRequest(status, front, land, null);
+    }
+
+    private Map<String, Object> updateRequest(String status, Long front, Long land, String remark) {
         Map<String, Object> body = new HashMap<>();
         body.put("status", status);
         body.put("frontNodeId", front);
         body.put("landNodeId", land);
+        body.put("remark", remark);
         return body;
     }
 
@@ -271,5 +276,62 @@ class AdminUserControllerTest extends MysqlTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(updateRequest(null, frontId, null))))
                 .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("备注可写入，列表与详情都带回")
+    void updateWritesRemark() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, "老客户，续费谈过"))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.remark").value("老客户，续费谈过"));
+        mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].remark")
+                        .value("老客户，续费谈过"));
+    }
+
+    @Test
+    @DisplayName("备注可清空：传 null 把原值抹掉")
+    void updateClearsRemark() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, "先写一句"))))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.remark").value("先写一句"));
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.remark").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("备注超 255 字报参数错误 110001")
+    void tooLongRemarkReportsParamError() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, "备".repeat(256)))))
+                .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("关键词搜索能命中备注")
+    void keywordMatchesRemark() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, "试用期"))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/users").param("keyword", "试用")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records[0].subject").value("logto-m2"));
     }
 }

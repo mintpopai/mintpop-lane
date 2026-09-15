@@ -29,7 +29,12 @@ import {
   validateSubscriptionForm,
   type SubscriptionFormModel,
 } from "../utils/subscriptionForm";
-import { buildUserPayload, selectableFrontNodes, selectableLandNodes } from "../utils/userForm";
+import {
+  buildUserPayload,
+  selectableFrontNodes,
+  selectableLandNodes,
+  userToForm,
+} from "../utils/userForm";
 
 /**
  * 某个用户的管理独立页：链路资源（第一跳/落地节点）分配 + 订阅管理。
@@ -54,6 +59,14 @@ const linkDirty = computed(
   () =>
     user.value !== null &&
     (frontNodeId.value !== user.value.frontNodeId || landNodeId.value !== user.value.landNodeId),
+);
+
+/** 备注表单：与链路资源分开保存——两件事互不相干，一起保存会让人分不清动了什么 */
+const remark = ref("");
+const savingRemark = ref(false);
+/** 与库里的备注比出来的「有没有改动」。服务端没写时回 null，比之前先收成空串 */
+const remarkDirty = computed(
+  () => user.value !== null && remark.value !== (user.value.remark ?? ""),
 );
 
 const list = ref<AdminSubscriptionResponse[]>([]);
@@ -193,6 +206,7 @@ async function loadUser(): Promise<void> {
     user.value = await adminApi().getUser(userId);
     frontNodeId.value = user.value.frontNodeId;
     landNodeId.value = user.value.landNodeId;
+    remark.value = user.value.remark ?? "";
     userError.value = "";
   } catch (error) {
     userError.value = error instanceof BizError ? error.message : (error as Error).message;
@@ -213,12 +227,12 @@ async function saveNodes(): Promise<void> {
   }
   savingNodes.value = true;
   try {
-    // 状态原样带回：这个接口是整体保存，但处置态的修改口子在用户列表，这里不动它
+    // 这个接口是整体保存：处置态（口子在用户列表）与备注（下面那张卡）都不归本卡管，
+    // 从 userToForm 摊平原样带回，只覆盖本卡编辑的两个节点
     await adminApi().updateUser(
       userId,
       buildUserPayload({
-        id: userId,
-        status: user.value.status,
+        ...userToForm(user.value),
         frontNodeId: frontNodeId.value,
         landNodeId: landNodeId.value,
       }),
@@ -231,6 +245,26 @@ async function saveNodes(): Promise<void> {
     reportError(error, "保存失败");
   } finally {
     savingNodes.value = false;
+  }
+}
+
+/** 备注保存。同样是整体保存接口，链路与处置态从 userToForm 摊平原样带回，只覆盖备注 */
+async function saveRemark(): Promise<void> {
+  if (!user.value) {
+    return;
+  }
+  savingRemark.value = true;
+  try {
+    await adminApi().updateUser(
+      userId,
+      buildUserPayload({ ...userToForm(user.value), remark: remark.value }),
+    );
+    showToast("success", "已保存");
+    await loadUser();
+  } catch (error) {
+    reportError(error, "保存备注失败");
+  } finally {
+    savingRemark.value = false;
   }
 }
 
@@ -451,6 +485,35 @@ async function confirmRevoke(): Promise<void> {
             @click="saveNodes()"
           >
             {{ savingNodes ? "保存中…" : "保存" }}
+          </button>
+        </div>
+      </section>
+
+      <!-- 备注：管理员自用说明，只在管理端可见，不下发给用户。
+           与链路资源分成两张卡各自保存——两件事互不相干，混在一张卡里保存
+           会让人分不清这一下动了什么 -->
+      <section class="admin-card remark-card">
+        <h4 class="block-title">备注</h4>
+        <div class="remark-grid">
+          <!-- 不再另起 label：卡标题已经说了「备注」，label 只会把同一件事说第二遍。
+               a11y 由 aria-label 承担，说明交给 placeholder -->
+          <div class="admin-field">
+            <input
+              id="user-remark"
+              v-model="remark"
+              class="admin-input"
+              maxlength="255"
+              placeholder="只有管理端可见，不下发给用户；如「老客户」「试用期，月底回访」"
+              aria-label="备注"
+            />
+          </div>
+          <button
+            type="button"
+            class="admin-btn"
+            :disabled="savingRemark || !remarkDirty"
+            @click="saveRemark()"
+          >
+            {{ savingRemark ? "保存中…" : "保存" }}
           </button>
         </div>
       </section>
@@ -800,6 +863,19 @@ async function confirmRevoke(): Promise<void> {
   align-items: end;
 }
 
+.remark-card {
+  padding: 20px 24px;
+  margin-top: 16px;
+}
+
+/* 一个输入框 + 保存钮一行排开、底对齐，与链路资源卡同一种读法 */
+.remark-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: end;
+}
+
 /* —— 区头：规模在左、区级动作在右 —— */
 .section-head {
   display: flex;
@@ -820,6 +896,15 @@ async function confirmRevoke(): Promise<void> {
   }
 
   .link-grid > .admin-btn {
+    justify-self: end;
+  }
+
+  .remark-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .remark-grid > .admin-btn {
     justify-self: end;
   }
 }

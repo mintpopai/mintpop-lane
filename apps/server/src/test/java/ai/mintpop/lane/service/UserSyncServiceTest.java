@@ -87,6 +87,22 @@ class UserSyncServiceTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("刷新邮箱不抹掉管理员写的备注")
+    void refreshKeepsRemark() {
+        UserDto user = userSyncService.syncOnLogin("logto-r", "r@example.com");
+        UserDto stored = userRepository.findById(user.getId()).orElseThrow();
+        stored.setRemark("老客户，续费谈过");
+        userRepository.update(stored);
+
+        // 登录同步是整行回写：备注不在同步的字段里，但也绝不能被这次回写冲掉
+        userSyncService.syncOnLogin("logto-r", "r2@example.com");
+
+        UserDto read = userRepository.findById(user.getId()).orElseThrow();
+        assertThat(read.getEmail()).isEqualTo("r2@example.com");
+        assertThat(read.getRemark()).isEqualTo("老客户，续费谈过");
+    }
+
+    @Test
     @DisplayName("邮箱已被别的 Logto 账号占用时首登报错，不静默建档")
     void firstLoginWithTakenEmailFails() {
         userSyncService.syncOnLogin("logto-owner", "shared@example.com");

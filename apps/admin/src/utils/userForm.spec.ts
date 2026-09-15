@@ -45,6 +45,7 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
     landNodeName: "LAND-东京-03",
     egressIp: "1.2.3.4",
     activeSubscriptions: [],
+    remark: null,
     createdAt: "2026-08-18T10:00:00",
     updatedAt: "2026-08-18T10:00:00",
     ...overrides,
@@ -58,6 +59,7 @@ describe("buildUserPayload", () => {
       status: "ACTIVE",
       frontNodeId: null,
       landNodeId: null,
+      remark: "",
     });
 
     expect(payload.frontNodeId).toBeNull();
@@ -65,7 +67,13 @@ describe("buildUserPayload", () => {
   });
 
   it("选了节点就原样直通两个节点 id", () => {
-    const payload = buildUserPayload({ id: 5, status: "ACTIVE", frontNodeId: 3, landNodeId: 11 });
+    const payload = buildUserPayload({
+      id: 5,
+      status: "ACTIVE",
+      frontNodeId: 3,
+      landNodeId: 11,
+      remark: "",
+    });
 
     expect(payload.frontNodeId).toBe(3);
     expect(payload.landNodeId).toBe(11);
@@ -78,10 +86,35 @@ describe("buildUserPayload", () => {
       // el-select clearable 清空后 v-model 拿到的是 undefined，类型上仍标成 null
       frontNodeId: undefined as unknown as null,
       landNodeId: undefined as unknown as null,
+      remark: "",
     });
 
     expect(payload.frontNodeId).toBeNull();
     expect(payload.landNodeId).toBeNull();
+  });
+
+  it("备注去掉首尾空白后带上", () => {
+    const payload = buildUserPayload({
+      id: 5,
+      status: "ACTIVE",
+      frontNodeId: null,
+      landNodeId: null,
+      remark: "  老客户，续费谈过  ",
+    });
+
+    expect(payload.remark).toBe("老客户，续费谈过");
+  });
+
+  it("只敲了空格的备注等于没写，提交空串", () => {
+    const payload = buildUserPayload({
+      id: 5,
+      status: "ACTIVE",
+      frontNodeId: null,
+      landNodeId: null,
+      remark: "   ",
+    });
+
+    expect(payload.remark).toBe("");
   });
 
   it("状态原样带上", () => {
@@ -90,6 +123,7 @@ describe("buildUserPayload", () => {
       status: "SUSPENDED",
       frontNodeId: null,
       landNodeId: null,
+      remark: "",
     });
 
     expect(payload.status).toBe("SUSPENDED");
@@ -145,6 +179,15 @@ describe("userToForm", () => {
       status: "ACTIVE",
       frontNodeId: 1,
       landNodeId: 11,
+      remark: "",
     });
+  });
+
+  it("服务端没写备注时回填成空串，输入框拿到的不是 null", () => {
+    expect(userToForm(makeUser({ remark: null })).remark).toBe("");
+  });
+
+  it("有备注就原样回填", () => {
+    expect(userToForm(makeUser({ remark: "试用期" })).remark).toBe("试用期");
   });
 });
