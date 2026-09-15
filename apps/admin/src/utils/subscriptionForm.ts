@@ -56,8 +56,9 @@ export function subscriptionToForm(s: AdminSubscriptionResponse): SubscriptionFo
     agentType: s.agentType,
     planId: s.planId,
     enterpriseId: s.enterpriseId,
-    // 服务端给的是带 Z 的 UTC 串，解析成 Date 后由控件按本地时区回显
-    startsAt: new Date(s.startsAt),
+    // 服务端给的是带 Z 的 UTC 串，解析成 Date 后由控件按本地时区回显；
+    // 待开通订阅起期为 null，留空让管理员填——填了提交即开通
+    startsAt: s.startsAt === null ? null : new Date(s.startsAt),
     accountEmail: s.accountEmail ?? "",
     // 服务端不回传凭据，回填一律为空；提交时空串即表示不修改
     credential: "",

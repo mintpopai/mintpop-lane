@@ -79,6 +79,12 @@ describe("subscriptionForm", () => {
     expect(form.credential).toBe("");
   });
 
+  it("待开通订阅（起止为 null）回填时起期留空，由管理员填写后开通", () => {
+    const form = subscriptionToForm({ ...sample, startsAt: null, endsAt: null });
+    expect(form.startsAt).toBeNull();
+    expect(validateSubscriptionForm(form, "edit")).toContain("起期不能为空");
+  });
+
   it("新增校验：必须先选 agent 类型再选套餐、起期必填", () => {
     const form = emptySubscriptionForm();
     form.startsAt = null;

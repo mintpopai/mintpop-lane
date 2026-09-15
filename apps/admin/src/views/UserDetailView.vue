@@ -551,6 +551,8 @@ async function confirmRevoke(): Promise<void> {
               >{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}</span
             >
             <span class="pill muted">{{ agentLabel(row.agentType) }}</span>
+            <!-- 自助购买建出的订阅起止为空：管理员在「编辑」里填起期即开通。琥珀底与「凭据未录入」同一档提醒 -->
+            <span v-if="row.startsAt === null" class="pill pending">待开通</span>
             <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
               {{ row.hasCredential ? "凭据已录入" : "凭据未录入" }}
             </span>
@@ -567,6 +569,8 @@ async function confirmRevoke(): Promise<void> {
                 v-if="row.agentType === AGENT_TYPE.CLAUDE"
                 type="button"
                 class="admin-link"
+                :disabled="row.startsAt === null"
+                :title="row.startsAt === null ? '先填写起期开通后再签发' : undefined"
                 @click="openIssue(row)"
               >
                 签发凭证

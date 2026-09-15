@@ -492,3 +492,32 @@ describe("UserDetailView · 备注", () => {
     );
   });
 });
+
+describe("UserDetailView · 待开通订阅", () => {
+  it("起止为 null 的订阅显示「待开通」徽标，起止列为占位符，签发按钮禁用并说明先填起期", async () => {
+    await mountView([
+      subscription({
+        startsAt: null,
+        endsAt: null,
+        remark: "自助购买，订单 LN20260915083005123456",
+      }),
+    ]);
+
+    const item = document.querySelector(".sub-item")!;
+    expect(item.querySelector(".pill.pending")?.textContent).toBe("待开通");
+    const facts = Array.from(item.querySelectorAll(".sub-fact dd")).map((dd) => dd.textContent);
+    expect(facts[0]).toBe("—");
+    expect(facts[1]).toBe("—");
+    const issue = buttonByText("签发凭证");
+    expect(issue.attributes("disabled")).toBeDefined();
+    expect(issue.attributes("title")).toBe("先填写起期开通后再签发");
+  });
+
+  it("已填起期的订阅不显示「待开通」，签发按钮可用", async () => {
+    await mountView([subscription()]);
+
+    expect(document.querySelector(".pill.pending")).toBeNull();
+    const issue = buttonByText("签发凭证");
+    expect(issue.attributes("disabled")).toBeUndefined();
+  });
+});

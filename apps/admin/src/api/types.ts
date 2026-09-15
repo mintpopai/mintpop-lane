@@ -97,11 +97,14 @@ export interface MeResponse {
 
 export interface MeSubscription {
   id: number;
+  /** 分配号：给用户看的分配标识 */
+  assignmentNo: string;
   name: string;
   /** 服务端可能新增本前端不认识的类型，故用 string 承载 */
   agentType: string;
-  startsAt: string;
-  endsAt: string;
+  /** 起止为 null 即「待开通」：自助购买建出、管理员尚未填起期 */
+  startsAt: string | null;
+  endsAt: string | null;
   active: boolean;
 }
 
@@ -245,8 +248,9 @@ export interface AdminSubscriptionResponse {
   planPrice: number;
   /** 服务端可能新增币种，故用 string 承载 */
   planCurrency: string;
-  startsAt: string;
-  endsAt: string;
+  /** 起止为 null 即「待开通」：自助购买建出、管理员尚未填起期，填了即开通 */
+  startsAt: string | null;
+  endsAt: string | null;
   /** 本次分配给用户的账号邮箱，小写；null 表示未录 */
   accountEmail: string | null;
   hasCredential: boolean;

@@ -517,6 +517,12 @@ body {
   color: var(--color-ink-secondary);
 }
 
+/* 待开通：琥珀底提醒管理员还有一步要做，与 [data-state="MISSING"] 同一档色 */
+.pill.pending {
+  background: color-mix(in srgb, #b4720b 14%, #ffffff);
+  color: #7a4d06;
+}
+
 .pill + .pill {
   margin-left: 6px;
 }
