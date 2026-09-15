@@ -12,6 +12,7 @@ import ai.mintpop.lane.request.DeviceRebindCreateRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -147,8 +149,12 @@ class DeviceBindingServiceImplTest {
 
         service.requestRebind(USER_ID, SUB_ID, THIS_DEVICE, body);
 
-        verify(rebindRequestRepository).supersedePending(SUB_ID);
-        verify(rebindRequestRepository).create(any());
+        // 顺序本身就是这条测试要守的东西：先作废旧 PENDING、再建新的。
+        // 若两行调换，新建的 PENDING 会被自己紧接着的 supersedePending 顺手作废掉，
+        // 订阅最终一条待处理申请都没有——两个独立的 verify 测不出这种调换，必须用 InOrder 钉死顺序
+        InOrder inOrder = inOrder(rebindRequestRepository);
+        inOrder.verify(rebindRequestRepository).supersedePending(SUB_ID);
+        inOrder.verify(rebindRequestRepository).create(any());
     }
 
     @Test

@@ -15,6 +15,7 @@ import ai.mintpop.lane.util.RebindRequestNo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -49,6 +50,7 @@ public class DeviceBindingServiceImpl implements DeviceBindingService {
     }
 
     @Override
+    @Transactional
     public void bind(Long userId, Long subscriptionId, String deviceId, DeviceBindRequest body) {
         SubscriptionDto subscription = ownedSubscription(userId, subscriptionId);
         Instant now = clock.instant();
@@ -72,6 +74,7 @@ public class DeviceBindingServiceImpl implements DeviceBindingService {
     }
 
     @Override
+    @Transactional
     public Long requestRebind(Long userId, Long subscriptionId, String deviceId,
                               DeviceRebindCreateRequest body) {
         SubscriptionDto subscription = ownedSubscription(userId, subscriptionId);
@@ -87,7 +90,10 @@ public class DeviceBindingServiceImpl implements DeviceBindingService {
         }
 
         // 同一份订阅同时只留一条 PENDING：用户在第三台机器上又提一次时，
-        // 第二台那条已经没有意义了，作废掉而不是让管理员在两条里挑
+        // 第二台那条已经没有意义了，作废掉而不是让管理员在两条里挑。
+        // upsert/supersedePending/create 三步必须在同一个事务里：撞键重试三次仍失败会
+        // 让异常逸出本方法，若无事务包裹，supersedePending 已提交的作废会永久生效，
+        // 而新申请没建出来——用户之前那条待处理申请无声消失，管理员也少了一条待办
         rebindRequestRepository.supersedePending(subscriptionId);
 
         DeviceRebindRequest request = new DeviceRebindRequest();
