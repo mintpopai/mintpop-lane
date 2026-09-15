@@ -83,6 +83,12 @@ public class SubscriptionDto {
      */
     private Boolean credentialExtraUsageEnabled;
 
+    /** 绑定的设备 id；null 表示这份订阅还没在任何设备上用过。弱引用，不设外键 */
+    private Long boundDeviceId;
+
+    /** 绑定时刻；与 boundDeviceId 同空同有值 */
+    private Instant boundAt;
+
     private String remark;
 
     private Instant createdAt;
