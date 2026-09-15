@@ -527,6 +527,24 @@ body {
   margin-left: 6px;
 }
 
+/* —— 导航轨待办角标：只在有待办时出现，数字本身就是全部信息，不加图标。
+   用实底琥珀而非 .pill.pending 的浅底，是因为它要在只有 208px 宽的导航轨上
+   被余光捕捉到；这是全站唯一一处「琥珀做底、白字」的例外 —— */
+.rail-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #b4720b;
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+}
+
 /* —— 控件 ——
    按钮、输入框、下拉、chip 并排出现在工具条里，必须严格同高：统一 18px 行高
    + 8px 纵向内边距 + 1px 描边 = 36px，不靠 min-height 兜 */
