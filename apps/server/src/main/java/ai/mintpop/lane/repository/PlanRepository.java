@@ -16,6 +16,9 @@ public interface PlanRepository {
     /** 全部套餐，按 id 升序 */
     List<Plan> findAll();
 
+    /** 上架套餐，按 agent 类型、时长、id 升序——用户侧套餐页的展示顺序 */
+    List<Plan> findEnabled();
+
     /** 新建，返回自增主键 */
     Long create(Plan plan);
 

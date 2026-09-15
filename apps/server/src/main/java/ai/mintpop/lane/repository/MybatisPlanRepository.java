@@ -32,6 +32,15 @@ public class MybatisPlanRepository implements PlanRepository {
     }
 
     @Override
+    public List<Plan> findEnabled() {
+        return mapper.selectList(Wrappers.<Plan>lambdaQuery()
+                .eq(Plan::getEnabled, true)
+                .orderByAsc(Plan::getAgentType)
+                .orderByAsc(Plan::getDurationDays)
+                .orderByAsc(Plan::getId));
+    }
+
+    @Override
     public Long create(Plan plan) {
         plan.setId(null);
         mapper.insert(plan);
