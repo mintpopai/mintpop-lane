@@ -13,6 +13,7 @@ import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.AdminDeviceRebindRequestResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -50,7 +51,13 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
     }
 
     @Override
+    @Transactional
     public void approve(Long requestId, Long adminUserId) {
+        // decide 提交后这条申请就不再是 PENDING，之后任何 decide 都会返回 false——
+        // 若紧随其后的 rebindDevice 失败（网络抖动、连接超时），申请会永久停在「已同意」
+        // 而订阅还绑在旧设备上，产品里没有任何一条路能自动救回这个状态。加事务后两步
+        // 要么一起提交、要么一起回滚，不会停在半成品状态；decide 本身仍是一条原子条件
+        // UPDATE，事务只决定它与紧随其后那条 rebindDevice 是否作为一个整体提交
         DeviceRebindRequest request = decide(requestId, RebindRequestStatus.APPROVED, adminUserId);
         // 裁决在前、改绑在后：条件 UPDATE 已经把「谁赢了这次裁决」定死，
         // 改绑因此不会被两个同时点「同意」的管理员各执行一次
@@ -61,13 +68,18 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
     }
 
     @Override
+    @Transactional
     public void reject(Long requestId, Long adminUserId) {
         decide(requestId, RebindRequestStatus.REJECTED, adminUserId);
         log.info("换机申请已拒绝，requestId={}", requestId);
     }
 
     @Override
+    @Transactional
     public void unbind(Long subscriptionId) {
+        // unbindDevice 提交后若 supersedePending 失败，绑定已清空但旧的 PENDING 申请还留着；
+        // 日后它被同意时 decide 仍会成功、rebindDevice 会把订阅悄悄改绑回申请里的目标设备，
+        // 违背了「强制解绑连带作废挂起申请」的设计意图。两步放进同一事务保证要么都生效、要么都不生效
         subscriptionRepository.unbindDevice(subscriptionId);
         // 绑定都没了，那条「想从 A 改绑到 B」的申请已经没有意义，留着只会让管理员困惑
         rebindRequestRepository.supersedePending(subscriptionId);
@@ -97,7 +109,9 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
                 request.getId(),
                 request.getRequestNo(),
                 request.getSubscriptionId(),
-                subscription == null ? "订阅已不存在" : subscription.getName(),
+                // 订阅已被删时统一给空串，与 assignmentNo 同一种「缺失」表达，
+                // 由前端决定怎么显示（与本仓 formatAssignmentNo 对空串整段隐藏的既有约定一致）
+                subscription == null ? "" : subscription.getName(),
                 subscription == null ? "" : subscription.getAssignmentNo(),
                 request.getUserId(),
                 userEmail,
