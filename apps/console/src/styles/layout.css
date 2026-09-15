@@ -1788,3 +1788,244 @@ body {
   font-size: 18px;
   color: var(--color-ink);
 }
+
+/* —— 收银台 —— */
+.pay-summary {
+  padding: 16px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: visible;
+}
+
+.pay-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.pay-product {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.pay-amount {
+  font-size: 20px;
+  color: var(--color-ink);
+}
+
+.pay-deadline {
+  color: #b4720b;
+  font-size: 13px;
+}
+
+.pay-panel {
+  padding: 16px 24px 20px;
+  overflow: visible;
+}
+
+.pay-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.pay-section-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.pay-powered {
+  font-size: 12px;
+}
+
+.stripe-word {
+  color: #635bff;
+}
+
+/* 三卡平级并列：窄屏单列、宽屏三列 */
+.method-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .method-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.method-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.method-card:hover {
+  border-color: var(--color-brand);
+}
+
+.method-card.selected {
+  border-color: var(--color-brand-deep);
+  background: color-mix(in srgb, var(--color-brand) 8%, #ffffff);
+}
+
+.method-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-wxpay {
+  background: #09bb07;
+}
+
+.icon-alipay {
+  background: #1677ff;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.icon-card {
+  background: #635bff;
+}
+
+.method-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.method-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.method-desc {
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
+.radio-dot {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.method-card.selected .radio-dot {
+  border-color: var(--color-brand-deep);
+  background: radial-gradient(circle, var(--color-brand-deep) 45%, transparent 50%);
+}
+
+.card-element {
+  margin-top: 16px;
+}
+
+.qr-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 0 4px;
+}
+
+.qr-canvas {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.qr-hint {
+  font-size: 14px;
+  color: var(--color-ink);
+}
+
+.qr-expiry {
+  font-size: 13px;
+}
+
+.qr-expiry.expired {
+  color: var(--counter-danger);
+}
+
+.pay-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.pay-btn {
+  padding: 0 32px;
+  height: 40px;
+}
+
+.security-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 12px;
+}
+
+/* —— 结果页 —— */
+.result-card {
+  padding: 40px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  overflow: visible;
+}
+
+.result-status {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.result-status.success {
+  color: #0a8a6a;
+}
+
+.result-status.failed {
+  color: var(--counter-danger);
+}
+
+.result-links {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.muted {
+  color: var(--color-ink-secondary);
+}
