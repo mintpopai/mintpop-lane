@@ -53,7 +53,8 @@ body {
 }
 
 [data-state="SUSPENDED"],
-[data-state="DISABLED"] {
+[data-state="DISABLED"],
+[data-state="UNBOUND"] {
   --state-color: #7a857f;
 }
 
@@ -495,7 +496,8 @@ body {
 }
 
 .state[data-state="SUSPENDED"],
-.state[data-state="DISABLED"] {
+.state[data-state="DISABLED"],
+.state[data-state="UNBOUND"] {
   color: var(--color-ink-secondary);
 }
 

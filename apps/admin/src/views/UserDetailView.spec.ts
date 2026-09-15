@@ -20,6 +20,7 @@ const listSubscriptions = vi.fn<(userId: number) => Promise<AdminSubscriptionRes
 const listPlans = vi.fn(async () => []);
 const listEnterprises = vi.fn(async () => []);
 const credentialRevoke = vi.fn<(subscriptionId: number) => Promise<CredentialRevokeResult>>();
+const unbindSubscriptionDevice = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 
 vi.mock("../api", () => ({
   adminApi: () => ({
@@ -30,6 +31,7 @@ vi.mock("../api", () => ({
     listPlans,
     listEnterprises,
     credentialRevoke,
+    unbindSubscriptionDevice,
   }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
@@ -308,6 +310,65 @@ describe("UserDetailView · 吊销凭证", () => {
     expect(warningText()).toContain(rowA.name);
     expect(warningText()).toContain(formatAssignmentNo(rowA.assignmentNo));
     expect(warningText()).not.toContain(formatAssignmentNo(rowB.assignmentNo));
+  });
+});
+
+describe("UserDetailView · 设备绑定", () => {
+  it("未绑定时如实说未绑定，且不给解绑入口", async () => {
+    await mountView([subscription({ id: 5, boundDevice: null })]);
+
+    expect(document.querySelector(".sub-item")?.textContent).toContain("未绑定设备");
+    expect(buttonExists("解绑设备")).toBe(false);
+  });
+
+  it("已绑定时把设备三要素与绑定时刻都摆出来", async () => {
+    await mountView([
+      subscription({
+        id: 5,
+        boundDevice: {
+          name: "月白的 MacBook",
+          os: "macos 26.6",
+          model: "Mac17,9",
+          boundAt: "2026-09-10T02:00:00Z",
+        },
+      }),
+    ]);
+    const text = document.querySelector(".sub-item")?.textContent ?? "";
+
+    expect(text).toContain("月白的 MacBook");
+    expect(text).toContain("macos 26.6");
+    expect(text).toContain("Mac17,9");
+  });
+
+  it("解绑要先过确认框，确认后调接口并重拉订阅，且确认文案提示会作废待处理换机申请", async () => {
+    const row = subscription({
+      id: 5,
+      name: "Claude 月付",
+      assignmentNo: "7K3M9QX2FT",
+      boundDevice: {
+        name: "月白的 MacBook",
+        os: "macos 26.6",
+        model: "Mac17,9",
+        boundAt: "2026-09-10T02:00:00Z",
+      },
+    });
+    await mountView([row]);
+
+    await buttonByText("解绑设备").trigger("click");
+    // 未确认前不能调用接口
+    expect(unbindSubscriptionDevice).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("月白的 MacBook");
+    expect(document.body.textContent).toContain(formatAssignmentNo(row.assignmentNo));
+    // 解绑会连带作废该订阅挂着的待处理换机申请，确认文案要把这个副作用说清楚
+    expect(document.body.textContent).toContain("换机申请");
+
+    listSubscriptions.mockResolvedValue([{ ...row, boundDevice: null }]);
+    await buttonByText("解绑").trigger("click");
+
+    await vi.waitFor(() => expect(unbindSubscriptionDevice).toHaveBeenCalledWith(row.id));
+    expect(showToast).toHaveBeenCalledWith("success", "已解绑，该订阅可在任意设备上重新绑定");
+    // 解绑与查询列表都发生了，列表重新拉取以反映绑定状态变化
+    await vi.waitFor(() => expect(listSubscriptions).toHaveBeenCalledTimes(2));
   });
 });
 
