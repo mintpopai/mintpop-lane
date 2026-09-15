@@ -58,7 +58,17 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
         // 而订阅还绑在旧设备上，产品里没有任何一条路能自动救回这个状态。加事务后两步
         // 要么一起提交、要么一起回滚，不会停在半成品状态；decide 本身仍是一条原子条件
         // UPDATE，事务只决定它与紧随其后那条 rebindDevice 是否作为一个整体提交
-        DeviceRebindRequest request = decide(requestId, RebindRequestStatus.APPROVED, adminUserId);
+        // 这里多读一次申请是为了在裁决之前拿到它的 subscriptionId；decide 内部那次读保持原样，
+        // 好让它对 reject 仍是自足的一步。换机裁决是低频管理动作，多一次主键查询不值得为它改结构
+        DeviceRebindRequest request = rebindRequestRepository.findById(requestId)
+                .orElseThrow(() -> new BizException(BizCodeEnum.REBIND_REQUEST_NOT_FOUND));
+        // 订阅存在性必须在 decide **之前**查：rebindDevice 是无条件 UPDATE，订阅已被删时它更新 0 行
+        // 却不报错，于是管理员被告知「换机成功」，实际什么都没发生，而那条申请的 PENDING 已经被
+        // decide 烧掉、再也回不去。先查一次，注定做不成的同意就不该动申请状态、更不该报成功
+        if (subscriptionRepository.findById(request.getSubscriptionId()).isEmpty()) {
+            throw new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND);
+        }
+        decide(requestId, RebindRequestStatus.APPROVED, adminUserId);
         // 裁决在前、改绑在后：条件 UPDATE 已经把「谁赢了这次裁决」定死，
         // 改绑因此不会被两个同时点「同意」的管理员各执行一次
         subscriptionRepository.rebindDevice(
@@ -77,6 +87,11 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
     @Override
     @Transactional
     public void unbind(Long subscriptionId) {
+        // 订阅不存在时 unbindDevice 只是更新 0 行、悄悄返回成功，管理员会以为解绑生效了。
+        // 管理端其它订阅操作一律报 410008，这里也得一致
+        if (subscriptionRepository.findById(subscriptionId).isEmpty()) {
+            throw new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND);
+        }
         // unbindDevice 提交后若 supersedePending 失败，绑定已清空但旧的 PENDING 申请还留着；
         // 日后它被同意时 decide 仍会成功、rebindDevice 会把订阅悄悄改绑回申请里的目标设备，
         // 违背了「强制解绑连带作废挂起申请」的设计意图。两步放进同一事务保证要么都生效、要么都不生效
@@ -110,7 +125,9 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
                 request.getRequestNo(),
                 request.getSubscriptionId(),
                 // 订阅已被删时统一给空串，与 assignmentNo 同一种「缺失」表达，
-                // 由前端决定怎么显示（与本仓 formatAssignmentNo 对空串整段隐藏的既有约定一致）
+                // 由前端决定怎么显示（与本仓 formatAssignmentNo 对空串整段隐藏的既有约定一致）。
+                // 与 DeviceRebindNotifyService.buildFields 的中文占位文案不一致是**有意为之**，别去统一：
+                // 这里喂的是管理端 UI（自己渲染缺失态），那边是人直接读的飞书卡片（必须说清缺了什么）
                 subscription == null ? "" : subscription.getName(),
                 subscription == null ? "" : subscription.getAssignmentNo(),
                 request.getUserId(),

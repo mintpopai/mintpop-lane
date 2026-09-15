@@ -16,7 +16,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
@@ -28,6 +30,8 @@ import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -57,7 +61,11 @@ class AdminDeviceControllerTest extends MysqlTestBase {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
+    /**
+     * 用 spy 而不是 mock：除「改绑写库失败」那一条用例外，全部走真实实现，
+     * 那一条才用 doThrow 把 rebindDevice 单独打成失败，验证事务真的在数据源层回滚
+     */
+    @MockitoSpyBean
     private SubscriptionRepository subscriptionRepository;
 
     @Autowired
@@ -204,6 +212,53 @@ class AdminDeviceControllerTest extends MysqlTestBase {
                         .header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    @DisplayName("解绑一份不存在的订阅：报 410008，与管理端其它订阅操作一致，不悄悄成功")
+    void unbindingMissingSubscriptionIsReportedAsNotFound() throws Exception {
+        mockMvc.perform(post("/api/admin/subscriptions/999999/device/unbind")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(410008));
+    }
+
+    @Test
+    @DisplayName("订阅已被删时同意换机：报 410008，且申请仍是 PENDING——不能一边报成功一边什么都没做")
+    void approvingRequestWhoseSubscriptionWasDeletedFails() throws Exception {
+        Long requestId = createPendingRequest(oldDeviceId, newDeviceId);
+        subscriptionRepository.deleteById(subscriptionId);
+
+        mockMvc.perform(post("/api/admin/device-rebind-requests/" + requestId + "/approve")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(410008));
+
+        // PENDING 没被烧掉：订阅要是被找回来（或本就是误删），这条申请还能正常裁决
+        assertThat(rebindRequestRepository.findById(requestId).orElseThrow().getStatus())
+                .isEqualTo(RebindRequestStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("改绑写库失败时事务真回滚：申请仍是 PENDING，绝不会留下「已同意但绑定没动」的残局")
+    void rebindFailureRollsBackTheDecision() throws Exception {
+        Long requestId = createPendingRequest(oldDeviceId, newDeviceId);
+        doThrow(new DataAccessResourceFailureException("模拟改绑写库失败"))
+                .when(subscriptionRepository).rebindDevice(any(), any(), any());
+
+        mockMvc.perform(post("/api/admin/device-rebind-requests/" + requestId + "/approve")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(110002));
+
+        // 这是「绝不出现已同意却绑定没跟上」的唯一守卫：decide 与 rebindDevice 必须同生共死。
+        // 断言从库里重查（不是从缓存的对象上读），证明回滚真的发生在数据源层
+        Long pendingCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM device_rebind_request WHERE id = ? AND status = 'PENDING'",
+                Long.class, requestId);
+        assertThat(pendingCount).isEqualTo(1L);
+        var subscription = subscriptionRepository.findById(subscriptionId).orElseThrow();
+        assertThat(subscription.getBoundDeviceId()).isEqualTo(oldDeviceId);
     }
 
     @Test

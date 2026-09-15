@@ -79,6 +79,8 @@ public class DeviceRebindNotifyService {
                 .map(UserDto::getEmail).orElse("未知用户");
         SubscriptionDto subscription = subscriptionRepository.findById(request.getSubscriptionId())
                 .orElse(null);
+        // 缺失值这里给的是中文描述而非空串，与 AdminDeviceServiceImpl.toResponse 不一致是**有意为之**，
+        // 别去统一：卡片由人直接读，必须说清缺了什么；那边喂的是管理端 UI，缺失态由前端自己渲染
         LinkedHashMap<String, String> fields = new LinkedHashMap<>();
         fields.put("用户", user);
         fields.put("套餐", subscription == null ? "订阅已不存在" : subscription.getName());
