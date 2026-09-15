@@ -58,7 +58,7 @@ order:
 # —— 支付（Stripe）——整段可选：不配 secret-key 与 publishable-key 时控制台的支付入口自动禁用，其它功能不受影响
 # 密钥在 Stripe Dashboard → Developers → API keys；webhook 密钥在 Developers → Webhooks 建端点后取得，
 # 端点地址 https://<控制台域名>/api/v1/payment/webhook/stripe，只订阅 payment_intent.succeeded 与 payment_intent.payment_failed。
-# 本地联调用 stripe listen（mise run webhook-listen，二期接入，当前需直接运行 stripe listen …）
+# 本地联调用 mise run webhook-listen（需先安装 Stripe CLI 并 stripe login），
 # 打印的 whsec_ 密钥，Dashboard 那把只用于线上。
 payment:
   stripe:

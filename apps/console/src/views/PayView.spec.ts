@@ -209,18 +209,29 @@ describe("确认支付", () => {
     expect(push).toHaveBeenCalledWith({ name: "PAYMENT_RESULT", query: { order_no: "LN1" } });
   });
 
-  it("微信二维码展示后切换支付方式，停止轮询", async () => {
+  it("微信二维码展示后锁定支付方式切换", async () => {
     const w = await mountPay();
     startWechatPayMock.mockResolvedValue("weixin://wxpay/x");
     await w.get(".pay-btn").trigger("click");
     await flushPromises();
     expect(w.find(".qr-canvas").exists()).toBe(true);
 
-    verifyOrder.mockClear();
-    await w.findAll(".method-card")[1].trigger("click");
-    await vi.advanceTimersByTimeAsync(4000);
+    const cards = w.findAll(".method-card");
+    expect(cards[1].attributes("disabled")).toBeDefined();
+    expect(cards[2].attributes("disabled")).toBeDefined();
+
+    await cards[1].trigger("click");
     await flushPromises();
-    expect(verifyOrder).not.toHaveBeenCalled();
+    expect(cards[0].attributes("aria-checked")).toBe("true");
+    expect(w.get(".pay-locked").text()).toContain("微信支付");
+  });
+
+  it("二维码倒计时不超订单剩余时限", async () => {
+    const w = await mountPay({ intent: { expireRemainingSeconds: 120 } });
+    startWechatPayMock.mockResolvedValue("weixin://wxpay/x");
+    await w.get(".pay-btn").trigger("click");
+    await flushPromises();
+    expect(w.get(".qr-expiry").text()).toContain("02:00");
   });
 
   it("确认前 verify 发现已取消：提示并回订单列表，不再发起支付", async () => {

@@ -7,11 +7,15 @@ import type { Stripe, StripeElements } from "@stripe/stripe-js";
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
-/** 懒加载并缓存 Stripe 实例（publishable key 来自 checkout-info，非敏感） */
+/** Stripe 报错缺 message 时的兜底文案（Stripe.js 理论上按 locale 本地化，但字段仍是可选的） */
+const PAYMENT_ERROR_FALLBACK = "支付请求被拒绝，请重试";
+
+/** 懒加载并缓存 Stripe 实例（publishable key 来自 checkout-info，非敏感）；locale 固定中文，
+ *  Stripe.js 的错误提示、Payment Element 文案都据此本地化 */
 export function getStripe(publishableKey: string): Promise<Stripe | null> {
   if (!stripePromise) {
     stripePromise = import("@stripe/stripe-js").then(({ loadStripe }) =>
-      loadStripe(publishableKey),
+      loadStripe(publishableKey, { locale: "zh" }),
     );
   }
   return stripePromise;
@@ -25,7 +29,7 @@ export async function startWechatPay(stripe: Stripe, clientSecret: string): Prom
     { handleActions: false },
   );
   if (result.error) {
-    throw new Error(result.error.message);
+    throw new Error(result.error.message ?? PAYMENT_ERROR_FALLBACK);
   }
   // stripe-js 的 next_action 类型不含微信二维码字段，按文档结构断言
   const nextAction = result.paymentIntent?.next_action as
@@ -47,7 +51,7 @@ export async function startAlipay(
   if (isMobile) {
     const result = await stripe.confirmAlipayPayment(clientSecret, { return_url: returnUrl });
     if (result.error) {
-      throw new Error(result.error.message);
+      throw new Error(result.error.message ?? PAYMENT_ERROR_FALLBACK);
     }
     return {};
   }
@@ -57,7 +61,7 @@ export async function startAlipay(
     { handleActions: false },
   );
   if (result.error) {
-    throw new Error(result.error.message);
+    throw new Error(result.error.message ?? PAYMENT_ERROR_FALLBACK);
   }
   const nextAction = result.paymentIntent?.next_action as
     { alipay_handle_redirect?: { url?: string } } | null | undefined;
@@ -92,7 +96,7 @@ export async function confirmCardPayment(
 ): Promise<string> {
   const submitResult = await elements.submit();
   if (submitResult.error) {
-    throw new Error(submitResult.error.message);
+    throw new Error(submitResult.error.message ?? PAYMENT_ERROR_FALLBACK);
   }
   const result = await stripe.confirmPayment({
     elements,
@@ -101,7 +105,7 @@ export async function confirmCardPayment(
     redirect: "if_required",
   });
   if (result.error) {
-    throw new Error(result.error.message);
+    throw new Error(result.error.message ?? PAYMENT_ERROR_FALLBACK);
   }
   return result.paymentIntent?.status ?? "processing";
 }

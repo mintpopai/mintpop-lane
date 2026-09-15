@@ -124,7 +124,7 @@
 
 2. Dashboard → Developers → Webhooks 建一个端点，地址填 `https://console.lane.mintpop.ai/api/v1/payment/webhook/stripe`，只订阅 `payment_intent.succeeded` 与 `payment_intent.payment_failed` 这两个事件，把端点详情页给出的 `whsec_` 开头的签名密钥填进 `webhook-secret`。
 
-3. 不配置 `payment.stripe` 这一段（或留空 secret-key）时，控制台的购买入口直接禁用，用户看不到购买按钮；其余功能（登录、查看订阅、桌面端下载等）不受影响。
+3. 不配置 `payment.stripe` 这一段（或留空 secret-key）时，控制台的购买入口直接禁用，购买按钮禁用并提示支付暂未开放；其余功能（登录、查看订阅、桌面端下载等）不受影响。
 
 4. `payment.stripe.product-code`：写入每笔 PaymentIntent 的 `metadata.product`，同一 Stripe 账号被多个业务线共用时，webhook 据此只认领属于本业务（`lane`）的事件，避免误处理其它业务线打进同一 webhook 端点的通知。
 

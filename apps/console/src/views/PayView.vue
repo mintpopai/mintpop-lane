@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 收银台：订单摘要 + 三张支付方式卡 + 确认区（二维码 / Payment Element）+ 取消。
 // 逻辑照搬 mintpop-shop：微信 / 支付宝桌面端本地画二维码后每 2 秒 verify，银行卡 succeeded 直接去结果页
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
 import { consoleApi } from "../api";
@@ -19,7 +19,8 @@ import {
 import { showToast } from "../toast";
 import { formatAmount } from "../utils/format";
 
-/** 二维码有效期（秒）：Stripe 不在 next_action 里下发过期时间，按微信码常见时效取 15 分钟 */
+/** 二维码有效期上限（秒）：Stripe 不在 next_action 里下发过期时间，按微信码常见时效取 15 分钟；
+ *  订单时限更短时以订单为准（二维码不该比订单本身活得更久） */
 const QR_TTL_SECONDS = 15 * 60;
 
 const route = useRoute();
@@ -56,6 +57,9 @@ const selectedOption = computed(
   () => payOptions.value.find((o) => o.key === selectedKey.value) ?? null,
 );
 const isCardSelected = computed(() => selectedOption.value?.subMethod === "card");
+// 收银台复用同一个 PaymentIntent：一旦已发起确认（生成了二维码，或卡支付进入轮询），
+// 再切到另一种方式重新确认是未经验证的路径，故此后锁死方式切换，只留取消订单重开一单
+const methodLocked = computed(() => qrFor.value !== null || polling.value);
 
 const METHOD_NAMES: Record<StripeSubMethod, string> = {
   wxpay: "微信支付",
@@ -161,7 +165,7 @@ watch(selectedKey, async () => {
       currency: intentInfo.value.currency,
     });
     cardElements.create("payment", { layout: "tabs" });
-    await Promise.resolve();
+    await nextTick();
     if (cardMount.value) {
       cardElements.getElement("payment")?.mount(cardMount.value);
     }
@@ -170,7 +174,7 @@ watch(selectedKey, async () => {
 
 function onRadioKeydown(event: KeyboardEvent): void {
   const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-  if (!keys.includes(event.key)) {
+  if (!keys.includes(event.key) || methodLocked.value) {
     return;
   }
   event.preventDefault();
@@ -238,7 +242,8 @@ async function confirm(): Promise<void> {
 
 async function showQr(kind: StripeSubMethod, content: string): Promise<void> {
   qrFor.value = kind;
-  qrSecondsLeft.value = QR_TTL_SECONDS;
+  // 二维码倒计时不该比订单本身活得更久：取二维码时效与订单剩余时限中较短的一个
+  qrSecondsLeft.value = Math.min(QR_TTL_SECONDS, orderSecondsLeft.value);
   clearInterval(qrTimer);
   qrTimer = setInterval(() => {
     if (qrSecondsLeft.value > 0) {
@@ -247,7 +252,7 @@ async function showQr(kind: StripeSubMethod, content: string): Promise<void> {
       clearInterval(qrTimer);
     }
   }, 1000);
-  await Promise.resolve();
+  await nextTick();
   if (qrCanvas.value) {
     const { toCanvas } = await import("qrcode");
     await toCanvas(qrCanvas.value, content, { width: 200, margin: 1 });
@@ -356,7 +361,9 @@ async function onCancel(): Promise<void> {
           :class="{ selected: option.key === selectedKey }"
           :aria-checked="option.key === selectedKey"
           :tabindex="option.key === selectedKey ? 0 : -1"
-          @click="selectedKey = option.key"
+          :disabled="methodLocked && option.key !== selectedKey"
+          :aria-disabled="methodLocked && option.key !== selectedKey"
+          @click="!methodLocked && (selectedKey = option.key)"
         >
           <!-- 图标一律内联 SVG / 文字，不引外链图片 -->
           <span
@@ -400,6 +407,10 @@ async function onCancel(): Promise<void> {
           <span class="radio-dot" aria-hidden="true"></span>
         </button>
       </div>
+
+      <p v-if="methodLocked" class="admin-hint pay-locked">
+        已发起{{ METHOD_NAMES[selectedOption!.subMethod] }}，如需换支付方式请先取消订单重新购买。
+      </p>
 
       <div v-show="isCardSelected && !qrFor" ref="cardMount" class="card-element"></div>
       <p v-if="polling && !qrFor" class="admin-hint pay-processing">正在确认支付结果…</p>

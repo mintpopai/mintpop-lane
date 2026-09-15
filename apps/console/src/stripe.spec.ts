@@ -22,12 +22,13 @@ const RETURN_URL = "http://localhost:5175/payment/result?order_no=LN1";
 afterEach(() => vi.restoreAllMocks());
 
 describe("getStripe", () => {
-  it("缓存实例：多次调用只加载一次 SDK", async () => {
+  it("缓存实例：多次调用只加载一次 SDK，语言固定中文", async () => {
     const instance = fakeStripe({});
     loadStripeMock.mockResolvedValue(instance);
     expect(await getStripe("pk_1")).toBe(instance);
     expect(await getStripe("pk_2")).toBe(instance);
     expect(loadStripeMock).toHaveBeenCalledOnce();
+    expect(loadStripeMock).toHaveBeenCalledWith("pk_1", { locale: "zh" });
   });
 });
 
@@ -65,6 +66,17 @@ describe("startWechatPay", () => {
         "cs",
       ),
     ).rejects.toThrow("未拿到微信支付二维码，请重试");
+  });
+
+  it("Stripe 报错缺 message 时用兜底文案", async () => {
+    await expect(
+      startWechatPay(
+        fakeStripe({
+          confirmWechatPayPayment: vi.fn().mockResolvedValue({ error: {} }),
+        }),
+        "cs",
+      ),
+    ).rejects.toThrow("支付请求被拒绝，请重试");
   });
 });
 
