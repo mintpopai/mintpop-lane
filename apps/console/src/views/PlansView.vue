@@ -24,19 +24,28 @@ const tabs = computed(() => agentTabs(plans.value));
 const visiblePlans = computed(() => plansForAgent(plans.value, agentType.value));
 
 onMounted(async () => {
-  try {
-    const [list, checkout] = await Promise.all([
-      consoleApi().listPlans(),
-      consoleApi().checkoutInfo(),
-    ]);
-    plans.value = list;
-    paymentOpen.value = checkout.methods.length > 0;
+  // 两个请求分开处理失败：支付状态只是「能不能买」的附加信息，它查询失败不该连累
+  // 已经拿到的套餐列表——只禁用购买按钮并提示，列表仍可浏览；套餐列表本身查询失败才是真的没得看
+  const [plansResult, checkoutResult] = await Promise.allSettled([
+    consoleApi().listPlans(),
+    consoleApi().checkoutInfo(),
+  ]);
+
+  if (plansResult.status === "fulfilled") {
+    plans.value = plansResult.value;
     agentType.value = tabs.value[0]?.value ?? null;
-  } catch (error) {
-    loadError.value = (error as Error).message;
-  } finally {
-    loading.value = false;
+  } else {
+    loadError.value = (plansResult.reason as Error).message;
   }
+
+  if (checkoutResult.status === "fulfilled") {
+    paymentOpen.value = checkoutResult.value.methods.length > 0;
+  } else {
+    paymentOpen.value = false;
+    showToast("error", (checkoutResult.reason as Error).message);
+  }
+
+  loading.value = false;
 });
 
 async function buy(plan: PlanResponse): Promise<void> {

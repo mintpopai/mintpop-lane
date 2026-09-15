@@ -84,4 +84,13 @@ describe("PlansView", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("暂无可购买的套餐");
   });
+
+  it("支付状态获取失败时套餐仍可浏览，只是购买按钮禁用并提示", async () => {
+    checkoutInfo.mockRejectedValue(new Error("网络错误"));
+    const wrapper = mount(PlansView);
+    await flushPromises();
+    expect(wrapper.get(".plan-card .plan-name").text()).toBe("Claude 月付");
+    expect(wrapper.get(".plan-card .admin-btn").attributes("disabled")).toBeDefined();
+    expect(showToast).toHaveBeenCalledWith("error", "网络错误");
+  });
 });
