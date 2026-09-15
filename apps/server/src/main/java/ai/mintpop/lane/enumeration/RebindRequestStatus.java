@@ -16,10 +16,5 @@ public enum RebindRequestStatus {
      * 已作废：同一份订阅又提了新申请，或管理员直接解绑了这份订阅。
      * 与 REJECTED 分开——那是管理员的判断，这只是被后续动作顶掉，不该读成「被拒绝过」
      */
-    SUPERSEDED;
-
-    /** 只有待处理的申请才可被裁决 */
-    public boolean isPending() {
-        return this == PENDING;
-    }
+    SUPERSEDED
 }
