@@ -89,7 +89,18 @@ public class PaymentService {
         if (order.getPaymentTradeNo() == null) {
             intent = stripeGateway.createPaymentIntent(order.getOrderNo(), order.getAmountMinor(),
                     order.getPlanCurrency(), order.getName(), properties.resolvePaymentMethodTypes());
-            orderRepository.attachPaymentIntent(order.getId(), PROVIDER_STRIPE, intent.getId());
+            if (!orderRepository.attachPaymentIntent(order.getId(), PROVIDER_STRIPE, intent.getId())) {
+                // 并发发起支付：另一个请求已抢先落号，自己这个 intent 沦为孤儿——尽力撤掉，
+                // 重新读单走「已有交易号」分支，让两个并发请求收敛到同一个 intent
+                log.warn("并发发起支付，撤掉本请求创建的孤儿 intent orderNo={} orphanIntentId={}",
+                        orderNo, intent.getId());
+                stripeGateway.cancelPaymentIntent(intent.getId());
+                order = orderService.requireOwn(userId, orderNo);
+                intent = stripeGateway.retrievePaymentIntent(order.getPaymentTradeNo());
+                if ("canceled".equals(intent.getStatus())) {
+                    throw new BizException(BizCodeEnum.ORDER_NOT_PAYABLE);
+                }
+            }
         } else {
             intent = stripeGateway.retrievePaymentIntent(order.getPaymentTradeNo());
             if ("canceled".equals(intent.getStatus())) {
@@ -142,11 +153,12 @@ public class PaymentService {
     public void settlePaid(String orderNo, String intentId, Long amountMinor, String currency) {
         PlanOrder order = orderRepository.findByOrderNo(orderNo).orElse(null);
         if (order == null) {
-            log.warn("入账查无此单，忽略 orderNo={}", orderNo);
+            // 与金额/币种不符同等严重：钱已收却核销不到单，都需要人工介入排查
+            log.error("入账查无此单，忽略 orderNo={}", orderNo);
             return;
         }
         if (order.getPaymentTradeNo() != null && !order.getPaymentTradeNo().equals(intentId)) {
-            log.warn("入账交易号与订单不符，拒绝 orderNo={} 订单交易号={} 事件交易号={}",
+            log.error("入账交易号与订单不符，拒绝 orderNo={} 订单交易号={} 事件交易号={}",
                     orderNo, order.getPaymentTradeNo(), intentId);
             return;
         }

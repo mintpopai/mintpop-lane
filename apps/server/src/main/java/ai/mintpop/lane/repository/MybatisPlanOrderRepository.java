@@ -54,11 +54,12 @@ public class MybatisPlanOrderRepository implements PlanOrderRepository {
     }
 
     @Override
-    public void attachPaymentIntent(Long id, String provider, String intentId) {
-        mapper.update(null, Wrappers.<PlanOrder>lambdaUpdate()
+    public boolean attachPaymentIntent(Long id, String provider, String intentId) {
+        return mapper.update(null, Wrappers.<PlanOrder>lambdaUpdate()
                 .eq(PlanOrder::getId, id)
+                .isNull(PlanOrder::getPaymentTradeNo)
                 .set(PlanOrder::getPaymentProvider, provider)
-                .set(PlanOrder::getPaymentTradeNo, intentId));
+                .set(PlanOrder::getPaymentTradeNo, intentId)) > 0;
     }
 
     @Override

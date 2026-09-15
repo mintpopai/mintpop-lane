@@ -86,6 +86,15 @@ class PlanOrderRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("落交易号只在首次生效：已有交易号时第二次落号返回 false 且不覆盖（防并发发起支付产生孤儿 intent）")
+    void attachPaymentIntentOnlyOnce() {
+        PlanOrder order = pending("LN1");
+        assertThat(orderRepository.attachPaymentIntent(order.getId(), "stripe", "pi_winner")).isTrue();
+        assertThat(orderRepository.attachPaymentIntent(order.getId(), "stripe", "pi_loser")).isFalse();
+        assertThat(orderRepository.findByOrderNo("LN1").orElseThrow().getPaymentTradeNo()).isEqualTo("pi_winner");
+    }
+
+    @Test
     @DisplayName("按用户查订单按创建倒序并受 limit 限制；超时查询只取可支付状态")
     void listAndTimedOut() {
         pending("LN1");

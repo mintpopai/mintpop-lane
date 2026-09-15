@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,7 +40,9 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -63,6 +66,9 @@ class PaymentControllerTest extends MysqlTestBase {
 
     /** 不打网络：Stripe 一律替身 */
     @MockitoBean private StripeGateway stripeGateway;
+
+    /** 按 bean 名定向替身两个 Consumer<String> bean 里的通知那个，验证入账通知契约 */
+    @MockitoBean(name = "orderSettledListener") private Consumer<String> orderSettledListener;
 
     private Long buyerId;
     private Long otherId;
@@ -139,6 +145,28 @@ class PaymentControllerTest extends MysqlTestBase {
         PlanOrder order = orderRepository.findByOrderNo(orderNo).orElseThrow();
         assertThat(order.getPaymentTradeNo()).isEqualTo("pi_1");
         assertThat(order.getPaymentProvider()).isEqualTo("stripe");
+    }
+
+    @Test
+    @DisplayName("并发发起支付：后落号请求自动收敛到先落号的 intent，并撤掉自己创建的孤儿 intent")
+    void createIntentRaceConditionConvergesToWinner() throws Exception {
+        String orderNo = createOrder(buyerId);
+        Long orderId = orderRepository.findByOrderNo(orderNo).orElseThrow().getId();
+        // 模拟并发：本请求创建 intent 拿到 pi_loser 之后、自己落号之前，另一个并发请求已经抢先落号成功
+        when(stripeGateway.createPaymentIntent(eq(orderNo), eq(9999L), eq(Currency.USD), anyString(), anyList()))
+                .thenAnswer(invocation -> {
+                    orderRepository.attachPaymentIntent(orderId, "stripe", "pi_winner");
+                    return intent("pi_loser", "requires_payment_method", "pi_loser_secret", 9999L, "usd");
+                });
+        when(stripeGateway.retrievePaymentIntent("pi_winner"))
+                .thenReturn(intent("pi_winner", "requires_payment_method", "pi_winner_secret", 9999L, "usd"));
+
+        mockMvc.perform(post("/api/payment/orders/" + orderNo + "/intent").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.clientSecret").value("pi_winner_secret"));
+
+        verify(stripeGateway).cancelPaymentIntent("pi_loser");
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getPaymentTradeNo()).isEqualTo("pi_winner");
     }
 
     @Test
@@ -225,6 +253,24 @@ class PaymentControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("verify：订单本地已超时未标记但 Stripe 侧已 succeeded，入账优先，结果是 PAID 而非 EXPIRED")
+    void verifySettlesEvenAfterLocalTimeout() throws Exception {
+        String orderNo = createOrder(buyerId);
+        Long orderId = orderRepository.findByOrderNo(orderNo).orElseThrow().getId();
+        orderRepository.attachPaymentIntent(orderId, "stripe", "pi_1");
+        jdbc.update("UPDATE plan_order SET created_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 31 MINUTE) WHERE order_no = ?", orderNo);
+        when(stripeGateway.retrievePaymentIntent("pi_1"))
+                .thenReturn(intent("pi_1", "succeeded", "s", 9999L, "usd"));
+
+        mockMvc.perform(post("/api/payment/orders/verify").header("Authorization", bearer(buyerId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"orderNo\":\"" + orderNo + "\"}"))
+                .andExpect(jsonPath("$.data.status").value("PAID"));
+
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(subscriptionRepository.findByUserId(buyerId)).hasSize(1);
+    }
+
+    @Test
     @DisplayName("入账重放不重复建订阅；金额或币种不符拒绝入账")
     void settleIsIdempotentAndChecksAmount() throws Exception {
         String orderNo = createOrder(buyerId);
@@ -285,5 +331,21 @@ class PaymentControllerTest extends MysqlTestBase {
         mockMvc.perform(post("/api/payment/orders/verify").header("Authorization", bearer(otherId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"orderNo\":\"" + orderNo + "\"}"))
                 .andExpect(jsonPath("$.code").value(510002));
+    }
+
+    @Test
+    @DisplayName("入账通知契约：首次入账恰好通知一次订单号；重放不再通知；通知抛异常不影响入账与建订阅")
+    void orderSettledListenerContract() throws Exception {
+        String orderNo = createOrder(buyerId);
+        paymentService.settlePaid(orderNo, "pi_1", 9999L, "usd");
+        paymentService.settlePaid(orderNo, "pi_1", 9999L, "usd");
+        verify(orderSettledListener, times(1)).accept(orderNo);
+
+        String second = createOrder(buyerId);
+        doThrow(new RuntimeException("飞书不可达（模拟）")).when(orderSettledListener).accept(second);
+        paymentService.settlePaid(second, "pi_2", 9999L, "usd");
+
+        assertThat(orderRepository.findByOrderNo(second).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(subscriptionRepository.findByUserId(buyerId)).hasSize(2);
     }
 }

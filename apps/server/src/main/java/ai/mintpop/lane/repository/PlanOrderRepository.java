@@ -23,8 +23,12 @@ public interface PlanOrderRepository {
     /** 某用户创建早于 cutoff 且仍可支付（PENDING / FAILED）的订单，供懒惰过期 */
     List<PlanOrder> findTimedOut(Long userId, Instant cutoff);
 
-    /** 首次发起支付：落处理方与 PaymentIntent id */
-    void attachPaymentIntent(Long id, String provider, String intentId);
+    /**
+     * 首次发起支付：落处理方与 PaymentIntent id。条件 UPDATE（仅当当前无交易号才写入），
+     * 防并发发起支付时后一个请求覆盖前一个已创建的 intent，产生孤儿 intent。
+     * 返回 false 即已被并发请求抢先落号，调用方应撤掉自己刚创建的 intent、转走已有交易号那条路。
+     */
+    boolean attachPaymentIntent(Long id, String provider, String intentId);
 
     /**
      * 入账：来源 PENDING / FAILED / CANCELLED / EXPIRED → PAID。
