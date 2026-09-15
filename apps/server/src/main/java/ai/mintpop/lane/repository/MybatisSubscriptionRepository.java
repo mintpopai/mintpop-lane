@@ -144,4 +144,29 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
                 .set(Subscription::getCredentialOrgUuid, null)
                 .set(Subscription::getCredentialExtraUsageEnabled, null));
     }
+
+    @Override
+    public boolean bindDeviceIfUnbound(Long subscriptionId, Long deviceId, Instant now) {
+        return mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .isNull(Subscription::getBoundDeviceId)
+                .set(Subscription::getBoundDeviceId, deviceId)
+                .set(Subscription::getBoundAt, now)) > 0;
+    }
+
+    @Override
+    public void rebindDevice(Long subscriptionId, Long deviceId, Instant now) {
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getBoundDeviceId, deviceId)
+                .set(Subscription::getBoundAt, now));
+    }
+
+    @Override
+    public void unbindDevice(Long subscriptionId) {
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getBoundDeviceId, null)
+                .set(Subscription::getBoundAt, null));
+    }
 }

@@ -81,4 +81,17 @@ public interface SubscriptionRepository {
      * 同样绕开常规 {@link #update}，不占用常规更新路径的 SQL 列。
      */
     void clearCredential(Long subscriptionId);
+
+    /**
+     * 首次绑定：**仅当当前未绑定**才写入，返回是否生效。
+     * 两台设备同时对同一份未绑定订阅点绑定时，靠 WHERE bound_device_id IS NULL 决出胜负，
+     * 绝不先查后写——那中间的窗口正好够第二台设备也判定成「未绑定」。
+     */
+    boolean bindDeviceIfUnbound(Long subscriptionId, Long deviceId, Instant now);
+
+    /** 管理员同意换机后的改绑：无条件覆盖（裁决本身已由申请的条件 UPDATE 串行化） */
+    void rebindDevice(Long subscriptionId, Long deviceId, Instant now);
+
+    /** 管理员强制解绑：两列一起清空 */
+    void unbindDevice(Long subscriptionId);
 }

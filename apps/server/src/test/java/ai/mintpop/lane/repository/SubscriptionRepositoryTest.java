@@ -115,4 +115,63 @@ class SubscriptionRepositoryTest extends MysqlTestBase {
         assertThat(read.getCredential()).isEqualTo("new");
         assertThat(read.getEndsAt()).isAfter(Instant.now().plus(20, ChronoUnit.DAYS));
     }
+
+    @Test
+    @DisplayName("bindDeviceIfUnbound 在未绑定时生效并写入绑定列")
+    void bindDeviceIfUnboundSucceedsWhenUnbound() {
+        Long id = fixtures.createSubscription(userId, AgentType.CLAUDE, "席位 A",
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
+        Instant boundAt = Instant.parse("2026-09-01T00:00:00Z");
+
+        assertThat(subscriptionRepository.bindDeviceIfUnbound(id, 1L, boundAt)).isTrue();
+
+        SubscriptionDto read = subscriptionRepository.findById(id).orElseThrow();
+        assertThat(read.getBoundDeviceId()).isEqualTo(1L);
+        assertThat(read.getBoundAt()).isEqualTo(boundAt);
+    }
+
+    @Test
+    @DisplayName("bindDeviceIfUnbound 已绑定时不生效，且不覆盖原有绑定——这是防止第二台设备顶替绑定的核心安全属性")
+    void bindDeviceIfUnboundFailsWhenAlreadyBoundAndLeavesBindingUntouched() {
+        Long id = fixtures.createSubscription(userId, AgentType.CLAUDE, "席位 A",
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
+        Instant firstBoundAt = Instant.parse("2026-09-01T00:00:00Z");
+        assertThat(subscriptionRepository.bindDeviceIfUnbound(id, 1L, firstBoundAt)).isTrue();
+
+        Instant secondAttemptAt = Instant.parse("2026-09-02T00:00:00Z");
+        assertThat(subscriptionRepository.bindDeviceIfUnbound(id, 2L, secondAttemptAt)).isFalse();
+
+        SubscriptionDto read = subscriptionRepository.findById(id).orElseThrow();
+        assertThat(read.getBoundDeviceId()).isEqualTo(1L);
+        assertThat(read.getBoundAt()).isEqualTo(firstBoundAt);
+    }
+
+    @Test
+    @DisplayName("rebindDevice 无条件覆盖原有绑定")
+    void rebindDeviceOverwritesExistingBinding() {
+        Long id = fixtures.createSubscription(userId, AgentType.CLAUDE, "席位 A",
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
+        subscriptionRepository.bindDeviceIfUnbound(id, 1L, Instant.parse("2026-09-01T00:00:00Z"));
+
+        Instant rebindAt = Instant.parse("2026-09-10T00:00:00Z");
+        subscriptionRepository.rebindDevice(id, 2L, rebindAt);
+
+        SubscriptionDto read = subscriptionRepository.findById(id).orElseThrow();
+        assertThat(read.getBoundDeviceId()).isEqualTo(2L);
+        assertThat(read.getBoundAt()).isEqualTo(rebindAt);
+    }
+
+    @Test
+    @DisplayName("unbindDevice 把绑定设备与绑定时刻两列一起清空")
+    void unbindDeviceClearsBothColumns() {
+        Long id = fixtures.createSubscription(userId, AgentType.CLAUDE, "席位 A",
+                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
+        subscriptionRepository.bindDeviceIfUnbound(id, 1L, Instant.parse("2026-09-01T00:00:00Z"));
+
+        subscriptionRepository.unbindDevice(id);
+
+        SubscriptionDto read = subscriptionRepository.findById(id).orElseThrow();
+        assertThat(read.getBoundDeviceId()).isNull();
+        assertThat(read.getBoundAt()).isNull();
+    }
 }

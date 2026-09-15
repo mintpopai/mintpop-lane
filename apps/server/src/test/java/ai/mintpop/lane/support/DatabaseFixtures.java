@@ -46,6 +46,8 @@ public class DatabaseFixtures {
     public void clearAll() {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
         jdbc.execute("TRUNCATE TABLE plan_order");
+        jdbc.execute("TRUNCATE TABLE device_rebind_request");
+        jdbc.execute("TRUNCATE TABLE user_device");
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
