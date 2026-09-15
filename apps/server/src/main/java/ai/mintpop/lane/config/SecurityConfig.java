@@ -49,6 +49,8 @@ public class SecurityConfig {
                         // 登录握手与票据兑换发生在拿到会话之前，必须匿名可达
                         .requestMatchers("/auth/**", "/oauth2/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/desktop/exchange").permitAll()
+                        // Stripe 回调没有会话，靠请求签名鉴真；必须排在 /api/** 之前
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payment/webhook/stripe").permitAll()
                         // 容器 ERROR dispatch（如 controller 内 response.sendError）会重新过一遍安全链，
                         // 不放行会被拦成 401，掩盖掉真实的 4xx/5xx 状态码
                         .requestMatchers("/error").permitAll()

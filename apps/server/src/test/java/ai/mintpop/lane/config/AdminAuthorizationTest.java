@@ -120,4 +120,11 @@ class AdminAuthorizationTest extends MysqlTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
     }
+
+    @Test
+    @DisplayName("Stripe webhook 端点匿名可达：没有会话也不是 401，而是由控制器判为 400（缺签名）")
+    void webhookIsAnonymouslyReachable() throws Exception {
+        mockMvc.perform(post("/api/v1/payment/webhook/stripe").content("{}"))
+                .andExpect(status().isBadRequest());
+    }
 }
