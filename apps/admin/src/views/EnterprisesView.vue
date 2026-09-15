@@ -9,9 +9,10 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import EnterpriseFormModal from "../components/EnterpriseFormModal.vue";
 import PageHead from "../components/PageHead.vue";
+import TruncatedText from "../components/TruncatedText.vue";
 import ViewTabs from "../components/ViewTabs.vue";
 import { showToast } from "../toast";
-import { agentLabel, booleanLabel, formatDateTime, PLACEHOLDER } from "../utils/format";
+import { agentLabel, booleanLabel, formatDateTime } from "../utils/format";
 
 /** 启用状态筛选：ALL=不筛 */
 type EnterpriseFilter = "ALL" | "ENABLED" | "DISABLED";
@@ -184,7 +185,8 @@ onMounted(load);
               {{ booleanLabel(row.enabled, "启用", "停用") }}
             </span>
           </td>
-          <td class="muted">{{ row.remark || PLACEHOLDER }}</td>
+          <!-- 备注是自由文本，直接铺在单元格里会把整张表越撑越长 -->
+          <td class="muted"><TruncatedText :text="row.remark" /></td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
             <button type="button" class="admin-link" @click="edit(row)">编辑</button>

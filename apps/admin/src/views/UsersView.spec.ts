@@ -5,6 +5,7 @@ import type { AdminUserResponse, PageResult, UserSaveRequest } from "../api/type
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import { showToast } from "../toast";
+import TruncatedText from "../components/TruncatedText.vue";
 import UsersView from "./UsersView.vue";
 
 type PageQuery = {
@@ -436,29 +437,20 @@ describe("UsersView 表格内容", () => {
     expect(wrapper.findAll("tbody tr")[0].findAll("td")[8].text()).toBe("—");
   });
 
-  it("备注单元格自己限宽截断，不把整张表撑成无限长", async () => {
-    pageUsers.mockResolvedValue(page([user({ remark: "很".repeat(50) })]));
+  it("备注交给 TruncatedText，不把整张表撑成无限长，原文靠悬浮看全", async () => {
+    const long = "很".repeat(50);
+    pageUsers.mockResolvedValue(page([user({ remark: long })]));
     const wrapper = await render();
 
-    // 截断靠内层 span：auto 表格布局下浏览器可以不理会 td 上的 max-width
-    const cell = wrapper.findAll("tbody tr")[0].findAll("td")[8].find(".remark-cell");
-    expect(cell.exists()).toBe(true);
-    // 截断后原文只能靠悬浮看全，故 title 必须挂完整备注
-    expect(cell.attributes("title")).toBe("很".repeat(50));
+    const cell = wrapper.findAll("tbody tr")[0].findAll("td")[8];
+    expect(cell.findComponent(TruncatedText).props("text")).toBe(long);
   });
 
   it("截断的是备注本身，模板换行不该在单元格里渲染出多余空白", async () => {
     pageUsers.mockResolvedValue(page([user({ remark: "老客户" })]));
     const wrapper = await render();
 
-    const cell = wrapper.findAll("tbody tr")[0].findAll("td")[8].find(".remark-cell");
+    const cell = wrapper.findAll("tbody tr")[0].findAll("td")[8].find(".truncated");
     expect(cell.element.textContent).toBe("老客户");
-  });
-
-  it("没写备注时不挂 title——悬浮弹出一个「—」只会让人莫名其妙", async () => {
-    const wrapper = await render();
-
-    const cell = wrapper.findAll("tbody tr")[0].findAll("td")[8].find(".remark-cell");
-    expect(cell.attributes("title")).toBeUndefined();
   });
 });

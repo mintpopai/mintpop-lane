@@ -6,6 +6,7 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import PlanFormModal from "../components/PlanFormModal.vue";
 import { showToast } from "../toast";
+import TruncatedText from "../components/TruncatedText.vue";
 import PlansView from "./PlansView.vue";
 
 const listPlans = vi.fn<() => Promise<PlanResponse[]>>();
@@ -247,5 +248,13 @@ describe("PlansView 表格内容", () => {
     const wrapper = await render();
 
     expect(wrapper.findAll("tbody tr td")[5].text()).not.toBe("");
+  });
+
+  it("备注交给 TruncatedText：长备注不把整张表撑长，原文靠悬浮看全", async () => {
+    const long = "这是一条很长的备注".repeat(8);
+    listPlans.mockResolvedValue([plan({ remark: long })]);
+    const wrapper = await render();
+
+    expect(wrapper.findAll("tbody tr td")[5].findComponent(TruncatedText).props("text")).toBe(long);
   });
 });
