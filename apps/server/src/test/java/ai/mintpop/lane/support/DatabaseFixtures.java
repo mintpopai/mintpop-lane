@@ -9,10 +9,11 @@ import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
+import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
-import ai.mintpop.lane.util.AssignmentNo;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.util.AssignmentNo;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
@@ -149,5 +150,18 @@ public class DatabaseFixtures {
         node.setSourceName(name);
         node.setSourceType("anytls");
         return nodeRepository.create(node);
+    }
+
+    /** 建一个上架套餐（USD），返回 id。传 enabled=false 建下架套餐 */
+    public static Long createPlan(PlanRepository planRepository, String name,
+                                   AgentType agentType, int durationDays, String price, boolean enabled) {
+        ai.mintpop.lane.entity.Plan plan = new ai.mintpop.lane.entity.Plan();
+        plan.setName(name);
+        plan.setAgentType(agentType);
+        plan.setDurationDays(durationDays);
+        plan.setPrice(new BigDecimal(price));
+        plan.setCurrency(Currency.USD);
+        plan.setEnabled(enabled);
+        return planRepository.create(plan);
     }
 }
