@@ -25,6 +25,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -96,7 +97,7 @@ public class LinkServiceImpl implements LinkService {
                 .orElse(null);
         Set<Long> pendingFromThisDevice = rebindRequestRepository.findPendingByUserId(user.getId())
                 .stream()
-                .filter(r -> r.getToDeviceId().equals(thisDeviceRowId))
+                .filter(r -> Objects.equals(r.getToDeviceId(), thisDeviceRowId))
                 .map(DeviceRebindRequest::getSubscriptionId)
                 .collect(Collectors.toSet());
 

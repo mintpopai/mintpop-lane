@@ -421,8 +421,10 @@ class LinkServiceImplTest {
     @DisplayName("旧式凭证没有 scope，下发空串而非 null：客户端按空串整段跳过注入")
     void legacyCredentialCarriesEmptyScope() {
         givenUser(user(UserStatus.ACTIVE));
+        givenThisDeviceKnown();
         SubscriptionDto subscription = activeSubscription(100L, "sk-ant-test");
         subscription.setCredentialScope(null);
+        subscription.setBoundDeviceId(9L);
         givenSubscriptions(subscription);
 
         var resp = service.resolveLink(USER_ID, THIS_DEVICE);
@@ -476,6 +478,10 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         SubscriptionDto sub = activeSubscription(1L, "sk-ant-secret");
         sub.setBoundDeviceId(null);
+        // scope 与组织 UUID 先设成非空值：凭据被扣住时它们必须跟着一起清空，
+        // 断言空对空恒真、测不出问题——必须先有值才能验证「被清掉」这件事
+        sub.setCredentialScope("user:inference user:profile");
+        sub.setCredentialOrgUuid("org-uuid-should-not-leak");
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(sub));
         when(userDeviceRepository.findByUserId(USER_ID)).thenReturn(List.of());
         when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of());
@@ -485,6 +491,9 @@ class LinkServiceImplTest {
 
         assertThat(row.deviceBinding()).isEqualTo(DeviceBinding.UNBOUND);
         assertThat(row.credential()).isEmpty();
+        assertThat(row.credentialScope()).isEmpty();
+        assertThat(row.credentialOrgUuid()).isEmpty();
+        assertThat(row.boundDeviceName()).isEmpty();
     }
 
     @Test
@@ -503,6 +512,7 @@ class LinkServiceImplTest {
 
         assertThat(row.deviceBinding()).isEqualTo(DeviceBinding.BOUND_HERE);
         assertThat(row.credential()).isEqualTo("sk-ant-secret");
+        assertThat(row.boundDeviceName()).isEmpty();
     }
 
     @Test
@@ -511,6 +521,10 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         SubscriptionDto sub = activeSubscription(1L, "sk-ant-secret");
         sub.setBoundDeviceId(8L);
+        // 同上：先给非空值，才能验证「凭据被扣住时 scope 与组织身份一并清空」这条不变量，
+        // 否则空对空的断言恒真，测不出「有人把三元表达式简化回旧形式」这种回归
+        sub.setCredentialScope("user:inference user:profile");
+        sub.setCredentialOrgUuid("org-uuid-should-not-leak");
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(sub));
         when(userDeviceRepository.findByUserId(USER_ID))
                 .thenReturn(List.of(device(8L, OTHER_DEVICE, "办公室 iMac")));
@@ -523,6 +537,8 @@ class LinkServiceImplTest {
         // 而真正的原因（绑在办公室那台机器上）没有任何地方说得出来
         assertThat(row.deviceBinding()).isEqualTo(DeviceBinding.BOUND_ELSEWHERE);
         assertThat(row.credential()).isEmpty();
+        assertThat(row.credentialScope()).isEmpty();
+        assertThat(row.credentialOrgUuid()).isEmpty();
         assertThat(row.boundDeviceName()).isEqualTo("办公室 iMac");
         assertThat(row.pendingRequest()).isFalse();
     }
