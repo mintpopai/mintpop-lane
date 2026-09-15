@@ -83,7 +83,10 @@ public enum BizCodeEnum {
     PAYMENT_GATEWAY_ERROR(510006, "支付网关异常，请稍后重试"),
     USER_NOT_ACTIVE(510007, "账号当前不可购买"),
     SUBSCRIPTION_BOUND_ELSEWHERE(510008, "该订阅已绑定到其它设备，请提交换机申请"),
-    SUBSCRIPTION_NOT_BOUND_ELSEWHERE(510009, "该订阅未绑定在其它设备上，无需申请换机");
+    SUBSCRIPTION_NOT_BOUND_ELSEWHERE(510009, "该订阅未绑定在其它设备上，无需申请换机"),
+    // 已过期刻意不复用 410041（订阅尚未开通，请先填写起期）：那句是写给管理员看的待开通提示，
+    // 对一份「买过、用过、只是到期了」的订阅说「请先填写起期」会把用户引到完全错误的方向
+    SUBSCRIPTION_EXPIRED(510010, "该订阅已过期，请续期后再使用");
 
     private final int code;
     private final String message;

@@ -35,7 +35,9 @@ ALTER TABLE subscription
     ADD COLUMN bound_at        DATETIME NULL COMMENT '绑定时刻（UTC）；与 bound_device_id 同空同有值';
 
 -- 换机申请。一份订阅同时只允许有一条 PENDING——MySQL 无部分唯一索引，
--- 由服务层保证（提新申请前把旧的 PENDING 置 SUPERSEDED），故这里只建普通索引
+-- 由服务层保证（提新申请前把旧的 PENDING 置 SUPERSEDED），故这里只建普通索引；
+-- 并发下靠 DeviceBindingServiceImpl.requestRebind 在订阅行上取 FOR UPDATE 行锁串行化，
+-- 否则两次同时提交会双双作废 0 条、双双插入，留下两条 PENDING
 CREATE TABLE device_rebind_request
 (
     id              BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',

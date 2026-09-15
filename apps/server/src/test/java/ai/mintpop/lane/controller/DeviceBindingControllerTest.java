@@ -5,6 +5,8 @@ import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.request.DeviceRebindCreateRequest;
+import ai.mintpop.lane.service.DeviceBindingService;
 import ai.mintpop.lane.service.DeviceRebindNotifyService;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -22,6 +24,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static ai.mintpop.lane.enumeration.AgentType.CLAUDE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,6 +71,9 @@ class DeviceBindingControllerTest extends MysqlTestBase {
     private UserDeviceRepository userDeviceRepository;
 
     @Autowired
+    private DeviceBindingService deviceBindingService;
+
+    @Autowired
     private SessionTokenService sessionTokenService;
 
     /** 通知是否真被触发只由 controller 接线决定，替身掉真正发飞书卡片这一步 */
@@ -81,6 +91,15 @@ class DeviceBindingControllerTest extends MysqlTestBase {
 
     private String bearer(Long userId) {
         return "Bearer " + sessionTokenService.issue(userId, Duration.ofMinutes(10));
+    }
+
+    private static DeviceRebindCreateRequest rebindBody(String tag) {
+        DeviceRebindCreateRequest body = new DeviceRebindCreateRequest();
+        body.setName("新电脑 " + tag);
+        body.setOs("macos 26.6.1");
+        body.setModel("Mac17,9");
+        body.setReason("换了新电脑 " + tag);
+        return body;
     }
 
     private static String bindBodyJson() {
@@ -208,6 +227,106 @@ class DeviceBindingControllerTest extends MysqlTestBase {
                 "SELECT COUNT(*) FROM device_rebind_request WHERE subscription_id = ? AND status = 'PENDING'",
                 Long.class, subscriptionId);
         assertThat(count).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("过期订阅：绑定与换机申请都被拦下，报 510010")
+    void expiredSubscriptionIsRejectedOnBothEndpoints() throws Exception {
+        Long expiredId = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository)
+                .createSubscription(ownerId, CLAUDE, "Claude 月付（已过期）",
+                        Instant.now().minus(60, ChronoUnit.DAYS),
+                        Instant.now().minus(1, ChronoUnit.DAYS), "sk-ant-test");
+
+        mockMvc.perform(post("/api/subscriptions/" + expiredId + "/device/bind")
+                        .header("Authorization", bearer(ownerId))
+                        .header("X-Device-Id", DEVICE_ID_MIXED_CASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bindBodyJson()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(510010));
+        mockMvc.perform(post("/api/subscriptions/" + expiredId + "/device/rebind-requests")
+                        .header("Authorization", bearer(ownerId))
+                        .header("X-Device-Id", DEVICE_ID_MIXED_CASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bindBodyJson()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(510010));
+
+        // 过期订阅一律不绑，额度不该烧在一个根本不下发凭据的席位上
+        assertThat(subscriptionRepository.findById(expiredId).orElseThrow().getBoundDeviceId()).isNull();
+    }
+
+    @Test
+    @DisplayName("待开通订阅（起期未填）：绑定与换机申请都被拦下，报 410041")
+    void pendingActivationSubscriptionIsRejectedOnBothEndpoints() throws Exception {
+        Long pendingId = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository)
+                .createSubscription(ownerId, CLAUDE, "Claude 月付（待开通）", null, null, "sk-ant-test");
+
+        mockMvc.perform(post("/api/subscriptions/" + pendingId + "/device/bind")
+                        .header("Authorization", bearer(ownerId))
+                        .header("X-Device-Id", DEVICE_ID_MIXED_CASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bindBodyJson()))
+                .andExpect(jsonPath("$.code").value(410041));
+        mockMvc.perform(post("/api/subscriptions/" + pendingId + "/device/rebind-requests")
+                        .header("Authorization", bearer(ownerId))
+                        .header("X-Device-Id", DEVICE_ID_MIXED_CASE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bindBodyJson()))
+                .andExpect(jsonPath("$.code").value(410041));
+    }
+
+    @Test
+    @DisplayName("两台新机器真并发提换机申请：同一份订阅最终只留下一条 PENDING")
+    void concurrentRebindRequestsLeaveExactlyOnePending() throws Exception {
+        // 先绑到旧设备，两台新机器才够格提申请
+        Instant now = Instant.now();
+        UserDevice oldDevice = userDeviceRepository.upsert(
+                ownerId, OTHER_DEVICE_ID, "旧电脑", "windows", "", now);
+        subscriptionRepository.bindDeviceIfUnbound(subscriptionId, oldDevice.getId(), now);
+        String deviceA = "a".repeat(64);
+        String deviceB = "b".repeat(64);
+        userDeviceRepository.upsert(ownerId, deviceA, "新电脑 A", "macos 26", "", now);
+        userDeviceRepository.upsert(ownerId, deviceB, "新电脑 B", "macos 26", "", now);
+
+        // 两个线程各自独立调用注入的 deviceBindingService bean：requestRebind 是 @Transactional，
+        // 每个线程因此各开一个事务、各占一条数据库连接，真的是两个事务在抢同一份订阅，
+        // 不是同一条连接顺序执行。本测试类没有 @Transactional，不存在测试事务把两者困在一起的问题
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Long> attemptA = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return deviceBindingService.requestRebind(ownerId, subscriptionId, deviceA, rebindBody("A"));
+            });
+            Future<Long> attemptB = executor.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS);
+                return deviceBindingService.requestRebind(ownerId, subscriptionId, deviceB, rebindBody("B"));
+            });
+            attemptA.get(20, TimeUnit.SECONDS);
+            attemptB.get(20, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        // 两条 PENDING 意味着管理员会看到两条一模一样的待办，同意了过期的那条就把订阅
+        // 绑到用户已经放弃的机器上，另一条永远挂着——这正是订阅行锁要挡住的。
+        // 实测：把 requestRebind 里的 findByIdForUpdate 注释掉，本用例在 MySQL 8.4 默认的
+        // REPEATABLE READ 下**以死锁告终**（两个事务的 supersedePending 各自匹配 0 行、
+        // 双双在 idx_device_rebind_subscription 上持有同一段 gap 锁，随后两边的 INSERT
+        // 各自等对方的 gap 锁释放），报 DeadlockLoserDataAccessException——用户点一次
+        // 「提交申请」直接拿到 110002。只要那条 UPDATE 扫到了真实记录（该订阅本就挂着一条
+        // PENDING）或隔离级别是 READ COMMITTED，gap 锁不成立，两条 INSERT 便双双落库，
+        // 退化成本用例标题说的两条 PENDING。两种结局都是错的，行锁把它们一起消掉
+        Long pending = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM device_rebind_request WHERE subscription_id = ? AND status = 'PENDING'",
+                Long.class, subscriptionId);
+        assertThat(pending).isEqualTo(1L);
+        // 先到的那条不是消失，而是被作废——它曾经存在过这件事仍留在库里
+        Long superseded = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM device_rebind_request WHERE subscription_id = ? AND status = 'SUPERSEDED'",
+                Long.class, subscriptionId);
+        assertThat(superseded).isEqualTo(1L);
     }
 
     @Test

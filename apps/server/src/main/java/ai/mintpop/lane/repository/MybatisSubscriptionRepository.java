@@ -33,6 +33,16 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
     }
 
     @Override
+    public Optional<SubscriptionDto> findByIdForUpdate(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(mapper.selectOne(
+                        Wrappers.<Subscription>lambdaQuery().eq(Subscription::getId, id).last("FOR UPDATE")))
+                .map(converter::toDto);
+    }
+
+    @Override
     public List<SubscriptionDto> findByUserId(Long userId) {
         return mapper.selectList(Wrappers.<Subscription>lambdaQuery()
                         .eq(Subscription::getUserId, userId)

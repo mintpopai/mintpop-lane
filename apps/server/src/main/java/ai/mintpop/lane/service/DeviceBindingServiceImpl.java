@@ -78,6 +78,12 @@ public class DeviceBindingServiceImpl implements DeviceBindingService {
     public Long requestRebind(Long userId, Long subscriptionId, String deviceId,
                               DeviceRebindCreateRequest body) {
         SubscriptionDto subscription = ownedSubscription(userId, subscriptionId);
+        // 「作废旧 PENDING + 建新申请」这一对必须按订阅串行化：它不是单条条件 UPDATE 能表达的，
+        // MySQL 也没有部分唯一索引可以在库层兜底（V17 因此只建了普通索引）。不锁的话，两台新机器
+        // 同时提申请、或用户双击一次「提交申请」，两边都作废 0 条、都插入成功，同一份订阅留下两条
+        // PENDING——管理员看到两条一模一样的待办，同意了过期的那条就把订阅绑到用户已经放弃的机器上。
+        // 本方法是 @Transactional，锁因此一直持有到提交，这正是它生效的前提；锁在事务外取等于没取
+        subscriptionRepository.findByIdForUpdate(subscriptionId);
         Instant now = clock.instant();
         UserDevice device = userDeviceRepository.upsert(
                 userId, deviceId, body.getName(), body.getOs(),
@@ -120,10 +126,29 @@ public class DeviceBindingServiceImpl implements DeviceBindingService {
         throw last;
     }
 
-    /** 取这个用户自己的订阅。别人的一律当作不存在——不泄露它的存在 */
+    /**
+     * 取这个用户自己的、且在期的订阅。别人的一律当作不存在——不泄露它的存在。
+     *
+     * <p>在期是绑定与换机共同的前置条件：不在期的席位本来就不下发凭据，
+     * 让它绑定等于把「一份订阅只能在一台设备上用」这枚额度烧在一个根本用不了的席位上；
+     * 让它提换机申请，则是为一个谁都用不了的席位去打扰管理员（还会推一张飞书卡片）。
+     *
+     * <p>两种不在期分开报：待开通（管理员还没填起期）与已过期，用户要做的事完全不同——
+     * 前者去催管理员，后者去续期。用同一句话会把人引到错误的方向
+     */
     private SubscriptionDto ownedSubscription(Long userId, Long subscriptionId) {
-        return subscriptionRepository.findById(subscriptionId)
+        SubscriptionDto subscription = subscriptionRepository.findById(subscriptionId)
                 .filter(s -> Objects.equals(s.getUserId(), userId))
                 .orElseThrow(() -> new BizException(BizCodeEnum.SUBSCRIPTION_NOT_FOUND));
+        Instant now = clock.instant();
+        if (subscription.isActiveAt(now)) {
+            return subscription;
+        }
+        // 已过止期是「过期了，去续期」；起期没填或还没到都是「尚未开通，去催管理员」。
+        // 合成一句会把两拨用户引到彼此的错误方向上
+        if (subscription.getEndsAt() != null && !now.isBefore(subscription.getEndsAt())) {
+            throw new BizException(BizCodeEnum.SUBSCRIPTION_EXPIRED);
+        }
+        throw new BizException(BizCodeEnum.SUBSCRIPTION_NOT_ACTIVATED);
     }
 }

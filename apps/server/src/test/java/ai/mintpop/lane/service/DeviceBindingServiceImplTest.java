@@ -152,9 +152,54 @@ class DeviceBindingServiceImplTest {
         // 顺序本身就是这条测试要守的东西：先作废旧 PENDING、再建新的。
         // 若两行调换，新建的 PENDING 会被自己紧接着的 supersedePending 顺手作废掉，
         // 订阅最终一条待处理申请都没有——两个独立的 verify 测不出这种调换，必须用 InOrder 钉死顺序
-        InOrder inOrder = inOrder(rebindRequestRepository);
+        // 锁也在这条顺序里：行锁必须在这一对之前取到，否则串行化不住（真并发的证据在
+        // DeviceBindingControllerTest.concurrentRebindRequestsLeaveExactlyOnePending，
+        // Mockito 测不了行锁，这里只钉住调用顺序）
+        InOrder inOrder = inOrder(subscriptionRepository, rebindRequestRepository);
+        inOrder.verify(subscriptionRepository).findByIdForUpdate(SUB_ID);
         inOrder.verify(rebindRequestRepository).supersedePending(SUB_ID);
         inOrder.verify(rebindRequestRepository).create(any());
+    }
+
+    @Test
+    @DisplayName("待开通的订阅（起期未填）：绑定与换机申请都报 410041，不把额度烧在用不了的席位上")
+    void pendingActivationSubscriptionIsRejectedOnBothEndpoints() {
+        SubscriptionDto pending = activeSubscription(null);
+        pending.setStartsAt(null);
+        pending.setEndsAt(null);
+        when(subscriptionRepository.findById(SUB_ID)).thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> service.bind(USER_ID, SUB_ID, THIS_DEVICE, bindBody()))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode.code", BizCodeEnum.SUBSCRIPTION_NOT_ACTIVATED.getCode());
+        assertThatThrownBy(() -> service.requestRebind(USER_ID, SUB_ID, THIS_DEVICE,
+                new DeviceRebindCreateRequest()))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode.code", BizCodeEnum.SUBSCRIPTION_NOT_ACTIVATED.getCode());
+
+        verify(subscriptionRepository, never()).bindDeviceIfUnbound(anyLong(), anyLong(), any());
+        verify(rebindRequestRepository, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("已过期的订阅：绑定与换机申请都报 510010（不复用 410041 的「请先填写起期」，那是写给管理员的）")
+    void expiredSubscriptionIsRejectedOnBothEndpoints() {
+        SubscriptionDto expired = activeSubscription(8L);
+        expired.setStartsAt(NOW.minus(60, ChronoUnit.DAYS));
+        expired.setEndsAt(NOW.minus(1, ChronoUnit.DAYS));
+        when(subscriptionRepository.findById(SUB_ID)).thenReturn(Optional.of(expired));
+
+        assertThatThrownBy(() -> service.bind(USER_ID, SUB_ID, THIS_DEVICE, bindBody()))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode.code", BizCodeEnum.SUBSCRIPTION_EXPIRED.getCode());
+        // 换机申请同样拦住：它会推一张飞书卡片去打扰管理员，而那个席位谁都用不了
+        assertThatThrownBy(() -> service.requestRebind(USER_ID, SUB_ID, THIS_DEVICE,
+                new DeviceRebindCreateRequest()))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode.code", BizCodeEnum.SUBSCRIPTION_EXPIRED.getCode());
+
+        verify(subscriptionRepository, never()).bindDeviceIfUnbound(anyLong(), anyLong(), any());
+        verify(rebindRequestRepository, never()).create(any());
     }
 
     @Test
