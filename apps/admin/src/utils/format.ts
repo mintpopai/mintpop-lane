@@ -1,4 +1,5 @@
 import { AGENT_TYPE_LABELS } from "../api/types";
+import type { DeviceBrief } from "../api/types";
 
 /** 列表里空值统一显示这个，避免出现空白单元格或 undefined */
 export const PLACEHOLDER = "—";
@@ -60,4 +61,17 @@ export function formatAssignmentNo(value?: string | null): string {
     return PLACEHOLDER;
   }
   return value.length === 10 ? `${value.slice(0, 5)}-${value.slice(5)}` : value;
+}
+
+/**
+ * 设备三要素压成一行：主机名是主角，系统与机型是辨认用的补充。
+ *
+ * 机型可能是空串——桌面端读不到硬件型号时就下发空值（库里该列 NOT NULL DEFAULT ''，
+ * 绑定入参也刻意不强制它）。无条件拼「系统 · 机型」会留下一个吊着的分隔符
+ * （`DESKTOP-4F2（windows 11 · ）`），故机型为空时连分隔符一起去掉。
+ * 与服务端 DeviceRebindNotifyService.describe 同一口径，两处显示一致。
+ */
+export function deviceLabel(device: DeviceBrief): string {
+  const model = device.model.trim();
+  return `${device.name}（${device.os}${model ? ` · ${model}` : ""}）`;
 }
