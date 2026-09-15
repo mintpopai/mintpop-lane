@@ -3,6 +3,7 @@ package ai.mintpop.lane.support;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.entity.Plan;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 import ai.mintpop.lane.enumeration.NodeProtocol;
@@ -155,7 +156,7 @@ public class DatabaseFixtures {
     /** 建一个上架套餐（USD），返回 id。传 enabled=false 建下架套餐 */
     public static Long createPlan(PlanRepository planRepository, String name,
                                    AgentType agentType, int durationDays, String price, boolean enabled) {
-        ai.mintpop.lane.entity.Plan plan = new ai.mintpop.lane.entity.Plan();
+        Plan plan = new Plan();
         plan.setName(name);
         plan.setAgentType(agentType);
         plan.setDurationDays(durationDays);

@@ -286,6 +286,19 @@ class PaymentControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("入账交易号与订单已挂的 intent 不一致时拒绝：状态不变、不建订阅")
+    void settleRejectsMismatchedIntentId() throws Exception {
+        String orderNo = createOrder(buyerId);
+        Long orderId = orderRepository.findByOrderNo(orderNo).orElseThrow().getId();
+        orderRepository.attachPaymentIntent(orderId, "stripe", "pi_a");
+
+        paymentService.settlePaid(orderNo, "pi_b", 9999L, "usd");
+
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(subscriptionRepository.findByUserId(buyerId)).isEmpty();
+    }
+
+    @Test
     @DisplayName("取消或过期后钱到账仍入账建订阅（钱已收必须履约）")
     void settleAfterCancelStillFulfils() throws Exception {
         String orderNo = createOrder(buyerId);
@@ -315,7 +328,40 @@ class PaymentControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("verify：未发起过支付直接回当前状态；已超时则过期；本地已终态不打网关")
+    @DisplayName("取消订单联动撤销已挂的 Stripe intent；未发起过支付的订单取消不打网关")
+    void cancelCancelsAttachedStripeIntent() throws Exception {
+        // 先验证未发起过支付（无交易号）的订单取消不打网关
+        String freshOrderNo = createOrder(buyerId);
+        mockMvc.perform(post("/api/orders/" + freshOrderNo + "/cancel").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.code").value(0));
+        verify(stripeGateway, never()).cancelPaymentIntent(anyString());
+
+        String orderNo = createOrder(buyerId);
+        Long orderId = orderRepository.findByOrderNo(orderNo).orElseThrow().getId();
+        orderRepository.attachPaymentIntent(orderId, "stripe", "pi_1");
+
+        mockMvc.perform(post("/api/orders/" + orderNo + "/cancel").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.code").value(0));
+        verify(stripeGateway).cancelPaymentIntent("pi_1");
+    }
+
+    @Test
+    @DisplayName("懒惰过期（订单列表入口）联动撤销已挂的 Stripe intent")
+    void lazyExpiryOnListCancelsAttachedStripeIntent() throws Exception {
+        String orderNo = createOrder(buyerId);
+        Long orderId = orderRepository.findByOrderNo(orderNo).orElseThrow().getId();
+        orderRepository.attachPaymentIntent(orderId, "stripe", "pi_2");
+        jdbc.update("UPDATE plan_order SET created_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 31 MINUTE) WHERE order_no = ?", orderNo);
+
+        mockMvc.perform(get("/api/orders").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(orderRepository.findByOrderNo(orderNo).orElseThrow().getStatus()).isEqualTo(OrderStatus.EXPIRED);
+        verify(stripeGateway).cancelPaymentIntent("pi_2");
+    }
+
+    @Test
+    @DisplayName("verify：未发起过支付直接回当前状态；已超时则过期；别人的单报 510002")
     void verifyWithoutIntentAndExpiry() throws Exception {
         String orderNo = createOrder(buyerId);
         mockMvc.perform(post("/api/payment/orders/verify").header("Authorization", bearer(buyerId))

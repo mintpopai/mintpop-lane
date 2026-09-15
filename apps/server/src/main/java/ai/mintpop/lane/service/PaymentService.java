@@ -96,6 +96,10 @@ public class PaymentService {
                         orderNo, intent.getId());
                 stripeGateway.cancelPaymentIntent(intent.getId());
                 order = orderService.requireOwn(userId, orderNo);
+                // 理论上重读的单必然已被另一并发请求落号；交易号仍为空说明状态异常，不可再查网关
+                if (order.getPaymentTradeNo() == null) {
+                    throw new BizException(BizCodeEnum.ORDER_NOT_PAYABLE);
+                }
                 intent = stripeGateway.retrievePaymentIntent(order.getPaymentTradeNo());
                 if ("canceled".equals(intent.getStatus())) {
                     throw new BizException(BizCodeEnum.ORDER_NOT_PAYABLE);
@@ -180,7 +184,9 @@ public class PaymentService {
             log.info("入账重放（已处理过），忽略 orderNo={}", orderNo);
             return;
         }
-        // 事务已提交；通知任务提交失败（如停机中执行器已关）也不能把 webhook 变 500
+        // transactionTemplate.execute 已返回即事务已提交，通知不会早于数据落库；
+        // 本方法及其调用方均不可再包一层外部 @Transactional，否则通知会在提交前发出。
+        // 通知任务提交失败（如停机中执行器已关）也不能把 webhook 变 500
         try {
             orderSettledListener.accept(orderNo);
         } catch (Exception e) {

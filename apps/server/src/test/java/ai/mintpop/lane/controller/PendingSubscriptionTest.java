@@ -16,7 +16,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
-import java.util.Map;
 
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
