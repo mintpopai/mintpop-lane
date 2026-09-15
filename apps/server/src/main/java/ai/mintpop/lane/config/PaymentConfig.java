@@ -17,4 +17,10 @@ public class PaymentConfig {
     Consumer<String> intentCanceller(StripeGateway stripeGateway) {
         return stripeGateway::cancelPaymentIntent;
     }
+
+    /** 首次入账成功后的回调。Task 8 接飞书通知，这里先空实现占位 */
+    @Bean
+    Consumer<String> orderSettledListener() {
+        return orderNo -> { };
+    }
 }
