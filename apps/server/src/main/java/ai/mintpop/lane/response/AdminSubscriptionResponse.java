@@ -47,8 +47,14 @@ public record AdminSubscriptionResponse(
          * 不对拿不准的情况报警。
          */
         boolean extraUsageDisabled,
+        /** 当前绑定的设备；null 表示这份订阅还没在任何设备上用过 */
+        BoundDevice boundDevice,
         String remark,
         Instant createdAt,
         Instant updatedAt
 ) {
+
+    /** 订阅当前绑定的设备。与申请里的 Device 分开：这里多一个绑定时刻 */
+    public record BoundDevice(String name, String os, String model, Instant boundAt) {
+    }
 }

@@ -3,12 +3,14 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.entity.Enterprise;
 import ai.mintpop.lane.entity.Plan;
+import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.EnterpriseRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.SubscriptionCreateRequest;
 import ai.mintpop.lane.request.SubscriptionUpdateRequest;
@@ -24,6 +26,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,24 +44,32 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
     private final EnterpriseRepository enterpriseRepository;
+    private final UserDeviceRepository userDeviceRepository;
     private final CredentialIssueService credentialIssueService;
 
     public AdminSubscriptionServiceImpl(SubscriptionRepository subscriptionRepository,
                                         UserRepository userRepository,
                                         PlanRepository planRepository,
                                         EnterpriseRepository enterpriseRepository,
+                                        UserDeviceRepository userDeviceRepository,
                                         CredentialIssueService credentialIssueService) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.planRepository = planRepository;
         this.enterpriseRepository = enterpriseRepository;
+        this.userDeviceRepository = userDeviceRepository;
         this.credentialIssueService = credentialIssueService;
     }
 
     @Override
     public List<AdminSubscriptionResponse> listByUser(Long userId) {
         userRepository.findById(userId).orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
-        return subscriptionRepository.findByUserId(userId).stream().map(this::toResponse).toList();
+        // 该用户的全部已知设备一次取回建成 Map：订阅按 boundDeviceId 就地查，
+        // 不必为每条订阅各查一次设备表
+        Map<Long, UserDevice> devices = userDeviceRepository.findByUserId(userId).stream()
+                .collect(Collectors.toMap(UserDevice::getId, Function.identity()));
+        return subscriptionRepository.findByUserId(userId).stream()
+                .map(s -> toResponse(s, devices)).toList();
     }
 
     @Override
@@ -204,7 +217,7 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
         return value == null || value.isBlank() ? null : value;
     }
 
-    private AdminSubscriptionResponse toResponse(SubscriptionDto s) {
+    private AdminSubscriptionResponse toResponse(SubscriptionDto s, Map<Long, UserDevice> devices) {
         return new AdminSubscriptionResponse(
                 s.getId(), s.getAssignmentNo(), s.getUserId(), s.getEnterpriseId(), s.getAgentType(),
                 s.getPlanId(), s.getName(), s.getPlanDurationDays(), s.getPlanPrice(), s.getPlanCurrency(),
@@ -215,7 +228,24 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
                 // 只有明确探测到「未开启」才报：null 表示旧式/手工凭证或签发时没拉到 profile，
                 // 那属于不知道，不是知道它关着
                 Boolean.FALSE.equals(s.getCredentialExtraUsageEnabled()),
+                boundDevice(s, devices),
                 s.getRemark(), s.getCreatedAt(), s.getUpdatedAt());
+    }
+
+    /**
+     * 拼绑定设备的展示三要素 + 绑定时刻。设备行取不到（被删过，绑定悬空）时如实给 null，
+     * 不拼一个半截对象。
+     */
+    private static AdminSubscriptionResponse.BoundDevice boundDevice(SubscriptionDto s, Map<Long, UserDevice> devices) {
+        if (s.getBoundDeviceId() == null) {
+            return null;
+        }
+        UserDevice device = devices.get(s.getBoundDeviceId());
+        if (device == null) {
+            return null;
+        }
+        return new AdminSubscriptionResponse.BoundDevice(
+                device.getName(), device.getOs(), device.getModel(), s.getBoundAt());
     }
 
     /**

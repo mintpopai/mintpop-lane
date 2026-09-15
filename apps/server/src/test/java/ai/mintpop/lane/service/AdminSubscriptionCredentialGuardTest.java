@@ -9,6 +9,7 @@ import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.EnterpriseRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.SubscriptionCreateRequest;
 import ai.mintpop.lane.request.SubscriptionUpdateRequest;
@@ -40,9 +41,9 @@ class AdminSubscriptionCredentialGuardTest {
                                                      UserRepository userRepository,
                                                      PlanRepository planRepository,
                                                      EnterpriseRepository enterpriseRepository) {
-        // 本测试类只覆盖手工凭据的收紧规则，与吊销无关，注入一个不会被用到的 mock 即可
+        // 本测试类只覆盖手工凭据的收紧规则，与吊销、绑定设备均无关，注入不会被用到的 mock 即可
         return new AdminSubscriptionServiceImpl(subscriptionRepository, userRepository, planRepository,
-                enterpriseRepository, mock(CredentialIssueService.class));
+                enterpriseRepository, mock(UserDeviceRepository.class), mock(CredentialIssueService.class));
     }
 
     private Plan planOf(AgentType agentType) {
