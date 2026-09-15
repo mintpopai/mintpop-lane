@@ -2,13 +2,16 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
-import type { AdminDeviceRebindRequestResponse } from "../api/types";
+import type { AdminDeviceRebindRequestResponse, RebindRequestStatus } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
+import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
 import DeviceRequestsView from "./DeviceRequestsView.vue";
 
-const listDeviceRebindRequests = vi.fn<() => Promise<AdminDeviceRebindRequestResponse[]>>();
+// 签名与真接口一致（带可选状态参数）：角标 store 打的就是带 PENDING 的那一路，要能按参数区分
+const listDeviceRebindRequests =
+  vi.fn<(status?: RebindRequestStatus) => Promise<AdminDeviceRebindRequestResponse[]>>();
 const approveDeviceRebindRequest = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 const rejectDeviceRebindRequest = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 
@@ -66,6 +69,16 @@ async function render() {
 
 function rowCount(wrapper: Awaited<ReturnType<typeof render>>): number {
   return wrapper.findAll("tbody tr").length;
+}
+
+/** 列表重拉的次数。角标 store 打的是同一个 mock（带 PENDING），故按「无参调用」计数 */
+function listLoadCount(): number {
+  return listDeviceRebindRequests.mock.calls.filter((call) => call.length === 0).length;
+}
+
+/** 角标刷新的次数：带 PENDING 的那些调用只可能来自 store.refresh() */
+function badgeRefreshCount(): number {
+  return listDeviceRebindRequests.mock.calls.filter((call) => call[0] === "PENDING").length;
 }
 
 describe("DeviceRequestsView 加载", () => {
@@ -137,8 +150,8 @@ describe("DeviceRequestsView 处理申请", () => {
     await flushPromises();
 
     expect(approveDeviceRebindRequest).toHaveBeenCalledWith(1);
-    // 角标 store 也打同一个 mock（带 PENDING），故按「无参调用」计数才看得出列表重拉了一次
-    expect(listDeviceRebindRequests.mock.calls.filter((call) => call.length === 0)).toHaveLength(2);
+    expect(listLoadCount()).toBe(2);
+    expect(badgeRefreshCount()).toBe(1);
     expect(showToast).toHaveBeenCalledWith("success", "已同意，用户刷新席位后即可使用");
   });
 
@@ -153,16 +166,51 @@ describe("DeviceRequestsView 处理申请", () => {
     expect(approveDeviceRebindRequest).not.toHaveBeenCalled();
   });
 
-  it("接口失败时原样转述服务端的中文，列表不重拉", async () => {
-    approveDeviceRebindRequest.mockRejectedValueOnce(new BizError(410044, "该申请已被处理"));
+  // 断网、5xx 这类失败与「这行过期了」是两回事：列表多半还是准的，再拉一次只会把一个失败叠成两个
+  it("网络类失败原样转述报错，列表与角标都不重拉", async () => {
+    approveDeviceRebindRequest.mockRejectedValueOnce(new Error("Failed to fetch"));
     const wrapper = await render();
 
     await wrapper.findAll("tbody tr")[0].findAll("td.actions button")[0].trigger("click");
     wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
     await flushPromises();
 
-    expect(showToast).toHaveBeenCalledWith("error", "该申请已被处理");
-    expect(listDeviceRebindRequests.mock.calls.filter((call) => call.length === 0)).toHaveLength(1);
+    expect(showToast).toHaveBeenCalledWith("error", "Failed to fetch");
+    expect(listLoadCount()).toBe(1);
+    expect(badgeRefreshCount()).toBe(0);
+  });
+
+  // 确认框留在原地就等于「只能对着同一行再点一次、再得到同一句报错」，是条死路
+  it("任何失败都收起确认框，不把它悬在刚拒绝了这次操作的那行上", async () => {
+    approveDeviceRebindRequest.mockRejectedValueOnce(new Error("Failed to fetch"));
+    const wrapper = await render();
+
+    await wrapper.findAll("tbody tr")[0].findAll("td.actions button")[0].trigger("click");
+    wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
+    await flushPromises();
+
+    expect(wrapper.findComponent(ConfirmDialog).exists()).toBe(false);
+  });
+
+  // 服务端明说「这条申请没了 / 已被别人处理 / 订阅已删」时，界面上摆着的这行可证是错的
+  it.each([
+    [410042, "换机申请不存在"],
+    [410043, "该换机申请已被处理"],
+    [410008, "订阅不存在"],
+  ])("服务端回 %i 说明本机这份已过期，列表与角标一并重拉", async (code, message) => {
+    approveDeviceRebindRequest.mockRejectedValueOnce(new BizError(code, message));
+    const wrapper = await render();
+    const store = useRebindStore();
+
+    await wrapper.findAll("tbody tr")[0].findAll("td.actions button")[0].trigger("click");
+    wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
+    await flushPromises();
+
+    expect(showToast).toHaveBeenCalledWith("error", message);
+    expect(wrapper.findComponent(ConfirmDialog).exists()).toBe(false);
+    expect(listLoadCount()).toBe(2);
+    expect(badgeRefreshCount()).toBe(1);
+    expect(store.pendingCount).toBe(ROWS.length);
   });
 
   it("已处理的申请不给操作按钮", async () => {
@@ -195,5 +243,60 @@ describe("DeviceRequestsView 处理申请", () => {
 
     expect(message).not.toContain("—");
     expect(message).not.toContain("「」");
+  });
+});
+
+describe("DeviceRequestsView 页头刷新", () => {
+  it("页头的「刷新」把列表与角标一起重拉——怀疑数据过期时不必切走再切回来", async () => {
+    const wrapper = await render();
+    const store = useRebindStore();
+
+    const refreshButton = wrapper
+      .findAll(".page-head-actions button")
+      .find((button) => button.text() === "刷新");
+    await refreshButton!.trigger("click");
+    await flushPromises();
+
+    expect(listLoadCount()).toBe(2);
+    expect(badgeRefreshCount()).toBe(1);
+    expect(store.pendingCount).toBe(ROWS.length);
+  });
+});
+
+describe("DeviceRequestsView 展示细节", () => {
+  it("机型为空时不留下吊着的分隔符", async () => {
+    listDeviceRebindRequests.mockResolvedValueOnce([
+      request({ toDevice: { name: "DESKTOP-4F2", os: "windows 11", model: "" } }),
+    ]);
+    const wrapper = await render();
+
+    const cell = wrapper.get("tbody tr").findAll("td")[3];
+    expect(cell.text()).toBe("DESKTOP-4F2（windows 11）");
+  });
+
+  // 绿色在本仓的色板里只表示「在跑 / 正常」，已拒绝与已作废都不是
+  it("只有已同意走绿档，已拒绝与已作废归灰档", async () => {
+    listDeviceRebindRequests.mockResolvedValueOnce([
+      request({ id: 1, status: "APPROVED" }),
+      request({ id: 2, status: "REJECTED" }),
+      request({ id: 3, status: "SUPERSEDED" }),
+      request({ id: 4, status: "PENDING" }),
+    ]);
+    const wrapper = await render();
+    wrapper.findComponent({ name: "ViewTabs" }).vm.$emit("update:modelValue", "ALL");
+    await wrapper.vm.$nextTick();
+
+    const states = wrapper.findAll("tbody tr .state").map((el) => el.attributes("data-state"));
+    expect(states).toEqual(["ENABLED", "CLOSED", "CLOSED", "MISSING"]);
+  });
+
+  // 飞书卡片拿申请号当把手；订阅被删的申请上「用户 + 分配号」都是空的，只剩它能对上号
+  it("每行都渲染出申请号，订阅已被删除时同样看得见", async () => {
+    listDeviceRebindRequests.mockResolvedValueOnce([
+      request({ requestNo: "DR20260915000007", subscriptionName: "", assignmentNo: "" }),
+    ]);
+    const wrapper = await render();
+
+    expect(wrapper.get("tbody tr").text()).toContain("DR20260915000007");
   });
 });

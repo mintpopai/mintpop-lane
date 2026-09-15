@@ -54,7 +54,8 @@ body {
 
 [data-state="SUSPENDED"],
 [data-state="DISABLED"],
-[data-state="UNBOUND"] {
+[data-state="UNBOUND"],
+[data-state="CLOSED"] {
   --state-color: #7a857f;
 }
 
@@ -462,6 +463,15 @@ body {
   color: var(--color-ink-secondary);
 }
 
+/* 单元格里的次要行：主角下面再挂一条辅助事实（如申请号挂在用户下面）。
+   不新开一列，靠字号与灰度拉开主次 */
+.admin-table .cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
 /* 紧凑密度：弹窗里的内嵌表格（订阅列表）宽度有限，内边距收一档 */
 .admin-table.dense th,
 .admin-table.dense td {
@@ -495,9 +505,12 @@ body {
   color: var(--counter-danger);
 }
 
+/* CLOSED：一条流程走到头了（换机申请的已拒绝 / 已作废）。绿只留给「在跑/正常」，
+   故它与 SUSPENDED / DISABLED / UNBOUND 同归灰档，色值与文字灰度都照这一档 */
 .state[data-state="SUSPENDED"],
 .state[data-state="DISABLED"],
-.state[data-state="UNBOUND"] {
+.state[data-state="UNBOUND"],
+.state[data-state="CLOSED"] {
   color: var(--color-ink-secondary);
 }
 
