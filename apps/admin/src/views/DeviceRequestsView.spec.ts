@@ -183,4 +183,17 @@ describe("DeviceRequestsView 处理申请", () => {
 
     expect(wrapper.get("tbody tr").findAll("td.actions button")).toHaveLength(2);
   });
+
+  it("订阅已被删除时，确认框不拼出空书名号或分配号占位符「—」", async () => {
+    listDeviceRebindRequests.mockResolvedValueOnce([
+      request({ subscriptionName: "", assignmentNo: "" }),
+    ]);
+    const wrapper = await render();
+
+    await wrapper.get("tbody tr").findAll("td.actions button")[0].trigger("click");
+    const message = wrapper.findComponent(ConfirmDialog).props("message");
+
+    expect(message).not.toContain("—");
+    expect(message).not.toContain("「」");
+  });
 });

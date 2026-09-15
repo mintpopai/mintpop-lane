@@ -64,10 +64,21 @@ const confirmMessage = computed(() => {
   if (decision === null) {
     return "";
   }
-  const label = `${decision.row.userEmail} 的订阅「${decision.row.subscriptionName}」（分配号 ${formatAssignmentNo(decision.row.assignmentNo)}）`;
-  return decision.approve
-    ? `确认把 ${label} 改绑到「${deviceText(decision.row.toDevice)}」？原设备将立即无法使用它。`
-    : `确认拒绝 ${label} 的换机申请？该订阅继续绑定在原设备上。`;
+  const row = decision.row;
+  // 订阅被删除后 subscriptionName / assignmentNo 均为空串：与表格单元格同一条纪律，
+  // 不能拼出「空书名号 + 分配号 —」这种半截标识，改用如实的整体说法
+  const subscriptionLabel = row.subscriptionName
+    ? `订阅「${row.subscriptionName}」（分配号 ${formatAssignmentNo(row.assignmentNo)}）`
+    : "一份已被删除的订阅";
+  const label = `${row.userEmail} 的${subscriptionLabel}`;
+  if (!decision.approve) {
+    return `确认拒绝 ${label} 的换机申请？该订阅继续绑定在原设备上。`;
+  }
+  // 目标设备行事后被删除时，「改绑到「设备记录已不存在」」把异常状态包装成了操作对象，读起来别扭；
+  // 换成陈述句更如实。按钮仍照常给出——是否真能改绑交给服务端裁决，不由前端猜测特判
+  return row.toDevice === null
+    ? `确认处理 ${label} 的换机申请？目标设备记录已不存在，继续可能会被服务端拒绝。`
+    : `确认把 ${label} 改绑到「${row.toDevice.name}（${row.toDevice.os} · ${row.toDevice.model}）」？原设备将立即无法使用它。`;
 });
 
 async function load(): Promise<void> {
