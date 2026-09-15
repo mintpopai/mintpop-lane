@@ -147,10 +147,14 @@ function showExpiredState(): void {
   orderExpired.value = true;
 }
 
-/** 切换方式：收起二维码；选中银行卡时挂 Payment Element */
+/** 切换方式：收起二维码并停掉轮询；选中银行卡时挂 Payment Element */
 watch(selectedKey, async () => {
   qrFor.value = null;
   clearInterval(qrTimer);
+  // 隐藏的二维码不该继续每 2 秒打 verifyOrder；同时清掉 polling 标记，
+  // 免得用户换支付方式后再次发起支付时被这个陈旧标记短路，压根不进 startPolling
+  clearInterval(pollTimer);
+  polling.value = false;
   if (isCardSelected.value && intentInfo.value && stripe && !cardElements) {
     cardElements = createCardElements(stripe, {
       amount: intentInfo.value.amountMinor,
@@ -398,6 +402,7 @@ async function onCancel(): Promise<void> {
       </div>
 
       <div v-show="isCardSelected && !qrFor" ref="cardMount" class="card-element"></div>
+      <p v-if="polling && !qrFor" class="admin-hint pay-processing">正在确认支付结果…</p>
 
       <div v-if="qrFor" class="qr-box">
         <canvas ref="qrCanvas" width="200" height="200" class="qr-canvas"></canvas>
@@ -415,7 +420,7 @@ async function onCancel(): Promise<void> {
           v-if="!qrFor"
           type="button"
           class="admin-btn pay-btn"
-          :disabled="submitting || !selectedOption"
+          :disabled="submitting || polling || !selectedOption"
           @click="confirm"
         >
           {{ submitting ? "处理中…" : isCardSelected ? "确认付款" : "生成二维码" }}

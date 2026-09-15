@@ -193,6 +193,36 @@ describe("确认支付", () => {
     expect(push).toHaveBeenCalledWith({ name: "PAYMENT_RESULT", query: { order_no: "LN1" } });
   });
 
+  it("银行卡：确认后非 succeeded 转入处理中，按钮禁用并给出反馈，PAID 后跳结果页", async () => {
+    const w = await mountPay();
+    await w.findAll(".method-card")[2].trigger("click");
+    await flushPromises();
+    confirmCardPaymentMock.mockResolvedValue("processing");
+    await w.get(".pay-btn").trigger("click");
+    await flushPromises();
+    expect(w.find(".pay-processing").exists()).toBe(true);
+    expect(w.get(".pay-btn").attributes("disabled")).toBeDefined();
+
+    verifyOrder.mockResolvedValue({ orderNo: "LN1", status: "PAID" });
+    await vi.advanceTimersByTimeAsync(2000);
+    await flushPromises();
+    expect(push).toHaveBeenCalledWith({ name: "PAYMENT_RESULT", query: { order_no: "LN1" } });
+  });
+
+  it("微信二维码展示后切换支付方式，停止轮询", async () => {
+    const w = await mountPay();
+    startWechatPayMock.mockResolvedValue("weixin://wxpay/x");
+    await w.get(".pay-btn").trigger("click");
+    await flushPromises();
+    expect(w.find(".qr-canvas").exists()).toBe(true);
+
+    verifyOrder.mockClear();
+    await w.findAll(".method-card")[1].trigger("click");
+    await vi.advanceTimersByTimeAsync(4000);
+    await flushPromises();
+    expect(verifyOrder).not.toHaveBeenCalled();
+  });
+
   it("确认前 verify 发现已取消：提示并回订单列表，不再发起支付", async () => {
     const w = await mountPay();
     verifyOrder.mockResolvedValue({ orderNo: "LN1", status: "CANCELLED" });

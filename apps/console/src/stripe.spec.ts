@@ -64,7 +64,7 @@ describe("startWechatPay", () => {
         }),
         "cs",
       ),
-    ).rejects.toThrow("missing wechat qr code");
+    ).rejects.toThrow("未拿到微信支付二维码，请重试");
   });
 });
 

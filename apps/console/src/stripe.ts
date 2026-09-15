@@ -32,7 +32,7 @@ export async function startWechatPay(stripe: Stripe, clientSecret: string): Prom
     { wechat_pay_display_qr_code?: { data?: string } } | null | undefined;
   const qr = nextAction?.wechat_pay_display_qr_code?.data;
   if (!qr) {
-    throw new Error("missing wechat qr code");
+    throw new Error("未拿到微信支付二维码，请重试");
   }
   return qr;
 }
@@ -63,7 +63,7 @@ export async function startAlipay(
     { alipay_handle_redirect?: { url?: string } } | null | undefined;
   const qrUrl = nextAction?.alipay_handle_redirect?.url;
   if (!qrUrl) {
-    throw new Error("missing alipay redirect url");
+    throw new Error("未拿到支付宝支付链接，请重试");
   }
   return { qrUrl };
 }
