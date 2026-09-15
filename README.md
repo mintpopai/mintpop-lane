@@ -1,6 +1,6 @@
 # 部署
 
-拉取 GHCR 上已发布的镜像运行。服务端、管理端与官网是三个独立发版的组件，镜像分别由 `server-v*`、`admin-v*` 与 `website-v*` tag 触发的发版流水线构建并推送，部署机不做构建。
+拉取 GHCR 上已发布的镜像运行。服务端、管理端、官网与控制台是四个独立发版的组件，镜像分别由 `server-v*`、`admin-v*`、`website-v*` 与 `console-v*` tag 触发的发版流水线构建并推送，部署机不做构建。
 
 > 桌面端已拆分为独立仓库 [`mintpopai/mintpop-lane-desktop`](https://github.com/mintpopai/mintpop-lane-desktop)（保留完整 git 历史），安装包由其 GitHub Releases 分发；本仓官网（`apps/website`）的下载页即从那里拉取最新版本直链。
 
@@ -53,16 +53,16 @@
 
    | 项 | 值 |
    |---|---|
-   | Redirect URI | `https://<管理端域名>/auth/callback`、`https://<主站域名>/auth/callback` |
-   | Post sign-out redirect URI | `https://<管理端域名>/auth/logout/callback` |
+   | Redirect URI | `https://<管理端域名>/auth/callback`、`https://<主站域名>/auth/callback`、`https://console.lane.mintpop.ai/auth/callback` |
+   | Post sign-out redirect URI | `https://<管理端域名>/auth/logout/callback`、`https://console.lane.mintpop.ai/auth/logout/callback` |
 
-   > 两类地址都按「请求实际到达的域名」动态展开：登录回调 `{baseUrl}/auth/callback` 管理端与主站（桌面端登录流走主站域名）各一条；登出回跳指向服务端的 `/auth/logout/callback` 中转端点（Logto 清完 IdP 会话回到它，再回当前域名首页），目前只有管理端网页有登出入口，登记管理端域名这一条即可。Logto 只接受已登记的地址，没登记对应跳转会被 Logto 拒绝、页面停在它的报错页。
+   > 两类地址都按「请求实际到达的域名」动态展开：登录回调 `{baseUrl}/auth/callback` 管理端、主站（桌面端登录流走主站域名）与控制台各一条；登出回跳指向服务端的 `/auth/logout/callback` 中转端点（Logto 清完 IdP 会话回到它，再回当前域名首页），管理端网页与控制台都有登出入口，各登记一条即可，主站没有登出入口不需要登记。Logto 只接受已登记的地址，没登记对应跳转会被 Logto 拒绝、页面停在它的报错页。
 
    把 App ID 和 App Secret 记下来，都填进第 4 步的 `application.yml`：App ID 填 `spring.security.oauth2.client.registration.logto.client-id`，App Secret 填同级的 `client-secret`。
 
-   > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**回调地址 `http://localhost:5173/auth/callback` 与登出回跳 `http://localhost:5173/auth/logout/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。
+   > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**回调地址 `http://localhost:5173/auth/callback` 与登出回跳 `http://localhost:5173/auth/logout/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。本地开发控制台时（`mise run run-console`，端口 5175）同理，追加 `http://localhost:5175/auth/callback` 与 `http://localhost:5175/auth/logout/callback`。
 
-   > ⚠️ **部署约束**：管理端与 API 必须**同源**（同协议 + 同域名 + 同端口）分路径部署。这件事由**管理端容器内的 nginx** 完成：它把 `/api`、`/auth`、`/oauth2` 反代到 server 容器（compose 内网），其余路径服务管理端静态站——宿主入口只需按 Host 把整个域名转给管理端容器即可，见下文「对外暴露」。管理端的请求是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端代码里，部署侧无需、也没有地方配置它。
+   > ⚠️ **部署约束**：管理端、控制台与 API 必须**各自同源**（同协议 + 同域名 + 同端口）分路径部署。这件事由**管理端与控制台容器各自内置的 nginx** 完成：都把 `/api`、`/auth`、`/oauth2` 反代到 server 容器（compose 内网），其余路径服务各自的静态站——宿主入口只需按 Host 把对应域名转给对应容器即可，见下文「对外暴露」。管理端与控制台的请求都是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com`/`console.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端与控制台代码里，部署侧无需、也没有地方配置它。
 
 6. **拉起服务**：
 
@@ -115,6 +115,34 @@
    ```
 
    f. 之后的一切（加落地节点、加用户、分配落地出口、录席位凭据）都走管理接口，继续用同一个 `lane_session` 值做 Bearer——网页会话有效期见 `lane.auth.web-session-ttl`（默认 7 天），过期后回到第 a 步重新登录一次即可拿到新值。
+
+## 支付配置（Stripe）
+
+控制台的自助购买套餐功能依赖 Stripe，未配置时该入口自动禁用，不影响其它功能（管理端、官网、桌面端登录与节点管理照常可用）。
+
+1. 在 [Stripe Dashboard](https://dashboard.stripe.com) 取 secret key（`sk_` 开头）与 publishable key（`pk_` 开头），填进 `application.yml` 的 `payment.stripe.secret-key` 与 `publishable-key`。
+
+2. Dashboard → Developers → Webhooks 建一个端点，地址填 `https://console.lane.mintpop.ai/api/v1/payment/webhook/stripe`，只订阅 `payment_intent.succeeded` 与 `payment_intent.payment_failed` 这两个事件，把端点详情页给出的 `whsec_` 开头的签名密钥填进 `webhook-secret`。
+
+3. 不配置 `payment.stripe` 这一段（或留空 secret-key）时，控制台的购买入口直接禁用，用户看不到购买按钮；其余功能（登录、查看订阅、桌面端下载等）不受影响。
+
+4. `payment.stripe.product-code`：写入每笔 PaymentIntent 的 `metadata.product`，同一 Stripe 账号被多个业务线共用时，webhook 据此只认领属于本业务（`lane`）的事件，避免误处理其它业务线打进同一 webhook 端点的通知。
+
+5. `payment.stripe.statement-descriptor-suffix`：显示在用户银行账单上的商户描述符后缀（如配成 `LANE`，账单显示为 `MINTPOP* LANE`），留空则不传该字段、由 Stripe 账号的默认描述符显示。
+
+6. **本地联调**：安装 [Stripe CLI](https://stripe.com/docs/stripe-cli) 并执行一次 `stripe login`，然后跑 `mise run webhook-listen`，把它打印出来的 `whsec_` 填进本机 `application.yml` 的 `webhook-secret`（与线上 Dashboard 那把不是同一把，仅本地联调用）。测试支付用 Stripe 测试卡号 `4242 4242 4242 4242`（任意未来到期日、任意 CVC）；微信支付 / 支付宝在测试模式下点击后会跳到 Stripe 提供的模拟扫码页，无需真实账号即可走完整流程。
+
+## 用户自助购买后如何开通
+
+控制台自助购买套餐、支付成功后，订阅记录已按套餐自动建出，但**起止期需要管理员手动开通**（无自动开通流程，避免异常支付状态下误开通）：
+
+1. 飞书群收到「新订单已支付，待开通」卡片通知，带买家邮箱、套餐、订单号与分配号。
+2. 管理端「用户列表」页用买家邮箱搜索，进入该用户的详情页。
+3. 详情页能看到一条带「待开通」徽标的订阅，备注里有对应订单号，与飞书卡片一一对应。
+4. 点「编辑」，填入起期并保存即完成开通——止期按套餐时长自动计算，无需手填。
+5. 按需给该用户分配落地节点、签发席位凭据（见「日常操作」一节的管理接口）。
+
+> 二期上线前需核对桌面端仓库 [`mintpop-lane-desktop`](https://github.com/mintpopai/mintpop-lane-desktop) 对 `/api/me` 里 `startsAt` / `endsAt` 为 `null` 的处理——待开通的订阅会下发 `null`，桌面端需能正确展示「待开通」态而不是崩溃或误判为已过期。
 
 ## 授予或撤销管理员
 
@@ -176,6 +204,8 @@ UPDATE app_user SET role = 'MEMBER' WHERE email = '<用户邮箱>';  -- 撤销
 | `ADMIN_PORT` | `8082` | 管理端的宿主监听端口 |
 | `WEBSITE_TAG` | `latest` | 官网镜像版本。回滚时指定具体版本，如 `WEBSITE_TAG=0.1.0` |
 | `WEBSITE_PORT` | `8083` | 官网的宿主监听端口 |
+| `CONSOLE_TAG` | `latest` | 控制台镜像版本。回滚时指定具体版本，如 `CONSOLE_TAG=0.1.0` |
+| `CONSOLE_PORT` | `8084` | 控制台的宿主监听端口 |
 | `TZ` | `UTC` | 服务端容器时区，仅影响日志时间显示。业务时间全链路按 UTC 存取、按查看者本地时区显示，与本变量无关 |
 
 ## 备份
@@ -191,7 +221,7 @@ UPDATE app_user SET role = 'MEMBER' WHERE email = '<用户邮箱>';  -- 撤销
 
 ## 对外暴露
 
-前端容器端口**都只绑 `127.0.0.1`**，公网访问不到；server **不映射宿主端口**，只经容器网络被管理端与官网反代访问。对外入口是宿主机上**已有的反代**（OpenResty/nginx，与本机其它站点共用），它**只按 Host 分流**、每个站点一条 `location /`——API 的路径拆分不在这一层做：管理端与官网容器内的 nginx 各自把 `/api`、`/auth`、`/oauth2` 反代到 server（compose 服务名 `server:8080`），因此各域名上的 API 调用天然同源，前端不需要 CORS。
+前端容器端口**都只绑 `127.0.0.1`**，公网访问不到；server **不映射宿主端口**，只经容器网络被管理端、官网与控制台反代访问。对外入口是宿主机上**已有的反代**（OpenResty/nginx，与本机其它站点共用），它**只按 Host 分流**、每个站点一条 `location /`——API 的路径拆分不在这一层做：管理端、官网与控制台容器内的 nginx 各自把 `/api`、`/auth`、`/oauth2` 反代到 server（compose 服务名 `server:8080`），因此各域名上的 API 调用天然同源，前端不需要 CORS。
 
 ```nginx
 server {
@@ -231,6 +261,22 @@ server {
 > 官网容器内的 nginx 还自带 `/api/gh/releases` 反代（上游 GitHub API、带缓存，精确匹配优先于 `/api/` 前缀，不会转给 server），宿主反代不需要为它做任何额外配置。
 >
 > 桌面端登录回跳发生在主站域名（`{baseUrl}/auth/callback` 按请求到达的域名展开），因此 Logto 控制台的 Redirect URI 要**同时登记管理端与主站两个域名**的 `/auth/callback`。
+
+控制台域名固定为 `console.lane.mintpop.ai`，与管理端一样反代到本机端口，只是端口换成 `8084`：`console.lane.mintpop.ai → 127.0.0.1:8084`。
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name console.lane.mintpop.ai;
+
+    location / {
+        proxy_pass http://127.0.0.1:8084;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 > 注意：Docker 自己写的 iptables `DOCKER` 链在 ufw 规则之前，`ufw deny <端口>` 拦不住已发布的容器端口。因此「不对外暴露」只能靠绑定地址收口，不能指望防火墙——这就是端口写成三段式 `127.0.0.1:<宿主端口>:<容器端口>` 的原因。
 

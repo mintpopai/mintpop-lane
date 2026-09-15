@@ -1,0 +1,24 @@
+name: CI Console
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/console/**"
+      - "mise.toml"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci-console.yml"
+      - ".github/workflows/quality-console.yml"
+  pull_request:
+    paths:
+      - "apps/console/**"
+      - "mise.toml"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci-console.yml"
+      - ".github/workflows/quality-console.yml"
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality-console.yml

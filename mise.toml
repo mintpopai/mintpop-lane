@@ -162,11 +162,11 @@ run = "pnpm prettier --write ."
 
 # —— 部署 ——
 [tasks.up]
-description = "在部署机上拉起服务端与管理端"
+description = "在部署机上拉起服务端、管理端、官网与控制台"
 run = "docker compose up -d"
 
 [tasks.down]
-description = "在部署机上停止服务端与管理端"
+description = "在部署机上停止服务端、管理端、官网与控制台"
 run = "docker compose down"
 
 # —— 发版 ——

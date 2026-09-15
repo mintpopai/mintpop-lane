@@ -7,9 +7,11 @@ on:
       - CI Server
       - CI Admin
       - CI Website
+      - CI Console
       - Release Server
       - Release Admin
       - Release Website
+      - Release Console
     types: [completed]
 
 permissions:

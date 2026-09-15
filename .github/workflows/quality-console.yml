@@ -1,0 +1,22 @@
+# 复用型质量门禁（workflow_call）：CI 与发版 workflow 共用，改一处两边生效
+name: Quality Console
+
+on:
+  workflow_call:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+      - name: 安装 mise 工具链
+        uses: jdx/mise-action@v4
+        with:
+          install_args: node pnpm
+      - name: 安装前端依赖（按 lockfile 精确安装）
+        run: mise run install-console --frozen
+      - name: 检查代码风格、格式与类型
+        run: mise run lint-console
+      - name: 运行控制台单元测试
+        run: mise run test-console
