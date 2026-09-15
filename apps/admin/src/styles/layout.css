@@ -83,22 +83,42 @@ body {
 
 /* 词标与副题上下两行：「Lane 管理后台」比 shop 的「管理后台」多一截 Lane 前缀，
    横排在 208px 轨道里会折行折在词中间 */
+/* 与闸门页 .gate-brand 同一套锁定组合，尺寸整组降一档：轨内可用宽只有 175px，
+   闸门页那档（字标 26px）横排要 239px，塞不下 */
 .rail-brand {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 12px 24px;
+  align-items: center;
+  gap: 8px;
+  /* 左缘比导航文字略收一点：整组已经吃满轨宽，12px 缩进会让「管理后台」顶到边 */
+  padding: 0 0 24px 6px;
 }
 
-/* 品牌字标用 standards.mintpop.ai 的 wordmark 图，不手写；高度与 shop 管理端导航轨同档 */
+/* 品牌字标用 standards.mintpop.ai 的 wordmark 图，不手写 */
 .rail-wordmark {
-  height: 22px;
-  width: auto;
   display: block;
+  height: 18px;
+  width: auto;
+  /* 横排里它是唯一会被挤扁的图：宽度让给右边的文字前先保住自己 */
+  flex-shrink: 0;
+}
+
+.rail-brand-text {
+  font-family: var(--font-display);
+  padding-left: 8px;
+  border-left: 1px solid var(--color-border);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  white-space: nowrap;
 }
 
 .rail-kind {
-  font-size: 12px;
+  margin-left: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: normal;
   color: var(--color-ink-secondary);
 }
 
@@ -1550,9 +1570,6 @@ body {
   .rail-brand {
     padding: 0;
     flex-shrink: 0;
-    flex-direction: row;
-    align-items: baseline;
-    gap: 8px;
   }
 
   .rail-nav {

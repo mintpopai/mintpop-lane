@@ -11,13 +11,21 @@ const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
 
 <template>
   <nav class="admin-rail" aria-label="管理后台">
+    <!-- 品牌锁定组合与闸门页逐项同读法：字标 → 竖线 → Lane → 管理后台，只是轨宽
+         只有 208px，整组等比降一档才塞得下。标了尺寸，图没到之前不抖版 -->
     <p class="rail-brand">
       <img
         class="rail-wordmark"
         src="https://standards.mintpop.ai/assets/brand/wordmark/mintpop-wordmark-dark.png"
         alt="MintPop"
+        width="106"
+        height="29"
       />
-      <span class="rail-kind">Lane 管理后台</span>
+      <span class="rail-brand-text">
+        Lane
+        <!-- 「管理后台」是身份说明不是产品名，跟在 Lane 后面小一号、灰一档 -->
+        <span class="rail-kind">管理后台</span>
+      </span>
     </p>
 
     <div class="rail-nav">

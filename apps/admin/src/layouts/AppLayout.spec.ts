@@ -6,7 +6,7 @@ import AppLayout from "./AppLayout.vue";
 describe("AppLayout", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("导航轨顶部用 wordmark 图片做品牌字标，副题保留「Lane 管理后台」", () => {
+  it("导航轨顶部是闸门页那套品牌锁定组合：字标 + Lane + 管理后台", () => {
     const wrapper = mount(AppLayout, {
       // 导航链接与工作区是真路由的事，这里桩掉即可
       global: {
@@ -21,6 +21,8 @@ describe("AppLayout", () => {
       "brand/wordmark/mintpop-wordmark-dark.png",
     );
     expect(wrapper.get(".rail-wordmark").attributes("alt")).toBe("MintPop");
-    expect(wrapper.get(".rail-kind").text()).toBe("Lane 管理后台");
+    // 产品名与身份说明分两层：Lane 是品牌锁定组合的一部分，「管理后台」只是注脚
+    expect(wrapper.get(".rail-brand-text").text().replace(/\s+/g, " ")).toBe("Lane 管理后台");
+    expect(wrapper.get(".rail-kind").text()).toBe("管理后台");
   });
 });
