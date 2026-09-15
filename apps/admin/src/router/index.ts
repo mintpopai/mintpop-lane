@@ -31,7 +31,12 @@ export function createAppRouter(
       // 无权限页必须在 isAdmin=false 时还能打开，否则会来回跳
       { path: "/forbidden", name: "FORBIDDEN", component: ForbiddenView, meta: { public: true } },
       // 登录环路的落点：同样必须 public，否则它自己也会被守卫赶去登录
-      { path: "/login-error", name: "LOGIN_ERROR", component: LoginErrorView, meta: { public: true } },
+      {
+        path: "/login-error",
+        name: "LOGIN_ERROR",
+        component: LoginErrorView,
+        meta: { public: true },
+      },
       {
         path: "/",
         component: AppLayout,

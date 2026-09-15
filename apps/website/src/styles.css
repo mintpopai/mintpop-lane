@@ -54,10 +54,11 @@
 
   /* 西文经 Fontsource 自托管（main.ts import），中文挂在其后走系统回退，
      不自托管中文 webfont（体积以 MB 计）。全站零外链，含中国大陆在内全球可达。 */
-  --font-display: "Fredoka", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    "Noto Sans CJK SC", sans-serif;
-  --font-body: "Space Grotesk", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    "Noto Sans CJK SC", sans-serif;
+  --font-display:
+    "Fredoka", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-body:
+    "Space Grotesk", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   color-scheme: light;

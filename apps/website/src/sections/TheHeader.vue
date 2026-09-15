@@ -58,12 +58,19 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
 
       <nav class="nav" :aria-label="t.ui.header.navLabel">
         <!-- 锚点带首页前缀：指南页上也能回到首页对应区块；在首页上 /#pricing 与 #pricing 都是页内跳转 -->
-        <a v-for="item in t.nav" :key="item.href" :href="localePath(locale) + item.href">{{ item.label }}</a>
+        <a v-for="item in t.nav" :key="item.href" :href="localePath(locale) + item.href">{{
+          item.label
+        }}</a>
       </nav>
 
       <!-- 放在 .nav 外面：<860px 时 .nav 整个 display:none，
            切换按钮若在里面，手机上就没法切语言了——而手机正是英文访客最可能的入口 -->
-      <button class="lang" type="button" :aria-label="t.ui.header.langSwitchLabel" @click="toggleLocale">
+      <button
+        class="lang"
+        type="button"
+        :aria-label="t.ui.header.langSwitchLabel"
+        @click="toggleLocale"
+      >
         {{ t.ui.header.langToggle }}
       </button>
 
@@ -80,7 +87,9 @@ onUnmounted(() => window.removeEventListener("scroll", onScroll));
         >{{ t.ui.contact.label }}</a
       >
 
-      <a class="btn btn-primary btn-sm cta" :href="`${localePath(locale)}#download`">{{ t.ui.header.cta }}</a>
+      <a class="btn btn-primary btn-sm cta" :href="`${localePath(locale)}#download`">{{
+        t.ui.header.cta
+      }}</a>
     </div>
   </header>
 </template>

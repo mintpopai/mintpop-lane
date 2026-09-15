@@ -40,7 +40,9 @@ useHead({
           <div class="a">
             <p>{{ item.a }}</p>
             <!-- 延伸阅读：答案讲到一半的话题，指南页里有完整版；站内链接走 RouterLink 免整页刷新 -->
-            <RouterLink v-if="item.more" :to="item.more.href" class="more">{{ item.more.label }} →</RouterLink>
+            <RouterLink v-if="item.more" :to="item.more.href" class="more"
+              >{{ item.more.label }} →</RouterLink
+            >
           </div>
         </details>
       </div>

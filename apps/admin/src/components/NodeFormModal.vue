@@ -24,7 +24,9 @@ const props = defineProps<{ role: NodeRole; editing: AdminNodeResponse | null }>
 // 弹窗由父组件 v-if 挂载/卸载，打开即初始化表单，不需要 watch 重置
 const emit = defineEmits<{ close: []; saved: [] }>();
 
-const form = ref<NodeFormModel>(props.editing ? nodeToForm(props.editing) : emptyNodeForm(props.role));
+const form = ref<NodeFormModel>(
+  props.editing ? nodeToForm(props.editing) : emptyNodeForm(props.role),
+);
 const submitting = ref(false);
 
 // 落地节点地址填成 IP 字面量时预填出口 IP（单 IP VPS 出口就是它自己），手工改过的值不覆盖
@@ -101,7 +103,10 @@ const isSubscriptionNode = computed(() => props.editing?.protocol === "MIHOMO");
 const protocolOptions = Object.values(NODE_PROTOCOL)
   .filter((value) => value !== "MIHOMO")
   .map((value) => ({ value, label: value }));
-const statusOptions = Object.entries(NODE_STATUS_LABELS).map(([value, label]) => ({ value, label }));
+const statusOptions = Object.entries(NODE_STATUS_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}));
 
 const protocolChanged = computed(
   () => props.editing !== null && props.editing.protocol !== form.value.protocol,
@@ -145,7 +150,10 @@ async function submit(): Promise<void> {
     emit("saved");
     emit("close");
   } catch (error) {
-    showToast("error", error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`,
+    );
   } finally {
     submitting.value = false;
   }
@@ -157,12 +165,18 @@ async function submit(): Promise<void> {
     <div class="admin-form">
       <div class="admin-field">
         <label for="node-name">节点名</label>
-        <input id="node-name" v-model="form.name" class="admin-input" placeholder="运维可读，如 LAND-东京-03" />
+        <input
+          id="node-name"
+          v-model="form.name"
+          class="admin-input"
+          placeholder="运维可读，如 LAND-东京-03"
+        />
       </div>
 
       <p v-if="isSubscriptionNode" class="admin-note">
-        订阅导入的节点（{{ props.editing?.sourceType }}，来自分组「{{ props.editing?.groupName }}」）。
-        连接参数以订阅为准，改动请到分组上「重新拉取」；这里只能改名称、状态与备注。
+        订阅导入的节点（{{ props.editing?.sourceType }}，来自分组「{{
+          props.editing?.groupName
+        }}」）。 连接参数以订阅为准，改动请到分组上「重新拉取」；这里只能改名称、状态与备注。
       </p>
 
       <div v-if="!isSubscriptionNode" class="admin-form-row">
@@ -186,7 +200,12 @@ async function submit(): Promise<void> {
       <div v-if="!isSubscriptionNode" class="admin-form-row">
         <div class="admin-field">
           <label for="node-addr">地址</label>
-          <input id="node-addr" v-model="form.serverAddr" class="admin-input fact" placeholder="tokyo.example.com" />
+          <input
+            id="node-addr"
+            v-model="form.serverAddr"
+            class="admin-input fact"
+            placeholder="tokyo.example.com"
+          />
         </div>
         <div class="admin-field">
           <label for="node-port">端口</label>
@@ -271,7 +290,12 @@ async function submit(): Promise<void> {
       <div class="admin-form-row">
         <div class="admin-field">
           <label for="node-status">状态</label>
-          <Select id="node-status" v-model="form.status" :options="statusOptions" aria-label="状态" />
+          <Select
+            id="node-status"
+            v-model="form.status"
+            :options="statusOptions"
+            aria-label="状态"
+          />
         </div>
         <div class="admin-field">
           <label for="node-remark">备注</label>

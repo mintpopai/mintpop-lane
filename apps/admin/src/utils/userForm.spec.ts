@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
-import { buildUserPayload, selectableFrontNodes, selectableLandNodes, userToForm } from "./userForm";
+import {
+  buildUserPayload,
+  selectableFrontNodes,
+  selectableLandNodes,
+  userToForm,
+} from "./userForm";
 
 function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
   return {
@@ -48,7 +53,12 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
 
 describe("buildUserPayload", () => {
   it("未选落地/第一跳节点提交 null，而不是 0", () => {
-    const payload = buildUserPayload({ id: 5, status: "ACTIVE", frontNodeId: null, landNodeId: null });
+    const payload = buildUserPayload({
+      id: 5,
+      status: "ACTIVE",
+      frontNodeId: null,
+      landNodeId: null,
+    });
 
     expect(payload.frontNodeId).toBeNull();
     expect(payload.landNodeId).toBeNull();
@@ -75,7 +85,12 @@ describe("buildUserPayload", () => {
   });
 
   it("状态原样带上", () => {
-    const payload = buildUserPayload({ id: 5, status: "SUSPENDED", frontNodeId: null, landNodeId: null });
+    const payload = buildUserPayload({
+      id: 5,
+      status: "SUSPENDED",
+      frontNodeId: null,
+      landNodeId: null,
+    });
 
     expect(payload.status).toBe("SUSPENDED");
   });
@@ -113,7 +128,9 @@ describe("selectableLandNodes", () => {
   });
 
   it("禁用的落地节点不可选", () => {
-    const nodes = [makeNode({ id: 12, role: "LAND", status: "DISABLED", capacity: 10, assignedUserCount: 0 })];
+    const nodes = [
+      makeNode({ id: 12, role: "LAND", status: "DISABLED", capacity: 10, assignedUserCount: 0 }),
+    ];
 
     expect(selectableLandNodes(nodes, null)).toEqual([]);
   });

@@ -59,7 +59,10 @@ async function submit(): Promise<void> {
     emit("close");
   } catch (error) {
     // 410021 企业名称已存在、410022 域名已存在等业务错误，服务端给的中文提示直接用
-    showToast("error", error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`,
+    );
   } finally {
     submitting.value = false;
   }
@@ -71,7 +74,12 @@ async function submit(): Promise<void> {
     <div class="admin-form">
       <div class="admin-field">
         <label for="enterprise-name">企业名称</label>
-        <input id="enterprise-name" v-model="form.name" class="admin-input" placeholder="如：Acme 科技" />
+        <input
+          id="enterprise-name"
+          v-model="form.name"
+          class="admin-input"
+          placeholder="如：Acme 科技"
+        />
       </div>
       <div class="admin-field">
         <label for="enterprise-domain">企业域名</label>
@@ -97,7 +105,11 @@ async function submit(): Promise<void> {
             :aria-pressed="form.agentTypes.includes(choice.value)"
             @click="toggleAgentType(form, choice.value)"
           >
-            <span v-if="form.agentTypes.includes(choice.value)" class="agent-chip-check" aria-hidden="true">
+            <span
+              v-if="form.agentTypes.includes(choice.value)"
+              class="agent-chip-check"
+              aria-hidden="true"
+            >
               ✓
             </span>
             {{ choice.label }}

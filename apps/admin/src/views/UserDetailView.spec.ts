@@ -13,14 +13,24 @@ import UserDetailView from "./UserDetailView.vue";
 
 const getUser = vi.fn<(id: number) => Promise<AdminUserResponse>>();
 const listNodes = vi.fn<() => Promise<AdminNodeResponse[]>>(async () => []);
-const updateUser = vi.fn<(id: number, body: UserSaveRequest) => Promise<void>>(async () => undefined);
+const updateUser = vi.fn<(id: number, body: UserSaveRequest) => Promise<void>>(
+  async () => undefined,
+);
 const listSubscriptions = vi.fn<(userId: number) => Promise<AdminSubscriptionResponse[]>>();
 const listPlans = vi.fn(async () => []);
 const listEnterprises = vi.fn(async () => []);
 const credentialRevoke = vi.fn<(subscriptionId: number) => Promise<CredentialRevokeResult>>();
 
 vi.mock("../api", () => ({
-  adminApi: () => ({ getUser, listNodes, updateUser, listSubscriptions, listPlans, listEnterprises, credentialRevoke }),
+  adminApi: () => ({
+    getUser,
+    listNodes,
+    updateUser,
+    listSubscriptions,
+    listPlans,
+    listEnterprises,
+    credentialRevoke,
+  }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 // 页面从路由参数取用户 id；这里只测页面自身逻辑，不架真路由
@@ -70,7 +80,9 @@ function node(overrides: Partial<AdminNodeResponse> = {}): AdminNodeResponse {
   };
 }
 
-function subscription(overrides: Partial<AdminSubscriptionResponse> = {}): AdminSubscriptionResponse {
+function subscription(
+  overrides: Partial<AdminSubscriptionResponse> = {},
+): AdminSubscriptionResponse {
   return {
     id: 7,
     assignmentNo: "7K3M9QX2FT",
@@ -147,7 +159,9 @@ describe("UserDetailView · 页面骨架", () => {
     await mountView([subscription()]);
 
     expect(getUser).toHaveBeenCalledWith(3);
-    await vi.waitFor(() => expect(document.querySelector(".user-head-email")?.textContent).toContain("zhang@acme.com"));
+    await vi.waitFor(() =>
+      expect(document.querySelector(".user-head-email")?.textContent).toContain("zhang@acme.com"),
+    );
     expect(document.querySelector(".user-head")?.textContent).toContain("用户管理");
     // 身份事实：状态徽标 + Logto id
     expect(document.querySelector(".user-head .state")?.textContent).toContain("正常");
@@ -207,7 +221,9 @@ describe("UserDetailView · 吊销凭证", () => {
     expect(document.body.textContent).toContain("确认吊销订阅");
     expect(document.body.textContent).toContain(row.name);
 
-    listSubscriptions.mockResolvedValue([{ ...row, hasCredential: false, credentialExpiresAt: null }]);
+    listSubscriptions.mockResolvedValue([
+      { ...row, hasCredential: false, credentialExpiresAt: null },
+    ]);
     await buttonByText("吊销").trigger("click");
 
     await vi.waitFor(() => expect(credentialRevoke).toHaveBeenCalledWith(row.id));
@@ -241,10 +257,7 @@ describe("UserDetailView · 吊销凭证", () => {
 
     // 关键断言：绝不能笼统报「已吊销」这类完全成功的说法
     expect(showToast).not.toHaveBeenCalledWith("success", "凭证已吊销");
-    expect(showToast).not.toHaveBeenCalledWith(
-      "success",
-      expect.stringContaining("已吊销"),
-    );
+    expect(showToast).not.toHaveBeenCalledWith("success", expect.stringContaining("已吊销"));
     // 必须出现「上游可能仍然有效」这类明确提示，而不是笼统的成功提示
     await vi.waitFor(() => expect(warningText()).toContain("上游"));
     expect(warningText()).toContain("可能仍然有效");
@@ -299,7 +312,14 @@ describe("UserDetailView · 链路资源", () => {
     getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
     listNodes.mockResolvedValue([
       node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3, egressIp: "1.2.3.4" }),
+      node({
+        id: 11,
+        name: "LAND-东京",
+        role: "LAND",
+        capacity: 10,
+        assignedUserCount: 3,
+        egressIp: "1.2.3.4",
+      }),
     ]);
     await mountView([]);
     // 等两个下拉都回显出当前分配，说明用户与节点都已加载完
@@ -328,7 +348,11 @@ describe("UserDetailView · 链路资源", () => {
     await buttonByText("保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, { status: "SUSPENDED", frontNodeId: 1, landNodeId: 12 }),
+      expect(updateUser).toHaveBeenCalledWith(3, {
+        status: "SUSPENDED",
+        frontNodeId: 1,
+        landNodeId: 12,
+      }),
     );
   });
 });

@@ -2,7 +2,13 @@
 import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { AGENT_TYPE_LABELS, USER_ROLE, USER_ROLE_LABELS, USER_STATUS, USER_STATUS_LABELS } from "../api/types";
+import {
+  AGENT_TYPE_LABELS,
+  USER_ROLE,
+  USER_ROLE_LABELS,
+  USER_STATUS,
+  USER_STATUS_LABELS,
+} from "../api/types";
 import type { AdminUserResponse, UserStatus } from "../api/types";
 import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -49,7 +55,10 @@ const emptyText = computed(() =>
 );
 
 function reportError(error: unknown, prefix: string): void {
-  showToast("error", error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`);
+  showToast(
+    "error",
+    error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`,
+  );
 }
 
 async function loadList(): Promise<void> {
@@ -114,11 +123,20 @@ async function confirmDelete(): Promise<void> {
  * 处置态转换。更新接口是整体保存，节点分配原样带回、只动状态。
  * toast 文案随动作走（停用→已停用、恢复→已恢复），不说笼统的「状态已更新」。
  */
-async function changeStatus(row: AdminUserResponse, status: UserStatus, doneText: string): Promise<void> {
+async function changeStatus(
+  row: AdminUserResponse,
+  status: UserStatus,
+  doneText: string,
+): Promise<void> {
   try {
     await adminApi().updateUser(
       row.id,
-      buildUserPayload({ id: row.id, status, frontNodeId: row.frontNodeId, landNodeId: row.landNodeId }),
+      buildUserPayload({
+        id: row.id,
+        status,
+        frontNodeId: row.frontNodeId,
+        landNodeId: row.landNodeId,
+      }),
     );
     showToast("success", doneText);
     await loadList();
@@ -137,7 +155,12 @@ async function confirmStatusRevoke(): Promise<void> {
   try {
     await adminApi().updateUser(
       row.id,
-      buildUserPayload({ id: row.id, status: USER_STATUS.REVOKED, frontNodeId: row.frontNodeId, landNodeId: row.landNodeId }),
+      buildUserPayload({
+        id: row.id,
+        status: USER_STATUS.REVOKED,
+        frontNodeId: row.frontNodeId,
+        landNodeId: row.landNodeId,
+      }),
     );
     showToast("success", "已吊销");
     pendingStatusRevoke.value = null;
@@ -155,7 +178,8 @@ onMounted(loadList);
 <template>
   <PageHead title="用户">
     <template #facts>
-      共 <span class="fact">{{ total }}</span> 人。用户随登录自动建档；处置与资源分配都从操作列进入。
+      共
+      <span class="fact">{{ total }}</span> 人。用户随登录自动建档；处置与资源分配都从操作列进入。
     </template>
   </PageHead>
 
@@ -222,7 +246,9 @@ onMounted(loadList);
           <td>
             <template v-if="row.activeSubscriptions.length">
               <span v-for="s in row.activeSubscriptions" :key="s.id" class="pill">
-                {{ AGENT_TYPE_LABELS[s.agentType as keyof typeof AGENT_TYPE_LABELS] ?? s.agentType }}
+                {{
+                  AGENT_TYPE_LABELS[s.agentType as keyof typeof AGENT_TYPE_LABELS] ?? s.agentType
+                }}
                 至 <span class="fact">{{ formatDate(s.endsAt) }}</span>
               </span>
             </template>
@@ -306,7 +332,12 @@ onMounted(loadList);
     </button>
     <span class="spacer" />
     <!-- 每页条数不是筛选，不给 filtered 的高亮；prefix 让它和筛选下拉同一种读法 -->
-    <Select v-model="pageSize" prefix="每页" :options="pageSizeOptions" @update:model-value="search()" />
+    <Select
+      v-model="pageSize"
+      prefix="每页"
+      :options="pageSizeOptions"
+      @update:model-value="search()"
+    />
   </div>
 
   <ConfirmDialog

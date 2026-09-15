@@ -44,7 +44,8 @@ export const createApp = ViteSSG(App, {
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition;
     if (to.hash) return { el: to.hash };
-    if (switchLocalePath(from.path, localeFromPath(to.path)) === canonicalPath(to.path)) return false;
+    if (switchLocalePath(from.path, localeFromPath(to.path)) === canonicalPath(to.path))
+      return false;
     return { top: 0, behavior: "instant" };
   },
 });

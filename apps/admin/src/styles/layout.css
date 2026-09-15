@@ -46,22 +46,22 @@ body {
 
 /* —— 状态语义色：任何元素带 data-state 都能取到，供状态点与筛选 chip 共用。
    色值取自 shop 校验过的色板：绿=在跑，灰=没在跑，红=出事/吊销，琥珀=待补齐 —— */
-[data-state='ACTIVE'],
-[data-state='ENABLED'],
-[data-state='CONFIGURED'] {
+[data-state="ACTIVE"],
+[data-state="ENABLED"],
+[data-state="CONFIGURED"] {
   --state-color: #0a8a6a;
 }
 
-[data-state='SUSPENDED'],
-[data-state='DISABLED'] {
+[data-state="SUSPENDED"],
+[data-state="DISABLED"] {
   --state-color: #7a857f;
 }
 
-[data-state='REVOKED'] {
+[data-state="REVOKED"] {
   --state-color: #b3341f;
 }
 
-[data-state='MISSING'] {
+[data-state="MISSING"] {
   --state-color: #b4720b;
 }
 
@@ -135,7 +135,9 @@ body {
   font-size: 14px;
   color: var(--color-ink-secondary);
   text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .rail-link:hover {
@@ -152,7 +154,7 @@ body {
 
 /* 贴在轨道左沿的指示条，是上面三重表达之外的冗余强化 */
 .rail-link.router-link-active::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 8px;
   bottom: 8px;
@@ -430,7 +432,7 @@ body {
    同样因为上面那条 box-shadow 限制，投影改用伪元素。
    宽度 12px < 单元格 20px 的横向内边距：没内容可藏时它只落在留白上 */
 .admin-table.sticky-actions tr > *:last-child::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   bottom: 0;
@@ -480,7 +482,7 @@ body {
 }
 
 .state::before {
-  content: '';
+  content: "";
   flex-shrink: 0;
   width: 6px;
   height: 6px;
@@ -488,12 +490,12 @@ body {
   background: var(--state-color, #7a857f);
 }
 
-.state[data-state='REVOKED'] {
+.state[data-state="REVOKED"] {
   color: var(--counter-danger);
 }
 
-.state[data-state='SUSPENDED'],
-.state[data-state='DISABLED'] {
+.state[data-state="SUSPENDED"],
+.state[data-state="DISABLED"] {
   color: var(--color-ink-secondary);
 }
 
@@ -683,7 +685,7 @@ body {
 }
 
 /* 说明行里要管理员先去改正的那种（格式错了、填错了），用危险色与普通说明区分 */
-.admin-note[data-tone='DANGER'] {
+.admin-note[data-tone="DANGER"] {
   color: var(--counter-danger);
 }
 
@@ -724,7 +726,7 @@ body {
 }
 
 .admin-tab.active::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   right: 0;
@@ -760,11 +762,13 @@ body {
   font-size: 13px;
   line-height: 18px;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .admin-chip[data-state]::before {
-  content: '';
+  content: "";
   width: 6px;
   height: 6px;
   border-radius: 50%;

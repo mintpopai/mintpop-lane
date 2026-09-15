@@ -83,7 +83,8 @@ const en: GuideCopy = {
       "Before chasing stable Claude access, know the three ways in: official Claude Code, mirror sites, and relay APIs. A comparison across model parity, rate limits, privacy, stability and price, and why MintPop Lane only does official access.",
   },
   navLabel: "Official vs relay",
-  summary: "Three ways in, compared on five dimensions, and why convenience should not cost you the official product.",
+  summary:
+    "Three ways in, compared on five dimensions, and why convenience should not cost you the official product.",
   kicker: "Guide",
   h1: "Official Claude Code, mirror sites and relay APIs: what is the difference",
   intro:

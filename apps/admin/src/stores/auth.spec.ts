@@ -38,7 +38,9 @@ describe("useAuthStore", () => {
 
   it("网络异常原样抛出，不误判成未登录", async () => {
     const store = useAuthStore();
-    await expect(store.refreshAuthState(fakeApi(new Error("网络错误")))).rejects.toThrow("网络错误");
+    await expect(store.refreshAuthState(fakeApi(new Error("网络错误")))).rejects.toThrow(
+      "网络错误",
+    );
     expect(store.isAdmin).toBeNull();
   });
 

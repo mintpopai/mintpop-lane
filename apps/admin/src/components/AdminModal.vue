@@ -44,7 +44,10 @@ function onKeydown(event: KeyboardEvent) {
   }
   const first = items[0];
   const last = items[items.length - 1];
-  if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) {
+  if (
+    event.shiftKey &&
+    (document.activeElement === first || document.activeElement === dialog.value)
+  ) {
     event.preventDefault();
     last.focus();
   } else if (!event.shiftKey && document.activeElement === last) {

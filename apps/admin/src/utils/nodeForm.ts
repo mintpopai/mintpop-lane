@@ -1,4 +1,10 @@
-import type { AdminNodeResponse, NodeProtocol, NodeRole, NodeSaveRequest, NodeStatus } from "../api/types";
+import type {
+  AdminNodeResponse,
+  NodeProtocol,
+  NodeRole,
+  NodeSaveRequest,
+  NodeStatus,
+} from "../api/types";
 
 /**
  * 各协议的敏感键，与服务端 NodeProtocol.secretKeys() 逐字镜像。
@@ -83,7 +89,12 @@ export function applyProtocol(form: NodeFormModel, protocol: NodeProtocol): Node
   const suggestedKeys = PROTOCOL_EXTRA_HINTS[protocol]
     .filter((key) => !filledExtraRows.some((row) => row.key === key))
     .map((key) => ({ key, value: "" }));
-  return { ...form, protocol, secret: emptySecretKeys(protocol), extraConfig: [...filledExtraRows, ...suggestedKeys] };
+  return {
+    ...form,
+    protocol,
+    secret: emptySecretKeys(protocol),
+    extraConfig: [...filledExtraRows, ...suggestedKeys],
+  };
 }
 
 export function nodeToForm(node: AdminNodeResponse): NodeFormModel {
@@ -189,7 +200,10 @@ export function validateNodeForm(form: NodeFormModel): string[] {
   }
 
   // 容量是落地专属概念，且服务端校验 @Min(1)；分数/空值在这里先拦下
-  if (form.role === "LAND" && (form.capacity === null || !Number.isInteger(form.capacity) || form.capacity < 1)) {
+  if (
+    form.role === "LAND" &&
+    (form.capacity === null || !Number.isInteger(form.capacity) || form.capacity < 1)
+  ) {
     errors.push("容量必须是不小于 1 的整数");
   }
 
@@ -211,13 +225,18 @@ export function isIpLiteral(value: string): boolean {
   const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(value);
   if (v4) {
     // 前导零一并拒绝：010 这类写法有八进制歧义，探测端也不会这么回显
-    return v4.slice(1).every((octet) => Number(octet) <= 255 && !(octet.length > 1 && octet.startsWith("0")));
+    return v4
+      .slice(1)
+      .every((octet) => Number(octet) <= 255 && !(octet.length > 1 && octet.startsWith("0")));
   }
   if (!value.includes(":")) {
     return false;
   }
   // 孤立的首尾单冒号不合法（"::" 除外）
-  if ((value.startsWith(":") && !value.startsWith("::")) || (value.endsWith(":") && !value.endsWith("::"))) {
+  if (
+    (value.startsWith(":") && !value.startsWith("::")) ||
+    (value.endsWith(":") && !value.endsWith("::"))
+  ) {
     return false;
   }
   const doubleColonCount = value.split("::").length - 1;
@@ -240,7 +259,10 @@ export function isIpLiteral(value: string): boolean {
  * 出口就是它自己），把空的、或仍等于上一次地址值（说明此前也是预填的）的出口 IP
  * 跟随更新；管理员手工改过的值绝不覆盖。
  */
-export function syncEgressIpFromServerAddr(form: NodeFormModel, previousServerAddr: string): NodeFormModel {
+export function syncEgressIpFromServerAddr(
+  form: NodeFormModel,
+  previousServerAddr: string,
+): NodeFormModel {
   const serverAddr = form.serverAddr.trim();
   if (form.role !== "LAND" || !isIpLiteral(serverAddr)) {
     return form;

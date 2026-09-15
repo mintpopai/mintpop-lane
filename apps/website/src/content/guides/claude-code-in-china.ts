@@ -27,7 +27,9 @@ const zh: GuideCopy = {
     },
     {
       heading: "自己折腾，代价在哪",
-      paragraphs: ["每一道坎都能自己过，但每一道都要持续投入时间，而且互相牵连：改了一处，另一处就可能出问题。"],
+      paragraphs: [
+        "每一道坎都能自己过，但每一道都要持续投入时间，而且互相牵连：改了一处，另一处就可能出问题。",
+      ],
       bullets: [
         "代理软件与订阅：要自己选节点、配规则、盯着它别掉线；节点一换，出口地址就跳，正是风控最敏感的信号。",
         "海外卡与账单地址：办卡、养卡、填地址，每一步都可能失败；成功了也要担心支付信息与实际使用地区不一致。",
@@ -85,12 +87,14 @@ const zh: GuideCopy = {
 
 const en: GuideCopy = {
   meta: {
-    title: "How to use Claude Code from China reliably: payment, network exit and account risk | MintPop Lane",
+    title:
+      "How to use Claude Code from China reliably: payment, network exit and account risk | MintPop Lane",
     description:
       "Using Claude Code from mainland China breaks in three places: paying for the subscription, the network exit, and account risk controls. This guide explains each one, what it costs to handle them yourself, and how MintPop Lane sets up the account, subscription and a dedicated exit so official Claude Code just keeps working.",
   },
   navLabel: "Claude Code from China",
-  summary: "Payment, exit and risk controls explained one by one, and how to get past them with official Claude Code.",
+  summary:
+    "Payment, exit and risk controls explained one by one, and how to get past them with official Claude Code.",
   kicker: "Guide",
   h1: "How to use Claude Code from China, reliably",
   intro:

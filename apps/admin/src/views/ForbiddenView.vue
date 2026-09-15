@@ -13,7 +13,9 @@ const auth = useAuthStore();
       当前登录的是 <span class="fact">{{ auth.email }}</span
       >。找系统管理员把它设为管理员，或换个账号登录。
     </p>
-    <p v-else class="gate-text gate-text-long">找系统管理员把这个账号设为管理员，或换个账号登录。</p>
+    <p v-else class="gate-text gate-text-long">
+      找系统管理员把这个账号设为管理员，或换个账号登录。
+    </p>
     <div class="gate-actions">
       <button type="button" class="gate-btn" @click="auth.signOut()">退出登录</button>
       <a class="gate-link" href="https://lane.mintpop.ai">返回官网</a>

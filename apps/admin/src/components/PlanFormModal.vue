@@ -46,7 +46,10 @@ async function submit(): Promise<void> {
     emit("close");
   } catch (error) {
     // 410018 套餐名已存在等业务错误，服务端给的中文提示直接用
-    showToast("error", error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`,
+    );
   } finally {
     submitting.value = false;
   }
@@ -62,7 +65,12 @@ async function submit(): Promise<void> {
       </div>
       <div class="admin-field">
         <label for="plan-agent">Agent 类型</label>
-        <Select id="plan-agent" v-model="form.agentType" :options="agentOptions" aria-label="Agent 类型" />
+        <Select
+          id="plan-agent"
+          v-model="form.agentType"
+          :options="agentOptions"
+          aria-label="Agent 类型"
+        />
       </div>
       <div class="admin-field">
         <label for="plan-duration">时长（天）</label>
@@ -90,15 +98,30 @@ async function submit(): Promise<void> {
       </div>
       <div class="admin-field">
         <label for="plan-currency">币种</label>
-        <Select id="plan-currency" v-model="form.currency" :options="currencyOptions" aria-label="币种" />
+        <Select
+          id="plan-currency"
+          v-model="form.currency"
+          :options="currencyOptions"
+          aria-label="币种"
+        />
       </div>
       <div class="admin-field">
         <label for="plan-enabled">状态</label>
-        <Select id="plan-enabled" v-model="form.enabled" :options="enabledOptions" aria-label="状态" />
+        <Select
+          id="plan-enabled"
+          v-model="form.enabled"
+          :options="enabledOptions"
+          aria-label="状态"
+        />
       </div>
       <div class="admin-field">
         <label for="plan-remark">备注</label>
-        <input id="plan-remark" v-model="form.remark" class="admin-input" placeholder="管理员自用说明，可空" />
+        <input
+          id="plan-remark"
+          v-model="form.remark"
+          class="admin-input"
+          placeholder="管理员自用说明，可空"
+        />
       </div>
     </div>
 

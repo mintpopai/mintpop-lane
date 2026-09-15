@@ -10,7 +10,8 @@ const zh: GuideCopy = {
       "ChatGPT 与 Codex 用户在国内遇到的问题和 Claude 一样：订阅付不出去、出口不稳定、账号被封。本文讲清原理与应对方式，并如实说明 MintPop Lane 当前接入的是 Claude Code，Codex 接入在规划中。",
   },
   navLabel: "ChatGPT / Codex",
-  summary: "ChatGPT / Codex 的稳定性问题与 Claude 同源；Lane 当前接入 Claude Code，Codex 在规划中。",
+  summary:
+    "ChatGPT / Codex 的稳定性问题与 Claude 同源；Lane 当前接入 Claude Code，Codex 在规划中。",
   kicker: "指南",
   h1: "想稳定使用 ChatGPT / Codex？先看清卡在哪",
   intro:
@@ -70,7 +71,8 @@ const en: GuideCopy = {
       "ChatGPT and Codex users in China hit the same wall as Claude users: subscriptions that will not go through, unstable exits, banned accounts. This guide explains why and what to do, and says plainly that MintPop Lane currently ships Claude Code, with Codex support planned.",
   },
   navLabel: "ChatGPT / Codex",
-  summary: "ChatGPT / Codex stability problems share one root with Claude's. Lane ships Claude Code today; Codex is planned.",
+  summary:
+    "ChatGPT / Codex stability problems share one root with Claude's. Lane ships Claude Code today; Codex is planned.",
   kicker: "Guide",
   h1: "Want stable ChatGPT / Codex access? First see where it breaks",
   intro:

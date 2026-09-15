@@ -48,7 +48,9 @@ const glyph: Record<Mark, string> = { ok: "✓", fail: "✕", warn: "!", pending
     <template v-for="(name, i) in t.ui.path.names" :key="i">
       <div v-if="i > 0" :class="['seg', shape.segs[i - 1]]"></div>
       <div class="node">
-        <span :class="['mark', shape.nodes[i]]" aria-hidden="true">{{ glyph[shape.nodes[i]] }}</span>
+        <span :class="['mark', shape.nodes[i]]" aria-hidden="true">{{
+          glyph[shape.nodes[i]]
+        }}</span>
         <template v-if="labels">
           <span class="name">{{ name }}</span>
           <span class="hint">{{ t.ui.path.hints[i] }}</span>

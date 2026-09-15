@@ -89,7 +89,10 @@ export function validateSubscriptionForm(
   if (accountEmail !== "") {
     if (!EMAIL_PATTERN.test(accountEmail)) {
       errors.push("账号邮箱格式不正确");
-    } else if (enterpriseDomain !== null && domainOf(accountEmail) !== enterpriseDomain.toLowerCase()) {
+    } else if (
+      enterpriseDomain !== null &&
+      domainOf(accountEmail) !== enterpriseDomain.toLowerCase()
+    ) {
       errors.push(`账号邮箱域名须与企业域名 ${enterpriseDomain} 一致`);
     }
   }
@@ -101,7 +104,9 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export function buildSubscriptionCreatePayload(form: SubscriptionFormModel): SubscriptionCreateRequest {
+export function buildSubscriptionCreatePayload(
+  form: SubscriptionFormModel,
+): SubscriptionCreateRequest {
   if (form.planId === null || !form.startsAt) {
     // 调用契约：先过 validateSubscriptionForm；走到这里是编程错误
     throw new Error("套餐或起期未填，先通过表单校验再构造入参");
@@ -118,7 +123,9 @@ export function buildSubscriptionCreatePayload(form: SubscriptionFormModel): Sub
   };
 }
 
-export function buildSubscriptionUpdatePayload(form: SubscriptionFormModel): SubscriptionUpdateRequest {
+export function buildSubscriptionUpdatePayload(
+  form: SubscriptionFormModel,
+): SubscriptionUpdateRequest {
   if (!form.startsAt) {
     throw new Error("起期未填，先通过表单校验再构造入参");
   }

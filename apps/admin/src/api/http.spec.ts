@@ -51,7 +51,11 @@ describe("createHttpClient", () => {
   });
 
   it("code 非 0 抛 BizError，带上业务码与服务端给的中文提示", async () => {
-    const fetchMock = fakeFetch(200, { code: 410002, data: null, msg: "该落地节点已被其他用户占用" });
+    const fetchMock = fakeFetch(200, {
+      code: 410002,
+      data: null,
+      msg: "该落地节点已被其他用户占用",
+    });
 
     await expect(createClient(fetchMock).request("/admin/users")).rejects.toMatchObject({
       name: "BizError",
@@ -64,13 +68,17 @@ describe("createHttpClient", () => {
   it("403 是 Spring Security 的原生状态码，必须单独识别成「没有管理权限」", async () => {
     const fetchMock = fakeFetch(403, null);
 
-    await expect(createClient(fetchMock).request("/admin/users")).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(createClient(fetchMock).request("/admin/users")).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
   });
 
   it("401 识别成登录失效，交给上层去重新登录", async () => {
     const fetchMock = fakeFetch(401, null);
 
-    await expect(createClient(fetchMock).request("/admin/users")).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(createClient(fetchMock).request("/admin/users")).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
   });
 
   it("401 时通知装配层去重新登录，并且异常照抛不误吞", async () => {

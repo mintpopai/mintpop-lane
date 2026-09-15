@@ -135,11 +135,17 @@ function resetFilters(): void {
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const [nodes, groups] = await Promise.all([adminApi().listNodes(), adminApi().listNodeGroups()]);
+    const [nodes, groups] = await Promise.all([
+      adminApi().listNodes(),
+      adminApi().listNodeGroups(),
+    ]);
     allNodes.value = nodes;
     groupList.value = groups;
     // 当前选中的分组被删掉后回落到「全部」
-    if (typeof currentGroup.value === "number" && !groups.some((g) => g.id === currentGroup.value)) {
+    if (
+      typeof currentGroup.value === "number" &&
+      !groups.some((g) => g.id === currentGroup.value)
+    ) {
       currentGroup.value = "ALL";
     }
     loadError.value = "";
@@ -172,7 +178,10 @@ async function confirmDelete(): Promise<void> {
     await load();
   } catch (error) {
     // 410003：仍被用户引用。服务端给的中文提示直接用，不另编一套话术
-    showToast("error", error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`,
+    );
   } finally {
     deleting.value = false;
   }
@@ -205,7 +214,10 @@ async function confirmRename(): Promise<void> {
     renamingGroup.value = null;
     await load();
   } catch (error) {
-    showToast("error", error instanceof BizError ? error.message : `改名失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `改名失败：${(error as Error).message}`,
+    );
   } finally {
     renaming.value = false;
   }
@@ -223,7 +235,10 @@ async function confirmDeleteGroup(): Promise<void> {
     await load();
   } catch (error) {
     // 410013：组内有节点被用户绑定。服务端中文提示直接用
-    showToast("error", error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`,
+    );
   } finally {
     deletingGroup.value = false;
   }
@@ -236,10 +251,16 @@ onMounted(load);
   <PageHead title="节点池">
     <template #facts>
       共 <span class="fact">{{ allNodes.length }}</span> 个节点 ·
-      <span class="fact">{{ groupList.length }}</span> 个分组。落地节点按容量分配，已绑人数在表里直接可见。
+      <span class="fact">{{ groupList.length }}</span>
+      个分组。落地节点按容量分配，已绑人数在表里直接可见。
     </template>
     <template #actions>
-      <button v-if="currentRole === 'FRONT'" type="button" class="admin-btn-ghost" @click="importModalOpen = true">
+      <button
+        v-if="currentRole === 'FRONT'"
+        type="button"
+        class="admin-btn-ghost"
+        @click="importModalOpen = true"
+      >
         从订阅导入
       </button>
       <button type="button" class="admin-btn" @click="create()">新建节点</button>
@@ -270,7 +291,9 @@ onMounted(load);
       <span class="spacer" />
       <button type="button" class="admin-link" @click="openRefetch(selectedGroup)">重新拉取</button>
       <button type="button" class="admin-link" @click="openRename(selectedGroup)">改名</button>
-      <button type="button" class="admin-link danger" @click="pendingDeleteGroup = selectedGroup">删除分组</button>
+      <button type="button" class="admin-link danger" @click="pendingDeleteGroup = selectedGroup">
+        删除分组
+      </button>
     </template>
   </div>
 
@@ -344,11 +367,18 @@ onMounted(load);
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
             <!-- 检测只对落地节点开放：前置节点走加密协议，服务端没内核连不了 -->
-            <button v-if="currentRole === 'LAND'" type="button" class="admin-link" @click="probingNode = row">
+            <button
+              v-if="currentRole === 'LAND'"
+              type="button"
+              class="admin-link"
+              @click="probingNode = row"
+            >
               检测
             </button>
             <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-            <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+            <button type="button" class="admin-link danger" @click="pendingDelete = row">
+              删除
+            </button>
           </td>
         </tr>
       </tbody>
@@ -362,7 +392,12 @@ onMounted(load);
     @saved="load()"
     @close="modalOpen = false"
   />
-  <NodeProbeModal v-if="probingNode" :node="probingNode" @saved="load()" @close="probingNode = null" />
+  <NodeProbeModal
+    v-if="probingNode"
+    :node="probingNode"
+    @saved="load()"
+    @close="probingNode = null"
+  />
   <ConfirmDialog
     v-if="pendingDelete"
     title="删除确认"
@@ -383,7 +418,11 @@ onMounted(load);
     @saved="load()"
     @close="refetchingGroup = null"
   />
-  <AdminModal v-if="renamingGroup" :title="`分组改名：${renamingGroup.name}`" @close="renamingGroup = null">
+  <AdminModal
+    v-if="renamingGroup"
+    :title="`分组改名：${renamingGroup.name}`"
+    @close="renamingGroup = null"
+  >
     <div class="admin-form">
       <div class="admin-field">
         <label for="group-rename">分组名</label>

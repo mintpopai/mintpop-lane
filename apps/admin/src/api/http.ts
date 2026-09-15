@@ -45,7 +45,11 @@ export interface HttpClient {
  * 凭据在 HttpOnly Cookie 里，同域请求浏览器自动携带，不需要也不能由前端注入。
  * 依赖全部由外部传入，因此单测不需要打模块补丁。
  */
-export function createHttpClient({ baseUrl, fetchImpl, onUnauthorized }: HttpClientOptions): HttpClient {
+export function createHttpClient({
+  baseUrl,
+  fetchImpl,
+  onUnauthorized,
+}: HttpClientOptions): HttpClient {
   const doFetch: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

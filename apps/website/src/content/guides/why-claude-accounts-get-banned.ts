@@ -117,7 +117,9 @@ const en: GuideCopy = {
     },
     {
       heading: "How Lane avoids each of them",
-      paragraphs: ["MintPop Lane removes the risk points from your side instead of asking you to be careful."],
+      paragraphs: [
+        "MintPop Lane removes the risk points from your side instead of asking you to be careful.",
+      ],
       bullets: [
         "Every account gets its own lane and its own fixed exit, never shared. The exit runs on IPs operated by our own US company, not rented from a third party and not a shared pool.",
         "The exit never moves: every connection lands on the same address, not one today and another tomorrow.",

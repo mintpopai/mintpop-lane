@@ -6,7 +6,11 @@
 import { ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import type { AdminSubscriptionResponse, CredentialAuthorizationStart, CredentialIssueResult } from "../api/types";
+import type {
+  AdminSubscriptionResponse,
+  CredentialAuthorizationStart,
+  CredentialIssueResult,
+} from "../api/types";
 import { showToast } from "../toast";
 import { formatDateTime } from "../utils/format";
 import Modal from "./AdminModal.vue";
@@ -22,7 +26,10 @@ const code = ref("");
 const result = ref<CredentialIssueResult | null>(null);
 
 function reportError(error: unknown, prefix: string): void {
-  showToast("error", error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`);
+  showToast(
+    "error",
+    error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`,
+  );
 }
 
 async function startAuthorize(): Promise<void> {
@@ -97,8 +104,8 @@ function close(): void {
     <div class="issue-body">
       <template v-if="step === 'start'">
         <p class="admin-note">
-          将由服务端经该席位自己的落地代理出口，向 Anthropic 发起一次 OAuth 授权，
-          签出一份仅 <span class="fact">user:profile</span> 权限、有效期跟随订阅剩余时长的凭证。
+          将由服务端经该席位自己的落地代理出口，向 Anthropic 发起一次 OAuth 授权， 签出一份仅
+          <span class="fact">user:profile</span> 权限、有效期跟随订阅剩余时长的凭证。
         </p>
         <dl class="issue-facts">
           <div class="issue-fact">
@@ -129,14 +136,24 @@ function close(): void {
 
         <div class="admin-field">
           <label for="issue-egress-ip">落地出口 IP</label>
-          <input id="issue-egress-ip" class="admin-input fact" :value="authStart.egressIp" disabled />
+          <input
+            id="issue-egress-ip"
+            class="admin-input fact"
+            :value="authStart.egressIp"
+            disabled
+          />
           <p class="admin-note">核对这个出口 IP 与该席位实际使用的一致，再继续授权。</p>
         </div>
 
         <div class="admin-field">
           <label for="issue-auth-url">授权链接</label>
           <div class="issue-url-row">
-            <input id="issue-auth-url" class="admin-input fact" :value="authStart.authUrl" readonly />
+            <input
+              id="issue-auth-url"
+              class="admin-input fact"
+              :value="authStart.authUrl"
+              readonly
+            />
             <button type="button" class="admin-btn-ghost" @click="copyAuthUrl()">复制</button>
             <button type="button" class="admin-btn-ghost" @click="openAuthUrl()">新窗口打开</button>
           </div>
@@ -160,7 +177,9 @@ function close(): void {
         <dl class="issue-facts">
           <div class="issue-fact">
             <dt>账号邮箱</dt>
-            <dd :class="{ fact: result.accountEmail !== null }">{{ result.accountEmail ?? "未知" }}</dd>
+            <dd :class="{ fact: result.accountEmail !== null }">
+              {{ result.accountEmail ?? "未知" }}
+            </dd>
           </div>
           <div class="issue-fact">
             <dt>授权范围</dt>
@@ -187,7 +206,13 @@ function close(): void {
       >
         {{ authorizing ? "生成中…" : "生成授权链接" }}
       </button>
-      <button v-else-if="step === 'authorize'" type="button" class="admin-btn" :disabled="exchanging" @click="exchange()">
+      <button
+        v-else-if="step === 'authorize'"
+        type="button"
+        class="admin-btn"
+        :disabled="exchanging"
+        @click="exchange()"
+      >
         {{ exchanging ? "签发中…" : "完成签发" }}
       </button>
     </template>

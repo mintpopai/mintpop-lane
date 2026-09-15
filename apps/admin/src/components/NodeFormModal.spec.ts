@@ -61,7 +61,10 @@ function hint(): string | null {
 }
 
 function mountEditing() {
-  return mount(NodeFormModal, { attachTo: document.body, props: { role: "LAND", editing: landNode() } });
+  return mount(NodeFormModal, {
+    attachTo: document.body,
+    props: { role: "LAND", editing: landNode() },
+  });
 }
 
 describe("NodeFormModal 出口 IP 与时区联动", () => {
@@ -102,7 +105,9 @@ describe("NodeFormModal 出口 IP 与时区联动", () => {
     await query("#node-egress").setValue("198.51.100.9");
     await query("#node-egress").trigger("keydown", { key: "Enter" });
 
-    await vi.waitFor(() => expect(query<HTMLInputElement>("#node-egress-tz").element.value).toBe("Asia/Singapore"));
+    await vi.waitFor(() =>
+      expect(query<HTMLInputElement>("#node-egress-tz").element.value).toBe("Asia/Singapore"),
+    );
     expect(lookupIpTimezone).toHaveBeenCalledWith("198.51.100.9");
     expect(hint()).toContain("已按出口 IP 识别时区");
 

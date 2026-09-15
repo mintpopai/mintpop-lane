@@ -75,7 +75,11 @@ export interface Copy {
     note: string;
     unavailable: string;
   };
-  faq: { kicker: string; title: string; items: { q: string; a: string; more?: { href: string; label: string } }[] };
+  faq: {
+    kicker: string;
+    title: string;
+    items: { q: string; a: string; more?: { href: string; label: string } }[];
+  };
   /** 首页「延伸阅读」区块的头；条目本身来自 content/guides 注册表，不在这里重复维护 */
   guides: { kicker: string; title: string; lede: string };
   footer: { tagline: string; links: { href: string; label: string }[] };
@@ -142,7 +146,10 @@ const zh: Copy = {
   ],
   hero: {
     pill: "一站式官方 Claude 接入软件",
-    title: ["想稳定使用官方 Claude Code，却不想折腾账号、支付、环境…… 🤯", "MintPop 帮你全部搞定！"],
+    title: [
+      "想稳定使用官方 Claude Code，却不想折腾账号、支付、环境…… 🤯",
+      "MintPop 帮你全部搞定！",
+    ],
     lede: [
       "所有环境已提前配置完成：IP 接入、时区设置、网络环境、依赖与权限全部到位。",
       "全程 100% 官方 Claude Code，用量可实时查询，对话内容零留存。",
@@ -308,7 +315,10 @@ const zh: Copy = {
       {
         q: "Claude 账号为什么会被封？Lane 怎么降低风险？",
         a: "常见诱因是多个账号共用一个出口、出口地址频繁变化、支付信息与使用地区不一致。Lane 给每个账号独立且固定的自营出口，账号与支付统一代办，从源头移除这几条。",
-        more: { href: "/guides/why-claude-accounts-get-banned/", label: "看完整的封号原因与避免方法" },
+        more: {
+          href: "/guides/why-claude-accounts-get-banned/",
+          label: "看完整的封号原因与避免方法",
+        },
       },
       {
         q: "支持 ChatGPT / Codex 吗？",
@@ -393,7 +403,8 @@ const zh: Copy = {
 
 const en: Copy = {
   meta: {
-    title: "Stable, official Claude Code access: account, subscription and dedicated exit handled | MintPop Lane",
+    title:
+      "Stable, official Claude Code access: account, subscription and dedicated exit handled | MintPop Lane",
     description:
       "Official Claude Code that keeps working: account and subscription handled for you, a dedicated fixed US exit to cut ban risk, and a ready-to-use terminal. macOS (Apple silicon) and Windows. Codex support is planned.",
   },
@@ -581,7 +592,10 @@ const en: Copy = {
       {
         q: "Why do Claude accounts get banned, and how does Lane lower the risk?",
         a: "The usual triggers are many accounts sharing one exit, an exit address that keeps changing, and billing details that do not match the region of use. Lane gives every account its own fixed exit on IPs we operate and handles the account and payment, removing those triggers at the source.",
-        more: { href: "/en/guides/why-claude-accounts-get-banned/", label: "Read the full guide on bans" },
+        more: {
+          href: "/en/guides/why-claude-accounts-get-banned/",
+          label: "Read the full guide on bans",
+        },
       },
       {
         q: "Do you support ChatGPT / Codex?",

@@ -21,7 +21,10 @@ const submitting = ref(false);
 
 const title = computed(() => (props.group ? `重新拉取：${props.group.name}` : "从订阅导入节点"));
 const allChecked = computed(
-  () => nodeList.value !== null && nodeList.value.length > 0 && checked.value.size === nodeList.value.length,
+  () =>
+    nodeList.value !== null &&
+    nodeList.value.length > 0 &&
+    checked.value.size === nodeList.value.length,
 );
 
 async function fetchPreview(): Promise<void> {
@@ -36,9 +39,14 @@ async function fetchPreview(): Promise<void> {
       : await adminApi().previewSub({ subUrl: subUrl.value.trim() });
     nodeList.value = list;
     // 疑似信息条目与已入池节点默认不勾：前者多半是垃圾，后者勾选意味着「更新参数」，应显式为之
-    checked.value = new Set(list.filter((n) => !n.suspectedInfo && !n.existed).map((n) => n.sourceName));
+    checked.value = new Set(
+      list.filter((n) => !n.suspectedInfo && !n.existed).map((n) => n.sourceName),
+    );
   } catch (error) {
-    showToast("error", error instanceof BizError ? error.message : `拉取失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `拉取失败：${(error as Error).message}`,
+    );
   } finally {
     loadingPreview.value = false;
   }
@@ -55,7 +63,9 @@ function toggleCheck(name: string): void {
 }
 
 function toggleCheckAll(): void {
-  checked.value = allChecked.value ? new Set() : new Set((nodeList.value ?? []).map((n) => n.sourceName));
+  checked.value = allChecked.value
+    ? new Set()
+    : new Set((nodeList.value ?? []).map((n) => n.sourceName));
 }
 
 async function submit(): Promise<void> {
@@ -84,7 +94,10 @@ async function submit(): Promise<void> {
     emit("saved");
     emit("close");
   } catch (error) {
-    showToast("error", error instanceof BizError ? error.message : `导入失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `导入失败：${(error as Error).message}`,
+    );
   } finally {
     submitting.value = false;
   }
@@ -97,7 +110,9 @@ async function submit(): Promise<void> {
     <div class="admin-form">
       <div v-if="!props.group" class="admin-field">
         <label for="sub-url">订阅链接</label>
-        <p class="admin-note">服务端会用 Clash UA 拉取并解析；链接含 token，将加密保存供以后重新拉取。</p>
+        <p class="admin-note">
+          服务端会用 Clash UA 拉取并解析；链接含 token，将加密保存供以后重新拉取。
+        </p>
         <input
           id="sub-url"
           v-model="subUrl"
@@ -106,18 +121,24 @@ async function submit(): Promise<void> {
           :disabled="nodeList !== null"
         />
       </div>
-      <p v-else-if="nodeList === null" class="admin-note">将用保存的订阅链接重新拉取该分组的节点列表。</p>
+      <p v-else-if="nodeList === null" class="admin-note">
+        将用保存的订阅链接重新拉取该分组的节点列表。
+      </p>
 
       <template v-if="nodeList !== null">
         <div class="admin-field">
-          <p class="admin-note">「疑似信息条目」与「已入池」默认不勾；勾选已入池的节点表示用订阅里的参数更新它。</p>
+          <p class="admin-note">
+            「疑似信息条目」与「已入池」默认不勾；勾选已入池的节点表示用订阅里的参数更新它。
+          </p>
           <div class="node-panel">
             <div class="node-panel-bar">
               <label class="node-check-all">
                 <input type="checkbox" :checked="allChecked" @change="toggleCheckAll()" />
                 全选
               </label>
-              <span class="node-count">已选 <span class="fact">{{ checked.size }} / {{ nodeList.length }}</span></span>
+              <span class="node-count"
+                >已选 <span class="fact">{{ checked.size }} / {{ nodeList.length }}</span></span
+              >
             </div>
             <div class="node-panel-body">
               <table class="admin-table dense node-table">
@@ -163,7 +184,12 @@ async function submit(): Promise<void> {
         <div v-if="!props.group" class="admin-form-row">
           <div class="admin-field">
             <label for="group-name">分组名</label>
-            <input id="group-name" v-model="groupName" class="admin-input" placeholder="如：机场A" />
+            <input
+              id="group-name"
+              v-model="groupName"
+              class="admin-input"
+              placeholder="如：机场A"
+            />
           </div>
           <div class="admin-field">
             <label for="group-remark">备注</label>
@@ -184,13 +210,7 @@ async function submit(): Promise<void> {
       >
         {{ loadingPreview ? "拉取中…" : "拉取节点列表" }}
       </button>
-      <button
-        v-else
-        type="button"
-        class="admin-btn"
-        :disabled="submitting"
-        @click="submit()"
-      >
+      <button v-else type="button" class="admin-btn" :disabled="submitting" @click="submit()">
         {{ submitting ? "导入中…" : props.group ? "导入所选" : "创建分组并导入" }}
       </button>
     </template>
@@ -256,7 +276,7 @@ async function submit(): Promise<void> {
   cursor: pointer;
 }
 
-.node-table input[type='checkbox'] {
+.node-table input[type="checkbox"] {
   accent-color: var(--counter-focus);
   cursor: pointer;
 }

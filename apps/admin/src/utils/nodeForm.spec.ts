@@ -50,7 +50,9 @@ describe("validateNodeForm", () => {
       extraConfig: [{ key: "password", value: "偷偷写在这里" }],
     });
 
-    expect(validateNodeForm(form)).toContain("password 属于该协议的敏感键，必须填在「敏感配置」里，不能放进透传键");
+    expect(validateNodeForm(form)).toContain(
+      "password 属于该协议的敏感键，必须填在「敏感配置」里，不能放进透传键",
+    );
   });
 
   it("透传键重复要拦下，否则后一条会静默覆盖前一条", () => {
@@ -84,7 +86,11 @@ describe("validateNodeForm", () => {
   });
 
   it("切换协议并重填了敏感键就放行", () => {
-    const form = makeForm({ originalProtocol: "TROJAN", protocol: "VMESS", secret: { uuid: "新的uuid" } });
+    const form = makeForm({
+      originalProtocol: "TROJAN",
+      protocol: "VMESS",
+      secret: { uuid: "新的uuid" },
+    });
 
     expect(validateNodeForm(form)).toEqual([]);
   });
@@ -120,8 +126,12 @@ describe("validateNodeForm", () => {
   });
 
   it("IPv4 与 IPv6 字面量都放行（配上时区，两者成对）", () => {
-    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "Asia/Tokyo" }))).toEqual([]);
-    expect(validateNodeForm(makeForm({ egressIp: "2001:db8::1", egressTimezone: "Asia/Tokyo" }))).toEqual([]);
+    expect(
+      validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "Asia/Tokyo" })),
+    ).toEqual([]);
+    expect(
+      validateNodeForm(makeForm({ egressIp: "2001:db8::1", egressTimezone: "Asia/Tokyo" })),
+    ).toEqual([]);
   });
 
   it("切到第一跳后不再校验已隐藏的出口 IP / 出口时区残值——提交时它们会被置 null", () => {
@@ -143,7 +153,9 @@ describe("validateNodeForm", () => {
 
   it("未登记出口 IP 时时区可留空；填了合法时区名放行", () => {
     expect(validateNodeForm(makeForm({ egressIp: "", egressTimezone: "" }))).toEqual([]);
-    expect(validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "Asia/Tokyo" }))).toEqual([]);
+    expect(
+      validateNodeForm(makeForm({ egressIp: "203.0.113.10", egressTimezone: "Asia/Tokyo" })),
+    ).toEqual([]);
   });
 });
 
@@ -238,11 +250,18 @@ describe("applyProtocol", () => {
     );
 
     expect(form.extraConfig[0]).toEqual({ key: "sni", value: "a.com" });
-    expect(form.extraConfig.slice(1).map((row) => row.key)).toEqual(["alterId", "cipher", "network"]);
+    expect(form.extraConfig.slice(1).map((row) => row.key)).toEqual([
+      "alterId",
+      "cipher",
+      "network",
+    ]);
   });
 
   it("不动 originalProtocol——它记的是库里那条记录的协议，正是判断要不要重填敏感键的依据", () => {
-    const form = applyProtocol(makeForm({ originalProtocol: "TROJAN", protocol: "TROJAN" }), "VMESS");
+    const form = applyProtocol(
+      makeForm({ originalProtocol: "TROJAN", protocol: "TROJAN" }),
+      "VMESS",
+    );
 
     expect(form.originalProtocol).toBe("TROJAN");
   });
@@ -276,7 +295,7 @@ describe("buildNodePayload", () => {
     });
   });
 
-  it("只填了键没填值的行也丢弃——新建表单默认铺了几行常用键的空行，不能把 sni:\"\" 下发给 mihomo", () => {
+  it('只填了键没填值的行也丢弃——新建表单默认铺了几行常用键的空行，不能把 sni:"" 下发给 mihomo', () => {
     const form = makeForm({
       extraConfig: [
         { key: "sni", value: "" },
@@ -299,7 +318,9 @@ describe("buildNodePayload", () => {
   });
 
   it("落地节点的出口时区去掉首尾空白后提交，留空提交 null", () => {
-    expect(buildNodePayload(makeForm({ egressTimezone: " Asia/Tokyo " })).egressTimezone).toBe("Asia/Tokyo");
+    expect(buildNodePayload(makeForm({ egressTimezone: " Asia/Tokyo " })).egressTimezone).toBe(
+      "Asia/Tokyo",
+    );
     expect(buildNodePayload(makeForm({ egressTimezone: "  " })).egressTimezone).toBeNull();
   });
 

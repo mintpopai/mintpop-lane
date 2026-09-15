@@ -150,9 +150,16 @@ describe("subscriptionForm", () => {
 
   it("agent 类型选项：只取有上架套餐的类型并去重，未知类型展示原始取值", () => {
     const codexPlan: PlanResponse = { ...plan, id: 12, name: "Codex 月付", agentType: "CODEX" };
-    const disabledPlan: PlanResponse = { ...plan, id: 13, agentType: "FUTURE_AGENT", enabled: false };
+    const disabledPlan: PlanResponse = {
+      ...plan,
+      id: 13,
+      agentType: "FUTURE_AGENT",
+      enabled: false,
+    };
     const futurePlan: PlanResponse = { ...plan, id: 14, agentType: "FUTURE_AGENT" };
-    expect(agentTypeOptions([plan, codexPlan, { ...plan, id: 15 }, disabledPlan, futurePlan])).toEqual([
+    expect(
+      agentTypeOptions([plan, codexPlan, { ...plan, id: 15 }, disabledPlan, futurePlan]),
+    ).toEqual([
       { value: "CLAUDE", label: "Claude Code" },
       { value: "CODEX", label: "Codex" },
       { value: "FUTURE_AGENT", label: "FUTURE_AGENT" },

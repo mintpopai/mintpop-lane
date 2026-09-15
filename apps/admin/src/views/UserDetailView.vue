@@ -182,7 +182,10 @@ async function copyAssignmentNo(row: AdminSubscriptionResponse): Promise<void> {
 }
 
 function reportError(error: unknown, prefix: string): void {
-  showToast("error", error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`);
+  showToast(
+    "error",
+    error instanceof BizError ? error.message : `${prefix}：${(error as Error).message}`,
+  );
 }
 
 async function loadUser(): Promise<void> {
@@ -211,12 +214,15 @@ async function saveNodes(): Promise<void> {
   savingNodes.value = true;
   try {
     // 状态原样带回：这个接口是整体保存，但处置态的修改口子在用户列表，这里不动它
-    await adminApi().updateUser(userId, buildUserPayload({
-      id: userId,
-      status: user.value.status,
-      frontNodeId: frontNodeId.value,
-      landNodeId: landNodeId.value,
-    }));
+    await adminApi().updateUser(
+      userId,
+      buildUserPayload({
+        id: userId,
+        status: user.value.status,
+        frontNodeId: frontNodeId.value,
+        landNodeId: landNodeId.value,
+      }),
+    );
     showToast("success", "已保存");
     // 用户（节点名/出口 IP）与节点（落地占用数）都变了，一起重拉
     await Promise.all([loadUser(), loadNodes()]);
@@ -296,7 +302,10 @@ async function submit(): Promise<void> {
   submitting.value = true;
   try {
     if (mode === "edit") {
-      await adminApi().updateSubscription(form.value.id as number, buildSubscriptionUpdatePayload(form.value));
+      await adminApi().updateSubscription(
+        form.value.id as number,
+        buildSubscriptionUpdatePayload(form.value),
+      );
     } else {
       await adminApi().createSubscription(userId, buildSubscriptionCreatePayload(form.value));
     }
@@ -391,7 +400,8 @@ async function confirmRevoke(): Promise<void> {
         <span class="state" :data-state="user.status">{{ USER_STATUS_LABELS[user.status] }}</span>
       </div>
       <p class="page-facts">
-        {{ USER_ROLE_LABELS[user.role] }} · Logto id <span class="fact">{{ user.subject }}</span> · 建档于
+        {{ USER_ROLE_LABELS[user.role] }} · Logto id <span class="fact">{{ user.subject }}</span> ·
+        建档于
         <span class="fact">{{ formatDate(user.createdAt) }}</span>
       </p>
     </template>
@@ -418,11 +428,21 @@ async function confirmRevoke(): Promise<void> {
         <div class="link-grid">
           <div class="admin-field">
             <label for="user-front">第一跳节点</label>
-            <Select id="user-front" v-model="frontNodeId" :options="frontOptions" aria-label="第一跳节点" />
+            <Select
+              id="user-front"
+              v-model="frontNodeId"
+              :options="frontOptions"
+              aria-label="第一跳节点"
+            />
           </div>
           <div class="admin-field">
             <label for="user-land">落地节点</label>
-            <Select id="user-land" v-model="landNodeId" :options="landOptions" aria-label="落地节点" />
+            <Select
+              id="user-land"
+              v-model="landNodeId"
+              :options="landOptions"
+              aria-label="落地节点"
+            />
           </div>
           <button
             type="button"
@@ -438,7 +458,9 @@ async function confirmRevoke(): Promise<void> {
       <!-- 区头一行：规模在左、动作在右——「分配订阅」贴着它管的区，不再挂到页头 -->
       <div class="section-head">
         <h4 class="block-title">
-          订阅<template v-if="!loading && !loadError"> · 共 <span class="fact">{{ list.length }}</span> 条</template>
+          订阅<template v-if="!loading && !loadError">
+            · 共 <span class="fact">{{ list.length }}</span> 条</template
+          >
         </h4>
         <button type="button" class="admin-btn" @click="create()">分配订阅</button>
       </div>
@@ -452,7 +474,9 @@ async function confirmRevoke(): Promise<void> {
         <li v-for="row in list" :key="row.id" class="sub-item">
           <div class="sub-item-head">
             <span class="sub-item-name">{{ row.name }}</span>
-            <span class="sub-item-spec">{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}</span>
+            <span class="sub-item-spec"
+              >{{ row.planDurationDays }} 天 · {{ row.planPrice }} {{ row.planCurrency }}</span
+            >
             <span class="pill muted">{{ agentLabel(row.agentType) }}</span>
             <span class="state" :data-state="row.hasCredential ? 'CONFIGURED' : 'MISSING'">
               {{ row.hasCredential ? "凭据已录入" : "凭据未录入" }}
@@ -460,7 +484,9 @@ async function confirmRevoke(): Promise<void> {
             <!-- 凭证到期日与订阅止期脱节：订阅止期改过但凭证没重签，需要显式提醒去重新签发 -->
             <span v-if="row.credentialStale" class="state" data-state="MISSING">凭证待更新</span>
             <!-- 组织没开 usage credits：凭证本身有效，只是该席位的 Fable 5 用不了 -->
-            <span v-if="row.extraUsageDisabled" class="state" data-state="MISSING">Fable 不可用</span>
+            <span v-if="row.extraUsageDisabled" class="state" data-state="MISSING"
+              >Fable 不可用</span
+            >
             <span class="sub-item-gap" />
             <div class="sub-item-actions">
               <!-- 服务端对非 Claude 类型的签发请求一律拒绝，未认识的类型也不显示，别让点了必错 -->
@@ -482,7 +508,9 @@ async function confirmRevoke(): Promise<void> {
                 吊销凭证
               </button>
               <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-              <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+              <button type="button" class="admin-link danger" @click="pendingDelete = row">
+                删除
+              </button>
             </div>
           </div>
           <dl class="sub-item-facts">
@@ -498,7 +526,9 @@ async function confirmRevoke(): Promise<void> {
               <dt>分配号</dt>
               <dd class="fact">
                 <span class="sub-assignment-no">{{ formatAssignmentNo(row.assignmentNo) }}</span>
-                <button type="button" class="admin-link" @click="copyAssignmentNo(row)">复制</button>
+                <button type="button" class="admin-link" @click="copyAssignmentNo(row)">
+                  复制
+                </button>
               </dd>
             </div>
             <div class="sub-fact">
@@ -507,7 +537,9 @@ async function confirmRevoke(): Promise<void> {
             </div>
             <div class="sub-fact">
               <dt>账号邮箱</dt>
-              <dd :class="{ fact: row.accountEmail !== null }">{{ row.accountEmail ?? "未录入" }}</dd>
+              <dd :class="{ fact: row.accountEmail !== null }">
+                {{ row.accountEmail ?? "未录入" }}
+              </dd>
             </div>
             <div v-if="row.hasCredential" class="sub-fact">
               <dt>凭证到期</dt>
@@ -524,9 +556,9 @@ async function confirmRevoke(): Promise<void> {
             <div v-if="row.extraUsageDisabled" class="sub-fact sub-fact-remark">
               <dt>提示</dt>
               <dd>
-                签发时该账号所属组织未开启 usage credits，此席位的 Fable 5 无法使用。
-                请到 claude.ai 的 Admin settings → Usage 打开「Turn on usage
-                credits」，余额可以为 0（Fable 走套餐内含额度，不消耗 credits）。
+                签发时该账号所属组织未开启 usage credits，此席位的 Fable 5 无法使用。 请到 claude.ai
+                的 Admin settings → Usage 打开「Turn on usage credits」，余额可以为 0（Fable
+                走套餐内含额度，不消耗 credits）。
               </dd>
             </div>
           </dl>
@@ -578,7 +610,13 @@ async function confirmRevoke(): Promise<void> {
               value="先选 Agent 类型"
               disabled
             />
-            <Select v-else id="sub-plan" v-model="form.planId" :options="planOptions" aria-label="套餐" />
+            <Select
+              v-else
+              id="sub-plan"
+              v-model="form.planId"
+              :options="planOptions"
+              aria-label="套餐"
+            />
           </div>
         </div>
 
@@ -611,12 +649,15 @@ async function confirmRevoke(): Promise<void> {
               type="email"
               maxlength="128"
               :placeholder="
-                selectedEnterpriseDomain ? `zhangsan@${selectedEnterpriseDomain}` : 'zhangsan@example.com'
+                selectedEnterpriseDomain
+                  ? `zhangsan@${selectedEnterpriseDomain}`
+                  : 'zhangsan@example.com'
               "
             />
             <p class="admin-note">
               本次分配给用户的是哪个账号，选填。<template v-if="selectedEnterpriseDomain"
-                >归属企业时须为 <span class="fact">@{{ selectedEnterpriseDomain }}</span> 的邮箱。</template
+                >归属企业时须为
+                <span class="fact">@{{ selectedEnterpriseDomain }}</span> 的邮箱。</template
               >
             </p>
           </div>
@@ -635,7 +676,12 @@ async function confirmRevoke(): Promise<void> {
           </div>
           <div class="admin-field">
             <label for="sub-ends">预计止期</label>
-            <input id="sub-ends" class="admin-input fact" :value="predictedEndsAt ?? '选套餐后自动推算'" disabled />
+            <input
+              id="sub-ends"
+              class="admin-input fact"
+              :value="predictedEndsAt ?? '选套餐后自动推算'"
+              disabled
+            />
           </div>
         </div>
         <p class="admin-note">
@@ -647,7 +693,9 @@ async function confirmRevoke(): Promise<void> {
           <div class="admin-field">
             <label for="sub-credential">席位凭据</label>
             <!-- Claude 席位不再允许手工录入（服务端 410037），换成签发入口的说明 -->
-            <p v-if="isClaudeAgent" class="admin-note">Claude 席位的凭证通过签发获得，不支持手工录入。</p>
+            <p v-if="isClaudeAgent" class="admin-note">
+              Claude 席位的凭证通过签发获得，不支持手工录入。
+            </p>
             <input
               v-else
               id="sub-credential"

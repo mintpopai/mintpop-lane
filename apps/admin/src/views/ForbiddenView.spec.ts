@@ -21,6 +21,8 @@ describe("ForbiddenView", () => {
     const wrapper = mount(ForbiddenView);
 
     expect(wrapper.find(".gate-text .fact").exists()).toBe(false);
-    expect(wrapper.get(".gate-text").text()).toBe("找系统管理员把这个账号设为管理员，或换个账号登录。");
+    expect(wrapper.get(".gate-text").text()).toBe(
+      "找系统管理员把这个账号设为管理员，或换个账号登录。",
+    );
   });
 });

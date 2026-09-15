@@ -43,7 +43,10 @@ export interface AdminApi {
   updateSubscription(id: number, body: SubscriptionUpdateRequest): Promise<void>;
   deleteSubscription(id: number): Promise<void>;
   credentialAuthorizeUrl(subscriptionId: number): Promise<CredentialAuthorizationStart>;
-  credentialExchange(subscriptionId: number, body: CredentialExchangeRequest): Promise<CredentialIssueResult>;
+  credentialExchange(
+    subscriptionId: number,
+    body: CredentialExchangeRequest,
+  ): Promise<CredentialIssueResult>;
   credentialRevoke(subscriptionId: number): Promise<CredentialRevokeResult>;
   previewSub(body: SubPreviewRequest): Promise<SubPreviewNode[]>;
   createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;
@@ -122,7 +125,10 @@ export function createAdminApi(http: HttpClient): AdminApi {
     },
 
     updateSubscription(id, body) {
-      return http.request(`/admin/subscriptions/${id}`, { method: "PUT", body: JSON.stringify(body) });
+      return http.request(`/admin/subscriptions/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
     },
 
     deleteSubscription(id) {
@@ -130,7 +136,9 @@ export function createAdminApi(http: HttpClient): AdminApi {
     },
 
     credentialAuthorizeUrl(subscriptionId) {
-      return http.request(`/admin/subscriptions/${subscriptionId}/credential/authorize-url`, { method: "POST" });
+      return http.request(`/admin/subscriptions/${subscriptionId}/credential/authorize-url`, {
+        method: "POST",
+      });
     },
 
     credentialExchange(subscriptionId, body) {
@@ -141,11 +149,16 @@ export function createAdminApi(http: HttpClient): AdminApi {
     },
 
     credentialRevoke(subscriptionId) {
-      return http.request(`/admin/subscriptions/${subscriptionId}/credential/revoke`, { method: "POST" });
+      return http.request(`/admin/subscriptions/${subscriptionId}/credential/revoke`, {
+        method: "POST",
+      });
     },
 
     previewSub(body) {
-      return http.request("/admin/node-groups/preview", { method: "POST", body: JSON.stringify(body) });
+      return http.request("/admin/node-groups/preview", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     },
 
     createNodeGroup(body) {
@@ -157,7 +170,10 @@ export function createAdminApi(http: HttpClient): AdminApi {
     },
 
     renameNodeGroup(id, body) {
-      return http.request(`/admin/node-groups/${id}`, { method: "PUT", body: JSON.stringify(body) });
+      return http.request(`/admin/node-groups/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
     },
 
     refreshPreviewNodeGroup(id) {
@@ -165,7 +181,10 @@ export function createAdminApi(http: HttpClient): AdminApi {
     },
 
     importNodeGroup(id, body) {
-      return http.request(`/admin/node-groups/${id}/import`, { method: "POST", body: JSON.stringify(body) });
+      return http.request(`/admin/node-groups/${id}/import`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     },
 
     deleteNodeGroup(id) {
@@ -197,7 +216,10 @@ export function createAdminApi(http: HttpClient): AdminApi {
     },
 
     updateEnterprise(id, body) {
-      return http.request(`/admin/enterprises/${id}`, { method: "PUT", body: JSON.stringify(body) });
+      return http.request(`/admin/enterprises/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
     },
 
     deleteEnterprise(id) {

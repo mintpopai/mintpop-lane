@@ -4,14 +4,23 @@
  * 任何失败（网络不通、被墙、限流、查不到）一律返回 null——预填是锦上添花，
  * 失败就降级为管理员人工填写，绝不阻塞表单。
  */
-export async function lookupIpTimezone(ip: string, fetchFn: typeof fetch = fetch): Promise<string | null> {
+export async function lookupIpTimezone(
+  ip: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string | null> {
   try {
-    const response = await fetchFn(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,timezone.id`);
+    const response = await fetchFn(
+      `https://ipwho.is/${encodeURIComponent(ip)}?fields=success,timezone.id`,
+    );
     if (!response.ok) {
       return null;
     }
     const body: unknown = await response.json();
-    if (typeof body !== "object" || body === null || (body as { success?: unknown }).success !== true) {
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      (body as { success?: unknown }).success !== true
+    ) {
       return null;
     }
     const timezone = (body as { timezone?: unknown }).timezone;

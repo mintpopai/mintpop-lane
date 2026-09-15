@@ -110,7 +110,10 @@ async function confirmDelete(): Promise<void> {
     pendingDelete.value = null;
     await load();
   } catch (error) {
-    showToast("error", error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`,
+    );
   } finally {
     deleting.value = false;
   }
@@ -123,7 +126,8 @@ onMounted(load);
   <PageHead title="套餐">
     <template #facts>
       共 <span class="fact">{{ plans.length }}</span> 个 · 上架
-      <span class="fact">{{ enabledCount }}</span> 个。套餐是固定时长与定价的可售卖选项，停用不删除。
+      <span class="fact">{{ enabledCount }}</span>
+      个。套餐是固定时长与定价的可售卖选项，停用不删除。
     </template>
     <template #actions>
       <button type="button" class="admin-btn" @click="create()">新建套餐</button>
@@ -150,7 +154,9 @@ onMounted(load);
     :empty-text="emptyText"
   >
     <template #empty-action>
-      <button v-if="plans.length === 0" type="button" class="admin-btn" @click="create()">新建套餐</button>
+      <button v-if="plans.length === 0" type="button" class="admin-btn" @click="create()">
+        新建套餐
+      </button>
       <button v-else type="button" class="admin-btn-ghost" @click="resetFilters()">查看全部</button>
     </template>
 
@@ -182,7 +188,9 @@ onMounted(load);
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
             <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-            <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+            <button type="button" class="admin-link danger" @click="pendingDelete = row">
+              删除
+            </button>
           </td>
         </tr>
       </tbody>

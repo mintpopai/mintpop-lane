@@ -99,14 +99,24 @@ dir = "apps/server"
 run = "mvn -q test"
 
 [tasks.lint-admin]
-description = "检查管理端代码风格与类型"
+description = "检查管理端代码风格、格式与类型"
 dir = "apps/admin"
-run = ["pnpm eslint .", "pnpm vue-tsc --noEmit"]
+run = ["pnpm eslint . --max-warnings 0", "pnpm prettier --check .", "pnpm vue-tsc --noEmit"]
+
+[tasks.format-admin]
+description = "按 prettier 重排管理端代码（lint-admin 里 --check 那步的修复版）"
+dir = "apps/admin"
+run = "pnpm prettier --write ."
 
 [tasks.lint-website]
-description = "检查官网代码风格与类型"
+description = "检查官网代码风格、格式与类型"
 dir = "apps/website"
-run = ["pnpm eslint .", "pnpm vue-tsc --noEmit"]
+run = ["pnpm eslint . --max-warnings 0", "pnpm prettier --check .", "pnpm vue-tsc --noEmit"]
+
+[tasks.format-website]
+description = "按 prettier 重排官网代码（lint-website 里 --check 那步的修复版）"
+dir = "apps/website"
+run = "pnpm prettier --write ."
 
 # —— 部署 ——
 [tasks.up]

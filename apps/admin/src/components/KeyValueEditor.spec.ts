@@ -12,7 +12,10 @@ describe("KeyValueEditor", () => {
     await wrapper.get("[data-test=add-row]").trigger("click");
 
     const emitted = wrapper.emitted("update:modelValue");
-    expect(emitted?.at(-1)?.[0]).toEqual([{ key: "sni", value: "a.com" }, { key: "", value: "" }]);
+    expect(emitted?.at(-1)?.[0]).toEqual([
+      { key: "sni", value: "a.com" },
+      { key: "", value: "" },
+    ]);
   });
 
   it("改动某一行的值会带着完整列表发出更新", async () => {

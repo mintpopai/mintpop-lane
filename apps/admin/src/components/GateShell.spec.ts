@@ -87,9 +87,7 @@ describe("GateShell", () => {
       await wrapper.vm.$nextTick();
 
       expect(matchMedia).toHaveBeenCalledWith("(prefers-reduced-motion: reduce)");
-      expect(wrapper.get(".gate-panel .gate-slogan-typed").text()).toBe(
-        "Pop into something fresh",
-      );
+      expect(wrapper.get(".gate-panel .gate-slogan-typed").text()).toBe("Pop into something fresh");
     } finally {
       vi.unstubAllGlobals();
     }
@@ -97,9 +95,11 @@ describe("GateShell", () => {
 
   it("卡片默认窄、wide 时放宽一档", () => {
     expect(mount(GateShell).get(".gate-box").classes()).not.toContain("gate-box-wide");
-    expect(mount(GateShell, { props: { wide: true } }).get(".gate-box").classes()).toContain(
-      "gate-box-wide",
-    );
+    expect(
+      mount(GateShell, { props: { wide: true } })
+        .get(".gate-box")
+        .classes(),
+    ).toContain("gate-box-wide");
   });
 
   it("气泡场是纯装饰：不进无障碍树，也不含任何文案", () => {

@@ -65,8 +65,7 @@ const primaryLabel = computed(() => {
   overflow: hidden;
   background:
     radial-gradient(760px 420px at 78% -6%, var(--bg-mint) 0%, transparent 68%),
-    radial-gradient(520px 320px at 6% 8%, rgba(23, 209, 167, 0.07) 0%, transparent 70%),
-    var(--bg);
+    radial-gradient(520px 320px at 6% 8%, rgba(23, 209, 167, 0.07) 0%, transparent 70%), var(--bg);
 }
 
 .copy {

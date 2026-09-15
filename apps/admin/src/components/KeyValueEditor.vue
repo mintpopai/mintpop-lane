@@ -48,7 +48,9 @@ function remove(index: number): void {
         删除
       </button>
     </div>
-    <button type="button" class="admin-btn-ghost" data-test="add-row" @click="add()">新增一行</button>
+    <button type="button" class="admin-btn-ghost" data-test="add-row" @click="add()">
+      新增一行
+    </button>
   </div>
 </template>
 

@@ -39,7 +39,9 @@ function verdictOf(r: NodeProbeResponse): { state: string; text: string } {
   if (r.matched === null) {
     return { state: "MISSING", text: "未登记出口 IP" };
   }
-  return r.matched ? { state: "CONFIGURED", text: "与登记一致" } : { state: "REVOKED", text: "与登记不一致" };
+  return r.matched
+    ? { state: "CONFIGURED", text: "与登记一致" }
+    : { state: "REVOKED", text: "与登记不一致" };
 }
 
 /** 连通且实际 IP 与登记不一致（含未登记）才有「填入」的必要 */
@@ -76,8 +78,8 @@ async function fillEgressIp(): Promise<void> {
   <Modal :title="`检测节点：${node.name}`" @close="emit('close')">
     <div class="probe-body">
       <p class="admin-note">
-        由服务端经 <span class="fact">{{ node.serverAddr }}:{{ node.port }}</span> 出站访问公网 IP 回显服务，
-        看这条落地代理是否连通、实际出口是哪个 IP。
+        由服务端经 <span class="fact">{{ node.serverAddr }}:{{ node.port }}</span> 出站访问公网 IP
+        回显服务， 看这条落地代理是否连通、实际出口是哪个 IP。
       </p>
 
       <p v-if="probing" class="probe-pending">检测中，最长约 45 秒…</p>
@@ -107,19 +109,34 @@ async function fillEgressIp(): Promise<void> {
           </div>
         </dl>
         <p v-if="canFill(result)" class="probe-hint">
-          填入会把节点的出口 IP 改为实际探测值{{ node.egressTimezone ? "" : "，并按 GeoIP 预填出口时区" }}；
-          其它字段与密码保持不变。
+          填入会把节点的出口 IP 改为实际探测值{{
+            node.egressTimezone ? "" : "，并按 GeoIP 预填出口时区"
+          }}； 其它字段与密码保持不变。
         </p>
       </template>
 
       <p v-else class="probe-pending muted">检测请求未完成，可重新检测。</p>
     </div>
     <template #footer>
-      <button type="button" class="admin-btn-ghost" :disabled="filling" @click="emit('close')">关闭</button>
-      <button id="probe-retry" type="button" class="admin-btn-ghost" :disabled="probing || filling" @click="probe()">
+      <button type="button" class="admin-btn-ghost" :disabled="filling" @click="emit('close')">
+        关闭
+      </button>
+      <button
+        id="probe-retry"
+        type="button"
+        class="admin-btn-ghost"
+        :disabled="probing || filling"
+        @click="probe()"
+      >
         {{ probing ? "检测中…" : "重新检测" }}
       </button>
-      <button v-if="canFill(result)" type="button" class="admin-btn" :disabled="filling" @click="fillEgressIp()">
+      <button
+        v-if="canFill(result)"
+        type="button"
+        class="admin-btn"
+        :disabled="filling"
+        @click="fillEgressIp()"
+      >
         {{ filling ? "保存中…" : `填入出口 IP ${result?.actualEgressIp}` }}
       </button>
     </template>

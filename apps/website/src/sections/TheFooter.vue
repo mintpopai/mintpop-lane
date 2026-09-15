@@ -23,7 +23,9 @@ const year = new Date().getFullYear();
       </div>
 
       <nav class="links" :aria-label="t.ui.footer.navLabel">
-        <a v-for="l in t.footer.links" :key="l.href" :href="localePath(locale) + l.href">{{ l.label }}</a>
+        <a v-for="l in t.footer.links" :key="l.href" :href="localePath(locale) + l.href">{{
+          l.label
+        }}</a>
         <!-- 指南页内链：全站每页都能到达四篇指南，这是搜索引擎发现与传递权重的主要路径 -->
         <RouterLink v-for="g in GUIDES" :key="g.slug" :to="guidePath(locale, g.slug)">{{
           g.copy[locale].navLabel

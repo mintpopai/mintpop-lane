@@ -1,20 +1,28 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
-import type { AdminSubscriptionResponse, CredentialAuthorizationStart, CredentialIssueResult } from "../api/types";
+import type {
+  AdminSubscriptionResponse,
+  CredentialAuthorizationStart,
+  CredentialIssueResult,
+} from "../api/types";
 import { formatDateTime } from "../utils/format";
 import { showToast } from "../toast";
 import CredentialIssueModal from "./CredentialIssueModal.vue";
 
-const credentialAuthorizeUrl = vi.fn<(subscriptionId: number) => Promise<CredentialAuthorizationStart>>();
-const credentialExchange = vi.fn<(subscriptionId: number, body: unknown) => Promise<CredentialIssueResult>>();
+const credentialAuthorizeUrl =
+  vi.fn<(subscriptionId: number) => Promise<CredentialAuthorizationStart>>();
+const credentialExchange =
+  vi.fn<(subscriptionId: number, body: unknown) => Promise<CredentialIssueResult>>();
 
 vi.mock("../api", () => ({
   adminApi: () => ({ credentialAuthorizeUrl, credentialExchange }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
-function subscription(overrides: Partial<AdminSubscriptionResponse> = {}): AdminSubscriptionResponse {
+function subscription(
+  overrides: Partial<AdminSubscriptionResponse> = {},
+): AdminSubscriptionResponse {
   return {
     id: 7,
     assignmentNo: "7K3M9QX2FT",
@@ -102,7 +110,10 @@ describe("CredentialIssueModal", () => {
 
     await query("#issue-code").setValue("auth-code-1");
     await primaryButton().trigger("click");
-    expect(credentialExchange).toHaveBeenCalledWith(7, { sessionId: "sess-1", code: "auth-code-1" });
+    expect(credentialExchange).toHaveBeenCalledWith(7, {
+      sessionId: "sess-1",
+      code: "auth-code-1",
+    });
 
     // ③ 完成：展示兑换结果
     await vi.waitFor(() => expect(document.body.textContent).toContain("user:profile"));
@@ -157,7 +168,10 @@ describe("CredentialIssueModal", () => {
     // 直接重试兑换即可成功
     await primaryButton().trigger("click");
     await vi.waitFor(() => expect(document.body.textContent).toContain("user:profile"));
-    expect(credentialExchange).toHaveBeenNthCalledWith(2, 7, { sessionId: "sess-1", code: "auth-code-1" });
+    expect(credentialExchange).toHaveBeenNthCalledWith(2, 7, {
+      sessionId: "sess-1",
+      code: "auth-code-1",
+    });
   });
 
   it("订阅未录入账号邮箱时，授权步显示需自行确认的提醒文案", async () => {
@@ -167,6 +181,8 @@ describe("CredentialIssueModal", () => {
     await primaryButton().trigger("click");
     await vi.waitFor(() => expect(document.querySelector("#issue-auth-url")).not.toBeNull());
 
-    expect(document.body.textContent).toContain("该订阅未录入账号邮箱，请自行确认要授权的是哪个账号");
+    expect(document.body.textContent).toContain(
+      "该订阅未录入账号邮箱，请自行确认要授权的是哪个账号",
+    );
   });
 });

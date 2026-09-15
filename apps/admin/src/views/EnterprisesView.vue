@@ -109,7 +109,10 @@ async function confirmDelete(): Promise<void> {
     await load();
   } catch (error) {
     // 410025 仍被订阅引用时删不掉，服务端给的中文提示直接用
-    showToast("error", error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`);
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`,
+    );
   } finally {
     deleting.value = false;
   }
@@ -172,7 +175,9 @@ onMounted(load);
           <td>{{ row.name }}</td>
           <td class="fact">{{ row.domain }}</td>
           <td>
-            <span v-for="type in row.agentTypes" :key="type" class="pill">{{ agentLabel(type) }}</span>
+            <span v-for="type in row.agentTypes" :key="type" class="pill">{{
+              agentLabel(type)
+            }}</span>
           </td>
           <td>
             <span class="state" :data-state="row.enabled ? 'ENABLED' : 'DISABLED'">
@@ -183,7 +188,9 @@ onMounted(load);
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
           <td class="actions">
             <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-            <button type="button" class="admin-link danger" @click="pendingDelete = row">删除</button>
+            <button type="button" class="admin-link danger" @click="pendingDelete = row">
+              删除
+            </button>
           </td>
         </tr>
       </tbody>

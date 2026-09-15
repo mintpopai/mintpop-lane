@@ -43,4 +43,3 @@ export function diffStructure(zh: unknown, en: unknown, path: string, errors: st
 
   // 到这里两侧都是基本类型（string/number/...）：不比较值本身，文案本就该不同
 }
-

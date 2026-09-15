@@ -13,7 +13,9 @@ const { locale, t } = useI18n();
 // 这里的 v-if 只是防御（客户端不可能经站内链接走到未知 slug）。
 const guide = computed(() => findGuide(String(route.params.slug)));
 const copy = computed(() => guide.value?.copy[locale.value]);
-const pageUrl = computed(() => (guide.value ? SITE + guidePath(locale.value, guide.value.slug) : SITE));
+const pageUrl = computed(() =>
+  guide.value ? SITE + guidePath(locale.value, guide.value.slug) : SITE,
+);
 const homePath = computed(() => localePath(locale.value));
 
 // 指南页自己的 head：标题、描述、社交卡片文字，
@@ -68,7 +70,12 @@ useHead({
           "@context": "https://schema.org",
           "@type": "BreadcrumbList",
           itemListElement: [
-            { "@type": "ListItem", position: 1, name: t.value.ui.guide.home, item: SITE + homePath.value },
+            {
+              "@type": "ListItem",
+              position: 1,
+              name: t.value.ui.guide.home,
+              item: SITE + homePath.value,
+            },
             { "@type": "ListItem", position: 2, name: c.h1, item: pageUrl.value },
           ],
         }),

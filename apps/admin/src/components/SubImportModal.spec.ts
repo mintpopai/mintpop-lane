@@ -14,9 +14,30 @@ vi.mock("../api", () => ({
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
 const previewNodes: SubPreviewNode[] = [
-  { sourceName: "剩余流量：10 GB", sourceType: "anytls", serverAddr: "a.example.com", port: 1, suspectedInfo: true, existed: false },
-  { sourceName: "香港-01", sourceType: "anytls", serverAddr: "hk.example.com", port: 2, suspectedInfo: false, existed: false },
-  { sourceName: "已入池的", sourceType: "vless", serverAddr: "b.example.com", port: 3, suspectedInfo: false, existed: true },
+  {
+    sourceName: "剩余流量：10 GB",
+    sourceType: "anytls",
+    serverAddr: "a.example.com",
+    port: 1,
+    suspectedInfo: true,
+    existed: false,
+  },
+  {
+    sourceName: "香港-01",
+    sourceType: "anytls",
+    serverAddr: "hk.example.com",
+    port: 2,
+    suspectedInfo: false,
+    existed: false,
+  },
+  {
+    sourceName: "已入池的",
+    sourceType: "vless",
+    serverAddr: "b.example.com",
+    port: 3,
+    suspectedInfo: false,
+    existed: true,
+  },
 ];
 
 beforeEach(() => {

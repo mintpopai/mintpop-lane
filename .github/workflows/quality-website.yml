@@ -16,7 +16,7 @@ jobs:
           install_args: node pnpm
       - name: 安装前端依赖（按 lockfile 精确安装）
         run: mise run install-website --frozen
-      - name: 检查代码风格与类型
+      - name: 检查代码风格、格式与类型
         run: mise run lint-website
       - name: 运行官网单元测试
         run: mise run test-website

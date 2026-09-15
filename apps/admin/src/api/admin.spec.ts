@@ -177,7 +177,12 @@ describe("createAdminApi", () => {
     const api = createAdminApi(http);
 
     await api.previewSub({ subUrl: "https://sub.example.com/c?token=t" });
-    await api.createNodeGroup({ name: "机场A", subUrl: "https://sub.example.com/c?token=t", selectedNames: ["香港-01"], remark: "" });
+    await api.createNodeGroup({
+      name: "机场A",
+      subUrl: "https://sub.example.com/c?token=t",
+      selectedNames: ["香港-01"],
+      remark: "",
+    });
     await api.listNodeGroups();
     await api.renameNodeGroup(3, { name: "机场A-新名", remark: "" });
     await api.refreshPreviewNodeGroup(3);
@@ -188,10 +193,20 @@ describe("createAdminApi", () => {
       method: "POST",
       body: JSON.stringify({ subUrl: "https://sub.example.com/c?token=t" }),
     });
-    expect(request).toHaveBeenNthCalledWith(2, "/admin/node-groups", expect.objectContaining({ method: "POST" }));
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "/admin/node-groups",
+      expect.objectContaining({ method: "POST" }),
+    );
     expect(request).toHaveBeenNthCalledWith(3, "/admin/node-groups");
-    expect(request).toHaveBeenNthCalledWith(4, "/admin/node-groups/3", expect.objectContaining({ method: "PUT" }));
-    expect(request).toHaveBeenNthCalledWith(5, "/admin/node-groups/3/refresh-preview", { method: "POST" });
+    expect(request).toHaveBeenNthCalledWith(
+      4,
+      "/admin/node-groups/3",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    expect(request).toHaveBeenNthCalledWith(5, "/admin/node-groups/3/refresh-preview", {
+      method: "POST",
+    });
     expect(request).toHaveBeenNthCalledWith(6, "/admin/node-groups/3/import", {
       method: "POST",
       body: JSON.stringify({ selectedNames: ["新加坡-01"] }),

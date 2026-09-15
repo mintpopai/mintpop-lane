@@ -1,4 +1,9 @@
-import type { AdminNodeResponse, AdminUserResponse, UserSaveRequest, UserStatus } from "../api/types";
+import type {
+  AdminNodeResponse,
+  AdminUserResponse,
+  UserSaveRequest,
+  UserStatus,
+} from "../api/types";
 
 export interface UserFormModel {
   id: number;

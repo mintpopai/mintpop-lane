@@ -17,7 +17,9 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
   <Modal :title="title" @close="emit('cancel')">
     <p class="message">{{ message }}</p>
     <template #footer>
-      <button type="button" class="admin-btn-ghost" :disabled="busy" @click="emit('cancel')">取消</button>
+      <button type="button" class="admin-btn-ghost" :disabled="busy" @click="emit('cancel')">
+        取消
+      </button>
       <button type="button" class="admin-btn danger" :disabled="busy" @click="emit('confirm')">
         {{ confirmText ?? "删除" }}
       </button>

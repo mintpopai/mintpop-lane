@@ -128,7 +128,11 @@ describe("NodeProbeModal", () => {
 
   it("填入新出口 IP 时按 GeoIP 查到时区：时区跟着新 IP 一起覆盖", async () => {
     probeNode.mockResolvedValue(
-      probeResult({ actualEgressIp: "198.51.100.9", registeredEgressIp: "203.0.113.7", matched: false }),
+      probeResult({
+        actualEgressIp: "198.51.100.9",
+        registeredEgressIp: "203.0.113.7",
+        matched: false,
+      }),
     );
     updateNode.mockResolvedValue();
     lookupIpTimezone.mockResolvedValue("Asia/Singapore");
@@ -166,7 +170,12 @@ describe("NodeProbeModal", () => {
   it("不通时展示原因、不提供填入，「重新检测」再发一次探测", async () => {
     probeNode
       .mockResolvedValueOnce(
-        probeResult({ reachable: false, actualEgressIp: null, matched: null, error: "connect timed out" }),
+        probeResult({
+          reachable: false,
+          actualEgressIp: null,
+          matched: null,
+          error: "connect timed out",
+        }),
       )
       .mockResolvedValueOnce(probeResult());
     mountModal();
@@ -184,7 +193,9 @@ describe("NodeProbeModal", () => {
     probeNode.mockRejectedValue(new BizError(410040, "只有落地节点支持出口检测"));
     mountModal();
 
-    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith("error", "只有落地节点支持出口检测"));
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("error", "只有落地节点支持出口检测"),
+    );
     expect(fillButton()).toBeNull();
     expect(document.querySelector("#probe-retry")).not.toBeNull();
   });
