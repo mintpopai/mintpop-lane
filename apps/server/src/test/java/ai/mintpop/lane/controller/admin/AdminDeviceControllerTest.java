@@ -30,6 +30,7 @@ import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -278,5 +279,22 @@ class AdminDeviceControllerTest extends MysqlTestBase {
         mockMvc.perform(post("/api/admin/subscriptions/" + subscriptionId + "/device/unbind")
                         .header("Authorization", bearer(memberId)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("换机申请带上两台设备各自的最近上报时刻：原设备昨天还在用和两个月没动过，该不该批是两回事")
+    void listCarriesDeviceLastSeenAt() throws Exception {
+        Instant oldSeen = Instant.parse("2026-09-14T10:00:00Z");
+        Instant newSeen = Instant.parse("2026-09-15T09:00:00Z");
+        userDeviceRepository.upsert(memberId, "device-old", "旧电脑", "macos 26", "", oldSeen);
+        userDeviceRepository.upsert(memberId, "device-new", "新电脑", "macos 26", "", newSeen);
+        createPendingRequest(oldDeviceId, newDeviceId);
+
+        mockMvc.perform(get("/api/admin/device-rebind-requests")
+                        .param("status", "PENDING")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].fromDevice.lastSeenAt", containsString("2026-09-14T10:00:00")))
+                .andExpect(jsonPath("$.data[0].toDevice.lastSeenAt", containsString("2026-09-15T09:00:00")));
     }
 }

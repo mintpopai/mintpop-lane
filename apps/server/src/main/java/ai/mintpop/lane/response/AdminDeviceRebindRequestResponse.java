@@ -30,7 +30,12 @@ public record AdminDeviceRebindRequestResponse(
         Instant decidedAt
 ) {
 
-    /** 设备的展示三要素。机器码本身不下发到管理端——管理员用不上，少一处流出就少一处 */
-    public record Device(String name, String os, String model) {
+    /**
+     * 设备的展示三要素 + 最近上报时刻。机器码本身不下发到管理端——管理员用不上，少一处流出就少一处。
+     *
+     * <p>lastSeenAt 对裁决很有分量：原设备昨天还在用，这次申请多半是想两台一起用；
+     * 两个月没动过，才像是真换机。
+     */
+    public record Device(String name, String os, String model, Instant lastSeenAt) {
     }
 }

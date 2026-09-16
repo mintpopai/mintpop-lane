@@ -56,6 +56,17 @@ public class MybatisUserDeviceRepository implements UserDeviceRepository {
     }
 
     @Override
+    public boolean touchLastSeen(Long userId, String deviceId, Instant now, Instant staleBefore) {
+        // 一条带条件的 UPDATE 同时完成三件事：定位本用户的那一行、判节流、写值。
+        // 不先查后写——那既多一次往返，两次之间还会出现「都读到旧值、都判定该写」的重复写
+        return mapper.update(null, Wrappers.<UserDevice>lambdaUpdate()
+                .eq(UserDevice::getUserId, userId)
+                .eq(UserDevice::getDeviceId, deviceId)
+                .lt(UserDevice::getLastSeenAt, staleBefore)
+                .set(UserDevice::getLastSeenAt, now)) > 0;
+    }
+
+    @Override
     public List<UserDevice> findByUserId(Long userId) {
         return mapper.selectList(Wrappers.<UserDevice>lambdaQuery()
                 .eq(UserDevice::getUserId, userId));

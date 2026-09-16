@@ -4,6 +4,7 @@ import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.exception.BizException;
 
 import java.util.Locale;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
@@ -22,15 +23,22 @@ public final class DeviceId {
     private DeviceId() {
     }
 
-    /** 校验并归一化。缺失或形状不对一律抛 DEVICE_ID_MISSING——对客户端来说这两种情况该做的事一样：升级 */
-    public static String normalize(String raw) {
+    /**
+     * 校验并归一化，失败返回空而不抛。
+     *
+     * <p>给「拿不到机器码就跳过、不该影响请求」的旁路用（如顺带记录设备活跃时刻）。
+     * 那种地方不是校验点：管理端网页本来就不带这个头，把它当错误会把整个管理端打挂。
+     */
+    public static Optional<String> tryNormalize(String raw) {
         if (raw == null || raw.isBlank()) {
-            throw new BizException(BizCodeEnum.DEVICE_ID_MISSING);
+            return Optional.empty();
         }
         String normalized = raw.trim().toLowerCase(Locale.ROOT);
-        if (!SHAPE.matcher(normalized).matches()) {
-            throw new BizException(BizCodeEnum.DEVICE_ID_MISSING);
-        }
-        return normalized;
+        return SHAPE.matcher(normalized).matches() ? Optional.of(normalized) : Optional.empty();
+    }
+
+    /** 校验并归一化。缺失或形状不对一律抛 DEVICE_ID_MISSING——对客户端来说这两种情况该做的事一样：升级 */
+    public static String normalize(String raw) {
+        return tryNormalize(raw).orElseThrow(() -> new BizException(BizCodeEnum.DEVICE_ID_MISSING));
     }
 }

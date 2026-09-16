@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.entity.Enterprise;
 import ai.mintpop.lane.entity.Plan;
+import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 import ai.mintpop.lane.repository.EnterpriseRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -72,6 +74,9 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Autowired
     private EnterpriseRepository enterpriseRepository;
+
+    @Autowired
+    private UserDeviceRepository userDeviceRepository;
 
     @Autowired
     private SessionTokenService sessionTokenService;
@@ -646,5 +651,27 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
                         .header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("绑定设备带上最近上报时刻：管理员据此判断这台机器是否还在用")
+    void boundDeviceCarriesLastSeenAt() throws Exception {
+        mockMvc.perform(post("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(createRequest(codexMonthlyPlanId, "2026-08-01T00:00:00Z", "sk-ant-x"))))
+                .andExpect(jsonPath("$.code").value(0));
+        Long subscriptionId = subscriptionRepository.findByUserId(memberId).getFirst().getId();
+        UserDevice device = userDeviceRepository.upsert(
+                memberId, "a".repeat(64), "月白的 MacBook", "macos 26.6.1", "Mac17,9",
+                Instant.parse("2026-09-10T08:30:00Z"));
+        subscriptionRepository.bindDeviceIfUnbound(
+                subscriptionId, device.getId(), Instant.parse("2026-08-01T00:00:00Z"));
+
+        mockMvc.perform(get("/api/admin/users/" + memberId + "/subscriptions")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].boundDevice.name").value("月白的 MacBook"))
+                .andExpect(jsonPath("$.data[0].boundDevice.boundAt", containsString("2026-08-01T00:00:00")))
+                .andExpect(jsonPath("$.data[0].boundDevice.lastSeenAt", containsString("2026-09-10T08:30:00")));
     }
 }

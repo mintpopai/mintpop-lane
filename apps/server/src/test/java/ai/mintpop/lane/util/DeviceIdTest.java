@@ -33,4 +33,18 @@ class DeviceIdTest {
                     .hasFieldOrPropertyWithValue("bizCode.code", BizCodeEnum.DEVICE_ID_MISSING.getCode());
         }
     }
+
+    @Test
+    @DisplayName("tryNormalize 合法机器码归一化后装进 Optional")
+    void tryNormalizeAcceptsValid() {
+        assertThat(DeviceId.tryNormalize("A".repeat(64))).contains(VALID);
+    }
+
+    @Test
+    @DisplayName("tryNormalize 对缺失与形状不对的一律返回空，不抛异常：调用方是顺带记录活跃时刻的旁路，不该因此中断请求")
+    void tryNormalizeReturnsEmptyInsteadOfThrowing() {
+        for (String bad : new String[] {null, "", "   ", "a".repeat(63), "a".repeat(65), "g".repeat(64)}) {
+            assertThat(DeviceId.tryNormalize(bad)).isEmpty();
+        }
+    }
 }

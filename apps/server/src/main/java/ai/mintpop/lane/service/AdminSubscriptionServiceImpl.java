@@ -245,7 +245,7 @@ public class AdminSubscriptionServiceImpl implements AdminSubscriptionService {
             return null;
         }
         return new AdminSubscriptionResponse.BoundDevice(
-                device.getName(), device.getOs(), device.getModel(), s.getBoundAt());
+                device.getName(), device.getOs(), device.getModel(), s.getBoundAt(), device.getLastSeenAt());
     }
 
     /**

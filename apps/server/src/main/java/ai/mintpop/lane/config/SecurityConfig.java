@@ -6,6 +6,8 @@ import ai.mintpop.lane.security.DesktopAwareAuthorizationRequestResolver;
 import ai.mintpop.lane.security.DesktopFlowCookie;
 import ai.mintpop.lane.security.NoOpAuthorizedClientRepository;
 import ai.mintpop.lane.security.OidcLoginSuccessHandler;
+import ai.mintpop.lane.repository.UserDeviceRepository;
+import ai.mintpop.lane.security.DeviceTouchFilter;
 import ai.mintpop.lane.security.SessionAuthFilter;
 import ai.mintpop.lane.service.SessionTokenService;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,8 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.web.SecurityFilterChain;
+
+import java.time.Clock;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -39,7 +43,9 @@ public class SecurityConfig {
                                                    UserRepository userRepository,
                                                    OidcLoginSuccessHandler successHandler,
                                                    DesktopFlowCookie desktopFlowCookie,
-                                                   ClientRegistrationRepository clientRegistrationRepository)
+                                                   ClientRegistrationRepository clientRegistrationRepository,
+                                                   UserDeviceRepository userDeviceRepository,
+                                                   Clock clock)
             throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -85,6 +91,9 @@ public class SecurityConfig {
                         new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .addFilterBefore(new SessionAuthFilter(sessionTokenService, userRepository),
                         UsernamePasswordAuthenticationFilter.class)
+                // 必须排在 SessionAuthFilter 之后：它靠 SecurityContext 里的 userId 才知道设备属于谁
+                .addFilterAfter(new DeviceTouchFilter(userDeviceRepository, clock),
+                        SessionAuthFilter.class)
                 .build();
     }
 

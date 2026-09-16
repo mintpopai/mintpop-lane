@@ -21,6 +21,7 @@ import java.time.Instant;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -140,5 +141,36 @@ class LinkControllerTest extends MysqlTestBase {
                         .header("Authorization", bearer(user2Id)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("REVOKED"));
+    }
+
+    @Test
+    @DisplayName("心跳顺带刷新该设备的最近上报时刻：心跳接口自己并不读机器码，覆盖靠的是安全链上的 DeviceTouchFilter")
+    void heartbeatRefreshesDeviceLastSeen() throws Exception {
+        Instant stale = Instant.parse("2020-01-01T00:00:00Z");
+        userDeviceRepository.upsert(user1Id, DEVICE_ID, "测试设备", "macos", "MacBook", stale);
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Device-Id", DEVICE_ID))
+                .andExpect(status().isOk());
+
+        assertThat(lastSeenOf(user1Id)).isAfter(stale);
+    }
+
+    @Test
+    @DisplayName("不带机器码的请求不动任何设备：刷新是按上报的机器码走的，不是见到已认证请求就刷")
+    void requestWithoutDeviceHeaderLeavesLastSeenAlone() throws Exception {
+        Instant stale = Instant.parse("2020-01-01T00:00:00Z");
+        userDeviceRepository.upsert(user1Id, DEVICE_ID, "测试设备", "macos", "MacBook", stale);
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id)))
+                .andExpect(status().isOk());
+
+        assertThat(lastSeenOf(user1Id)).isEqualTo(stale);
+    }
+
+    private Instant lastSeenOf(Long userId) {
+        return userDeviceRepository.findByUserId(userId).getFirst().getLastSeenAt();
     }
 }
