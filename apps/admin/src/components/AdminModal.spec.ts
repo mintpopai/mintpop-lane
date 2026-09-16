@@ -180,3 +180,17 @@ describe("关闭后的焦点归还", () => {
     opener.remove();
   });
 });
+
+describe("内容区内边距", () => {
+  it("flush 为真时内容区去掉内边距，供内部自己分栏", () => {
+    mount(Modal, { attachTo: document.body, props: { title: "编辑套餐", flush: true } });
+
+    expect(document.querySelector(".content")?.classList.contains("flush")).toBe(true);
+  });
+
+  it("不传 flush 时内容区保持默认内边距", () => {
+    mount(Modal, { attachTo: document.body, props: { title: "编辑套餐" } });
+
+    expect(document.querySelector(".content")?.classList.contains("flush")).toBe(false);
+  });
+});

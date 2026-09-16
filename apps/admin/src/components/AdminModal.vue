@@ -7,6 +7,8 @@ defineProps<{
   title: string;
   /** 宽弹窗（订阅管理这类「列表 + 表单」内容）用 wide */
   wide?: boolean;
+  /** 内容区不留内边距：内部要自己分栏、且分栏底色要铺到弹窗边缘时用 */
+  flush?: boolean;
 }>();
 const emit = defineEmits<{ close: [] }>();
 
@@ -81,7 +83,7 @@ function onKeydown(event: KeyboardEvent) {
           <h3 class="head-title">{{ title }}</h3>
           <button type="button" class="close" aria-label="关闭" @click="emit('close')">×</button>
         </header>
-        <div class="content">
+        <div class="content" :class="{ flush }">
           <slot />
         </div>
         <footer class="foot">
@@ -149,6 +151,11 @@ function onKeydown(event: KeyboardEvent) {
 .content {
   padding: 20px;
   overflow-y: auto;
+}
+
+/* 分栏内容自己铺满：内边距交给各栏，免得在弹窗边缘留一圈与栏底色不同的白边 */
+.content.flush {
+  padding: 0;
 }
 
 .foot {
