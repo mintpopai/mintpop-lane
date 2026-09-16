@@ -12,6 +12,10 @@ const updatePlan = vi.fn<(id: number, body: PlanSaveRequest) => Promise<void>>(
 
 vi.mock("../api", () => ({ adminApi: () => ({ createPlan, updatePlan }) }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
+// TipTap 在 jsdom 里真的去建编辑器会拖慢且易碎，测试只关心表单联动，换成一个只渲染 <div> 的桩件
+vi.mock("./RichTextEditor.vue", () => ({
+  default: { name: "RichTextEditor", props: ["id", "modelValue", "fill"], template: "<div />" },
+}));
 
 function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
   return {
@@ -22,6 +26,7 @@ function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
     price: 29.9,
     currency: "USD",
     description: "含 5 个并发席位",
+    detail: "<p>含 5 个并发席位</p>",
     imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
     enabled: true,
     remark: "老客专享",
@@ -103,6 +108,29 @@ describe("PlanFormModal 打开时", () => {
   });
 });
 
+describe("PlanFormModal 两栏布局", () => {
+  it("弹窗分左右两栏，文案在左、参数在右", () => {
+    render(plan());
+
+    expect(document.querySelector(".copy-pane")).not.toBeNull();
+    expect(document.querySelector(".tag-pane")).not.toBeNull();
+    // 套餐名属于文案，Agent 类型属于参数
+    expect(document.querySelector(".copy-pane #plan-name")).not.toBeNull();
+    expect(document.querySelector(".tag-pane #plan-agent")).not.toBeNull();
+  });
+
+  it("提交时把详情一并带上", async () => {
+    const wrapper = render(plan());
+
+    await submit(wrapper);
+
+    expect(updatePlan).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ detail: "<p>含 5 个并发席位</p>" }),
+    );
+  });
+});
+
 describe("PlanFormModal 图片预览失败态", () => {
   it("图加载失败后换一个新地址，失败态会被清掉、重新显示图", async () => {
     const wrapper = render(plan());
@@ -180,6 +208,7 @@ describe("PlanFormModal 保存", () => {
       price: 79.9,
       currency: "USD",
       description: "",
+      detail: "",
       imageUrl: "",
       enabled: true,
       remark: "",

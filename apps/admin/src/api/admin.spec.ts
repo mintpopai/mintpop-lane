@@ -225,6 +225,7 @@ describe("createAdminApi", () => {
       currency: "USD" as const,
       description: "",
       imageUrl: "",
+      detail: "",
       enabled: true,
       remark: "",
     };

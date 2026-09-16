@@ -25,6 +25,7 @@ function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
     currency: "USD",
     description: null,
     imageUrl: null,
+    detail: null,
     enabled: true,
     remark: null,
     createdAt: "2026-09-01T00:00:00Z",

@@ -438,6 +438,8 @@ export interface PlanResponse {
   description: string | null;
   /** 套餐图公开 URL */
   imageUrl: string | null;
+  /** 详情富文本（已经服务端 jsoup 白名单净化），留空表示不展示「详情」入口 */
+  detail: string | null;
   /** 上架状态：false 表示停用但保留 */
   enabled: boolean;
   remark: string | null;
@@ -478,6 +480,8 @@ export interface PlanSaveRequest {
   currency: Currency;
   description: string;
   imageUrl: string;
+  /** 详情富文本，入库前经服务端 jsoup 白名单净化 */
+  detail: string;
   enabled: boolean;
   remark: string;
 }

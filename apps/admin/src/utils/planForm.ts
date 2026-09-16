@@ -10,6 +10,8 @@ export interface PlanFormModel {
   currency: Currency;
   description: string;
   imageUrl: string;
+  /** 详情富文本，原样往返（不 trim）——富文本里的空白由编辑器决定 */
+  detail: string;
   enabled: boolean;
   remark: string;
 }
@@ -23,6 +25,7 @@ export function emptyPlanForm(): PlanFormModel {
     currency: "USD",
     description: "",
     imageUrl: "",
+    detail: "",
     enabled: true,
     remark: "",
   };
@@ -37,6 +40,7 @@ export function planToForm(plan: PlanResponse): PlanFormModel {
     currency: plan.currency,
     description: plan.description ?? "",
     imageUrl: plan.imageUrl ?? "",
+    detail: plan.detail ?? "",
     enabled: plan.enabled,
     remark: plan.remark ?? "",
   };
@@ -80,6 +84,8 @@ export function buildPlanPayload(form: PlanFormModel): PlanSaveRequest {
     currency: form.currency,
     description: form.description.trim(),
     imageUrl: form.imageUrl.trim(),
+    // 不 trim：富文本里的空白由编辑器决定，服务端还会净化一遍
+    detail: form.detail,
     enabled: form.enabled,
     remark: form.remark.trim(),
   };

@@ -16,6 +16,7 @@ const plan: PlanResponse = {
   price: 29.9,
   currency: "USD",
   description: "含 5 个并发席位",
+  detail: "<p>含 5 个并发席位</p>",
   imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
   enabled: true,
   remark: "首发款",
@@ -33,6 +34,7 @@ describe("emptyPlanForm", () => {
       price: null,
       currency: "USD",
       description: "",
+      detail: "",
       imageUrl: "",
       enabled: true,
       remark: "",
@@ -54,6 +56,7 @@ describe("planToForm / buildPlanPayload", () => {
       price: 29.9,
       currency: "USD",
       description: "含 5 个并发席位",
+      detail: "<p>含 5 个并发席位</p>",
       imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
       enabled: true,
       remark: "首发款",
@@ -69,6 +72,14 @@ describe("planToForm / buildPlanPayload", () => {
     const payload = buildPlanPayload(form);
     expect(payload.name).toBe("月付套餐");
     expect(payload.remark).toBe("备注");
+  });
+});
+
+describe("planToForm / buildPlanPayload 对详情的处理", () => {
+  it("详情原样往返，不做 trim——富文本里的空白由编辑器决定", () => {
+    const form = planToForm(plan);
+    expect(form.detail).toBe("<p>含 5 个并发席位</p>");
+    expect(buildPlanPayload(form).detail).toBe("<p>含 5 个并发席位</p>");
   });
 });
 
