@@ -147,7 +147,7 @@ public class AdminDeviceServiceImpl implements AdminDeviceService {
         }
         return userDeviceRepository.findById(deviceRowId)
                 .map(d -> new AdminDeviceRebindRequestResponse.Device(
-                        d.getName(), d.getOs(), d.getModel()))
+                        d.getName(), d.getOs(), d.getModel(), d.getLastSeenAt()))
                 .orElse(null);
     }
 }

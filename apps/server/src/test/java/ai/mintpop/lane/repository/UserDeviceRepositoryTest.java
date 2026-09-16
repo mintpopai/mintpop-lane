@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -97,5 +98,61 @@ class UserDeviceRepositoryTest extends MysqlTestBase {
 
         assertThat(deviceRepository.findById(a.getId())).isPresent();
         assertThat(deviceRepository.findById(999_999L)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("touchLastSeen 距上次上报够久：刷新 last_seen_at 并返回 true")
+    void touchLastSeenRefreshesStaleRow() {
+        Instant firstSeen = Instant.parse("2026-09-01T00:00:00Z");
+        Instant now = Instant.parse("2026-09-01T00:10:00Z");
+        UserDevice created = deviceRepository.upsert(userId, "device-aaa", "机器", "macos 26", "", firstSeen);
+
+        boolean written = deviceRepository.touchLastSeen(userId, "device-aaa", now, now.minus(Duration.ofMinutes(5)));
+
+        assertThat(written).isTrue();
+        UserDevice reread = deviceRepository.findById(created.getId()).orElseThrow();
+        assertThat(reread.getLastSeenAt()).isEqualTo(now);
+        // 只动 last_seen_at：首见时刻与展示信息都不归它管
+        assertThat(reread.getFirstSeenAt()).isEqualTo(firstSeen);
+        assertThat(reread.getName()).isEqualTo("机器");
+    }
+
+    @Test
+    @DisplayName("touchLastSeen 节流：距上次上报不够久时一个字节也不写，返回 false")
+    void touchLastSeenThrottlesRecentRow() {
+        Instant firstSeen = Instant.parse("2026-09-01T00:00:00Z");
+        Instant now = Instant.parse("2026-09-01T00:02:00Z");
+        UserDevice created = deviceRepository.upsert(userId, "device-aaa", "机器", "macos 26", "", firstSeen);
+
+        boolean written = deviceRepository.touchLastSeen(userId, "device-aaa", now, now.minus(Duration.ofMinutes(5)));
+
+        assertThat(written).isFalse();
+        assertThat(deviceRepository.findById(created.getId()).orElseThrow().getLastSeenAt()).isEqualTo(firstSeen);
+    }
+
+    @Test
+    @DisplayName("touchLastSeen 对未登记的机器码不建行：只有绑定过的设备才有活跃时刻可言")
+    void touchLastSeenIgnoresUnknownDevice() {
+        Instant now = Instant.parse("2026-09-01T00:10:00Z");
+
+        boolean written = deviceRepository.touchLastSeen(userId, "device-never-seen", now, now.minus(Duration.ofMinutes(5)));
+
+        assertThat(written).isFalse();
+        assertThat(deviceRepository.findByUserId(userId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("touchLastSeen 只认本用户的那一行：同机器码属于别人的设备不受影响")
+    void touchLastSeenScopedToOwner() {
+        Instant firstSeen = Instant.parse("2026-09-01T00:00:00Z");
+        Instant now = Instant.parse("2026-09-01T00:10:00Z");
+        Long otherUserId = fixtures.createUser("logto-other-owner", null, null);
+        UserDevice mine = deviceRepository.upsert(userId, "device-shared", "我的机器", "macos 26", "", firstSeen);
+        UserDevice theirs = deviceRepository.upsert(otherUserId, "device-shared", "他的机器", "windows 11", "", firstSeen);
+
+        deviceRepository.touchLastSeen(userId, "device-shared", now, now.minus(Duration.ofMinutes(5)));
+
+        assertThat(deviceRepository.findById(mine.getId()).orElseThrow().getLastSeenAt()).isEqualTo(now);
+        assertThat(deviceRepository.findById(theirs.getId()).orElseThrow().getLastSeenAt()).isEqualTo(firstSeen);
     }
 }

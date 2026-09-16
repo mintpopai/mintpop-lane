@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   agentLabel,
   booleanLabel,
@@ -7,6 +7,7 @@ import {
   formatDate,
   formatDateTime,
   PLACEHOLDER,
+  relativeTime,
 } from "./format";
 
 // 钉死本进程时区，让「按本地时区渲染」可断言（Node 在 POSIX 上支持运行中生效）
@@ -109,5 +110,50 @@ describe("deviceLabel", () => {
     expect(deviceLabel({ name: "DESKTOP-4F2", os: "windows 11", model: "   " })).toBe(
       "DESKTOP-4F2（windows 11）",
     );
+  });
+});
+
+describe("relativeTime", () => {
+  // 「最近活跃」要回答的是「这台机器还在不在用」，绝对时刻还得让人心算，相对时刻一眼就知道
+  const now = new Date("2026-09-15T12:00:00Z");
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const at = (iso: string) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    return relativeTime(iso);
+  };
+
+  it("一分钟以内显示「刚刚」", () => {
+    expect(at("2026-09-15T11:59:31Z")).toBe("刚刚");
+  });
+
+  it("一小时以内按分钟", () => {
+    expect(at("2026-09-15T11:17:00Z")).toBe("43 分钟前");
+  });
+
+  it("一天以内按小时", () => {
+    expect(at("2026-09-15T09:30:00Z")).toBe("2 小时前");
+  });
+
+  it("三十天以内按天", () => {
+    expect(at("2026-09-10T12:00:00Z")).toBe("5 天前");
+  });
+
+  it("超过三十天退回绝对日期：那么久以前，「87 天前」不如直接给日期好读", () => {
+    expect(at("2026-06-20T12:00:00Z")).toBe("2026-06-20");
+  });
+
+  it("时刻在未来时按「刚刚」处理，不显示负数：服务端与本机时钟总会有些偏差", () => {
+    expect(at("2026-09-15T12:00:30Z")).toBe("刚刚");
+  });
+
+  it("空值与非法串给占位符", () => {
+    expect(relativeTime(null)).toBe(PLACEHOLDER);
+    expect(relativeTime("")).toBe(PLACEHOLDER);
+    expect(relativeTime("不是时间")).toBe(PLACEHOLDER);
   });
 });

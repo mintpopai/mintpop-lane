@@ -15,7 +15,7 @@ import TruncatedText from "../components/TruncatedText.vue";
 import ViewTabs from "../components/ViewTabs.vue";
 import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
-import { deviceLabel, formatAssignmentNo, formatDateTime } from "../utils/format";
+import { deviceLabel, formatAssignmentNo, formatDateTime, relativeTime } from "../utils/format";
 
 /** 待办与历史两档。默认待办——这页存在的理由就是「有东西等我处理」 */
 type RequestTab = "PENDING" | "ALL";
@@ -223,8 +223,29 @@ onMounted(load);
               <span class="fact">{{ formatAssignmentNo(row.assignmentNo) }}</span>
             </template>
           </td>
-          <td class="muted">{{ deviceText(row.fromDevice) }}</td>
-          <td>{{ deviceText(row.toDevice) }}</td>
+          <!-- 最近活跃做成次要行而非新增列：这表 1400px 下已经要横向滚动了。
+               它对裁决很有分量——原设备昨天还在用，这次申请多半是想两台一起用；
+               绝对时刻挂 title 供悬浮查看，正文给相对说法，免得管理员自己拿今天去减 -->
+          <td class="muted">
+            {{ deviceText(row.fromDevice) }}
+            <span
+              v-if="row.fromDevice"
+              class="cell-sub fact"
+              :title="formatDateTime(row.fromDevice.lastSeenAt)"
+            >
+              最近活跃 {{ relativeTime(row.fromDevice.lastSeenAt) }}
+            </span>
+          </td>
+          <td>
+            {{ deviceText(row.toDevice) }}
+            <span
+              v-if="row.toDevice"
+              class="cell-sub fact"
+              :title="formatDateTime(row.toDevice.lastSeenAt)"
+            >
+              最近活跃 {{ relativeTime(row.toDevice.lastSeenAt) }}
+            </span>
+          </td>
           <!-- 理由是用户自由输入，直接铺开会把整张表越撑越长 -->
           <td class="muted"><TruncatedText :text="row.reason" /></td>
           <td class="fact muted">{{ formatDateTime(row.createdAt) }}</td>

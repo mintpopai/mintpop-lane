@@ -17,7 +17,13 @@ import Select from "../components/AdminSelect.vue";
 import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
-import { deviceLabel, formatAssignmentNo, formatDate, formatDateTime } from "../utils/format";
+import {
+  deviceLabel,
+  formatAssignmentNo,
+  formatDate,
+  formatDateTime,
+  relativeTime,
+} from "../utils/format";
 import {
   agentTypeOptions,
   buildSubscriptionCreatePayload,
@@ -673,6 +679,15 @@ async function confirmUnbind(): Promise<void> {
             <div v-if="row.boundDevice" class="sub-fact">
               <dt>绑定时刻</dt>
               <dd class="fact">{{ formatDateTime(row.boundDevice.boundAt) }}</dd>
+            </div>
+            <!-- 与「绑定时刻」是两回事：那个是什么时候绑上的，这个是最后一次还在用是什么时候。
+                 正文给相对说法（管理员看的是新旧，绝对时刻还得自己拿今天去减），
+                 精确时刻挂 title 供悬浮查看 -->
+            <div v-if="row.boundDevice" class="sub-fact">
+              <dt>最近活跃</dt>
+              <dd class="fact" :title="formatDateTime(row.boundDevice.lastSeenAt)">
+                {{ relativeTime(row.boundDevice.lastSeenAt) }}
+              </dd>
             </div>
             <div v-if="row.hasCredential" class="sub-fact">
               <dt>凭证到期</dt>

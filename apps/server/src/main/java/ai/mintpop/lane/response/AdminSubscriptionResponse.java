@@ -55,6 +55,10 @@ public record AdminSubscriptionResponse(
 ) {
 
     /** 订阅当前绑定的设备。与申请里的 Device 分开：这里多一个绑定时刻 */
-    public record BoundDevice(String name, String os, String model, Instant boundAt) {
+    /**
+     * boundAt 是「什么时候绑上的」，lastSeenAt 是「最近一次还在用是什么时候」——
+     * 两个都要：绑了半年但一个月没动过的机器，和昨天刚绑的，管理员要做的判断不一样。
+     */
+    public record BoundDevice(String name, String os, String model, Instant boundAt, Instant lastSeenAt) {
     }
 }
