@@ -300,6 +300,94 @@ class AdminPlanControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("imageUrl 传空串不再被 @Pattern 拒绝，仍能建出套餐；https 正常通过，http 仍被拒")
+    void imageUrlBlankIsAccepted() throws Exception {
+        Map<String, Object> blankImage = validBody();
+        blankImage.put("imageUrl", "");
+        Long id = createPlan(blankImage);
+        assertThat(jdbc.queryForObject("SELECT image_url FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+
+        Map<String, Object> httpsImage = validBody();
+        httpsImage.put("name", "另一个套餐");
+        httpsImage.put("imageUrl", "https://assets.lane.mintpop.ai/plans/b.png");
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(httpsImage)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        Map<String, Object> httpImage = validBody();
+        httpImage.put("name", "第三个套餐");
+        httpImage.put("imageUrl", "http://assets.lane.mintpop.ai/plans/c.png");
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(httpImage)))
+                .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("description 传空串能正常建出套餐（同类风险：与 imageUrl 一起确认没被误伤）")
+    void descriptionBlankIsAccepted() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("description", "");
+        Long id = createPlan(body);
+        assertThat(jdbc.queryForObject("SELECT description FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("更新时把 detail 清空为空串，库里真的变成 null，而不是沿用旧值")
+    void clearingDetailPersistsAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<p>探针</p>");
+        Long id = createPlan(body);
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id))
+                .isEqualTo("<p>探针</p>");
+
+        Map<String, Object> cleared = validBody();
+        cleared.put("detail", "");
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(cleared)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id)).isNull();
+    }
+
+    @Test
+    @DisplayName("更新时把 detail 传净化后不剩内容的输入，库里同样被清成 null，而不是沿用旧值")
+    void clearingDetailWithOnlyScriptPersistsAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<p>探针</p>");
+        Long id = createPlan(body);
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id))
+                .isEqualTo("<p>探针</p>");
+
+        Map<String, Object> onlyScript = validBody();
+        onlyScript.put("detail", "<script>alert(1)</script>");
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(onlyScript)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id)).isNull();
+    }
+
+    @Test
+    @DisplayName("更新时把 description / imageUrl 清空为空串，库里真的变成空串（这两个字段不经净化，不会变 null），而不是沿用旧值")
+    void clearingDescriptionAndImageUrlPersists() throws Exception {
+        Long id = createPlan(validBody());
+        assertThat(jdbc.queryForObject("SELECT description FROM plan WHERE id = ?", String.class, id))
+                .isNotEmpty();
+        assertThat(jdbc.queryForObject("SELECT image_url FROM plan WHERE id = ?", String.class, id))
+                .isNotEmpty();
+
+        Map<String, Object> cleared = validBody();
+        cleared.put("description", "");
+        cleared.put("imageUrl", "");
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(cleared)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT description FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+        assertThat(jdbc.queryForObject("SELECT image_url FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+    }
+
+    @Test
     @DisplayName("详情入库前被净化：script 剥掉、排版标签保留")
     void detailIsSanitizedBeforeSave() throws Exception {
         Map<String, Object> body = validBody();

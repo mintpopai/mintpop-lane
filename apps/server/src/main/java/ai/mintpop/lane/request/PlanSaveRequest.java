@@ -42,9 +42,9 @@ public class PlanSaveRequest {
     @Size(max = 255)
     private String description;
 
-    /** 套餐图公开 URL，可空；只收 https，不许把 http 图混进 https 页面 */
+    /** 套餐图公开 URL，可空；留空放行，填了必须是 https，不许把 http 图混进 https 页面 */
     @Size(max = 512)
-    @Pattern(regexp = "^https://.+")
+    @Pattern(regexp = "^(https://.+)?$")
     private String imageUrl;
 
     /** 套餐详情富文本，服务端会按白名单净化后入库，可空 */

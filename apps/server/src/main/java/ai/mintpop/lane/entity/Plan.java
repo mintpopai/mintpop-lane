@@ -35,13 +35,20 @@ public class Plan {
 
     private Currency currency;
 
-    /** 面向用户的短描述，控制台购买卡片的副标题，可空 */
+    /**
+     * 面向用户的短描述，控制台购买卡片的副标题，可空。
+     * 更新策略设为 ALWAYS：{@link ai.mintpop.lane.request.PlanSaveRequest} 的契约是
+     * 「更新时全量覆盖」，默认的 NOT_NULL 策略会导致清空该字段的更新被静默跳过。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String description;
 
-    /** 套餐图公开 URL，可空 */
+    /** 套餐图公开 URL，可空。更新策略同 description，见其注释 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String imageUrl;
 
-    /** 套餐详情富文本，已净化的 HTML，可空 */
+    /** 套餐详情富文本，已净化的 HTML，可空。更新策略同 description，见其注释 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String detail;
 
     /** 上架状态：false 表示停用但保留 */
