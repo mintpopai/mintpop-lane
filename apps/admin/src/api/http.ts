@@ -53,11 +53,14 @@ export function createHttpClient({
   const doFetch: typeof fetch = fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
 
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    // multipart 上传：Content-Type 必须由浏览器带上 boundary 自己填，
+    // 手写 application/json 会让后端解析不出文件
+    const isFormData = init.body instanceof FormData;
     try {
       const response = await doFetch(`${baseUrl}${path}`, {
         ...init,
         headers: {
-          "Content-Type": "application/json",
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
           ...(init.headers as Record<string, string> | undefined),
         },
       });
@@ -68,6 +71,11 @@ export function createHttpClient({
       }
       if (response.status === 403) {
         throw new ForbiddenError();
+      }
+      // 反代（容器内 nginx / 宿主 OpenResty）的 client_max_body_size 拦下超大请求体：
+      // 请求根本到不了 Spring，没有业务码，只能在这里给一句人话
+      if (response.status === 413) {
+        throw new Error("文件太大，超出服务器允许的上传上限");
       }
       if (!response.ok) {
         throw new Error(`服务端返回异常状态：${response.status}`);

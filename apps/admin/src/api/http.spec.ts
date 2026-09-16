@@ -99,4 +99,27 @@ describe("createHttpClient", () => {
 
     await expect(createClient(fetchMock).request("/admin/users")).rejects.toThrow("502");
   });
+
+  it("上传 FormData 时不写 Content-Type，交给浏览器自己带 boundary", async () => {
+    const fetchMock = fakeFetch(200, { code: 0, data: { url: "https://x/a.png" }, msg: null });
+
+    await createClient(fetchMock).request("/admin/uploads/images", {
+      method: "POST",
+      body: new FormData(),
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+  });
+
+  it("413 给出可读文案：反代拦下超大请求体时到不了后端，没有业务码", async () => {
+    const fetchMock = fakeFetch(413, "");
+
+    await expect(
+      createClient(fetchMock).request("/admin/uploads/images", {
+        method: "POST",
+        body: new FormData(),
+      }),
+    ).rejects.toThrow("文件太大，超出服务器允许的上传上限");
+  });
 });
