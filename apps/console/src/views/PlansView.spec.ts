@@ -154,4 +154,23 @@ describe("PlansView", () => {
     wrapper.unmount();
     document.body.innerHTML = "";
   });
+
+  it("详情里带 target=_blank 的外链渲染后保留 target 与 rel，不把人带离控制台", async () => {
+    listPlans.mockResolvedValue([
+      {
+        ...claude,
+        detail: '<a href="https://x" target="_blank" rel="noopener noreferrer nofollow">文档</a>',
+      },
+    ]);
+    const wrapper = mount(PlansView, { attachTo: document.body });
+    await flushPromises();
+
+    await wrapper.get(".plan-detail-link").trigger("click");
+
+    const link = document.querySelector(".plan-detail-body a");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toContain("noopener");
+    wrapper.unmount();
+    document.body.innerHTML = "";
+  });
 });

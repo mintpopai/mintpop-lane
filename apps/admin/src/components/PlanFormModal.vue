@@ -84,8 +84,8 @@ async function submit(): Promise<void> {
         <div class="admin-field">
           <label for="plan-description">
             描述
-            <span class="char-count" :class="{ over: form.description.length > 255 }">
-              {{ form.description.length }} / 255
+            <span class="char-count" :class="{ over: form.description.trim().length > 255 }">
+              {{ form.description.trim().length }} / 255
             </span>
           </label>
           <textarea

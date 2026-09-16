@@ -388,6 +388,22 @@ class AdminPlanControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("更新时把 remark 传 null，库里真的变成 null，而不是默认策略下被静默跳过、沿用旧值")
+    void clearingRemarkToNullPersists() throws Exception {
+        Long id = createPlan(validBody());
+        assertThat(jdbc.queryForObject("SELECT remark FROM plan WHERE id = ?", String.class, id))
+                .isEqualTo("首发款");
+
+        Map<String, Object> cleared = validBody();
+        cleared.put("remark", null);
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(cleared)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT remark FROM plan WHERE id = ?", String.class, id)).isNull();
+    }
+
+    @Test
     @DisplayName("详情入库前被净化：script 剥掉、排版标签保留")
     void detailIsSanitizedBeforeSave() throws Exception {
         Map<String, Object> body = validBody();

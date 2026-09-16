@@ -190,6 +190,18 @@ describe("PlanFormModal 提交校验", () => {
     expect(showToast).toHaveBeenCalledWith("error", "描述不能超过 255 字");
     expect(updatePlan).not.toHaveBeenCalled();
   });
+
+  it("255 字加一个尾随空格：计数按 trim 后的字数算，不标红，也能保存成功", async () => {
+    const wrapper = render(plan());
+
+    await query<HTMLTextAreaElement>("#plan-description").setValue(`${"字".repeat(255)} `);
+    expect(query(".char-count").text()).toBe("255 / 255");
+    expect(query(".char-count").classes()).not.toContain("over");
+
+    await submit(wrapper);
+
+    expect(updatePlan).toHaveBeenCalled();
+  });
 });
 
 describe("PlanFormModal 保存", () => {

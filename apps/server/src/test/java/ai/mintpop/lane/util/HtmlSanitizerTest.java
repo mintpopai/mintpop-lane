@@ -52,4 +52,19 @@ class HtmlSanitizerTest {
         assertThat(sanitizer.sanitize("   ")).isNull();
         assertThat(sanitizer.sanitize("<script>alert(1)</script>")).isNull();
     }
+
+    @Test
+    @DisplayName("编辑器工具栏能产出的标签都要保留：删除线 <s> 与分隔线 <hr> 不在 jsoup relaxed 默认表里")
+    void keepsEditorOnlyTags() {
+        assertThat(sanitizer.sanitize("<p>前<s>删除线</s>后</p><hr>"))
+                .isEqualTo("<p>前<s>删除线</s>后</p><hr>");
+    }
+
+    @Test
+    @DisplayName("富文本插图的 http 地址被剥掉，https 原样保留：控制台是 https 页面，http 图会被当混合内容拦掉")
+    void stripsHttpImageProtocol() {
+        String cleaned = sanitizer.sanitize(
+                "<img src=\"http://x/a.png\"><img src=\"https://x/b.png\">");
+        assertThat(cleaned).doesNotContain("http://x/a.png").contains("https://x/b.png");
+    }
 }

@@ -33,7 +33,11 @@ const visiblePlans = computed(() => plansForAgent(plans.value, agentType.value))
  * 都不至于直达 v-html。
  */
 const safeDetail = computed(() =>
-  detailPlan.value?.detail ? DOMPurify.sanitize(detailPlan.value.detail) : "",
+  detailPlan.value?.detail
+    ? // target 不在 DOMPurify 默认放行表里，但服务端白名单是明确放行它的（见 HtmlSanitizer）；
+      // 不显式加回来，详情里的外链会在当前标签页打开、把人带离控制台
+      DOMPurify.sanitize(detailPlan.value.detail, { ADD_ATTR: ["target"] })
+    : "",
 );
 
 onMounted(async () => {
