@@ -103,6 +103,26 @@ describe("PlanFormModal 打开时", () => {
   });
 });
 
+describe("PlanFormModal 图片预览失败态", () => {
+  it("图加载失败后换一个新地址，失败态会被清掉、重新显示图", async () => {
+    const wrapper = render(plan());
+    expect(document.querySelector(".image-preview img")).not.toBeNull();
+
+    await query(".image-preview img").trigger("error");
+    expect(document.querySelector(".image-preview img")).toBeNull();
+    expect(query(".image-preview").text()).toContain("这个地址取不到图片");
+
+    await query<HTMLInputElement>("#plan-image").setValue(
+      "https://assets.lane.mintpop.ai/plans/2026/09/b.png",
+    );
+    await wrapper.vm.$nextTick();
+
+    expect(query<HTMLImageElement>(".image-preview img").element.src).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/b.png",
+    );
+  });
+});
+
 describe("PlanFormModal 提交校验", () => {
   it("校验不过时只提示第一条，且一个请求都不发", async () => {
     const wrapper = render(null);
@@ -128,6 +148,18 @@ describe("PlanFormModal 提交校验", () => {
     await submit(wrapper);
 
     expect(showToast).toHaveBeenCalledWith("error", "价格必须是不小于 0 的数，至多两位小数");
+    expect(updatePlan).not.toHaveBeenCalled();
+  });
+
+  it("描述超过 255 字时计数标红，且挡下保存", async () => {
+    const wrapper = render(plan());
+
+    await query<HTMLTextAreaElement>("#plan-description").setValue("字".repeat(256));
+    expect(query(".char-count").classes()).toContain("over");
+
+    await submit(wrapper);
+
+    expect(showToast).toHaveBeenCalledWith("error", "描述不能超过 255 字");
     expect(updatePlan).not.toHaveBeenCalled();
   });
 });

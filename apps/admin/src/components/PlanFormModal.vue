@@ -137,7 +137,6 @@ async function submit(): Promise<void> {
           v-model="form.description"
           class="admin-input"
           rows="2"
-          maxlength="255"
           placeholder="如：含 5 个并发席位，不限流量"
         ></textarea>
         <p class="field-note">控制台购买卡片上，套餐名下面那行小字。</p>
