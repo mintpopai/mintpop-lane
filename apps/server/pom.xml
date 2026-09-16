@@ -21,6 +21,7 @@
     <java.version>25</java.version>
     <mybatis-plus.version>3.5.17</mybatis-plus.version>
     <aws-sdk.version>2.46.7</aws-sdk.version>
+    <jsoup.version>1.21.1</jsoup.version>
   </properties>
 
   <dependencyManagement>
@@ -181,6 +182,12 @@
           <artifactId>netty-nio-client</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <!-- 富文本白名单净化：套餐详情入库前过一遍 -->
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+      <version>${jsoup.version}</version>
     </dependency>
   </dependencies>
 
