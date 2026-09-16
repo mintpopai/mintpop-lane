@@ -132,6 +132,25 @@
 
 6. **本地联调**：安装 [Stripe CLI](https://stripe.com/docs/stripe-cli) 并执行一次 `stripe login`，然后跑 `mise run webhook-listen`，把它打印出来的 `whsec_` 填进本机 `application.yml` 的 `webhook-secret`（与线上 Dashboard 那把不是同一把，仅本地联调用）。测试支付用 Stripe 测试卡号 `4242 4242 4242 4242`（任意未来到期日、任意 CVC）；微信支付 / 支付宝在测试模式下点击后会跳到 Stripe 提供的模拟扫码页，无需真实账号即可走完整流程。
 
+## 套餐图上传（可选）
+
+管理端的套餐表单可以直接上传套餐图，图存在 Cloudflare R2、由 `assets.lane.mintpop.ai` 对外提供。
+**不配也能用**——上传按钮会提示「图片存储未配置」，手填图片地址那条路照常可用。
+
+要启用，在 `application.yml` 里填 `storage.r2` 五项（见 `apps/server/config/application.example.yml`）：
+桶名 `mintpop-lane-assets`，自定义域 `assets.lane.mintpop.ai`，Access Key 由 R2 API Token 生成。
+
+⚠️ **宿主机 OpenResty 那层也要放行请求体**：镜像里管理端 nginx 的 `/api/` 已设
+`client_max_body_size 6m`，但请求先过宿主入口，那里若仍是默认的 1 MB，上传大图会被 413 挡下，
+管理端提示「文件太大，超出服务器允许的上传上限」。在宿主 OpenResty 对应 server 块里同样放到 `6m`。
+
+⚠️ `assets.lane.mintpop.ai` 是二级子域，Universal SSL 的通配符覆盖不到，依赖已开通的
+ACM + Total TLS，且**该 DNS 记录必须是橙云代理**。上线后验一次：
+
+```bash
+curl -o /dev/null -w '%{http_code}\n' https://assets.lane.mintpop.ai/<任一已上传对象键>
+```
+
 ## 用户自助购买后如何开通
 
 控制台自助购买套餐、支付成功后，订阅记录已按套餐自动建出，但**起止期需要管理员手动开通**（无自动开通流程，避免异常支付状态下误开通）：
