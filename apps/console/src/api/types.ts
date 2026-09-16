@@ -79,6 +79,8 @@ export interface PlanResponse {
   description: string | null;
   /** 套餐图公开 URL，可空 */
   imageUrl: string | null;
+  /** 套餐详情富文本，已由服务端净化；可空，为空则不显示「详情」入口 */
+  detail: string | null;
 }
 
 export interface OrderCreateRequest {

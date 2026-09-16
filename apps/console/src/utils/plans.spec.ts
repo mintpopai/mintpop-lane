@@ -11,6 +11,7 @@ const claude: PlanResponse = {
   currency: "USD",
   description: null,
   imageUrl: null,
+  detail: null,
 };
 const codex: PlanResponse = {
   id: 2,
@@ -21,6 +22,7 @@ const codex: PlanResponse = {
   currency: "USD",
   description: null,
   imageUrl: null,
+  detail: null,
 };
 
 describe("plans", () => {

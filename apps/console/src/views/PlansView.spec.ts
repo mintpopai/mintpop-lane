@@ -22,6 +22,7 @@ const claude: PlanResponse = {
   currency: "USD",
   description: "含 5 个并发席位，不限流量",
   imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+  detail: "<p>含 5 个并发席位</p>",
 };
 const codex: PlanResponse = {
   id: 2,
@@ -32,6 +33,7 @@ const codex: PlanResponse = {
   currency: "USD",
   description: null,
   imageUrl: null,
+  detail: null,
 };
 
 describe("PlansView", () => {
@@ -118,5 +120,38 @@ describe("PlansView", () => {
     expect(wrapper.get(".plan-card .plan-name").text()).toBe("Claude 月付");
     expect(wrapper.get(".plan-card .admin-btn").attributes("disabled")).toBeDefined();
     expect(showToast).toHaveBeenCalledWith("error", "网络错误");
+  });
+
+  it("有详情的套餐才显示「详情」入口，点开后弹窗渲染富文本", async () => {
+    const wrapper = mount(PlansView, { attachTo: document.body });
+    await flushPromises();
+
+    await wrapper.get(".plan-detail-link").trigger("click");
+
+    expect(document.querySelector(".plan-detail-body")?.innerHTML).toContain("含 5 个并发席位");
+    wrapper.unmount();
+    document.body.innerHTML = "";
+  });
+
+  it("没有详情的套餐不显示「详情」入口", async () => {
+    listPlans.mockResolvedValue([codex]);
+    const wrapper = mount(PlansView);
+    await flushPromises();
+
+    expect(wrapper.find(".plan-detail-link").exists()).toBe(false);
+  });
+
+  it("详情里的 script 在渲染前被剥掉", async () => {
+    listPlans.mockResolvedValue([{ ...claude, detail: "<p>正文</p><script>alert(1)</script>" }]);
+    const wrapper = mount(PlansView, { attachTo: document.body });
+    await flushPromises();
+
+    await wrapper.get(".plan-detail-link").trigger("click");
+
+    const body = document.querySelector(".plan-detail-body");
+    expect(body?.innerHTML).toContain("正文");
+    expect(body?.querySelector("script")).toBeNull();
+    wrapper.unmount();
+    document.body.innerHTML = "";
   });
 });
