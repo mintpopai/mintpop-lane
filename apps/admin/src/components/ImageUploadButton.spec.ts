@@ -62,11 +62,16 @@ describe("ImageUploadButton", () => {
   });
 
   it("选完就清空 input 的值，同一个文件能再选一次", async () => {
+    // 断言 input.element.value === "" 是恒真的：用例里 files 是靠 Object.defineProperty 伪造的，
+    // 没走真实文件选择流程，jsdom 里 value 本来就一直是 ""——不管组件有没有清空都会通过。
+    // 改为监视 value 的 setter，断言组件确实主动调用过它，才能证明「代码清空了」而非「代码没碰过」。
     uploadImage.mockResolvedValue("https://x/a.png");
     const wrapper = mount(ImageUploadButton);
+    const setValue = vi.spyOn(HTMLInputElement.prototype, "value", "set");
 
     await pick(wrapper, file(1024));
 
-    expect(wrapper.get<HTMLInputElement>("input[type=file]").element.value).toBe("");
+    expect(setValue).toHaveBeenCalledWith("");
+    setValue.mockRestore();
   });
 });
