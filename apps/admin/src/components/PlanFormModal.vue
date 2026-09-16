@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { AGENT_TYPE_LABELS, CURRENCY_LABELS } from "../api/types";
@@ -8,6 +8,7 @@ import { showToast } from "../toast";
 import { buildPlanPayload, emptyPlanForm, planToForm, validatePlanForm } from "../utils/planForm";
 import Modal from "./AdminModal.vue";
 import Select from "./AdminSelect.vue";
+import ImageUploadButton from "./ImageUploadButton.vue";
 
 const props = defineProps<{ editing: PlanResponse | null }>();
 // 弹窗由父组件 v-if 挂载/卸载，打开即初始化表单，不需要 watch 重置
@@ -15,6 +16,16 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 
 const form = ref(props.editing ? planToForm(props.editing) : emptyPlanForm());
 const submitting = ref(false);
+/** 图片地址取不到图时，预览位给一句人话，而不是一个碎图标 */
+const imageError = ref(false);
+
+// 换了地址就重新试一次，别把上一张的失败状态留在新地址上
+watch(
+  () => form.value.imageUrl,
+  () => {
+    imageError.value = false;
+  },
+);
 
 const title = computed(() => (props.editing ? `编辑套餐：${props.editing.name}` : "新建套餐"));
 const agentOptions = Object.entries(AGENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
@@ -115,6 +126,48 @@ async function submit(): Promise<void> {
         />
       </div>
       <div class="admin-field">
+        <label for="plan-description">
+          描述
+          <span class="char-count" :class="{ over: form.description.length > 255 }">
+            {{ form.description.length }} / 255
+          </span>
+        </label>
+        <textarea
+          id="plan-description"
+          v-model="form.description"
+          class="admin-input"
+          rows="2"
+          maxlength="255"
+          placeholder="如：含 5 个并发席位，不限流量"
+        ></textarea>
+        <p class="field-note">控制台购买卡片上，套餐名下面那行小字。</p>
+      </div>
+      <div class="admin-field">
+        <label for="plan-image">套餐图</label>
+        <!-- 手填地址与本地上传两条路都留着：上传成功直接回填地址，预览随 watch 刷新 -->
+        <div class="image-row">
+          <input
+            id="plan-image"
+            v-model="form.imageUrl"
+            class="admin-input"
+            type="url"
+            placeholder="https://…"
+          />
+          <ImageUploadButton @uploaded="form.imageUrl = $event" />
+        </div>
+        <div class="image-preview">
+          <img
+            v-if="form.imageUrl && !imageError"
+            :src="form.imageUrl"
+            alt=""
+            @error="imageError = true"
+          />
+          <p v-else class="image-note">
+            {{ imageError ? "这个地址取不到图片。" : "填了地址或上传图片就能在这里看到效果。" }}
+          </p>
+        </div>
+      </div>
+      <div class="admin-field">
         <label for="plan-remark">备注</label>
         <input
           id="plan-remark"
@@ -133,3 +186,54 @@ async function submit(): Promise<void> {
     </template>
   </Modal>
 </template>
+
+<style scoped>
+/* 字数计数贴在 label 右侧，超限标红 */
+.char-count {
+  float: right;
+  font-family: var(--font-fact);
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
+.char-count.over {
+  color: var(--counter-danger);
+}
+
+/* 字段下面的一句解释，说清这个值会出现在哪 */
+.field-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-ink-secondary);
+}
+
+.image-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.image-preview {
+  margin-top: 8px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-note {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  padding: 0 12px;
+  text-align: center;
+}
+</style>

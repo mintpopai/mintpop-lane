@@ -82,6 +82,25 @@ describe("PlanFormModal 打开时", () => {
 
     expect(query<HTMLInputElement>("#plan-remark").element.value).toBe("");
   });
+
+  it("编辑时回填描述与图片地址，并把图显示在预览位上", () => {
+    render(plan());
+
+    expect(query<HTMLTextAreaElement>("#plan-description").element.value).toBe("含 5 个并发席位");
+    expect(query<HTMLInputElement>("#plan-image").element.value).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+    );
+    expect(query<HTMLImageElement>(".image-preview img").element.src).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+    );
+  });
+
+  it("没有图时预览位给一句人话，而不是一个碎图标", () => {
+    render(plan({ imageUrl: null }));
+
+    expect(document.querySelector(".image-preview img")).toBeNull();
+    expect(query(".image-preview").text()).toContain("填了地址或上传图片就能在这里看到效果");
+  });
 });
 
 describe("PlanFormModal 提交校验", () => {
@@ -144,6 +163,20 @@ describe("PlanFormModal 保存", () => {
     expect(createPlan).not.toHaveBeenCalled();
   });
 
+  it("提交时把描述与图片地址一并带上", async () => {
+    const wrapper = render(plan());
+
+    await submit(wrapper);
+
+    expect(updatePlan).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({
+        description: "含 5 个并发席位",
+        imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+      }),
+    );
+  });
+
   it("保存成功后告诉父组件「存好了」并让它关掉弹窗", async () => {
     const wrapper = render(plan());
 
@@ -198,7 +231,8 @@ describe("PlanFormModal 保存", () => {
   it("取消只是关掉，不碰任何接口", async () => {
     const wrapper = render(plan());
 
-    await query<HTMLButtonElement>(".admin-btn-ghost").trigger("click");
+    // .foot 限定取消按钮：ImageUploadButton 内部按钮同样用了 admin-btn-ghost 类，不加限定会点错
+    await query<HTMLButtonElement>(".foot .admin-btn-ghost").trigger("click");
 
     expect(wrapper.emitted("close")).toHaveLength(1);
     expect(updatePlan).not.toHaveBeenCalled();
