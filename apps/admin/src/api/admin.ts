@@ -27,6 +27,7 @@ import type {
   UserSaveRequest,
   EnterpriseResponse,
   EnterpriseSaveRequest,
+  ImageUploadResponse,
 } from "./types";
 
 export interface AdminApi {
@@ -69,6 +70,8 @@ export interface AdminApi {
   createPlan(body: PlanSaveRequest): Promise<number>;
   updatePlan(id: number, body: PlanSaveRequest): Promise<void>;
   deletePlan(id: number): Promise<void>;
+  /** 上传图片，返回公开 URL；套餐主图与富文本插图共用 */
+  uploadImage(file: File): Promise<string>;
   listEnterprises(): Promise<EnterpriseResponse[]>;
   createEnterprise(body: EnterpriseSaveRequest): Promise<number>;
   updateEnterprise(id: number, body: EnterpriseSaveRequest): Promise<void>;
@@ -233,6 +236,17 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     deletePlan(id) {
       return http.request(`/admin/plans/${id}`, { method: "DELETE" });
+    },
+
+    async uploadImage(file) {
+      const form = new FormData();
+      form.append("file", file);
+      // 不设 Content-Type：http 客户端识别 FormData 后交给浏览器带 boundary
+      const result = await http.request<ImageUploadResponse>("/admin/uploads/images", {
+        method: "POST",
+        body: form,
+      });
+      return result.url;
     },
 
     listEnterprises() {

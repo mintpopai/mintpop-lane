@@ -434,6 +434,10 @@ export interface PlanResponse {
   durationDays: number;
   price: number;
   currency: Currency;
+  /** 面向用户的短描述，控制台购买卡片的副标题 */
+  description: string | null;
+  /** 套餐图公开 URL */
+  imageUrl: string | null;
   /** 上架状态：false 表示停用但保留 */
   enabled: boolean;
   remark: string | null;
@@ -472,6 +476,13 @@ export interface PlanSaveRequest {
   durationDays: number;
   price: number;
   currency: Currency;
+  description: string;
+  imageUrl: string;
   enabled: boolean;
   remark: string;
+}
+
+/** 图片上传结果（POST /api/admin/uploads/images） */
+export interface ImageUploadResponse {
+  url: string;
 }

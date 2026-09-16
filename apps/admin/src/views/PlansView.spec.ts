@@ -23,6 +23,8 @@ function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
     durationDays: 30,
     price: 29.9,
     currency: "USD",
+    description: null,
+    imageUrl: null,
     enabled: true,
     remark: null,
     createdAt: "2026-09-01T00:00:00Z",

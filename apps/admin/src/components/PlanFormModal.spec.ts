@@ -21,6 +21,8 @@ function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
     durationDays: 30,
     price: 29.9,
     currency: "USD",
+    description: "含 5 个并发席位",
+    imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
     enabled: true,
     remark: "老客专享",
     createdAt: "2026-09-01T00:00:00Z",
@@ -126,6 +128,8 @@ describe("PlanFormModal 保存", () => {
       durationDays: 90,
       price: 79.9,
       currency: "USD",
+      description: "",
+      imageUrl: "",
       enabled: true,
       remark: "",
     });
