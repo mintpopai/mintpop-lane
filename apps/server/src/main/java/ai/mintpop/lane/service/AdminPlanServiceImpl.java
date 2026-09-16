@@ -75,12 +75,15 @@ public class AdminPlanServiceImpl implements AdminPlanService {
         plan.setDurationDays(request.getDurationDays());
         plan.setPrice(request.getPrice());
         plan.setCurrency(request.getCurrency());
+        plan.setDescription(request.getDescription());
+        plan.setImageUrl(request.getImageUrl());
         plan.setEnabled(request.getEnabled());
         plan.setRemark(request.getRemark());
     }
 
     private PlanResponse toResponse(Plan plan) {
-        return new PlanResponse(plan.getId(), plan.getName(), plan.getAgentType(), plan.getDurationDays(), plan.getPrice(),
-                plan.getCurrency(), plan.getEnabled(), plan.getRemark(), plan.getCreatedAt(), plan.getUpdatedAt());
+        return new PlanResponse(plan.getId(), plan.getName(), plan.getAgentType(), plan.getDurationDays(),
+                plan.getPrice(), plan.getCurrency(), plan.getDescription(), plan.getImageUrl(),
+                plan.getEnabled(), plan.getRemark(), plan.getCreatedAt(), plan.getUpdatedAt());
     }
 }

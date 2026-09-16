@@ -35,6 +35,12 @@ public class Plan {
 
     private Currency currency;
 
+    /** 面向用户的短描述，控制台购买卡片的副标题，可空 */
+    private String description;
+
+    /** 套餐图公开 URL，可空 */
+    private String imageUrl;
+
     /** 上架状态：false 表示停用但保留 */
     private Boolean enabled;
 

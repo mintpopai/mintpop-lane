@@ -25,6 +25,7 @@ import java.util.Map;
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -82,6 +83,8 @@ class AdminPlanControllerTest extends MysqlTestBase {
         body.put("currency", "USD");
         body.put("enabled", true);
         body.put("remark", "首发款");
+        body.put("description", "含 5 个并发席位，不限流量");
+        body.put("imageUrl", "https://assets.lane.mintpop.ai/plans/2026/09/a.png");
         return body;
     }
 
@@ -125,6 +128,8 @@ class AdminPlanControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].currency").value("USD"))
                 .andExpect(jsonPath("$.data[0].enabled").value(true))
                 .andExpect(jsonPath("$.data[0].remark").value("首发款"))
+                .andExpect(jsonPath("$.data[0].description").value("含 5 个并发席位，不限流量"))
+                .andExpect(jsonPath("$.data[0].imageUrl").value("https://assets.lane.mintpop.ai/plans/2026/09/a.png"))
                 .andExpect(jsonPath("$.data[0].createdAt").exists())
                 .andExpect(jsonPath("$.data[0].updatedAt").exists())
                 .andExpect(jsonPath("$.data[1].name").value("季付套餐"))
@@ -257,5 +262,40 @@ class AdminPlanControllerTest extends MysqlTestBase {
 
         mockMvc.perform(delete("/api/admin/plans/" + planId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410017));
+    }
+
+    @Test
+    @DisplayName("描述与图片地址可空：不传这两项也能建出套餐")
+    void mediaFieldsAreOptional() throws Exception {
+        Map<String, Object> body = validBody();
+        body.remove("description");
+        body.remove("imageUrl");
+
+        Long id = createPlan(body);
+
+        mockMvc.perform(get("/api/admin/plans").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].id").value(id))
+                .andExpect(jsonPath("$.data[0].description").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].imageUrl").value(nullValue()));
+    }
+
+    @Test
+    @DisplayName("图片地址必须是 https，描述超 255 字被挡下，均报 110001")
+    void mediaFieldValidation() throws Exception {
+        Map<String, Object> httpUrl = validBody();
+        httpUrl.put("imageUrl", "http://assets.lane.mintpop.ai/plans/a.png");
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(httpUrl)))
+                .andExpect(jsonPath("$.code").value(110001));
+
+        Map<String, Object> longDescription = validBody();
+        longDescription.put("name", "另一个套餐");
+        longDescription.put("description", "描".repeat(256));
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(longDescription)))
+                .andExpect(jsonPath("$.code").value(110001));
+
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM plan", Integer.class);
+        assertThat(count).isEqualTo(0);
     }
 }

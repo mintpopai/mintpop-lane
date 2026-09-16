@@ -88,4 +88,30 @@ class PlanControllerTest extends MysqlTestBase {
     void anonymousGets401() throws Exception {
         mockMvc.perform(get("/api/plans")).andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("用户侧套餐列表带上描述与图片，管理员备注仍然不出现")
+    void userListExposesMedia() throws Exception {
+        // 只留这一个套餐，断言就不必依赖 setUp 里那几个的排序
+        jdbc.update("DELETE FROM plan");
+        Plan withMedia = new Plan();
+        withMedia.setName("Claude 双月付");
+        withMedia.setAgentType(AgentType.CLAUDE);
+        withMedia.setDurationDays(60);
+        withMedia.setPrice(new BigDecimal("159.00"));
+        withMedia.setCurrency(Currency.USD);
+        withMedia.setEnabled(true);
+        withMedia.setRemark("内部备注-双月");
+        withMedia.setDescription("含 5 个并发席位，不限流量");
+        withMedia.setImageUrl("https://assets.lane.mintpop.ai/plans/2026/09/a.png");
+        planRepository.create(withMedia);
+
+        mockMvc.perform(get("/api/plans").header("Authorization", bearer(memberId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].description").value("含 5 个并发席位，不限流量"))
+                .andExpect(jsonPath("$.data[0].imageUrl")
+                        .value("https://assets.lane.mintpop.ai/plans/2026/09/a.png"))
+                .andExpect(content().string(not(containsString("内部备注"))));
+    }
 }
