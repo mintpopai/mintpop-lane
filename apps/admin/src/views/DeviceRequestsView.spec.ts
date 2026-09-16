@@ -35,8 +35,18 @@ function request(
     assignmentNo: "7K3M9QX2FT",
     userId: 3,
     userEmail: "u@example.com",
-    fromDevice: { name: "旧机", os: "macos 15.6", model: "Mac15,6" },
-    toDevice: { name: "新机", os: "macos 26.6", model: "Mac17,9" },
+    fromDevice: {
+      name: "旧机",
+      os: "macos 15.6",
+      model: "Mac15,6",
+      lastSeenAt: "2026-09-15T09:00:00Z",
+    },
+    toDevice: {
+      name: "新机",
+      os: "macos 26.6",
+      model: "Mac17,9",
+      lastSeenAt: "2026-09-15T11:50:00Z",
+    },
     reason: "换了新电脑",
     status: "PENDING",
     createdAt: "2026-09-15T02:00:00Z",
@@ -266,12 +276,21 @@ describe("DeviceRequestsView 页头刷新", () => {
 describe("DeviceRequestsView 展示细节", () => {
   it("机型为空时不留下吊着的分隔符", async () => {
     listDeviceRebindRequests.mockResolvedValueOnce([
-      request({ toDevice: { name: "DESKTOP-4F2", os: "windows 11", model: "" } }),
+      request({
+        toDevice: {
+          name: "DESKTOP-4F2",
+          os: "windows 11",
+          model: "",
+          lastSeenAt: "2026-09-15T11:50:00Z",
+        },
+      }),
     ]);
     const wrapper = await render();
 
+    // 只盯设备标签本身，不锁死整个单元格——同格里还有「最近活跃」那一行
     const cell = wrapper.get("tbody tr").findAll("td")[3];
-    expect(cell.text()).toBe("DESKTOP-4F2（windows 11）");
+    expect(cell.text()).toContain("DESKTOP-4F2（windows 11）");
+    expect(cell.text()).not.toContain("· ");
   });
 
   // 绿色在本仓的色板里只表示「在跑 / 正常」，已拒绝与已作废都不是
@@ -298,5 +317,15 @@ describe("DeviceRequestsView 展示细节", () => {
     const wrapper = await render();
 
     expect(wrapper.get("tbody tr").text()).toContain("DR20260915000007");
+  });
+
+  it("两台设备各自带上最近活跃时刻：原设备刚刚还在用，这次申请多半不是真换机", async () => {
+    // 相对说法是按「现在」算的，钉住它才能断言
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-15T12:00:00Z").getTime());
+    const wrapper = await render();
+
+    const row = wrapper.get("tbody tr").text();
+    expect(row).toContain("3 小时前");
+    expect(row).toContain("10 分钟前");
   });
 });

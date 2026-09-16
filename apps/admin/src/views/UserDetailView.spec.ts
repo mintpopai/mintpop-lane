@@ -337,6 +337,7 @@ describe("UserDetailView · 设备绑定", () => {
           os: "macos 26.6",
           model: "Mac17,9",
           boundAt: "2026-09-10T02:00:00Z",
+          lastSeenAt: "2026-09-15T09:00:00Z",
         },
       }),
     ]);
@@ -345,6 +346,27 @@ describe("UserDetailView · 设备绑定", () => {
     expect(text).toContain("月白的 MacBook");
     expect(text).toContain("macos 26.6");
     expect(text).toContain("Mac17,9");
+  });
+
+  it("已绑定时同时给出最近活跃时刻：绑了半年却一个月没动过，和昨天刚绑的不是一回事", async () => {
+    // 相对说法是按「现在」算的，钉住它才能断言
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-15T12:00:00Z").getTime());
+    await mountView([
+      subscription({
+        id: 5,
+        boundDevice: {
+          name: "月白的 MacBook",
+          os: "macos 26.6",
+          model: "Mac17,9",
+          boundAt: "2026-03-10T02:00:00Z",
+          lastSeenAt: "2026-09-15T09:00:00Z",
+        },
+      }),
+    ]);
+    const text = document.querySelector(".sub-item")?.textContent ?? "";
+
+    expect(text).toContain("最近活跃");
+    expect(text).toContain("3 小时前");
   });
 
   it("解绑要先过确认框，确认后调接口并重拉订阅，且确认文案提示会作废待处理换机申请", async () => {
@@ -357,6 +379,7 @@ describe("UserDetailView · 设备绑定", () => {
         os: "macos 26.6",
         model: "Mac17,9",
         boundAt: "2026-09-10T02:00:00Z",
+        lastSeenAt: "2026-09-15T09:00:00Z",
       },
     });
     await mountView([row]);
@@ -388,6 +411,7 @@ describe("UserDetailView · 设备绑定", () => {
         os: "macos 26.6",
         model: "Mac17,9",
         boundAt: "2026-09-10T02:00:00Z",
+        lastSeenAt: "2026-09-15T09:00:00Z",
       },
     });
     await mountView([row]);
@@ -411,6 +435,7 @@ describe("UserDetailView · 设备绑定", () => {
         os: "macos 26.6",
         model: "Mac17,9",
         boundAt: "2026-09-10T02:00:00Z",
+        lastSeenAt: "2026-09-15T09:00:00Z",
       },
     });
     await mountView([row]);
@@ -433,6 +458,7 @@ describe("UserDetailView · 设备绑定", () => {
           os: "macos 26.6",
           model: "Mac17,9",
           boundAt: "2026-09-10T02:00:00Z",
+          lastSeenAt: "2026-09-15T09:00:00Z",
         },
       }),
     ]);
@@ -454,6 +480,7 @@ describe("UserDetailView · 设备绑定", () => {
           os: "windows 11",
           model: "",
           boundAt: "2026-09-10T02:00:00Z",
+          lastSeenAt: "2026-09-15T09:00:00Z",
         },
       }),
     ]);

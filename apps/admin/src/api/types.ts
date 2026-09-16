@@ -251,6 +251,8 @@ export interface DeviceBrief {
   name: string;
   os: string;
   model: string;
+  /** 最近一次上报时刻：这台机器最后一次还在用是什么时候。服务端按 5 分钟窗口节流刷新，可能滞后数分钟 */
+  lastSeenAt: string;
 }
 
 /** 订阅当前绑定的设备。未绑定时整个对象为 null，不是字段为空 */
