@@ -96,3 +96,19 @@ claude:
     # 最小充分集，不可增删：多要 user:mcp_servers 会被拒发长有效期，少要 user:profile 则方案目的落空
     scope: "user:profile user:inference"
     max-expires-in-seconds: 31536000
+
+# 套餐图上传用的 Cloudflare R2 对象存储。
+# 整段可选：五项留空则上传接口返回「图片存储未配置」（业务码 410044），
+# 管理端手填图片地址那条路照常可用，其它功能完全不受影响，本地开发不必配。
+# 桶名与自定义域见 docs/superpowers/specs/2026-09-16-套餐商品化-design.md。
+storage:
+  r2:
+    # Cloudflare 账户 ID，用于拼 S3 兼容端点 https://<accountId>.r2.cloudflarestorage.com
+    account-id: ""
+    # R2 API Token 生成的 Access Key ID（敏感）
+    access-key-id: ""
+    # R2 API Token 生成的 Secret Access Key（敏感）
+    secret-access-key: ""
+    bucket: mintpop-lane-assets
+    # 桶绑定的自定义域名，图片的公开地址由它 + 对象键拼成
+    public-base-url: https://assets.lane.mintpop.ai
