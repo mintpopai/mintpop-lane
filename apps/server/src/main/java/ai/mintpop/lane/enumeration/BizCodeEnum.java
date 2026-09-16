@@ -73,6 +73,10 @@ public enum BizCodeEnum {
     SUBSCRIPTION_NOT_ACTIVATED(410041, "订阅尚未开通，请先填写起期"),
     REBIND_REQUEST_NOT_FOUND(410042, "换机申请不存在"),
     REBIND_REQUEST_NOT_PENDING(410043, "该换机申请已被处理"),
+    IMAGE_STORAGE_NOT_CONFIGURED(410044, "图片存储未配置"),
+    IMAGE_TOO_LARGE(410045, "图片不能超过 5 MB"),
+    IMAGE_TYPE_UNSUPPORTED(410046, "只支持 JPEG / PNG / WebP / GIF 图片"),
+    IMAGE_STORAGE_ERROR(410047, "图片存储写入失败，请稍后重试"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),
