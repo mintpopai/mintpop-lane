@@ -36,7 +36,8 @@
   /* 品牌展示字体：只给品牌锁定组合里的产品名用（闸门页左上角的「Lane」），与官网
      --font-display 同一套。西文经 Fontsource 自托管（main.ts import），不外链 */
   --font-display: "Fredoka", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --rail-width: 208px;
+  /* 顶栏高度：与 .bar-link 的 36px 一起决定当前项指示条贴底边框的偏移，改一个要一起算 */
+  --bar-height: 60px;
 }
 
 /* 页面底用基线的 Cloud，卡面纯白——两层足够拉开层次 */
@@ -65,44 +66,39 @@ body {
   --state-color: #b4720b;
 }
 
-/* —— 外壳：全高导航轨常驻左侧，长表格滚动时导航不跟着走。
-   轨道用白面、工作区用 Cloud，靠这层明暗差和一条右边框区分，不靠深色块压 —— */
-.admin-rail {
-  position: fixed;
+/* —— 外壳：顶栏常驻页首，长表格滚动时导航不跟着走（sticky 而非 fixed：工作区照旧随
+   文档滚动，不必另造滚动容器）。顶栏用白面、工作区用 Cloud，靠这层明暗差和一条下边框
+   区分，不靠深色块压。控制台只有三个入口，横排一行足够，整幅宽度留给内容 —— */
+.admin-bar {
+  position: sticky;
   top: 0;
-  bottom: 0;
-  left: 0;
-  width: var(--rail-width);
-  display: flex;
-  flex-direction: column;
-  padding: 24px 16px 20px;
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border);
   z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: var(--bar-height);
+  padding: 0 24px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
 }
 
-/* 词标与副题上下两行：「Lane 管理后台」比 shop 的「管理后台」多一截 Lane 前缀，
-   横排在 208px 轨道里会折行折在词中间 */
-/* 与闸门页 .gate-brand 同一套锁定组合，尺寸整组降一档：轨内可用宽只有 175px，
-   闸门页那档（字标 26px）横排要 239px，塞不下 */
-.rail-brand {
+/* 与闸门页 .gate-brand 同一套锁定组合，尺寸整组降一档 */
+.bar-brand {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* 左缘比导航文字略收一点：整组已经吃满轨宽，12px 缩进会让「管理后台」顶到边 */
-  padding: 0 0 24px 6px;
-}
-
-/* 品牌字标用 standards.mintpop.ai 的 wordmark 图，不手写 */
-.rail-wordmark {
-  display: block;
-  height: 18px;
-  width: auto;
-  /* 横排里它是唯一会被挤扁的图：宽度让给右边的文字前先保住自己 */
   flex-shrink: 0;
 }
 
-.rail-brand-text {
+/* 品牌字标用 standards.mintpop.ai 的 wordmark 图，不手写 */
+.bar-wordmark {
+  display: block;
+  height: 18px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.bar-brand-text {
   font-family: var(--font-display);
   padding-left: 8px;
   border-left: 1px solid var(--color-border);
@@ -114,7 +110,7 @@ body {
   white-space: nowrap;
 }
 
-.rail-kind {
+.bar-kind {
   margin-left: 5px;
   font-size: 11px;
   font-weight: 400;
@@ -122,63 +118,87 @@ body {
   color: var(--color-ink-secondary);
 }
 
-.rail-nav {
+.bar-nav {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 4px;
 }
 
-.rail-link {
+/* 高与顶栏是一对约数：20 行高 + 上下 8 padding = 36，顶栏 60 → 上下各余 12，
+   当前项的指示条正好能用 -12 贴到底边框上 */
+.bar-link {
   position: relative;
   padding: 8px 12px;
   border-radius: var(--radius-button);
   font-size: 14px;
+  line-height: 20px;
   color: var(--color-ink-secondary);
   text-decoration: none;
+  white-space: nowrap;
   transition:
     background 0.15s ease,
     color 0.15s ease;
 }
 
-.rail-link:hover {
+.bar-link:hover {
   background: var(--color-bg-cloud);
   color: var(--color-ink);
 }
 
 /* 当前位置三重表达：淡薄荷底、墨色、加粗——不靠颜色单独传达 */
-.rail-link.router-link-active {
+.bar-link.router-link-active {
   background: color-mix(in srgb, var(--color-brand) 14%, #ffffff);
   color: var(--color-ink);
   font-weight: 600;
 }
 
-/* 贴在轨道左沿的指示条，是上面三重表达之外的冗余强化 */
-.rail-link.router-link-active::before {
+/* 贴在顶栏下沿的指示条，是上面三重表达之外的冗余强化（导航由轨转横，它也跟着转 90°） */
+.bar-link.router-link-active::before {
   content: "";
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: -16px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
+  right: 12px;
+  bottom: -12px;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
   background: var(--color-brand-deep);
 }
 
-.rail-foot {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
+/* 胶囊与菜单同处一个定位容器：判定「点的是不是自己人」只认它 */
+.bar-account {
+  position: relative;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
-.rail-user {
+.bar-user {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px;
-  min-width: 0;
+  gap: 10px;
+  height: 36px;
+  padding: 0 4px 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-.rail-avatar {
+.bar-user:hover {
+  background: var(--color-bg-cloud);
+}
+
+/* 顶栏寸土寸金，邮箱长了就截断；全文在菜单里 */
+.bar-user-email {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--color-ink);
+}
+
+.bar-avatar {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -193,33 +213,53 @@ body {
   object-fit: cover;
 }
 
-.rail-user-email {
-  font-size: 13px;
-  color: var(--color-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.bar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  min-width: 208px;
+  max-width: 280px;
+  padding: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  /* 浮层才有的投影：页面上其它卡面一律不投影，靠边框分层 */
+  box-shadow: 0 8px 24px rgb(11 11 12 / 10%);
 }
 
-.rail-signout {
-  margin-top: 8px;
-  padding: 0 4px;
+.bar-menu-email {
+  padding: 6px 10px 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-ink);
+  /* 长邮箱在 280px 里换行读全，不省略 */
+  word-break: break-all;
+}
+
+.bar-signout {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
   border: none;
+  border-radius: var(--radius-button);
   background: none;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
+  text-align: left;
   color: var(--color-ink-secondary);
-  text-decoration: none;
   cursor: pointer;
 }
 
-.rail-signout:hover {
+.bar-signout:hover {
+  background: var(--color-bg-cloud);
   color: var(--color-ink);
 }
 
 .admin-desk {
-  margin-left: var(--rail-width);
-  min-height: 100vh;
+  min-height: calc(100vh - var(--bar-height));
 }
 
 .admin-page {
@@ -1564,57 +1604,11 @@ body {
   }
 }
 
-/* —— 响应式：窄屏把导航轨放平成顶部横条 —— */
+/* —— 响应式：顶栏在窄屏只收紧间距，导航形态不变 —— */
 @media (max-width: 960px) {
-  .admin-rail {
-    position: static;
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    gap: 20px;
-    padding: 12px 20px;
-    overflow-x: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .rail-brand {
-    padding: 0;
-    flex-shrink: 0;
-  }
-
-  .rail-nav {
-    flex-direction: row;
-    gap: 4px;
-  }
-
-  .rail-link.router-link-active::before {
-    top: auto;
-    bottom: -12px;
-    left: 12px;
-    right: 12px;
-    width: auto;
-    height: 2px;
-    border-radius: 2px 2px 0 0;
-  }
-
-  .rail-foot {
-    margin-top: 0;
-    margin-left: auto;
-    padding-top: 0;
-    border-top: none;
-    display: flex;
-    align-items: center;
+  .admin-bar {
     gap: 16px;
-  }
-
-  .rail-signout {
-    margin-top: 0;
-  }
-
-  .admin-desk {
-    margin-left: 0;
-    min-height: 0;
+    padding: 0 20px;
   }
 
   .admin-page {
@@ -1623,7 +1617,40 @@ body {
 }
 
 @media (max-width: 640px) {
-  .rail-user-email {
+  /* 先保住三个 tab 横排：品牌文字与邮箱都让位，身份改到菜单里读；tab 内边距再收 2px，
+     390 宽（最窄的主流手机）排得下还余 7px。更窄时让顶栏自己横滚——滚动条不显形，否则
+     它会在顶栏下沿压出一条常驻灰杠；指示条同步收进高亮块内，否则会被 overflow 裁掉 */
+  .admin-bar {
+    gap: 12px;
+    padding: 0 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .admin-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bar-brand-text {
+    display: none;
+  }
+
+  .bar-link {
+    padding: 8px 8px;
+  }
+
+  /* 指示条跟着收窄后的内边距走，仍与文字等宽 */
+  .bar-link.router-link-active::before {
+    right: 8px;
+    bottom: 0;
+    left: 8px;
+  }
+
+  .bar-user {
+    padding: 0 4px;
+  }
+
+  .bar-user-email {
     display: none;
   }
 
