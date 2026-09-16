@@ -82,8 +82,13 @@ async function buy(plan: PlanResponse): Promise<void> {
   >
     <ul class="plan-list">
       <li v-for="plan in visiblePlans" :key="plan.id" class="plan-card">
+        <!-- 没有图就整块不占位：留一个空框比没有更显得缺东西 -->
+        <div v-if="plan.imageUrl" class="plan-thumb">
+          <img :src="plan.imageUrl" alt="" />
+        </div>
         <div class="plan-text">
           <span class="plan-name">{{ plan.name }}</span>
+          <span v-if="plan.description" class="plan-desc">{{ plan.description }}</span>
           <span class="plan-spec"
             ><span class="fact">{{ plan.durationDays }}</span> 天</span
           >

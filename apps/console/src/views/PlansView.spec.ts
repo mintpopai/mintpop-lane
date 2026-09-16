@@ -20,6 +20,8 @@ const claude: PlanResponse = {
   durationDays: 30,
   price: 99.99,
   currency: "USD",
+  description: "含 5 个并发席位，不限流量",
+  imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
 };
 const codex: PlanResponse = {
   id: 2,
@@ -28,6 +30,8 @@ const codex: PlanResponse = {
   durationDays: 30,
   price: 49,
   currency: "USD",
+  description: null,
+  imageUrl: null,
 };
 
 describe("PlansView", () => {
@@ -76,6 +80,28 @@ describe("PlansView", () => {
     await flushPromises();
     expect(wrapper.get(".plan-card .admin-btn").attributes("disabled")).toBeDefined();
     expect(wrapper.text()).toContain("支付暂未开放");
+  });
+
+  it("有图有描述时，卡片显示缩略图与描述行", async () => {
+    const wrapper = mount(PlansView);
+    await flushPromises();
+
+    const card = wrapper.get(".plan-card");
+    expect(card.get<HTMLImageElement>(".plan-thumb img").element.src).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+    );
+    expect(card.get(".plan-desc").text()).toBe("含 5 个并发席位，不限流量");
+  });
+
+  it("没有图或描述的套餐不占位，卡片只少那一块", async () => {
+    listPlans.mockResolvedValue([codex]);
+    const wrapper = mount(PlansView);
+    await flushPromises();
+
+    const card = wrapper.get(".plan-card");
+    expect(card.find(".plan-thumb").exists()).toBe(false);
+    expect(card.find(".plan-desc").exists()).toBe(false);
+    expect(card.get(".plan-name").text()).toBe("Codex 月付");
   });
 
   it("没有上架套餐时是空态", async () => {

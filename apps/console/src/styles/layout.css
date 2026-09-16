@@ -1811,6 +1811,34 @@ body {
   color: var(--color-ink-secondary);
 }
 
+/* 套餐缩略图：无图时这一整块不渲染，卡片自然收窄 */
+.plan-thumb {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--color-bg-cloud);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 描述可能很长，卡片高度不能被它撑开，超出就省略 */
+.plan-desc {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .plan-price {
   font-size: 18px;
   color: var(--color-ink);
