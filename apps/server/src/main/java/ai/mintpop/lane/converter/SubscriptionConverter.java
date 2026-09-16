@@ -44,6 +44,8 @@ public class SubscriptionConverter {
         // 组织身份两列同属只读方向：写入靠专用的 updateCredentialOrg/clearCredentialMetadata
         dto.setCredentialOrgUuid(entity.getCredentialOrgUuid());
         dto.setCredentialExtraUsageEnabled(entity.getCredentialExtraUsageEnabled());
+        dto.setBoundDeviceId(entity.getBoundDeviceId());
+        dto.setBoundAt(entity.getBoundAt());
         dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
@@ -68,6 +70,8 @@ public class SubscriptionConverter {
         String credential = dto.getCredential();
         entity.setCredentialCipher(
                 credential == null || credential.isBlank() ? null : cipher.encrypt(credential));
+        entity.setBoundDeviceId(dto.getBoundDeviceId());
+        entity.setBoundAt(dto.getBoundAt());
         entity.setRemark(dto.getRemark());
         return entity;
     }

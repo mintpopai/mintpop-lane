@@ -33,6 +33,16 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
     }
 
     @Override
+    public Optional<SubscriptionDto> findByIdForUpdate(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(mapper.selectOne(
+                        Wrappers.<Subscription>lambdaQuery().eq(Subscription::getId, id).last("FOR UPDATE")))
+                .map(converter::toDto);
+    }
+
+    @Override
     public List<SubscriptionDto> findByUserId(Long userId) {
         return mapper.selectList(Wrappers.<Subscription>lambdaQuery()
                         .eq(Subscription::getUserId, userId)
@@ -143,5 +153,30 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
                 .set(Subscription::getCredentialRefreshCipher, null)
                 .set(Subscription::getCredentialOrgUuid, null)
                 .set(Subscription::getCredentialExtraUsageEnabled, null));
+    }
+
+    @Override
+    public boolean bindDeviceIfUnbound(Long subscriptionId, Long deviceId, Instant now) {
+        return mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .isNull(Subscription::getBoundDeviceId)
+                .set(Subscription::getBoundDeviceId, deviceId)
+                .set(Subscription::getBoundAt, now)) > 0;
+    }
+
+    @Override
+    public void rebindDevice(Long subscriptionId, Long deviceId, Instant now) {
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getBoundDeviceId, deviceId)
+                .set(Subscription::getBoundAt, now));
+    }
+
+    @Override
+    public void unbindDevice(Long subscriptionId) {
+        mapper.update(null, Wrappers.<Subscription>lambdaUpdate()
+                .eq(Subscription::getId, subscriptionId)
+                .set(Subscription::getBoundDeviceId, null)
+                .set(Subscription::getBoundAt, null));
     }
 }

@@ -1,5 +1,6 @@
 import type { HttpClient } from "./http";
 import type {
+  AdminDeviceRebindRequestResponse,
   AdminNodeResponse,
   AdminSubscriptionResponse,
   AdminUserResponse,
@@ -17,6 +18,7 @@ import type {
   PageResult,
   PlanResponse,
   PlanSaveRequest,
+  RebindRequestStatus,
   SubPreviewNode,
   SubPreviewRequest,
   SubscriptionCreateRequest,
@@ -48,6 +50,14 @@ export interface AdminApi {
     body: CredentialExchangeRequest,
   ): Promise<CredentialIssueResult>;
   credentialRevoke(subscriptionId: number): Promise<CredentialRevokeResult>;
+  /** 换机申请列表；不传状态即全部历史，按提交时间倒序 */
+  listDeviceRebindRequests(
+    status?: RebindRequestStatus,
+  ): Promise<AdminDeviceRebindRequestResponse[]>;
+  approveDeviceRebindRequest(id: number): Promise<void>;
+  rejectDeviceRebindRequest(id: number): Promise<void>;
+  /** 强制解绑订阅当前绑定的设备。与有没有申请无关，故挂在订阅下 */
+  unbindSubscriptionDevice(id: number): Promise<void>;
   previewSub(body: SubPreviewRequest): Promise<SubPreviewNode[]>;
   createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;
   listNodeGroups(): Promise<NodeGroupResponse[]>;
@@ -152,6 +162,24 @@ export function createAdminApi(http: HttpClient): AdminApi {
       return http.request(`/admin/subscriptions/${subscriptionId}/credential/revoke`, {
         method: "POST",
       });
+    },
+
+    listDeviceRebindRequests(status) {
+      return http.request(
+        status ? `/admin/device-rebind-requests?status=${status}` : "/admin/device-rebind-requests",
+      );
+    },
+
+    approveDeviceRebindRequest(id) {
+      return http.request(`/admin/device-rebind-requests/${id}/approve`, { method: "POST" });
+    },
+
+    rejectDeviceRebindRequest(id) {
+      return http.request(`/admin/device-rebind-requests/${id}/reject`, { method: "POST" });
+    },
+
+    unbindSubscriptionDevice(id) {
+      return http.request(`/admin/subscriptions/${id}/device/unbind`, { method: "POST" });
     },
 
     previewSub(body) {

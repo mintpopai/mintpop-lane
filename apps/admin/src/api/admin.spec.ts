@@ -272,3 +272,46 @@ describe("createAdminApi", () => {
     expect(request).toHaveBeenNthCalledWith(4, "/admin/enterprises/7", { method: "DELETE" });
   });
 });
+
+describe("createAdminApi 换机申请", () => {
+  it("带状态查申请列表时把状态拼进查询串", async () => {
+    const { http, request } = fakeClient();
+
+    await createAdminApi(http).listDeviceRebindRequests("PENDING");
+
+    expect(request).toHaveBeenCalledWith("/admin/device-rebind-requests?status=PENDING");
+  });
+
+  it("不带状态时不拼查询串，拿全部历史", async () => {
+    const { http, request } = fakeClient();
+
+    await createAdminApi(http).listDeviceRebindRequests();
+
+    expect(request).toHaveBeenCalledWith("/admin/device-rebind-requests");
+  });
+
+  it("同意与拒绝都是 POST，落在各自的子路径上", async () => {
+    const { http, request } = fakeClient();
+    const api = createAdminApi(http);
+
+    await api.approveDeviceRebindRequest(7);
+    await api.rejectDeviceRebindRequest(7);
+
+    expect(request).toHaveBeenNthCalledWith(1, "/admin/device-rebind-requests/7/approve", {
+      method: "POST",
+    });
+    expect(request).toHaveBeenNthCalledWith(2, "/admin/device-rebind-requests/7/reject", {
+      method: "POST",
+    });
+  });
+
+  it("解绑挂在订阅下，而不是申请下——它与有没有申请无关", async () => {
+    const { http, request } = fakeClient();
+
+    await createAdminApi(http).unbindSubscriptionDevice(42);
+
+    expect(request).toHaveBeenCalledWith("/admin/subscriptions/42/device/unbind", {
+      method: "POST",
+    });
+  });
+});

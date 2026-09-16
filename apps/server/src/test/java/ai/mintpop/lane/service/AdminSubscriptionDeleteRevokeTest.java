@@ -4,6 +4,7 @@ import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.repository.EnterpriseRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,8 @@ class AdminSubscriptionDeleteRevokeTest {
     private AdminSubscriptionServiceImpl newService(SubscriptionRepository subscriptionRepository,
                                                      CredentialIssueService credentialIssueService) {
         return new AdminSubscriptionServiceImpl(subscriptionRepository, mock(UserRepository.class),
-                mock(PlanRepository.class), mock(EnterpriseRepository.class), credentialIssueService);
+                mock(PlanRepository.class), mock(EnterpriseRepository.class),
+                mock(UserDeviceRepository.class), credentialIssueService);
     }
 
     private SubscriptionDto subscriptionWithCredential(String credential) {

@@ -71,7 +71,9 @@ class PendingSubscriptionTest extends MysqlTestBase {
     @Test
     @DisplayName("链路配置不下发待开通订阅的凭据")
     void linkConfigOmitsPending() throws Exception {
-        mockMvc.perform(get("/api/link/config").header("Authorization", bearer(memberId)))
+        mockMvc.perform(get("/api/link/config")
+                        .header("Authorization", bearer(memberId))
+                        .header("X-Device-Id", "a".repeat(64)))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.agentCredentials").isEmpty());
     }

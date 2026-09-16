@@ -4,17 +4,24 @@ import ai.mintpop.lane.config.LinkProperties;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.entity.DeviceRebindRequest;
+import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.DeviceBinding;
 import ai.mintpop.lane.enumeration.LinkStatus;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.NodeStatus;
+import ai.mintpop.lane.enumeration.RebindRequestStatus;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
+import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.response.LinkConfigResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,10 +47,14 @@ class LinkServiceImplTest {
     private static final Long MISSING_USER_ID = 999999L;
     /** 全类统一的「现在」，service 用固定时钟构造，判定完全确定 */
     private static final Instant NOW = Instant.parse("2026-08-19T12:00:00Z");
+    private static final String THIS_DEVICE = "a".repeat(64);
+    private static final String OTHER_DEVICE = "b".repeat(64);
 
     private UserRepository userRepository;
     private ProxyNodeRepository nodeRepository;
     private SubscriptionRepository subscriptionRepository;
+    private UserDeviceRepository userDeviceRepository;
+    private DeviceRebindRequestRepository rebindRequestRepository;
     private LinkServiceImpl service;
 
     private static ProxyNodeDto node(long id, NodeRole role, NodeProtocol protocol, String server) {
@@ -99,16 +110,29 @@ class LinkServiceImplTest {
                 NOW.minus(30, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS), credential);
     }
 
+    private static UserDevice device(Long id, String deviceId, String name) {
+        UserDevice d = new UserDevice();
+        d.setId(id);
+        d.setUserId(USER_ID);
+        d.setDeviceId(deviceId);
+        d.setName(name);
+        d.setOs("macos 26.6.1");
+        d.setModel("Mac17,9");
+        return d;
+    }
+
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
         nodeRepository = mock(ProxyNodeRepository.class);
         subscriptionRepository = mock(SubscriptionRepository.class);
+        userDeviceRepository = mock(UserDeviceRepository.class);
+        rebindRequestRepository = mock(DeviceRebindRequestRepository.class);
 
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
         service = new LinkServiceImpl(props, userRepository, nodeRepository, subscriptionRepository,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                userDeviceRepository, rebindRequestRepository, Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
         when(nodeRepository.findById(10L))
@@ -116,6 +140,8 @@ class LinkServiceImplTest {
         when(nodeRepository.findById(20L))
                 .thenReturn(Optional.of(node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10")));
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of());
+        when(userDeviceRepository.findByUserId(any())).thenReturn(List.of());
+        when(rebindRequestRepository.findPendingByUserId(any())).thenReturn(List.of());
     }
 
     private void givenUser(UserDto user) {
@@ -126,13 +152,25 @@ class LinkServiceImplTest {
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(subscriptions));
     }
 
+    /**
+     * 登记本机为已知设备（行 id 固定 9L），供只关心「凭据能否下发」而非绑定关系本身的
+     * 既有用例复用——这些用例的订阅要先 setBoundDeviceId(9L) 绑到本机，凭据才会下发。
+     */
+    private void givenThisDeviceKnown() {
+        when(userDeviceRepository.findByUserId(USER_ID))
+                .thenReturn(List.of(device(9L, THIS_DEVICE, "本机")));
+    }
+
     @Test
     @DisplayName("正常用户能拿到两跳链路与在期订阅的凭据")
     void activeUserGetsTwoHopLink() {
         givenUser(user(UserStatus.ACTIVE));
-        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
+        givenThisDeviceKnown();
+        SubscriptionDto sub = activeSubscription(100L, "sk-ant-test");
+        sub.setBoundDeviceId(9L);
+        givenSubscriptions(sub);
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.front()).containsEntry("type", "trojan").containsEntry("server", "us.example.com");
         assertThat(resp.land()).containsEntry("type", "socks5").containsEntry("server", "203.0.113.10");
@@ -149,7 +187,7 @@ class LinkServiceImplTest {
     void egressTimezoneDeliveredWithLink() {
         givenUser(user(UserStatus.ACTIVE));
 
-        assertThat(service.resolveLink(USER_ID).egressTimezone()).isEqualTo("Asia/Tokyo");
+        assertThat(service.resolveLink(USER_ID, THIS_DEVICE).egressTimezone()).isEqualTo("Asia/Tokyo");
     }
 
     @Test
@@ -160,7 +198,7 @@ class LinkServiceImplTest {
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(land));
         givenUser(user(UserStatus.ACTIVE));
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.egressTimezone()).isNull();
         assertThat(resp.expectedEgressIp()).isNotBlank();
@@ -169,7 +207,7 @@ class LinkServiceImplTest {
     @Test
     @DisplayName("未录入的账号被拒绝，按吊销处理")
     void unknownAccountRejected() {
-        assertThatThrownBy(() -> service.resolveLink(MISSING_USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(MISSING_USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -180,7 +218,7 @@ class LinkServiceImplTest {
     void revokedUserRejected() {
         givenUser(user(UserStatus.REVOKED));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -191,7 +229,7 @@ class LinkServiceImplTest {
     void suspendedUserRejected() {
         givenUser(user(UserStatus.SUSPENDED));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_REVOKED);
@@ -203,7 +241,7 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         // 订阅列表默认空，无需额外造数
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials()).isEmpty();
         assertThat(resp.expectedEgressIp()).isNotBlank();
@@ -215,7 +253,7 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(expiredSubscription(100L, "sk-ant-test"));
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials()).isEmpty();
         assertThat(resp.expectedEgressIp()).isNotBlank();
@@ -229,7 +267,7 @@ class LinkServiceImplTest {
         u.setLandNodeId(null);
         givenUser(u);
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -244,7 +282,7 @@ class LinkServiceImplTest {
         givenUser(u);
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -258,7 +296,7 @@ class LinkServiceImplTest {
         givenUser(u);
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -271,7 +309,7 @@ class LinkServiceImplTest {
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
         when(nodeRepository.findById(10L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.INTERNAL_ERROR);
@@ -286,7 +324,7 @@ class LinkServiceImplTest {
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(disabled));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.NODE_DISABLED);
@@ -301,7 +339,7 @@ class LinkServiceImplTest {
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(10L)).thenReturn(Optional.of(disabled));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.NODE_DISABLED);
@@ -316,7 +354,7 @@ class LinkServiceImplTest {
         noIp.setEgressIp(null);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(noIp));
 
-        assertThatThrownBy(() -> service.resolveLink(USER_ID))
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
@@ -328,7 +366,7 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, null));
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials()).isEmpty();
         assertThat(resp.expectedEgressIp()).isNotBlank();
@@ -340,7 +378,7 @@ class LinkServiceImplTest {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, "   "));
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials()).isEmpty();
         assertThat(resp.expectedEgressIp()).isNotBlank();
@@ -350,9 +388,12 @@ class LinkServiceImplTest {
     @DisplayName("两条在期订阅中一条无凭据，只下发有凭据的那一条")
     void onlyCredentialedSubscriptionDelivered() {
         givenUser(user(UserStatus.ACTIVE));
-        givenSubscriptions(activeSubscription(100L, "sk-ant-有凭据"), activeSubscription(101L, null));
+        givenThisDeviceKnown();
+        SubscriptionDto withCredential = activeSubscription(100L, "sk-ant-有凭据");
+        withCredential.setBoundDeviceId(9L);
+        givenSubscriptions(withCredential, activeSubscription(101L, null));
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials()).hasSize(1);
         assertThat(resp.agentCredentials().getFirst().credential()).isEqualTo("sk-ant-有凭据");
@@ -363,11 +404,13 @@ class LinkServiceImplTest {
     @DisplayName("下发席位时带上凭证 scope，客户端据此决定要不要注入 scope 环境变量")
     void carriesCredentialScope() {
         givenUser(user(UserStatus.ACTIVE));
+        givenThisDeviceKnown();
         SubscriptionDto subscription = activeSubscription(100L, "sk-ant-test");
         subscription.setCredentialScope("user:inference user:profile");
+        subscription.setBoundDeviceId(9L);
         givenSubscriptions(subscription);
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials()).hasSize(1);
         assertThat(resp.agentCredentials().getFirst().credentialScope())
@@ -378,11 +421,13 @@ class LinkServiceImplTest {
     @DisplayName("旧式凭证没有 scope，下发空串而非 null：客户端按空串整段跳过注入")
     void legacyCredentialCarriesEmptyScope() {
         givenUser(user(UserStatus.ACTIVE));
+        givenThisDeviceKnown();
         SubscriptionDto subscription = activeSubscription(100L, "sk-ant-test");
         subscription.setCredentialScope(null);
+        subscription.setBoundDeviceId(9L);
         givenSubscriptions(subscription);
 
-        var resp = service.resolveLink(USER_ID);
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
         assertThat(resp.agentCredentials().getFirst().credentialScope()).isEmpty();
     }
@@ -425,5 +470,111 @@ class LinkServiceImplTest {
     @DisplayName("心跳：未录入账号按吊销处理，客户端据此断链")
     void heartbeatUnknownAccountTreatedAsRevoked() {
         assertThat(service.heartbeat(MISSING_USER_ID).status()).isEqualTo(LinkStatus.REVOKED);
+    }
+
+    @Test
+    @DisplayName("未绑定的席位：标 UNBOUND 且凭据置空——绑定之前谁也拿不到")
+    void unboundSubscriptionGetsNoCredential() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto sub = activeSubscription(1L, "sk-ant-secret");
+        sub.setBoundDeviceId(null);
+        // scope 与组织 UUID 先设成非空值：凭据被扣住时它们必须跟着一起清空，
+        // 断言空对空恒真、测不出问题——必须先有值才能验证「被清掉」这件事
+        sub.setCredentialScope("user:inference user:profile");
+        sub.setCredentialOrgUuid("org-uuid-should-not-leak");
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(sub));
+        when(userDeviceRepository.findByUserId(USER_ID)).thenReturn(List.of());
+        when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of());
+
+        LinkConfigResponse.AgentCredential row = service.resolveLink(USER_ID, THIS_DEVICE)
+                .agentCredentials().getFirst();
+
+        assertThat(row.deviceBinding()).isEqualTo(DeviceBinding.UNBOUND);
+        assertThat(row.credential()).isEmpty();
+        assertThat(row.credentialScope()).isEmpty();
+        assertThat(row.credentialOrgUuid()).isEmpty();
+        assertThat(row.boundDeviceName()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("绑在本机的席位：标 BOUND_HERE 且照常下发凭据")
+    void boundHereGetsCredential() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto sub = activeSubscription(1L, "sk-ant-secret");
+        sub.setBoundDeviceId(7L);
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(sub));
+        when(userDeviceRepository.findByUserId(USER_ID))
+                .thenReturn(List.of(device(7L, THIS_DEVICE, "月白的 MacBook")));
+        when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of());
+
+        LinkConfigResponse.AgentCredential row = service.resolveLink(USER_ID, THIS_DEVICE)
+                .agentCredentials().getFirst();
+
+        assertThat(row.deviceBinding()).isEqualTo(DeviceBinding.BOUND_HERE);
+        assertThat(row.credential()).isEqualTo("sk-ant-secret");
+        assertThat(row.boundDeviceName()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("绑在别处的席位：凭据置空，但席位照列并带上那台机器的名字")
+    void boundElsewhereIsListedWithoutCredential() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto sub = activeSubscription(1L, "sk-ant-secret");
+        sub.setBoundDeviceId(8L);
+        // 同上：先给非空值，才能验证「凭据被扣住时 scope 与组织身份一并清空」这条不变量，
+        // 否则空对空的断言恒真，测不出「有人把三元表达式简化回旧形式」这种回归
+        sub.setCredentialScope("user:inference user:profile");
+        sub.setCredentialOrgUuid("org-uuid-should-not-leak");
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(sub));
+        when(userDeviceRepository.findByUserId(USER_ID))
+                .thenReturn(List.of(device(8L, OTHER_DEVICE, "办公室 iMac")));
+        when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of());
+
+        LinkConfigResponse.AgentCredential row = service.resolveLink(USER_ID, THIS_DEVICE)
+                .agentCredentials().getFirst();
+
+        // 席位必须照列：滤掉它，用户只会看到「我明明买了，席位却凭空消失」，
+        // 而真正的原因（绑在办公室那台机器上）没有任何地方说得出来
+        assertThat(row.deviceBinding()).isEqualTo(DeviceBinding.BOUND_ELSEWHERE);
+        assertThat(row.credential()).isEmpty();
+        assertThat(row.credentialScope()).isEmpty();
+        assertThat(row.credentialOrgUuid()).isEmpty();
+        assertThat(row.boundDeviceName()).isEqualTo("办公室 iMac");
+        assertThat(row.pendingRequest()).isFalse();
+    }
+
+    @Test
+    @DisplayName("本机已为该订阅提过申请且未被处理时，pendingRequest 为真")
+    void pendingRequestFromThisDeviceIsReported() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto sub = activeSubscription(1L, "sk-ant-secret");
+        sub.setBoundDeviceId(8L);
+        DeviceRebindRequest pending = new DeviceRebindRequest();
+        pending.setSubscriptionId(1L);
+        pending.setToDeviceId(7L);
+        pending.setStatus(RebindRequestStatus.PENDING);
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(sub));
+        when(userDeviceRepository.findByUserId(USER_ID)).thenReturn(List.of(
+                device(7L, THIS_DEVICE, "月白的 MacBook"),
+                device(8L, OTHER_DEVICE, "办公室 iMac")));
+        when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of(pending));
+
+        LinkConfigResponse.AgentCredential row = service.resolveLink(USER_ID, THIS_DEVICE)
+                .agentCredentials().getFirst();
+
+        assertThat(row.pendingRequest()).isTrue();
+    }
+
+    @Test
+    @DisplayName("绑定关系不改变既有的两道过滤：过期的、没录凭据的订阅仍然不下发")
+    void bindingDoesNotWeakenExistingFilters() {
+        givenUser(user(UserStatus.ACTIVE));
+        SubscriptionDto expired = expiredSubscription(1L, "sk-ant-a");
+        SubscriptionDto noCredential = activeSubscription(2L, null);
+        when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of(expired, noCredential));
+        when(userDeviceRepository.findByUserId(USER_ID)).thenReturn(List.of());
+        when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of());
+
+        assertThat(service.resolveLink(USER_ID, THIS_DEVICE).agentCredentials()).isEmpty();
     }
 }

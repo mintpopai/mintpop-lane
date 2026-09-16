@@ -92,7 +92,9 @@ class AdminAuthorizationTest extends MysqlTestBase {
     @DisplayName("token 的 userid 在库里已不存在时视同未登录")
     void tokenOfDeletedUserTreatedAsUnauthenticated() throws Exception {
         userRepository.deleteById(memberId);
-        mockMvc.perform(get("/api/link/config").header("Authorization", bearer(memberId)))
+        mockMvc.perform(get("/api/link/config")
+                        .header("Authorization", bearer(memberId))
+                        .header("X-Device-Id", "a".repeat(64)))
                 .andExpect(status().isUnauthorized());
     }
 

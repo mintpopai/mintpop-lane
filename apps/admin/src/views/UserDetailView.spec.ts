@@ -1,4 +1,5 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AdminNodeResponse,
@@ -7,6 +8,7 @@ import type {
   CredentialRevokeResult,
   UserSaveRequest,
 } from "../api/types";
+import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
 import { formatAssignmentNo } from "../utils/format";
 import UserDetailView from "./UserDetailView.vue";
@@ -20,6 +22,9 @@ const listSubscriptions = vi.fn<(userId: number) => Promise<AdminSubscriptionRes
 const listPlans = vi.fn(async () => []);
 const listEnterprises = vi.fn(async () => []);
 const credentialRevoke = vi.fn<(subscriptionId: number) => Promise<CredentialRevokeResult>>();
+const unbindSubscriptionDevice = vi.fn<(id: number) => Promise<void>>(async () => undefined);
+// 角标 store 用它数待处理换机申请；store 只取 length，故这里给几个空对象就够
+const listDeviceRebindRequests = vi.fn<(status?: string) => Promise<unknown[]>>(async () => []);
 
 vi.mock("../api", () => ({
   adminApi: () => ({
@@ -30,6 +35,8 @@ vi.mock("../api", () => ({
     listPlans,
     listEnterprises,
     credentialRevoke,
+    unbindSubscriptionDevice,
+    listDeviceRebindRequests,
   }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
@@ -102,6 +109,7 @@ function subscription(
     credentialExpiresAt: "2026-08-31T00:00:00Z",
     credentialStale: false,
     extraUsageDisabled: false,
+    boundDevice: null,
     remark: "",
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
@@ -110,6 +118,8 @@ function subscription(
 }
 
 beforeEach(() => {
+  // 这页会推一把导航轨的角标 store（解绑会作废该订阅的待处理换机申请）
+  setActivePinia(createPinia());
   vi.clearAllMocks();
   getUser.mockResolvedValue(user());
   // jsdom 不实现 scrollIntoView，AdminSelect 展开面板定位高亮项时会调它
@@ -307,6 +317,150 @@ describe("UserDetailView · 吊销凭证", () => {
     expect(warningText()).toContain(rowA.name);
     expect(warningText()).toContain(formatAssignmentNo(rowA.assignmentNo));
     expect(warningText()).not.toContain(formatAssignmentNo(rowB.assignmentNo));
+  });
+});
+
+describe("UserDetailView · 设备绑定", () => {
+  it("未绑定时如实说未绑定，且不给解绑入口", async () => {
+    await mountView([subscription({ id: 5, boundDevice: null })]);
+
+    expect(document.querySelector(".sub-item")?.textContent).toContain("未绑定设备");
+    expect(buttonExists("解绑设备")).toBe(false);
+  });
+
+  it("已绑定时把设备三要素与绑定时刻都摆出来", async () => {
+    await mountView([
+      subscription({
+        id: 5,
+        boundDevice: {
+          name: "月白的 MacBook",
+          os: "macos 26.6",
+          model: "Mac17,9",
+          boundAt: "2026-09-10T02:00:00Z",
+        },
+      }),
+    ]);
+    const text = document.querySelector(".sub-item")?.textContent ?? "";
+
+    expect(text).toContain("月白的 MacBook");
+    expect(text).toContain("macos 26.6");
+    expect(text).toContain("Mac17,9");
+  });
+
+  it("解绑要先过确认框，确认后调接口并重拉订阅，且确认文案提示会作废待处理换机申请", async () => {
+    const row = subscription({
+      id: 5,
+      name: "Claude 月付",
+      assignmentNo: "7K3M9QX2FT",
+      boundDevice: {
+        name: "月白的 MacBook",
+        os: "macos 26.6",
+        model: "Mac17,9",
+        boundAt: "2026-09-10T02:00:00Z",
+      },
+    });
+    await mountView([row]);
+
+    await buttonByText("解绑设备").trigger("click");
+    // 未确认前不能调用接口
+    expect(unbindSubscriptionDevice).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("月白的 MacBook");
+    expect(document.body.textContent).toContain(formatAssignmentNo(row.assignmentNo));
+    // 解绑会连带作废该订阅挂着的待处理换机申请，确认文案要把这个副作用说清楚
+    expect(document.body.textContent).toContain("换机申请");
+
+    listSubscriptions.mockResolvedValue([{ ...row, boundDevice: null }]);
+    await buttonByText("解绑").trigger("click");
+
+    await vi.waitFor(() => expect(unbindSubscriptionDevice).toHaveBeenCalledWith(row.id));
+    expect(showToast).toHaveBeenCalledWith("success", "已解绑，该订阅可在任意设备上重新绑定");
+    // 解绑与查询列表都发生了，列表重新拉取以反映绑定状态变化
+    await vi.waitFor(() => expect(listSubscriptions).toHaveBeenCalledTimes(2));
+  });
+
+  // 服务端解绑会把该订阅的待处理换机申请一并作废，角标却是另一份数据：
+  // 不推这一把，导航轨就会一直挂着一条已经不存在的待办，只有整页刷新才消得掉
+  it("解绑成功后刷新导航轨的换机申请角标", async () => {
+    const row = subscription({
+      id: 5,
+      boundDevice: {
+        name: "月白的 MacBook",
+        os: "macos 26.6",
+        model: "Mac17,9",
+        boundAt: "2026-09-10T02:00:00Z",
+      },
+    });
+    await mountView([row]);
+    const store = useRebindStore();
+    // 解绑前角标还没被这页动过
+    expect(store.pendingCount).toBe(0);
+
+    listDeviceRebindRequests.mockResolvedValue([{}, {}]);
+    await buttonByText("解绑设备").trigger("click");
+    await buttonByText("解绑").trigger("click");
+
+    await vi.waitFor(() => expect(store.pendingCount).toBe(2));
+    expect(listDeviceRebindRequests).toHaveBeenCalledWith("PENDING");
+  });
+
+  it("解绑失败时不去动角标——服务端什么都没作废", async () => {
+    const row = subscription({
+      id: 5,
+      boundDevice: {
+        name: "月白的 MacBook",
+        os: "macos 26.6",
+        model: "Mac17,9",
+        boundAt: "2026-09-10T02:00:00Z",
+      },
+    });
+    await mountView([row]);
+    unbindSubscriptionDevice.mockRejectedValueOnce(new Error("Failed to fetch"));
+
+    await buttonByText("解绑设备").trigger("click");
+    await buttonByText("解绑").trigger("click");
+
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(listDeviceRebindRequests).not.toHaveBeenCalled();
+  });
+
+  // 「可以在任意设备上重新绑定」听着像无害的整理，实则原设备当场就没席位了
+  it("解绑确认框把「原设备当场失去席位」这个代价说出来", async () => {
+    await mountView([
+      subscription({
+        id: 5,
+        boundDevice: {
+          name: "月白的 MacBook",
+          os: "macos 26.6",
+          model: "Mac17,9",
+          boundAt: "2026-09-10T02:00:00Z",
+        },
+      }),
+    ]);
+
+    await buttonByText("解绑设备").trigger("click");
+    const message = document.body.textContent ?? "";
+
+    expect(message).toContain("当场失去这个席位");
+    expect(message).toContain("重新确认绑定");
+  });
+
+  // 桌面端读不到硬件型号时机型就是空串，无条件拼「系统 · 机型」会留下一个吊着的分隔符
+  it("机型为空时不留下吊着的分隔符", async () => {
+    await mountView([
+      subscription({
+        id: 5,
+        boundDevice: {
+          name: "DESKTOP-4F2",
+          os: "windows 11",
+          model: "",
+          boundAt: "2026-09-10T02:00:00Z",
+        },
+      }),
+    ]);
+    const text = document.querySelector(".sub-item")?.textContent ?? "";
+
+    expect(text).toContain("DESKTOP-4F2（windows 11）");
+    expect(text).not.toContain("windows 11 · ");
   });
 });
 

@@ -85,6 +85,12 @@ public class Subscription {
     /** 签发时该组织是否已开启 usage credits；为 false 时 Fable 预置不生效，管理端应提示 */
     private Boolean credentialExtraUsageEnabled;
 
+    /** 绑定的设备 id；NULL 表示这份订阅还没在任何设备上用过。弱引用，不设外键 */
+    private Long boundDeviceId;
+
+    /** 绑定时刻；与 boundDeviceId 同空同有值 */
+    private Instant boundAt;
+
     private String remark;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)

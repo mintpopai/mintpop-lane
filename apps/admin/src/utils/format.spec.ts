@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentLabel,
   booleanLabel,
+  deviceLabel,
   formatAssignmentNo,
   formatDate,
   formatDateTime,
@@ -87,5 +88,26 @@ describe("formatAssignmentNo", () => {
   it("空值走占位符", () => {
     expect(formatAssignmentNo(null)).toBe(PLACEHOLDER);
     expect(formatAssignmentNo("")).toBe(PLACEHOLDER);
+  });
+});
+
+describe("deviceLabel", () => {
+  it("三要素齐全时压成「名称（系统 · 机型）」", () => {
+    expect(deviceLabel({ name: "月白的 MacBook", os: "macos 26.6", model: "Mac17,9" })).toBe(
+      "月白的 MacBook（macos 26.6 · Mac17,9）",
+    );
+  });
+
+  it("机型为空时连分隔符一起去掉，不留下吊着的「 · 」", () => {
+    // 桌面端读不到硬件型号（如 Windows 的 SystemProductName 读取失败）时机型就是空串
+    expect(deviceLabel({ name: "DESKTOP-4F2", os: "windows 11", model: "" })).toBe(
+      "DESKTOP-4F2（windows 11）",
+    );
+  });
+
+  it("机型只有空白同样按空处理", () => {
+    expect(deviceLabel({ name: "DESKTOP-4F2", os: "windows 11", model: "   " })).toBe(
+      "DESKTOP-4F2（windows 11）",
+    );
   });
 });

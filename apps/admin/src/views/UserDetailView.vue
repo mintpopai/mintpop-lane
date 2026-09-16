@@ -14,9 +14,10 @@ import type {
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import CredentialIssueModal from "../components/CredentialIssueModal.vue";
 import Select from "../components/AdminSelect.vue";
+import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
 import { fromDatetimeLocal, toDatetimeLocal } from "../utils/datetimeLocal";
-import { formatAssignmentNo, formatDate, formatDateTime } from "../utils/format";
+import { deviceLabel, formatAssignmentNo, formatDate, formatDateTime } from "../utils/format";
 import {
   agentTypeOptions,
   buildSubscriptionCreatePayload,
@@ -98,6 +99,11 @@ const revoking = ref(false);
  * 认真读完的说明，故单独留一块不自动消失、要手动关闭的提示
  */
 const revokeWarning = ref<string | null>(null);
+
+/** 待二次确认解绑的那一条订阅。解绑与有没有换机申请无关：丢机、离职收回、手动重置都走它 */
+const pendingUnbind = ref<AdminSubscriptionResponse | null>(null);
+const unbinding = ref(false);
+const rebind = useRebindStore();
 
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -421,6 +427,33 @@ async function confirmRevoke(): Promise<void> {
     revoking.value = false;
   }
 }
+
+/**
+ * 解绑确认后调用后端。解绑只是把订阅上的绑定清空，用户下次在任意设备上选中它即重新绑定；
+ * 该订阅挂着的待处理换机申请由服务端一并作废（那个申请要改绑的目标已经没有意义了），
+ * 确认框文案里已经把这一点说给管理员听，避免解绑后有人纳闷刚才那条待办去哪了。
+ */
+async function confirmUnbind(): Promise<void> {
+  if (!pendingUnbind.value) {
+    return;
+  }
+  const target = pendingUnbind.value;
+  unbinding.value = true;
+  try {
+    await adminApi().unbindSubscriptionDevice(target.id);
+    pendingUnbind.value = null;
+    showToast("success", "已解绑，该订阅可在任意设备上重新绑定");
+    await loadList();
+    // 服务端会把这份订阅的待处理换机申请一并作废，导航轨的角标却是另一份数据：
+    // 不在这里推一把，角标就会一直挂着一条刚被作废的待办，只有整页刷新才消得掉。
+    // 这页只是顺手通知一声，不接手队列页的任何职责
+    await rebind.refresh();
+  } catch (error) {
+    reportError(error, "解绑失败");
+  } finally {
+    unbinding.value = false;
+  }
+}
 </script>
 
 <template>
@@ -562,6 +595,10 @@ async function confirmRevoke(): Promise<void> {
             <span v-if="row.extraUsageDisabled" class="state" data-state="MISSING"
               >Fable 不可用</span
             >
+            <!-- 绑定设备是这条订阅现在「能在哪台机器上用」，与凭据是否录入同一档要紧 -->
+            <span class="state" :data-state="row.boundDevice ? 'CONFIGURED' : 'UNBOUND'">
+              {{ row.boundDevice ? `已绑定 ${row.boundDevice.name}` : "未绑定设备" }}
+            </span>
             <span class="sub-item-gap" />
             <div class="sub-item-actions">
               <!-- 服务端对非 Claude 类型的签发请求一律拒绝，未认识的类型也不显示，别让点了必错 -->
@@ -583,6 +620,15 @@ async function confirmRevoke(): Promise<void> {
                 @click="pendingRevoke = row"
               >
                 吊销凭证
+              </button>
+              <!-- 没绑定就没什么可解的，不画按钮 -->
+              <button
+                v-if="row.boundDevice"
+                type="button"
+                class="admin-link danger"
+                @click="pendingUnbind = row"
+              >
+                解绑设备
               </button>
               <button type="button" class="admin-link" @click="edit(row)">编辑</button>
               <button type="button" class="admin-link danger" @click="pendingDelete = row">
@@ -617,6 +663,16 @@ async function confirmRevoke(): Promise<void> {
               <dd :class="{ fact: row.accountEmail !== null }">
                 {{ row.accountEmail ?? "未录入" }}
               </dd>
+            </div>
+            <div class="sub-fact">
+              <dt>绑定设备</dt>
+              <dd :class="{ fact: row.boundDevice !== null }">
+                {{ row.boundDevice ? deviceLabel(row.boundDevice) : "未绑定" }}
+              </dd>
+            </div>
+            <div v-if="row.boundDevice" class="sub-fact">
+              <dt>绑定时刻</dt>
+              <dd class="fact">{{ formatDateTime(row.boundDevice.boundAt) }}</dd>
             </div>
             <div v-if="row.hasCredential" class="sub-fact">
               <dt>凭证到期</dt>
@@ -814,6 +870,16 @@ async function confirmRevoke(): Promise<void> {
       :busy="revoking"
       @confirm="confirmRevoke()"
       @cancel="pendingRevoke = null"
+    />
+
+    <ConfirmDialog
+      v-if="pendingUnbind"
+      title="解绑设备"
+      :message="`确认解除订阅「${pendingUnbind.name}」（分配号 ${formatAssignmentNo(pendingUnbind.assignmentNo)}）与设备「${pendingUnbind.boundDevice?.name}」的绑定？原设备会当场失去这个席位：服务端下发的链路配置随即变成「未绑定」并停止下发凭据，用户要在客户端重新确认绑定后才能再开会话。解绑后它可以在任意设备上重新绑定；该订阅若有待处理的换机申请，也会一并作废。`"
+      confirm-text="解绑"
+      :busy="unbinding"
+      @confirm="confirmUnbind()"
+      @cancel="pendingUnbind = null"
     />
 
     <CredentialIssueModal

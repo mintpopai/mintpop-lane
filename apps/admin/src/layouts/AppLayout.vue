@@ -1,12 +1,17 @@
 <script setup lang="ts">
 // 后台外壳：全高导航轨（品牌 + 页面 + 当前用户）+ 右侧工作区
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useAuthStore } from "../stores/auth";
+import { useRebindStore } from "../stores/rebind";
 
 const auth = useAuthStore();
+const rebind = useRebindStore();
 
 /** 头像字母：邮箱首字母大写；/api/me 还没回来时用 ? 占位 */
 const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
+
+// 外壳只在进后台时取一次待办数。之后由「同意 / 拒绝」就地更新（见 DeviceRequestsView）
+onMounted(() => rebind.refresh());
 </script>
 
 <template>
@@ -30,6 +35,11 @@ const initial = computed(() => (auth.email || "?").slice(0, 1).toUpperCase());
 
     <div class="rail-nav">
       <RouterLink :to="{ name: 'USERS' }" class="rail-link">用户</RouterLink>
+      <!-- 待办数只在大于 0 时出现：常驻一个 0 会训练人忽略它 -->
+      <RouterLink :to="{ name: 'DEVICE_REQUESTS' }" class="rail-link">
+        换机申请
+        <span v-if="rebind.pendingCount > 0" class="rail-badge">{{ rebind.pendingCount }}</span>
+      </RouterLink>
       <RouterLink :to="{ name: 'NODES' }" class="rail-link">节点池</RouterLink>
       <RouterLink :to="{ name: 'PLANS' }" class="rail-link">套餐</RouterLink>
       <RouterLink :to="{ name: 'ENTERPRISES' }" class="rail-link">企业</RouterLink>

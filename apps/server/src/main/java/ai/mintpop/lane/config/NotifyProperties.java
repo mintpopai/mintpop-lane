@@ -19,6 +19,9 @@ public class NotifyProperties {
     /** 机器人签名校验密钥（飞书机器人安全设置开启「签名校验」后提供；为空则不签名） */
     private String secret;
 
+    /** 管理端地址，如 https://admin.lane.mintpop.ai。用于在卡片末尾给出处理入口；未配则省略那一行 */
+    private String adminUrl;
+
     /** 通知功能是否已配置启用 */
     public boolean isConfigured() {
         return webhookUrl != null && !webhookUrl.isBlank();

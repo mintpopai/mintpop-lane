@@ -17,6 +17,17 @@ public interface SubscriptionRepository {
 
     Optional<SubscriptionDto> findById(Long id);
 
+    /**
+     * 按 id 的锁定读（SELECT ... FOR UPDATE），把该订阅行锁到当前事务提交为止。
+     * 供换机申请用：一份订阅同时只允许有一条 PENDING，而「作废旧的 + 建新的」这一对
+     * 无法用单条条件 UPDATE 表达（MySQL 也没有部分唯一索引可兜底），只能在订阅行上串行化——
+     * 否则两台新机器同时提申请（或用户双击一次「提交申请」）会双双作废 0 条、双双插入，
+     * 同一份订阅留下两条 PENDING：管理员看到两条一模一样的待办，同意了过期的那条就会把订阅
+     * 绑到用户已经放弃的机器上，另一条则永远挂着。
+     * 必须在事务内调用，否则锁随语句立即释放、形同虚设。
+     */
+    Optional<SubscriptionDto> findByIdForUpdate(Long id);
+
     /** 某用户的全部订阅（含已过期），按 id 升序 */
     List<SubscriptionDto> findByUserId(Long userId);
 
@@ -81,4 +92,17 @@ public interface SubscriptionRepository {
      * 同样绕开常规 {@link #update}，不占用常规更新路径的 SQL 列。
      */
     void clearCredential(Long subscriptionId);
+
+    /**
+     * 首次绑定：**仅当当前未绑定**才写入，返回是否生效。
+     * 两台设备同时对同一份未绑定订阅点绑定时，靠 WHERE bound_device_id IS NULL 决出胜负，
+     * 绝不先查后写——那中间的窗口正好够第二台设备也判定成「未绑定」。
+     */
+    boolean bindDeviceIfUnbound(Long subscriptionId, Long deviceId, Instant now);
+
+    /** 管理员同意换机后的改绑：无条件覆盖（裁决本身已由申请的条件 UPDATE 串行化） */
+    void rebindDevice(Long subscriptionId, Long deviceId, Instant now);
+
+    /** 管理员强制解绑：两列一起清空 */
+    void unbindDevice(Long subscriptionId);
 }
