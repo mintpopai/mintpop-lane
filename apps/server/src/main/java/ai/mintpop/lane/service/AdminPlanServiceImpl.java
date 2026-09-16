@@ -6,6 +6,7 @@ import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.request.PlanSaveRequest;
 import ai.mintpop.lane.response.PlanResponse;
+import ai.mintpop.lane.util.HtmlSanitizer;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -16,9 +17,11 @@ import java.util.function.Supplier;
 public class AdminPlanServiceImpl implements AdminPlanService {
 
     private final PlanRepository planRepository;
+    private final HtmlSanitizer htmlSanitizer;
 
-    public AdminPlanServiceImpl(PlanRepository planRepository) {
+    public AdminPlanServiceImpl(PlanRepository planRepository, HtmlSanitizer htmlSanitizer) {
         this.planRepository = planRepository;
+        this.htmlSanitizer = htmlSanitizer;
     }
 
     @Override
@@ -77,13 +80,15 @@ public class AdminPlanServiceImpl implements AdminPlanService {
         plan.setCurrency(request.getCurrency());
         plan.setDescription(request.getDescription());
         plan.setImageUrl(request.getImageUrl());
+        // 净化收口在入库前：库里只存干净 HTML
+        plan.setDetail(htmlSanitizer.sanitize(request.getDetail()));
         plan.setEnabled(request.getEnabled());
         plan.setRemark(request.getRemark());
     }
 
     private PlanResponse toResponse(Plan plan) {
         return new PlanResponse(plan.getId(), plan.getName(), plan.getAgentType(), plan.getDurationDays(),
-                plan.getPrice(), plan.getCurrency(), plan.getDescription(), plan.getImageUrl(),
+                plan.getPrice(), plan.getCurrency(), plan.getDescription(), plan.getImageUrl(), plan.getDetail(),
                 plan.getEnabled(), plan.getRemark(), plan.getCreatedAt(), plan.getUpdatedAt());
     }
 }

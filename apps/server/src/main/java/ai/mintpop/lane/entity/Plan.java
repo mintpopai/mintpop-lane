@@ -41,6 +41,9 @@ public class Plan {
     /** 套餐图公开 URL，可空 */
     private String imageUrl;
 
+    /** 套餐详情富文本，已净化的 HTML，可空 */
+    private String detail;
+
     /** 上架状态：false 表示停用但保留 */
     private Boolean enabled;
 

@@ -47,6 +47,9 @@ public class PlanSaveRequest {
     @Pattern(regexp = "^https://.+")
     private String imageUrl;
 
+    /** 套餐详情富文本，服务端会按白名单净化后入库，可空 */
+    private String detail;
+
     /** 上架状态：false 表示停用但保留 */
     @NotNull
     private Boolean enabled;

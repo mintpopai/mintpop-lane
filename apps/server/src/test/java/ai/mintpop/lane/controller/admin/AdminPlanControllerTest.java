@@ -298,4 +298,26 @@ class AdminPlanControllerTest extends MysqlTestBase {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM plan", Integer.class);
         assertThat(count).isEqualTo(0);
     }
+
+    @Test
+    @DisplayName("详情入库前被净化：script 剥掉、排版标签保留")
+    void detailIsSanitizedBeforeSave() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<p>含 5 个并发席位</p><script>alert(1)</script>");
+        Long id = createPlan(body);
+
+        String stored = jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id);
+        assertThat(stored).isEqualTo("<p>含 5 个并发席位</p>");
+    }
+
+    @Test
+    @DisplayName("详情留空或净化后不剩内容都入库为 null，不混存空壳")
+    void blankDetailStoredAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<script>alert(1)</script>");
+        Long id = createPlan(body);
+
+        String stored = jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id);
+        assertThat(stored).isNull();
+    }
 }
