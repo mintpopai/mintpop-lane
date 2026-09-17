@@ -2,6 +2,7 @@ package ai.mintpop.lane.config;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
@@ -24,8 +25,13 @@ public class AuthProperties {
     /** 桌面端登录握手中间态（PKCE challenge + state）的 Cookie 名 */
     public static final String DESKTOP_FLOW_COOKIE_NAME = "lane_desktop_flow";
 
-    /** 自签会话 JWT 的 HS256 密钥，至少 32 字节（openssl rand -base64 32 生成） */
+    /**
+     * 自签会话 JWT 的 HS256 密钥，至少 32 字节（openssl rand -base64 32 生成）。
+     * 排除出 toString——拿到它就能伪造任意用户（含管理员）的会话 token，
+     * 后果不亚于泄露数据库口令。
+     */
     @NotBlank
+    @ToString.Exclude
     private String sessionSecret;
 
     /** 管理端网页会话有效期 */

@@ -1,6 +1,7 @@
 package ai.mintpop.lane.config;
 
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -15,9 +16,11 @@ public class StorageProperties {
 
     /** Cloudflare 账户 ID，用于拼 S3 兼容端点 */
     private String accountId;
-    /** R2 API Token 生成的 Access Key ID（敏感） */
+    /** R2 API Token 生成的 Access Key ID（敏感）。与下面的 secret 成对使用，泄露即等于交出整个桶的读写权，排除出 toString */
+    @ToString.Exclude
     private String accessKeyId;
-    /** R2 API Token 生成的 Secret Access Key（敏感） */
+    /** R2 API Token 生成的 Secret Access Key（敏感）。排除出 toString——随日志泄露后攻击者可任意读写、删除桶内资产 */
+    @ToString.Exclude
     private String secretAccessKey;
     /** 桶名（本项目约定 mintpop-lane-assets） */
     private String bucket;
