@@ -516,12 +516,13 @@ describe("NodesView 表格内容", () => {
     expect(wrapper.text()).toContain("未解析");
   });
 
-  it("落地节点没有故障域这个概念，展示占位符而不是「未解析」", async () => {
+  it("落地节点没有故障域这个概念，故障域列固定展示占位符「—」", async () => {
     listNodes.mockResolvedValue([node({ id: 4, role: "LAND", failureDomain: null })]);
     const wrapper = await render();
     await switchTo(wrapper, "LAND");
 
-    const rowText = wrapper.findAll("tbody tr")[0].text();
-    expect(rowText).not.toContain("未解析");
+    // 落地列序：节点名/协议/地址/故障域/出口 IP/…（落地没有分组列），故障域是第 4 格
+    const failureDomainCell = wrapper.findAll("tbody tr")[0].findAll("td")[3];
+    expect(failureDomainCell.text()).toBe("—");
   });
 });
