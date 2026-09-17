@@ -2,6 +2,7 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
+import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
@@ -60,7 +61,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
     @Override
     public List<SubPreviewNodeResponse> preview(String subUrl) {
-        return fetchAndParse(subUrl).stream()
+        return fetchAndParse(subUrl).nodes().stream()
                 .map(node -> toPreview(node, false))
                 .toList();
     }
@@ -73,17 +74,18 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         // 先拉订阅再建分组：拉取失败时不留下空分组；
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建分组 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
-        List<SubNode> nodes = fetchAndParse(request.getSubUrl());
-        Map<String, String> failureDomains = resolveFailureDomains(nodes);
+        FetchResult fetched = fetchAndParse(request.getSubUrl());
+        Map<String, String> failureDomains = resolveFailureDomains(fetched.nodes());
 
         NodeGroupDto group = new NodeGroupDto();
         group.setName(request.getName());
         group.setSubUrl(request.getSubUrl());
         group.setRemark(request.getRemark());
+        applyTrafficInfo(group, fetched.subFetchResult());
 
         return transactionTemplate.execute(status -> {
             Long groupId = wrapUniqueViolation(() -> groupRepository.create(group));
-            importNodes(groupId, nodes, request.getSelectedNames(), failureDomains);
+            importNodes(groupId, fetched.nodes(), request.getSelectedNames(), failureDomains);
             return groupId;
         });
     }
@@ -97,6 +99,10 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                         maskUrl(group.getSubUrl()),
                         nodeRepository.countByGroupId(group.getId()),
                         group.getRemark(),
+                        group.getUsedBytes(),
+                        group.getTotalBytes(),
+                        group.getExpiresAt(),
+                        group.getFetchedAt(),
                         group.getCreatedAt(),
                         group.getUpdatedAt()))
                 .toList();
@@ -120,7 +126,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     @Override
     public List<SubPreviewNodeResponse> refreshPreview(Long id) {
         NodeGroupDto group = getGroup(id);
-        return fetchAndParse(group.getSubUrl()).stream()
+        return fetchAndParse(group.getSubUrl()).nodes().stream()
                 .map(node -> toPreview(node,
                         nodeRepository.findByGroupIdAndSourceName(id, node.sourceName()).isPresent()))
                 .toList();
@@ -129,12 +135,15 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     @Override
     public void importNodes(Long id, NodeGroupImportRequest request) {
         // 取分组、拉取解析都是只读操作，同样挪到事务外，避免外呼期间占用数据库连接；
-        // 只有真正落库的「导入」交给 transactionTemplate 包事务
+        // 只有真正落库的「更新分组额度信息 + 导入节点」交给 transactionTemplate 包事务
         NodeGroupDto group = getGroup(id);
-        List<SubNode> nodes = fetchAndParse(group.getSubUrl());
-        Map<String, String> failureDomains = resolveFailureDomains(nodes);
-        transactionTemplate.executeWithoutResult(status ->
-                importNodes(id, nodes, request.getSelectedNames(), failureDomains));
+        FetchResult fetched = fetchAndParse(group.getSubUrl());
+        Map<String, String> failureDomains = resolveFailureDomains(fetched.nodes());
+        applyTrafficInfo(group, fetched.subFetchResult());
+        transactionTemplate.executeWithoutResult(status -> {
+            groupRepository.update(group);
+            importNodes(id, fetched.nodes(), request.getSelectedNames(), failureDomains);
+        });
     }
 
     @Override
@@ -170,8 +179,25 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                 .orElseThrow(() -> new BizException(BizCodeEnum.NODE_GROUP_NOT_FOUND));
     }
 
-    private List<SubNode> fetchAndParse(String subUrl) {
-        return subYamlParser.parse(subFetchClient.fetch(subUrl));
+    /** fetchAndParse 的返回值：解析出的节点列表 + 该次拉取带回的额度元信息 */
+    private record FetchResult(List<SubNode> nodes, SubFetchResult subFetchResult) {
+    }
+
+    private FetchResult fetchAndParse(String subUrl) {
+        SubFetchResult result = subFetchClient.fetch(subUrl);
+        return new FetchResult(subYamlParser.parse(result.body()), result);
+    }
+
+    /**
+     * 把本次拉取带回的额度信息写进分组 DTO。三个额度字段可能都是 null（机场未返回该头），
+     * 直接透传即可——MyBatis-Plus 默认 update 策略是 NOT_NULL，null 字段不会把旧值覆盖成 null。
+     * fetchedAt 则始终记录本次拉取时间，不管额度信息是否解析出来。
+     */
+    private void applyTrafficInfo(NodeGroupDto group, SubFetchResult subFetchResult) {
+        group.setUsedBytes(subFetchResult.usedBytes());
+        group.setTotalBytes(subFetchResult.totalBytes());
+        group.setExpiresAt(subFetchResult.expiresAt());
+        group.setFetchedAt(Instant.now());
     }
 
     private SubPreviewNodeResponse toPreview(SubNode node, boolean existed) {

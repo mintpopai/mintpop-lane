@@ -11,6 +11,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -39,7 +40,7 @@ class RestClientSubFetchClientTest {
                 .andExpect(header(HttpHeaders.USER_AGENT, "clash.meta"))
                 .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN));
 
-        assertThat(client.fetch("https://sub.example.com/c?token=t")).isEqualTo("proxies: []");
+        assertThat(client.fetch("https://sub.example.com/c?token=t").body()).isEqualTo("proxies: []");
     }
 
     @Test
@@ -84,5 +85,45 @@ class RestClientSubFetchClientTest {
         assertThatThrownBy(() -> client.fetch("https://sub.example.com/c?token=t"))
                 .isInstanceOf(BizException.class)
                 .extracting("bizCode").isEqualTo(BizCodeEnum.SUB_FETCH_FAILED);
+    }
+
+    @Test
+    @DisplayName("解析 subscription-userinfo 头，已用流量是上传与下载之和")
+    void parsesSubscriptionUserinfo() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN)
+                        .header("subscription-userinfo",
+                                "upload=25219803197; download=10948589634; total=137438953472; expire=1809245089"));
+
+        SubFetchResult result = client.fetch("https://sub.example.com/c?token=t");
+
+        assertThat(result.body()).isEqualTo("proxies: []");
+        assertThat(result.usedBytes()).isEqualTo(25219803197L + 10948589634L);
+        assertThat(result.totalBytes()).isEqualTo(137438953472L);
+        assertThat(result.expiresAt()).isEqualTo(Instant.ofEpochSecond(1809245089L));
+    }
+
+    @Test
+    @DisplayName("缺 subscription-userinfo 头时三个字段为 null，不影响拉取")
+    void toleratesMissingHeader() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN));
+
+        SubFetchResult result = client.fetch("https://sub.example.com/c?token=t");
+
+        assertThat(result.body()).isNotBlank();
+        assertThat(result.usedBytes()).isNull();
+        assertThat(result.totalBytes()).isNull();
+        assertThat(result.expiresAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("头格式不认识时同样降级为 null，不抛异常")
+    void toleratesMalformedHeader() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN)
+                        .header("subscription-userinfo", "garbage"));
+
+        assertThat(client.fetch("https://sub.example.com/c?token=t").usedBytes()).isNull();
     }
 }

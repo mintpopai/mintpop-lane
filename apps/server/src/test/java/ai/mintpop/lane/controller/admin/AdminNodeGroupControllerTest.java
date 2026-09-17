@@ -3,6 +3,7 @@ package ai.mintpop.lane.controller.admin;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
+import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
@@ -102,7 +103,8 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.clearAll();
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
-        when(subFetchClient.fetch(anyString())).thenReturn(sampleSubscription());
+        when(subFetchClient.fetch(anyString()))
+                .thenReturn(new SubFetchResult(sampleSubscription(), null, null, null));
     }
 
     /** 建分组并勾选导入两个真节点，返回分组 id */
@@ -206,7 +208,7 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
                 + "\n"; // 保持 YAML 合法
         updatedYaml = updatedYaml.replace("proxy-groups:",
                 "    - { name: '新加坡-01', type: anytls, server: sg01.example.com, port: 35357, password: uuid-秘密-1 }\nproxy-groups:");
-        when(subFetchClient.fetch(anyString())).thenReturn(updatedYaml);
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(updatedYaml, null, null, null));
 
         mockMvc.perform(post("/api/admin/node-groups/" + groupId + "/refresh-preview")
                         .header("Authorization", bearer(adminId)))

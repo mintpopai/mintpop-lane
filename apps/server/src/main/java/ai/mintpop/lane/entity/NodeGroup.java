@@ -27,6 +27,21 @@ public class NodeGroup {
 
     private String remark;
 
+    /** 已用流量字节数（upload+download），取自 subscription-userinfo 头；机场未返回该头则为 null */
+    private Long trafficUsedBytes;
+
+    /** 总流量额度字节数；null 同上 */
+    private Long trafficTotalBytes;
+
+    /** 订阅到期时间；null 同上 */
+    private Instant trafficExpiresAt;
+
+    /** 已推送过额度告警的档位（80 或 95），服务端内部去重用，不对外展示；null 表示未推过 */
+    private Integer trafficAlertedPct;
+
+    /** 最近一次成功拉取订阅的时间 */
+    private Instant fetchedAt;
+
     /** 由数据库默认值维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant createdAt;

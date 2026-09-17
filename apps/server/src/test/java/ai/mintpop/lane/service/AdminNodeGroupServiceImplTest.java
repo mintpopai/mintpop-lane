@@ -2,6 +2,7 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
+import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.parser.SubYamlParser;
@@ -65,9 +66,7 @@ class AdminNodeGroupServiceImplTest {
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
 
-        // 此刻 SubFetchClient.fetch 还返回 String —— SubFetchResult 要到 Task 5 才存在。
-        // Task 5 换签名时会连带改这里的桩（那个任务的 Step 5 已写明）
-        when(subFetchClient.fetch(anyString())).thenReturn(SUB_YAML);
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, null, null));
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
         service = new AdminNodeGroupServiceImpl(groupRepository, nodeRepository, userRepository,
@@ -129,11 +128,11 @@ class AdminNodeGroupServiceImplTest {
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
         when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
-        when(subFetchClient.fetch(anyString())).thenReturn("""
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
                   - { name: 'US-01', type: anytls, server: hk01a.t11-a.app, port: 35660, password: p }
                   - { name: 'US-02', type: anytls, server: hk01a.t11-a.app, port: 35661, password: p }
-                """);
+                """, null, null, null));
 
         NodeGroupImportRequest request = new NodeGroupImportRequest();
         request.setSelectedNames(List.of("US-01", "US-02"));
