@@ -1,6 +1,7 @@
 package ai.mintpop.lane.config;
 
 import lombok.Data;
+import lombok.ToString;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -22,9 +23,11 @@ public class PaymentProperties {
     private static final Map<String, String> PM_TYPE_MAPPING =
             Map.of("wxpay", "wechat_pay", "alipay", "alipay", "card", "card");
 
-    /** Stripe secret key（敏感，sk_ 开头） */
+    /** Stripe secret key（敏感，sk_ 开头）。排除出 toString——它能直接调 Stripe API 发起扣款与退款 */
+    @ToString.Exclude
     private String secretKey;
-    /** Stripe webhook 签名密钥（敏感，whsec_ 开头） */
+    /** Stripe webhook 签名密钥（敏感，whsec_ 开头）。排除出 toString——泄露后可伪造「已支付」事件骗过履约 */
+    @ToString.Exclude
     private String webhookSecret;
     /** Stripe publishable key（下发前端初始化 Stripe.js，非敏感） */
     private String publishableKey;
