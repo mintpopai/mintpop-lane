@@ -1,15 +1,11 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
-import type {
-  AdminNodeResponse,
-  NodeGroupResponse,
-  SubAuditRequest,
-  SubAuditResponse,
-} from "../api/types";
+import type { AdminNodeResponse, NodeGroupResponse } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
+import NodeGroupAuditModal from "../components/NodeGroupAuditModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import { showToast } from "../toast";
@@ -21,7 +17,6 @@ const listNodeGroups = vi.fn<() => Promise<NodeGroupResponse[]>>();
 const deleteNode = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 const deleteNodeGroup = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 const renameNodeGroup = vi.fn<(id: number, body: unknown) => Promise<void>>(async () => undefined);
-const auditNodeGroup = vi.fn<(body: SubAuditRequest) => Promise<SubAuditResponse>>();
 
 vi.mock("../api", () => ({
   adminApi: () => ({
@@ -30,7 +25,6 @@ vi.mock("../api", () => ({
     deleteNode,
     deleteNodeGroup,
     renameNodeGroup,
-    auditNodeGroup,
   }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
@@ -76,22 +70,6 @@ function group(overrides: Partial<NodeGroupResponse> = {}): NodeGroupResponse {
     fetchedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
-    ...overrides,
-  };
-}
-
-function auditReport(overrides: Partial<SubAuditResponse> = {}): SubAuditResponse {
-  return {
-    airportName: "候选机场",
-    totalNodes: 10,
-    usNodeCount: 0,
-    usNodeNames: [],
-    failureDomains: [],
-    conflictsWith: [],
-    protocols: [],
-    usedBytes: null,
-    totalBytes: null,
-    expiresAt: null,
     ...overrides,
   };
 }
@@ -156,34 +134,6 @@ async function mountNodesViewWithGroups(groups: Partial<NodeGroupResponse>[]) {
   listNodes.mockResolvedValue([]);
   listNodeGroups.mockResolvedValue(groups.map((g) => group(g)));
   return render();
-}
-
-/**
- * AdminModal 用 Teleport 挂到 document.body，脱离了 wrapper 自己的渲染子树，
- * wrapper.text() / wrapper.find 找不到它——弹窗内容一律改从 document 查，与本文件
- * 既有的改名弹窗测试（document.querySelector(".dialog .admin-input")）同一个套路。
- */
-function dialogEl(): HTMLElement {
-  return document.querySelector<HTMLElement>(".dialog")!;
-}
-
-/** 打开尽调弹窗、贴链接、提交，返回报告出来后的 wrapper */
-async function openAuditDialogWith(overrides: Partial<SubAuditResponse>) {
-  auditNodeGroup.mockResolvedValueOnce(auditReport(overrides));
-  const wrapper = await render();
-
-  const auditBtn = wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调")!;
-  await auditBtn.trigger("click");
-
-  const input = document.querySelector<HTMLInputElement>(".dialog .admin-input")!;
-  input.value = "https://example.com/sub";
-  input.dispatchEvent(new Event("input"));
-  await wrapper.vm.$nextTick();
-
-  document.querySelector<HTMLButtonElement>(".dialog .admin-btn")!.click();
-  await flushPromises();
-
-  return wrapper;
 }
 
 async function setGroup(wrapper: Wrapper, value: "ALL" | "NONE" | number) {
@@ -601,59 +551,36 @@ describe("NodesView 表格内容", () => {
   });
 });
 
+// 尽调弹窗自身的行为（否决态样式、美国节点名单、失败提示等）已随组件拆分迁到
+// NodeGroupAuditModal.spec.ts；这里只管「点尽调按钮真的打开/关闭了这个弹窗」，
+// 与「重新拉取」打开 SubImportModal、检测打开 NodeProbeModal 是同一层次的浅断言。
 describe("NodesView 订阅尽调", () => {
-  it("贴链接提交后，把订阅链接原样传给尽调接口", async () => {
-    await openAuditDialogWith({ conflictsWith: [], usNodeNames: [] });
-
-    expect(auditNodeGroup).toHaveBeenCalledWith({ subUrl: "https://example.com/sub" });
-  });
-
-  it("conflictsWith 非空时用醒目的否决态样式标出，不是和其它文案一样平铺", async () => {
-    await openAuditDialogWith({
-      conflictsWith: ["TaiShan Net"],
-      usNodeNames: [],
-    });
-
-    expect(dialogEl().textContent).toContain("与现有分组同故障域");
-    const verdict = dialogEl().querySelector(".audit-verdict-danger")!;
-    expect(verdict).not.toBeNull();
-    expect(verdict.textContent).toContain("建议否决");
-    expect(verdict.textContent).toContain("TaiShan Net");
-  });
-
-  it("未撞库时给出正面结论，不是留白", async () => {
-    await openAuditDialogWith({ conflictsWith: [], usNodeNames: [] });
-
-    expect(dialogEl().querySelector(".audit-verdict-danger")).toBeNull();
-    expect(dialogEl().querySelector(".audit-verdict-ok")!.textContent).toContain("未发现");
-  });
-
-  it("完整列出启发式判定的美国节点供人核对，并注明是启发式判断", async () => {
-    await openAuditDialogWith({
-      conflictsWith: [],
-      usNodeNames: ["🇺🇸[US]San Jose07", "United States 03"],
-    });
-
-    expect(dialogEl().textContent).toContain("🇺🇸[US]San Jose07");
-    expect(dialogEl().textContent).toContain("United States 03");
-    expect(dialogEl().textContent).toContain("判定为启发式");
-  });
-
-  it("尽调失败时用服务端中文提示，不吞掉错误", async () => {
-    auditNodeGroup.mockReset();
-    auditNodeGroup.mockRejectedValueOnce(new BizError(410099, "订阅拉取失败"));
+  it("「尽调」按钮只在第一跳出现，点了就打开尽调弹窗", async () => {
     const wrapper = await render();
+    expect(wrapper.findComponent(NodeGroupAuditModal).exists()).toBe(false);
 
     const auditBtn = wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调")!;
     await auditBtn.trigger("click");
-    const input = document.querySelector<HTMLInputElement>(".dialog .admin-input")!;
-    input.value = "https://example.com/sub";
-    input.dispatchEvent(new Event("input"));
-    await wrapper.vm.$nextTick();
-    document.querySelector<HTMLButtonElement>(".dialog .admin-btn")!.click();
-    await flushPromises();
 
-    expect(showToast).toHaveBeenCalledWith("error", "订阅拉取失败");
+    expect(wrapper.findComponent(NodeGroupAuditModal).exists()).toBe(true);
+
+    await switchTo(wrapper, "LAND");
+    expect(
+      wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调"),
+    ).toBeUndefined();
+  });
+
+  it("尽调弹窗关闭后不再渲染，也不会跟着刷新节点列表（只读探测，不改数据）", async () => {
+    const wrapper = await render();
+    const auditBtn = wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调")!;
+    await auditBtn.trigger("click");
+    listNodes.mockClear();
+
+    wrapper.findComponent(NodeGroupAuditModal).vm.$emit("close");
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent(NodeGroupAuditModal).exists()).toBe(false);
+    expect(listNodes).not.toHaveBeenCalled();
   });
 });
 

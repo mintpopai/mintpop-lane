@@ -3,18 +3,14 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
-import type {
-  AdminNodeResponse,
-  NodeGroupResponse,
-  NodeRole,
-  SubAuditResponse,
-} from "../api/types";
+import type { AdminNodeResponse, NodeGroupResponse, NodeRole } from "../api/types";
 import AdminModal from "../components/AdminModal.vue";
 import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import FilterChips from "../components/FilterChips.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
+import NodeGroupAuditModal from "../components/NodeGroupAuditModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
@@ -45,11 +41,9 @@ const renaming = ref(false);
 const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
 const deletingGroup = ref(false);
 
-// —— 采购尽调：候选机场是否与库里已有节点撞故障域，只读，不落库 ——
+// —— 采购尽调：候选机场是否与库里已有节点撞故障域，只读，不落库。
+// 弹窗自身的状态与逻辑都在 NodeGroupAuditModal 组件里，这里只管开关 ——
 const auditModalOpen = ref(false);
-const auditSubUrl = ref("");
-const auditReport = ref<SubAuditResponse | null>(null);
-const auditing = ref(false);
 
 /** 启用状态筛选，两跳共用：ALL=不筛 */
 const currentStatus = ref<"ALL" | "ENABLED" | "DISABLED">("ALL");
@@ -267,34 +261,6 @@ async function confirmDeleteGroup(): Promise<void> {
   }
 }
 
-function openAudit(): void {
-  auditSubUrl.value = "";
-  auditReport.value = null;
-  auditModalOpen.value = true;
-}
-
-function closeAudit(): void {
-  auditModalOpen.value = false;
-}
-
-async function submitAudit(): Promise<void> {
-  if (!auditSubUrl.value.trim()) {
-    showToast("error", "先粘贴候选机场的订阅链接");
-    return;
-  }
-  auditing.value = true;
-  try {
-    auditReport.value = await adminApi().auditNodeGroup({ subUrl: auditSubUrl.value.trim() });
-  } catch (error) {
-    showToast(
-      "error",
-      error instanceof BizError ? error.message : `尽调失败：${(error as Error).message}`,
-    );
-  } finally {
-    auditing.value = false;
-  }
-}
-
 onMounted(load);
 </script>
 
@@ -319,7 +285,7 @@ onMounted(load);
         v-if="currentRole === 'FRONT'"
         type="button"
         class="admin-btn-ghost"
-        @click="openAudit()"
+        @click="auditModalOpen = true"
       >
         尽调
       </button>
@@ -530,98 +496,7 @@ onMounted(load);
     @confirm="confirmDeleteGroup()"
     @cancel="pendingDeleteGroup = null"
   />
-  <AdminModal
-    v-if="auditModalOpen"
-    title="订阅尽调"
-    :wide="auditReport !== null"
-    @close="closeAudit()"
-  >
-    <div class="admin-form">
-      <div v-if="!auditReport" class="admin-field">
-        <label for="audit-sub-url">候选机场订阅链接</label>
-        <p class="admin-note">
-          只读探测，不写库：解析候选机场的节点域名，判断是否与库里已有分组撞同一个故障域（同一家中转商）。
-        </p>
-        <input
-          id="audit-sub-url"
-          v-model="auditSubUrl"
-          class="admin-input fact"
-          placeholder="https://…?token=…"
-          :disabled="auditing"
-        />
-      </div>
-
-      <template v-else>
-        <div class="audit-summary">
-          <span
-            >机场：<span class="fact">{{ auditReport.airportName ?? "未知" }}</span></span
-          >
-          <span
-            >节点数：<span class="fact">{{ auditReport.totalNodes }}</span></span
-          >
-          <span
-            >协议：<span class="fact">{{ auditReport.protocols.join("、") || "—" }}</span></span
-          >
-        </div>
-
-        <!-- 全份报告最重要的结论：撞了故障域就等于花两份钱买同一个入口，采购上要一眼看到、否决 -->
-        <div v-if="auditReport.conflictsWith.length > 0" class="audit-verdict audit-verdict-danger">
-          <strong>与现有分组同故障域，建议否决这次采购</strong>
-          <p>撞车分组：{{ auditReport.conflictsWith.join("、") }}</p>
-        </div>
-        <div v-else class="audit-verdict audit-verdict-ok">未发现与现有分组撞故障域。</div>
-
-        <div class="admin-field">
-          <p class="admin-note">
-            按节点名匹配 [US] / United States / 美国 / 🇺🇸
-            等关键词，判定为启发式，请核对——机场命名不规范时会误判， 不是确定结论。以下
-            {{ auditReport.usNodeCount }} 个节点被判定为美国落地：
-          </p>
-          <ul v-if="auditReport.usNodeNames.length > 0" class="audit-us-list">
-            <li v-for="name in auditReport.usNodeNames" :key="name">{{ name }}</li>
-          </ul>
-          <p v-else class="muted">未发现疑似美国节点。</p>
-        </div>
-
-        <div v-if="auditReport.failureDomains.length > 0" class="admin-field">
-          <label>故障域分布</label>
-          <table class="admin-table dense">
-            <thead>
-              <tr>
-                <th>域名</th>
-                <th>节点数</th>
-                <th>美国节点数</th>
-                <th>分线路</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="fd in auditReport.failureDomains" :key="fd.domain">
-                <td class="fact">{{ fd.domain }}</td>
-                <td>{{ fd.nodeCount }}</td>
-                <td>{{ fd.usNodeCount }}</td>
-                <td>{{ booleanLabel(fd.lineSplit, "是", "否") }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </template>
-    </div>
-
-    <template #footer>
-      <button type="button" class="admin-btn-ghost" @click="closeAudit()">
-        {{ auditReport ? "关闭" : "取消" }}
-      </button>
-      <button
-        v-if="!auditReport"
-        type="button"
-        class="admin-btn"
-        :disabled="auditing"
-        @click="submitAudit()"
-      >
-        {{ auditing ? "尽调中…" : "开始尽调" }}
-      </button>
-    </template>
-  </AdminModal>
+  <NodeGroupAuditModal v-if="auditModalOpen" @close="auditModalOpen = false" />
 </template>
 
 <style scoped>
@@ -670,55 +545,5 @@ onMounted(load);
 .group-quota-pct {
   flex: 0 0 auto;
   min-width: 96px;
-}
-
-/* —— 尽调报告 —— */
-.audit-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  font-size: 13px;
-  color: var(--color-ink-secondary);
-}
-
-.audit-verdict {
-  padding: 12px 14px;
-  border-radius: var(--radius-button);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* 全份报告最重要的结论：故障域撞车＝花两份钱买同一个入口，必须比其它文案更醒目 */
-.audit-verdict-danger {
-  background: rgba(179, 52, 31, 0.08);
-  border: 1px solid var(--counter-danger);
-  color: var(--counter-danger-deep);
-}
-
-.audit-verdict-danger strong {
-  font-size: 14px;
-}
-
-.audit-verdict-ok {
-  background: var(--color-bg-cloud);
-  border: 1px solid var(--color-border);
-  color: var(--color-ink-secondary);
-}
-
-/* 美国节点名单可能有几十条，限高滚动，别把弹窗撑破 */
-.audit-us-list {
-  max-height: 200px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 8px 12px;
-  list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-button);
-  font-family: var(--font-fact);
-  font-size: 12px;
-}
-
-.audit-us-list li + li {
-  margin-top: 4px;
 }
 </style>
