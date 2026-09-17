@@ -40,6 +40,7 @@ function node(overrides: Partial<AdminNodeResponse> = {}): AdminNodeResponse {
     groupId: null,
     groupName: null,
     sourceType: null,
+    failureDomain: null,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-02T03:04:05Z",
     ...overrides,
@@ -502,5 +503,25 @@ describe("NodesView 表格内容", () => {
     const rows = wrapper.findAll("tbody tr");
     expect(rows[0].findAll("td")[1].text()).toBe("vmess");
     expect(rows[1].findAll("td")[1].text()).toBe("SOCKS5");
+  });
+
+  it("故障域：有值就展示域名，null 展示「未解析」而不是留空", async () => {
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT", failureDomain: "jp.tsdns.top" }),
+      node({ id: 2, name: "US-02", role: "FRONT", failureDomain: null }),
+    ]);
+    const wrapper = await render();
+
+    expect(wrapper.text()).toContain("jp.tsdns.top");
+    expect(wrapper.text()).toContain("未解析");
+  });
+
+  it("落地节点没有故障域这个概念，展示占位符而不是「未解析」", async () => {
+    listNodes.mockResolvedValue([node({ id: 4, role: "LAND", failureDomain: null })]);
+    const wrapper = await render();
+    await switchTo(wrapper, "LAND");
+
+    const rowText = wrapper.findAll("tbody tr")[0].text();
+    expect(rowText).not.toContain("未解析");
   });
 });

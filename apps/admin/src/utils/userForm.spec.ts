@@ -26,6 +26,7 @@ function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
     groupId: null,
     groupName: null,
     sourceType: null,
+    failureDomain: null,
     createdAt: "2026-08-18T10:00:00",
     updatedAt: "2026-08-18T10:00:00",
     ...overrides,

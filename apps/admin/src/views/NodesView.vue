@@ -326,6 +326,7 @@ onMounted(load);
           <th>协议</th>
           <th v-if="currentRole === 'FRONT'">分组</th>
           <th>地址</th>
+          <th>故障域</th>
           <template v-if="currentRole === 'LAND'">
             <th>出口 IP</th>
             <th>出口时区</th>
@@ -346,6 +347,13 @@ onMounted(load);
             <span v-else class="muted">—</span>
           </td>
           <td class="fact">{{ row.serverAddr }}:{{ row.port }}</td>
+          <!-- 故障域＝该节点域名 CNAME 链的终点，只对前置节点有意义；落地节点没有这个概念 -->
+          <td
+            class="fact muted"
+            :title="row.role === 'FRONT' ? (row.failureDomain ?? '尚未解析或解析失败') : undefined"
+          >
+            {{ row.role === "FRONT" ? (row.failureDomain ?? "未解析") : "—" }}
+          </td>
           <template v-if="currentRole === 'LAND'">
             <td class="fact muted">{{ row.egressIp ?? "—" }}</td>
             <td class="fact muted">{{ row.egressTimezone ?? "—" }}</td>

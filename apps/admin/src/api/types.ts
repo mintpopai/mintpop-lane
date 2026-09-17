@@ -187,6 +187,8 @@ export interface AdminNodeResponse {
   groupName: string | null;
   /** 订阅节点的真实 mihomo type（如 anytls）；手工节点为 null */
   sourceType: string | null;
+  /** 故障域：节点域名 CNAME 链的终点，仅对 FRONT 节点有意义；null 表示尚未解析或解析失败 */
+  failureDomain: string | null;
   createdAt: string;
   updatedAt: string;
 }
