@@ -60,7 +60,8 @@ class SubAuditServiceImplTest {
     @BeforeEach
     void setUp() {
         when(subFetchClient.fetch(SUB_URL))
-                .thenReturn(new SubFetchResult(SUB_YAML, 1L, 100L, Instant.parse("2027-05-02T08:04:00Z")));
+                .thenReturn(new SubFetchResult(SUB_YAML, "TaiShan Net", 1L, 100L,
+                        Instant.parse("2027-05-02T08:04:00Z")));
         when(failureDomainResolver.resolve(anyString())).thenReturn("candidate.example.net");
         when(ecsDnsClient.resolveA(anyString(), anyString())).thenReturn(List.of("203.0.113.1"));
         when(ipAsnClient.lookupAsn(anyString())).thenReturn(java.util.Optional.of("AS16509"));
@@ -108,6 +109,12 @@ class SubAuditServiceImplTest {
         assertThat(report.usNodeNames()).containsExactly("🇺🇸[US]San Jose07", "United States 03");
         assertThat(report.usNodeCount()).isEqualTo(2);
         assertThat(report.totalNodes()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("机场名直接取自 SubFetchResult.airportName（由拉取层从 content-disposition 解出）")
+    void carriesAirportNameFromFetchResult() {
+        assertThat(service.audit(SUB_URL).airportName()).isEqualTo("TaiShan Net");
     }
 
     @Test

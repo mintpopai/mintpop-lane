@@ -99,8 +99,7 @@ public class SubAuditServiceImpl implements SubAuditService {
         List<String> conflictsWith = findConflictingGroups(nodesByDomain.keySet());
 
         return new SubAuditResponse(
-                // 当前 SubFetchClient 未透出响应头，取不到 content-disposition，恒为 null
-                null,
+                fetchResult.airportName(),
                 nodes.size(),
                 usNodeNames.size(),
                 usNodeNames,

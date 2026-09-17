@@ -22,12 +22,17 @@ public class EntryIpWatchProperties {
 
     private Map<DnsVantage, String> vantages = defaultVantages();
 
+    /**
+     * 默认值经实测：用这四个子网查 EDNS Client Subnet 时，同一域名电信解析到 GCP 东京、
+     * 联通/移动/海外解析到 AWS 香港，同一子网重复查 6 次结果稳定——正是靠它们才发现
+     * 「中转入口按运营商分线路」这件事。
+     */
     private static Map<DnsVantage, String> defaultVantages() {
         Map<DnsVantage, String> defaults = new LinkedHashMap<>();
-        defaults.put(DnsVantage.CHINA_TELECOM, "202.96.128.0/24");
-        defaults.put(DnsVantage.CHINA_UNICOM, "202.106.195.0/24");
-        defaults.put(DnsVantage.CHINA_MOBILE, "120.196.165.0/24");
-        defaults.put(DnsVantage.OVERSEAS, "8.8.8.0/24");
+        defaults.put(DnsVantage.CHINA_TELECOM, "202.96.209.0/24");
+        defaults.put(DnsVantage.CHINA_UNICOM, "123.125.114.0/24");
+        defaults.put(DnsVantage.CHINA_MOBILE, "120.196.212.0/24");
+        defaults.put(DnsVantage.OVERSEAS, "104.16.0.0/24");
         return defaults;
     }
 }

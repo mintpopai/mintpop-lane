@@ -126,4 +126,26 @@ class RestClientSubFetchClientTest {
 
         assertThat(client.fetch("https://sub.example.com/c?token=t").usedBytes()).isNull();
     }
+
+    @Test
+    @DisplayName("解析 content-disposition 的 filename*（RFC 5987 百分号编码）得到机场名")
+    void parsesAirportNameFromContentDisposition() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN)
+                        .header("content-disposition", "attachment;filename*=UTF-8''TaiShan%20Net"));
+
+        assertThat(client.fetch("https://sub.example.com/c?token=t").airportName()).isEqualTo("TaiShan Net");
+    }
+
+    @Test
+    @DisplayName("缺 content-disposition 头时机场名为 null，不影响拉取")
+    void toleratesMissingContentDisposition() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN));
+
+        SubFetchResult result = client.fetch("https://sub.example.com/c?token=t");
+
+        assertThat(result.body()).isNotBlank();
+        assertThat(result.airportName()).isNull();
+    }
 }

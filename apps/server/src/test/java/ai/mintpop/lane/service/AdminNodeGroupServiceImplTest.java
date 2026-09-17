@@ -66,7 +66,7 @@ class AdminNodeGroupServiceImplTest {
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
 
-        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, null, null));
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, null, null, null));
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
         service = new AdminNodeGroupServiceImpl(groupRepository, nodeRepository, userRepository,
@@ -132,7 +132,7 @@ class AdminNodeGroupServiceImplTest {
                 proxies:
                   - { name: 'US-01', type: anytls, server: hk01a.t11-a.app, port: 35660, password: p }
                   - { name: 'US-02', type: anytls, server: hk01a.t11-a.app, port: 35661, password: p }
-                """, null, null, null));
+                """, null, null, null, null));
 
         NodeGroupImportRequest request = new NodeGroupImportRequest();
         request.setSelectedNames(List.of("US-01", "US-02"));
