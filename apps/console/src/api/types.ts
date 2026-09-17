@@ -75,6 +75,12 @@ export interface PlanResponse {
   price: number;
   /** 服务端可能新增币种，故用 string 承载 */
   currency: string;
+  /** 面向用户的短描述，可空 */
+  description: string | null;
+  /** 套餐图公开 URL，可空 */
+  imageUrl: string | null;
+  /** 套餐详情富文本，已由服务端净化；可空，为空则不显示「详情」入口 */
+  detail: string | null;
 }
 
 export interface OrderCreateRequest {

@@ -223,6 +223,9 @@ describe("createAdminApi", () => {
       durationDays: 30,
       price: 29.9,
       currency: "USD" as const,
+      description: "",
+      imageUrl: "",
+      detail: "",
       enabled: true,
       remark: "",
     };
@@ -270,6 +273,22 @@ describe("createAdminApi", () => {
       body: JSON.stringify(body),
     });
     expect(request).toHaveBeenNthCalledWith(4, "/admin/enterprises/7", { method: "DELETE" });
+  });
+
+  it("上传图片走 multipart，把 File 放进 FormData 的 file 字段，只交出 url", async () => {
+    const request = vi.fn(async () => ({ url: "https://assets.lane.mintpop.ai/plans/a.png" }));
+    const http = { request } as unknown as HttpClient;
+
+    const url = await createAdminApi(http).uploadImage(
+      new File(["x"], "a.png", { type: "image/png" }),
+    );
+
+    expect(url).toBe("https://assets.lane.mintpop.ai/plans/a.png");
+    const [path, init] = request.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe("/admin/uploads/images");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get("file")).toBeInstanceOf(File);
   });
 });
 

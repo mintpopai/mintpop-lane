@@ -7,6 +7,8 @@ defineProps<{
   title: string;
   /** 宽弹窗（订阅管理这类「列表 + 表单」内容）用 wide */
   wide?: boolean;
+  /** 内容区不留内边距：内部要自己分栏、且分栏底色要铺到弹窗边缘时用 */
+  flush?: boolean;
 }>();
 const emit = defineEmits<{ close: [] }>();
 
@@ -14,8 +16,13 @@ const dialog = ref<HTMLElement | null>(null);
 /** 打开弹窗前焦点在哪，关闭后还回去，不把人丢回页首 */
 let restoreTo: HTMLElement | null = null;
 
+// 每个标签分支都要单独 :not([tabindex="-1"])：逗号并列是 OR 关系，
+// 标签选择器（如 input:not([disabled])）本身不看 tabindex，
+// 只有 [tabindex]:not([tabindex="-1"]) 那一支会排除，但它只覆盖「纯靠 tabindex 才可聚焦」的元素
+// （如 <div tabindex="0">），管不到本就可聚焦的 input/button 等——不逐支加，tabindex="-1" 的隐藏
+// file input 照样会被 input:not([disabled]) 选中，排除形同虚设。
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 function focusables(): HTMLElement[] {
   return Array.from(dialog.value?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
@@ -76,7 +83,7 @@ function onKeydown(event: KeyboardEvent) {
           <h3 class="head-title">{{ title }}</h3>
           <button type="button" class="close" aria-label="关闭" @click="emit('close')">×</button>
         </header>
-        <div class="content">
+        <div class="content" :class="{ flush }">
           <slot />
         </div>
         <footer class="foot">
@@ -144,6 +151,11 @@ function onKeydown(event: KeyboardEvent) {
 .content {
   padding: 20px;
   overflow-y: auto;
+}
+
+/* 分栏内容自己铺满：内边距交给各栏，免得在弹窗边缘留一圈与栏底色不同的白边 */
+.content.flush {
+  padding: 0;
 }
 
 .foot {

@@ -25,6 +25,7 @@ import java.util.Map;
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -82,6 +83,8 @@ class AdminPlanControllerTest extends MysqlTestBase {
         body.put("currency", "USD");
         body.put("enabled", true);
         body.put("remark", "首发款");
+        body.put("description", "含 5 个并发席位，不限流量");
+        body.put("imageUrl", "https://assets.lane.mintpop.ai/plans/2026/09/a.png");
         return body;
     }
 
@@ -125,6 +128,8 @@ class AdminPlanControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].currency").value("USD"))
                 .andExpect(jsonPath("$.data[0].enabled").value(true))
                 .andExpect(jsonPath("$.data[0].remark").value("首发款"))
+                .andExpect(jsonPath("$.data[0].description").value("含 5 个并发席位，不限流量"))
+                .andExpect(jsonPath("$.data[0].imageUrl").value("https://assets.lane.mintpop.ai/plans/2026/09/a.png"))
                 .andExpect(jsonPath("$.data[0].createdAt").exists())
                 .andExpect(jsonPath("$.data[0].updatedAt").exists())
                 .andExpect(jsonPath("$.data[1].name").value("季付套餐"))
@@ -257,5 +262,166 @@ class AdminPlanControllerTest extends MysqlTestBase {
 
         mockMvc.perform(delete("/api/admin/plans/" + planId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410017));
+    }
+
+    @Test
+    @DisplayName("描述与图片地址可空：不传这两项也能建出套餐")
+    void mediaFieldsAreOptional() throws Exception {
+        Map<String, Object> body = validBody();
+        body.remove("description");
+        body.remove("imageUrl");
+
+        Long id = createPlan(body);
+
+        mockMvc.perform(get("/api/admin/plans").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].id").value(id))
+                .andExpect(jsonPath("$.data[0].description").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].imageUrl").value(nullValue()));
+    }
+
+    @Test
+    @DisplayName("图片地址必须是 https，描述超 255 字被挡下，均报 110001")
+    void mediaFieldValidation() throws Exception {
+        Map<String, Object> httpUrl = validBody();
+        httpUrl.put("imageUrl", "http://assets.lane.mintpop.ai/plans/a.png");
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(httpUrl)))
+                .andExpect(jsonPath("$.code").value(110001));
+
+        Map<String, Object> longDescription = validBody();
+        longDescription.put("name", "另一个套餐");
+        longDescription.put("description", "描".repeat(256));
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(longDescription)))
+                .andExpect(jsonPath("$.code").value(110001));
+
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM plan", Integer.class);
+        assertThat(count).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("imageUrl 传空串不再被 @Pattern 拒绝，仍能建出套餐；https 正常通过，http 仍被拒")
+    void imageUrlBlankIsAccepted() throws Exception {
+        Map<String, Object> blankImage = validBody();
+        blankImage.put("imageUrl", "");
+        Long id = createPlan(blankImage);
+        assertThat(jdbc.queryForObject("SELECT image_url FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+
+        Map<String, Object> httpsImage = validBody();
+        httpsImage.put("name", "另一个套餐");
+        httpsImage.put("imageUrl", "https://assets.lane.mintpop.ai/plans/b.png");
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(httpsImage)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        Map<String, Object> httpImage = validBody();
+        httpImage.put("name", "第三个套餐");
+        httpImage.put("imageUrl", "http://assets.lane.mintpop.ai/plans/c.png");
+        mockMvc.perform(post("/api/admin/plans").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(httpImage)))
+                .andExpect(jsonPath("$.code").value(110001));
+    }
+
+    @Test
+    @DisplayName("description 传空串能正常建出套餐（同类风险：与 imageUrl 一起确认没被误伤）")
+    void descriptionBlankIsAccepted() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("description", "");
+        Long id = createPlan(body);
+        assertThat(jdbc.queryForObject("SELECT description FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("更新时把 detail 清空为空串，库里真的变成 null，而不是沿用旧值")
+    void clearingDetailPersistsAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<p>探针</p>");
+        Long id = createPlan(body);
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id))
+                .isEqualTo("<p>探针</p>");
+
+        Map<String, Object> cleared = validBody();
+        cleared.put("detail", "");
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(cleared)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id)).isNull();
+    }
+
+    @Test
+    @DisplayName("更新时把 detail 传净化后不剩内容的输入，库里同样被清成 null，而不是沿用旧值")
+    void clearingDetailWithOnlyScriptPersistsAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<p>探针</p>");
+        Long id = createPlan(body);
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id))
+                .isEqualTo("<p>探针</p>");
+
+        Map<String, Object> onlyScript = validBody();
+        onlyScript.put("detail", "<script>alert(1)</script>");
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(onlyScript)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id)).isNull();
+    }
+
+    @Test
+    @DisplayName("更新时把 description / imageUrl 清空为空串，库里真的变成空串（这两个字段不经净化，不会变 null），而不是沿用旧值")
+    void clearingDescriptionAndImageUrlPersists() throws Exception {
+        Long id = createPlan(validBody());
+        assertThat(jdbc.queryForObject("SELECT description FROM plan WHERE id = ?", String.class, id))
+                .isNotEmpty();
+        assertThat(jdbc.queryForObject("SELECT image_url FROM plan WHERE id = ?", String.class, id))
+                .isNotEmpty();
+
+        Map<String, Object> cleared = validBody();
+        cleared.put("description", "");
+        cleared.put("imageUrl", "");
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(cleared)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT description FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+        assertThat(jdbc.queryForObject("SELECT image_url FROM plan WHERE id = ?", String.class, id)).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("更新时把 remark 传 null，库里真的变成 null，而不是默认策略下被静默跳过、沿用旧值")
+    void clearingRemarkToNullPersists() throws Exception {
+        Long id = createPlan(validBody());
+        assertThat(jdbc.queryForObject("SELECT remark FROM plan WHERE id = ?", String.class, id))
+                .isEqualTo("首发款");
+
+        Map<String, Object> cleared = validBody();
+        cleared.put("remark", null);
+        mockMvc.perform(put("/api/admin/plans/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(cleared)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(jdbc.queryForObject("SELECT remark FROM plan WHERE id = ?", String.class, id)).isNull();
+    }
+
+    @Test
+    @DisplayName("详情入库前被净化：script 剥掉、排版标签保留")
+    void detailIsSanitizedBeforeSave() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<p>含 5 个并发席位</p><script>alert(1)</script>");
+        Long id = createPlan(body);
+
+        String stored = jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id);
+        assertThat(stored).isEqualTo("<p>含 5 个并发席位</p>");
+    }
+
+    @Test
+    @DisplayName("详情留空或净化后不剩内容都入库为 null，不混存空壳")
+    void blankDetailStoredAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("detail", "<script>alert(1)</script>");
+        Long id = createPlan(body);
+
+        String stored = jdbc.queryForObject("SELECT detail FROM plan WHERE id = ?", String.class, id);
+        assertThat(stored).isNull();
     }
 }

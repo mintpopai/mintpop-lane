@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -36,6 +37,18 @@ public class PlanSaveRequest {
 
     @NotNull
     private Currency currency;
+
+    /** 面向用户的短描述，控制台购买卡片的副标题，可空 */
+    @Size(max = 255)
+    private String description;
+
+    /** 套餐图公开 URL，可空；留空放行，填了必须是 https，不许把 http 图混进 https 页面 */
+    @Size(max = 512)
+    @Pattern(regexp = "^(https://.+)?$")
+    private String imageUrl;
+
+    /** 套餐详情富文本，服务端会按白名单净化后入库，可空 */
+    private String detail;
 
     /** 上架状态：false 表示停用但保留 */
     @NotNull

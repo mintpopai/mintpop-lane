@@ -145,6 +145,23 @@ describe("焦点陷阱", () => {
     expect(w.emitted("close")).toBeUndefined();
     expect(document.activeElement).toBe(all[0]);
   });
+
+  it("隐藏的 file input（tabindex=-1）不进入 Tab 焦点环，护栏防止 FOCUSABLE 选择器被改回去", () => {
+    render({
+      default: '<input class="a" /><input type="file" tabindex="-1" style="display:none" />',
+    });
+    const closeBtn = document.querySelector(".close") as HTMLElement;
+    const aInput = document.querySelector(".a") as HTMLElement;
+    const fileInput = document.querySelector('input[type="file"]') as HTMLElement;
+    // 真正的可聚焦元素只有关闭按钮与 .a，.a 是最后一个；
+    // 若 file input 被误算进焦点环，Tab 会先落到它上而不是直接回到第一个
+    aInput.focus();
+
+    press("Tab");
+
+    expect(document.activeElement).toBe(closeBtn);
+    expect(document.activeElement).not.toBe(fileInput);
+  });
 });
 
 describe("关闭后的焦点归还", () => {
@@ -161,5 +178,19 @@ describe("关闭后的焦点归还", () => {
 
     expect(document.activeElement).toBe(opener);
     opener.remove();
+  });
+});
+
+describe("内容区内边距", () => {
+  it("flush 为真时内容区去掉内边距，供内部自己分栏", () => {
+    mount(Modal, { attachTo: document.body, props: { title: "编辑套餐", flush: true } });
+
+    expect(document.querySelector(".content")?.classList.contains("flush")).toBe(true);
+  });
+
+  it("不传 flush 时内容区保持默认内边距", () => {
+    mount(Modal, { attachTo: document.body, props: { title: "编辑套餐" } });
+
+    expect(document.querySelector(".content")?.classList.contains("flush")).toBe(false);
   });
 });

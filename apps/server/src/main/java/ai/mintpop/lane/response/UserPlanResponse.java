@@ -13,10 +13,17 @@ public record UserPlanResponse(
         AgentType agentType,
         Integer durationDays,
         BigDecimal price,
-        Currency currency
+        Currency currency,
+        /** 面向用户的短描述，可空 */
+        String description,
+        /** 套餐图公开 URL，可空 */
+        String imageUrl,
+        /** 套餐详情富文本，已净化的 HTML，可空 */
+        String detail
 ) {
     public static UserPlanResponse from(Plan plan) {
         return new UserPlanResponse(plan.getId(), plan.getName(), plan.getAgentType(),
-                plan.getDurationDays(), plan.getPrice(), plan.getCurrency());
+                plan.getDurationDays(), plan.getPrice(), plan.getCurrency(),
+                plan.getDescription(), plan.getImageUrl(), plan.getDetail());
     }
 }

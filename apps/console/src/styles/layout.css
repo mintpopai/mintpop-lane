@@ -1811,6 +1811,66 @@ body {
   color: var(--color-ink-secondary);
 }
 
+/* 套餐缩略图：无图时这一整块不渲染，卡片自然收窄 */
+.plan-thumb {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--color-bg-cloud);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 描述可能很长，卡片高度不能被它撑开，超出就省略 */
+.plan-desc {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-detail-image {
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-cloud);
+}
+
+.plan-detail-desc {
+  margin-top: 12px;
+  color: var(--color-ink-secondary);
+}
+
+/* 富文本正文：作者写什么样就什么样，这里只保证图不撑破弹窗、行距可读 */
+.plan-detail-body {
+  margin-top: 12px;
+  line-height: 1.7;
+}
+
+.plan-detail-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.plan-detail-body :is(h1, h2, h3, p, ul, ol, blockquote) {
+  margin: 0.6em 0;
+}
+
+.plan-detail-body :is(ul, ol) {
+  padding-left: 1.4em;
+}
+
 .plan-price {
   font-size: 18px;
   color: var(--color-ink);

@@ -14,8 +14,13 @@ const dialog = ref<HTMLElement | null>(null);
 /** 打开弹窗前焦点在哪，关闭后还回去，不把人丢回页首 */
 let restoreTo: HTMLElement | null = null;
 
+// 每个标签分支都要单独 :not([tabindex="-1"])：逗号并列是 OR 关系，
+// 标签选择器（如 input:not([disabled])）本身不看 tabindex，
+// 只有 [tabindex]:not([tabindex="-1"]) 那一支会排除，但它只覆盖「纯靠 tabindex 才可聚焦」的元素
+// （如 <div tabindex="0">），管不到本就可聚焦的 input/button 等——不逐支加，tabindex="-1" 的隐藏
+// file input 照样会被 input:not([disabled]) 选中，排除形同虚设。
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 function focusables(): HTMLElement[] {
   return Array.from(dialog.value?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);

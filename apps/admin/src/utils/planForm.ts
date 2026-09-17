@@ -8,6 +8,10 @@ export interface PlanFormModel {
   durationDays: number | null;
   price: number | null;
   currency: Currency;
+  description: string;
+  imageUrl: string;
+  /** 详情富文本，原样往返（不 trim）——富文本里的空白由编辑器决定 */
+  detail: string;
   enabled: boolean;
   remark: string;
 }
@@ -19,6 +23,9 @@ export function emptyPlanForm(): PlanFormModel {
     durationDays: null,
     price: null,
     currency: "USD",
+    description: "",
+    imageUrl: "",
+    detail: "",
     enabled: true,
     remark: "",
   };
@@ -31,6 +38,9 @@ export function planToForm(plan: PlanResponse): PlanFormModel {
     durationDays: plan.durationDays,
     price: plan.price,
     currency: plan.currency,
+    description: plan.description ?? "",
+    imageUrl: plan.imageUrl ?? "",
+    detail: plan.detail ?? "",
     enabled: plan.enabled,
     remark: plan.remark ?? "",
   };
@@ -54,6 +64,13 @@ export function validatePlanForm(form: PlanFormModel): string[] {
   ) {
     errors.push("价格必须是不小于 0 的数，至多两位小数");
   }
+  if (form.description.trim().length > 255) {
+    errors.push("描述不能超过 255 字");
+  }
+  // 与服务端 PlanSaveRequest 的 @Pattern 同一条规则：留空放行，填了就必须是 https
+  if (form.imageUrl.trim() && !form.imageUrl.trim().startsWith("https://")) {
+    errors.push("图片地址必须以 https:// 开头");
+  }
   return errors;
 }
 
@@ -65,6 +82,10 @@ export function buildPlanPayload(form: PlanFormModel): PlanSaveRequest {
     durationDays: form.durationDays ?? 0,
     price: form.price ?? 0,
     currency: form.currency,
+    description: form.description.trim(),
+    imageUrl: form.imageUrl.trim(),
+    // 不 trim：富文本里的空白由编辑器决定，服务端还会净化一遍
+    detail: form.detail,
     enabled: form.enabled,
     remark: form.remark.trim(),
   };

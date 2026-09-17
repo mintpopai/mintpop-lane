@@ -12,6 +12,10 @@ const updatePlan = vi.fn<(id: number, body: PlanSaveRequest) => Promise<void>>(
 
 vi.mock("../api", () => ({ adminApi: () => ({ createPlan, updatePlan }) }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
+// TipTap 在 jsdom 里真的去建编辑器会拖慢且易碎，测试只关心表单联动，换成一个只渲染 <div> 的桩件
+vi.mock("./RichTextEditor.vue", () => ({
+  default: { name: "RichTextEditor", props: ["id", "modelValue", "fill"], template: "<div />" },
+}));
 
 function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
   return {
@@ -21,6 +25,9 @@ function plan(overrides: Partial<PlanResponse> = {}): PlanResponse {
     durationDays: 30,
     price: 29.9,
     currency: "USD",
+    description: "含 5 个并发席位",
+    detail: "<p>含 5 个并发席位</p>",
+    imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
     enabled: true,
     remark: "老客专享",
     createdAt: "2026-09-01T00:00:00Z",
@@ -80,6 +87,68 @@ describe("PlanFormModal 打开时", () => {
 
     expect(query<HTMLInputElement>("#plan-remark").element.value).toBe("");
   });
+
+  it("编辑时回填描述与图片地址，并把图显示在预览位上", () => {
+    render(plan());
+
+    expect(query<HTMLTextAreaElement>("#plan-description").element.value).toBe("含 5 个并发席位");
+    expect(query<HTMLInputElement>("#plan-image").element.value).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+    );
+    expect(query<HTMLImageElement>(".image-preview img").element.src).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+    );
+  });
+
+  it("没有图时预览位给一句人话，而不是一个碎图标", () => {
+    render(plan({ imageUrl: null }));
+
+    expect(document.querySelector(".image-preview img")).toBeNull();
+    expect(query(".image-preview").text()).toContain("填了地址或上传图片就能在这里看到效果");
+  });
+});
+
+describe("PlanFormModal 两栏布局", () => {
+  it("弹窗分左右两栏，文案在左、参数在右", () => {
+    render(plan());
+
+    expect(document.querySelector(".copy-pane")).not.toBeNull();
+    expect(document.querySelector(".tag-pane")).not.toBeNull();
+    // 套餐名属于文案，Agent 类型属于参数
+    expect(document.querySelector(".copy-pane #plan-name")).not.toBeNull();
+    expect(document.querySelector(".tag-pane #plan-agent")).not.toBeNull();
+  });
+
+  it("提交时把详情一并带上", async () => {
+    const wrapper = render(plan());
+
+    await submit(wrapper);
+
+    expect(updatePlan).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({ detail: "<p>含 5 个并发席位</p>" }),
+    );
+  });
+});
+
+describe("PlanFormModal 图片预览失败态", () => {
+  it("图加载失败后换一个新地址，失败态会被清掉、重新显示图", async () => {
+    const wrapper = render(plan());
+    expect(document.querySelector(".image-preview img")).not.toBeNull();
+
+    await query(".image-preview img").trigger("error");
+    expect(document.querySelector(".image-preview img")).toBeNull();
+    expect(query(".image-preview").text()).toContain("这个地址取不到图片");
+
+    await query<HTMLInputElement>("#plan-image").setValue(
+      "https://assets.lane.mintpop.ai/plans/2026/09/b.png",
+    );
+    await wrapper.vm.$nextTick();
+
+    expect(query<HTMLImageElement>(".image-preview img").element.src).toBe(
+      "https://assets.lane.mintpop.ai/plans/2026/09/b.png",
+    );
+  });
 });
 
 describe("PlanFormModal 提交校验", () => {
@@ -109,6 +178,30 @@ describe("PlanFormModal 提交校验", () => {
     expect(showToast).toHaveBeenCalledWith("error", "价格必须是不小于 0 的数，至多两位小数");
     expect(updatePlan).not.toHaveBeenCalled();
   });
+
+  it("描述超过 255 字时计数标红，且挡下保存", async () => {
+    const wrapper = render(plan());
+
+    await query<HTMLTextAreaElement>("#plan-description").setValue("字".repeat(256));
+    expect(query(".char-count").classes()).toContain("over");
+
+    await submit(wrapper);
+
+    expect(showToast).toHaveBeenCalledWith("error", "描述不能超过 255 字");
+    expect(updatePlan).not.toHaveBeenCalled();
+  });
+
+  it("255 字加一个尾随空格：计数按 trim 后的字数算，不标红，也能保存成功", async () => {
+    const wrapper = render(plan());
+
+    await query<HTMLTextAreaElement>("#plan-description").setValue(`${"字".repeat(255)} `);
+    expect(query(".char-count").text()).toBe("255 / 255");
+    expect(query(".char-count").classes()).not.toContain("over");
+
+    await submit(wrapper);
+
+    expect(updatePlan).toHaveBeenCalled();
+  });
 });
 
 describe("PlanFormModal 保存", () => {
@@ -126,6 +219,9 @@ describe("PlanFormModal 保存", () => {
       durationDays: 90,
       price: 79.9,
       currency: "USD",
+      description: "",
+      detail: "",
+      imageUrl: "",
       enabled: true,
       remark: "",
     });
@@ -138,6 +234,20 @@ describe("PlanFormModal 保存", () => {
 
     expect(updatePlan).toHaveBeenCalledWith(5, expect.objectContaining({ name: "月付套餐" }));
     expect(createPlan).not.toHaveBeenCalled();
+  });
+
+  it("提交时把描述与图片地址一并带上", async () => {
+    const wrapper = render(plan());
+
+    await submit(wrapper);
+
+    expect(updatePlan).toHaveBeenCalledWith(
+      5,
+      expect.objectContaining({
+        description: "含 5 个并发席位",
+        imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
+      }),
+    );
   });
 
   it("保存成功后告诉父组件「存好了」并让它关掉弹窗", async () => {
@@ -194,7 +304,8 @@ describe("PlanFormModal 保存", () => {
   it("取消只是关掉，不碰任何接口", async () => {
     const wrapper = render(plan());
 
-    await query<HTMLButtonElement>(".admin-btn-ghost").trigger("click");
+    // .foot 限定取消按钮：ImageUploadButton 内部按钮同样用了 admin-btn-ghost 类，不加限定会点错
+    await query<HTMLButtonElement>(".foot .admin-btn-ghost").trigger("click");
 
     expect(wrapper.emitted("close")).toHaveLength(1);
     expect(updatePlan).not.toHaveBeenCalled();

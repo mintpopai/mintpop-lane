@@ -20,6 +20,8 @@
   <properties>
     <java.version>25</java.version>
     <mybatis-plus.version>3.5.17</mybatis-plus.version>
+    <aws-sdk.version>2.46.7</aws-sdk.version>
+    <jsoup.version>1.21.1</jsoup.version>
   </properties>
 
   <dependencyManagement>
@@ -28,6 +30,13 @@
         <groupId>com.baomidou</groupId>
         <artifactId>mybatis-plus-bom</artifactId>
         <version>${mybatis-plus.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws-sdk.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -162,6 +171,23 @@
       <groupId>com.stripe</groupId>
       <artifactId>stripe-java</artifactId>
       <version>33.4.2</version>
+    </dependency>
+    <!-- Cloudflare R2 对象存储（S3 兼容）。只用同步客户端，排除给异步客户端用的 netty -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>netty-nio-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- 富文本白名单净化：套餐详情入库前过一遍 -->
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+      <version>${jsoup.version}</version>
     </dependency>
   </dependencies>
 

@@ -16,6 +16,12 @@ public record PlanResponse(
         Integer durationDays,
         BigDecimal price,
         Currency currency,
+        /** 面向用户的短描述，可空 */
+        String description,
+        /** 套餐图公开 URL，可空 */
+        String imageUrl,
+        /** 套餐详情富文本，已净化的 HTML，可空 */
+        String detail,
         /** 上架状态：false 表示停用但保留 */
         Boolean enabled,
         String remark,

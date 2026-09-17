@@ -6,6 +6,12 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: false
+  servlet:
+    multipart:
+      # 与 ImageUploadService.MAX_BYTES、管理端 ImageUploadButton 的本地预检三处一致
+      max-file-size: 5MB
+      # 比单文件上限略大，留给 multipart 的分隔符与表单字段开销
+      max-request-size: 6MB
 
 mybatis-plus:
   configuration:

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { PlanResponse } from "../api/types";
-import { buildPlanPayload, emptyPlanForm, planToForm, validatePlanForm } from "./planForm";
+import {
+  buildPlanPayload,
+  emptyPlanForm,
+  planToForm,
+  validatePlanForm,
+  type PlanFormModel,
+} from "./planForm";
 
 const plan: PlanResponse = {
   id: 3,
@@ -9,6 +15,10 @@ const plan: PlanResponse = {
   durationDays: 30,
   price: 29.9,
   currency: "USD",
+  description: "含 5 个并发席位",
+  // 首尾带空白：用来验证 detail 不经 trim 原样往返（若误加 trim，这条会立刻变红）
+  detail: "  <p>含 5 个并发席位</p>  ",
+  imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
   enabled: true,
   remark: "首发款",
   createdAt: "2026-08-01T00:00:00Z",
@@ -24,6 +34,9 @@ describe("emptyPlanForm", () => {
       durationDays: null,
       price: null,
       currency: "USD",
+      description: "",
+      detail: "",
+      imageUrl: "",
       enabled: true,
       remark: "",
     });
@@ -43,6 +56,9 @@ describe("planToForm / buildPlanPayload", () => {
       durationDays: 30,
       price: 29.9,
       currency: "USD",
+      description: "含 5 个并发席位",
+      detail: "  <p>含 5 个并发席位</p>  ",
+      imageUrl: "https://assets.lane.mintpop.ai/plans/2026/09/a.png",
       enabled: true,
       remark: "首发款",
     });
@@ -57,6 +73,14 @@ describe("planToForm / buildPlanPayload", () => {
     const payload = buildPlanPayload(form);
     expect(payload.name).toBe("月付套餐");
     expect(payload.remark).toBe("备注");
+  });
+});
+
+describe("planToForm / buildPlanPayload 对详情的处理", () => {
+  it("详情原样往返，不做 trim——富文本里的空白由编辑器决定", () => {
+    const form = planToForm(plan);
+    expect(form.detail).toBe("  <p>含 5 个并发席位</p>  ");
+    expect(buildPlanPayload(form).detail).toBe("  <p>含 5 个并发席位</p>  ");
   });
 });
 
@@ -108,5 +132,30 @@ describe("validatePlanForm", () => {
     expect(validatePlanForm(form)).toContain("价格必须是不小于 0 的数，至多两位小数");
     form.price = 0;
     expect(validatePlanForm(form)).toEqual([]);
+  });
+});
+
+describe("validatePlanForm 的描述与图片规则", () => {
+  function formWith(overrides: Partial<PlanFormModel>): PlanFormModel {
+    return { ...emptyPlanForm(), name: "月付套餐", durationDays: 30, price: 29.9, ...overrides };
+  }
+
+  it("描述与图片都可以留空", () => {
+    expect(validatePlanForm(formWith({ description: "", imageUrl: "" }))).toEqual([]);
+  });
+
+  it("描述超 255 字被挡下", () => {
+    expect(validatePlanForm(formWith({ description: "描".repeat(256) }))).toContain(
+      "描述不能超过 255 字",
+    );
+  });
+
+  it("图片地址只收 https，http 与随手写的字串都被挡下", () => {
+    expect(validatePlanForm(formWith({ imageUrl: "http://x/a.png" }))).toContain(
+      "图片地址必须以 https:// 开头",
+    );
+    expect(validatePlanForm(formWith({ imageUrl: "随便写的" }))).toContain(
+      "图片地址必须以 https:// 开头",
+    );
   });
 });

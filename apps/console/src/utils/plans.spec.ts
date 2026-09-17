@@ -9,6 +9,9 @@ const claude: PlanResponse = {
   durationDays: 30,
   price: 99.99,
   currency: "USD",
+  description: null,
+  imageUrl: null,
+  detail: null,
 };
 const codex: PlanResponse = {
   id: 2,
@@ -17,6 +20,9 @@ const codex: PlanResponse = {
   durationDays: 30,
   price: 49,
   currency: "USD",
+  description: null,
+  imageUrl: null,
+  detail: null,
 };
 
 describe("plans", () => {
