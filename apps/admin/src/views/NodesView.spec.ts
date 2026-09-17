@@ -1,13 +1,19 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
-import type { AdminNodeResponse, NodeGroupResponse } from "../api/types";
+import type {
+  AdminNodeResponse,
+  NodeGroupResponse,
+  SubAuditRequest,
+  SubAuditResponse,
+} from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import { showToast } from "../toast";
+import { formatDate, formatDateTime } from "../utils/format";
 import NodesView from "./NodesView.vue";
 
 const listNodes = vi.fn<() => Promise<AdminNodeResponse[]>>();
@@ -15,9 +21,17 @@ const listNodeGroups = vi.fn<() => Promise<NodeGroupResponse[]>>();
 const deleteNode = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 const deleteNodeGroup = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 const renameNodeGroup = vi.fn<(id: number, body: unknown) => Promise<void>>(async () => undefined);
+const auditNodeGroup = vi.fn<(body: SubAuditRequest) => Promise<SubAuditResponse>>();
 
 vi.mock("../api", () => ({
-  adminApi: () => ({ listNodes, listNodeGroups, deleteNode, deleteNodeGroup, renameNodeGroup }),
+  adminApi: () => ({
+    listNodes,
+    listNodeGroups,
+    deleteNode,
+    deleteNodeGroup,
+    renameNodeGroup,
+    auditNodeGroup,
+  }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
@@ -55,8 +69,29 @@ function group(overrides: Partial<NodeGroupResponse> = {}): NodeGroupResponse {
     // 服务端给的是全量计数，页面刻意不用它
     nodeCount: 999,
     remark: null,
+    // 默认不给额度头，与「机场没提供」这条真实情况对齐；要测有额度的分组时逐个 override
+    usedBytes: null,
+    totalBytes: null,
+    expiresAt: null,
+    fetchedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function auditReport(overrides: Partial<SubAuditResponse> = {}): SubAuditResponse {
+  return {
+    airportName: "候选机场",
+    totalNodes: 10,
+    usNodeCount: 0,
+    usNodeNames: [],
+    failureDomains: [],
+    conflictsWith: [],
+    protocols: [],
+    usedBytes: null,
+    totalBytes: null,
+    expiresAt: null,
     ...overrides,
   };
 }
@@ -114,6 +149,41 @@ async function switchTo(wrapper: Wrapper, role: "FRONT" | "LAND") {
 async function setStatus(wrapper: Wrapper, status: "ALL" | "ENABLED" | "DISABLED") {
   wrapper.findComponent({ name: "AdminSelect" }).vm.$emit("update:modelValue", status);
   await wrapper.vm.$nextTick();
+}
+
+/** 只关心分组额度展示时用：节点列表留空，只喂分组数据 */
+async function mountNodesViewWithGroups(groups: Partial<NodeGroupResponse>[]) {
+  listNodes.mockResolvedValue([]);
+  listNodeGroups.mockResolvedValue(groups.map((g) => group(g)));
+  return render();
+}
+
+/**
+ * AdminModal 用 Teleport 挂到 document.body，脱离了 wrapper 自己的渲染子树，
+ * wrapper.text() / wrapper.find 找不到它——弹窗内容一律改从 document 查，与本文件
+ * 既有的改名弹窗测试（document.querySelector(".dialog .admin-input")）同一个套路。
+ */
+function dialogEl(): HTMLElement {
+  return document.querySelector<HTMLElement>(".dialog")!;
+}
+
+/** 打开尽调弹窗、贴链接、提交，返回报告出来后的 wrapper */
+async function openAuditDialogWith(overrides: Partial<SubAuditResponse>) {
+  auditNodeGroup.mockResolvedValueOnce(auditReport(overrides));
+  const wrapper = await render();
+
+  const auditBtn = wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调")!;
+  await auditBtn.trigger("click");
+
+  const input = document.querySelector<HTMLInputElement>(".dialog .admin-input")!;
+  input.value = "https://example.com/sub";
+  input.dispatchEvent(new Event("input"));
+  await wrapper.vm.$nextTick();
+
+  document.querySelector<HTMLButtonElement>(".dialog .admin-btn")!.click();
+  await flushPromises();
+
+  return wrapper;
 }
 
 async function setGroup(wrapper: Wrapper, value: "ALL" | "NONE" | number) {
@@ -410,10 +480,11 @@ describe("NodesView 空态", () => {
 });
 
 describe("NodesView 增删改", () => {
-  it("「从订阅导入」只在第一跳出现在页头", async () => {
+  it("「从订阅导入」「尽调」只在第一跳出现在页头", async () => {
     const wrapper = await render();
     expect(wrapper.findAll(".page-head-actions button").map((b) => b.text())).toEqual([
       "从订阅导入",
+      "尽调",
       "新建节点",
     ]);
 
@@ -424,7 +495,10 @@ describe("NodesView 增删改", () => {
   it("新建不带待编辑记录，编辑带上这一行", async () => {
     const wrapper = await render();
 
-    await wrapper.findAll(".page-head-actions button")[1].trigger("click");
+    const createBtn = wrapper
+      .findAll(".page-head-actions button")
+      .find((b) => b.text() === "新建节点")!;
+    await createBtn.trigger("click");
     expect(wrapper.findComponent(NodeFormModal).props("editing")).toBeNull();
 
     wrapper.findComponent(NodeFormModal).vm.$emit("close");
@@ -524,5 +598,130 @@ describe("NodesView 表格内容", () => {
     // 落地列序：节点名/协议/地址/故障域/出口 IP/…（落地没有分组列），故障域是第 4 格
     const failureDomainCell = wrapper.findAll("tbody tr")[0].findAll("td")[3];
     expect(failureDomainCell.text()).toBe("—");
+  });
+});
+
+describe("NodesView 订阅尽调", () => {
+  it("贴链接提交后，把订阅链接原样传给尽调接口", async () => {
+    await openAuditDialogWith({ conflictsWith: [], usNodeNames: [] });
+
+    expect(auditNodeGroup).toHaveBeenCalledWith({ subUrl: "https://example.com/sub" });
+  });
+
+  it("conflictsWith 非空时用醒目的否决态样式标出，不是和其它文案一样平铺", async () => {
+    await openAuditDialogWith({
+      conflictsWith: ["TaiShan Net"],
+      usNodeNames: [],
+    });
+
+    expect(dialogEl().textContent).toContain("与现有分组同故障域");
+    const verdict = dialogEl().querySelector(".audit-verdict-danger")!;
+    expect(verdict).not.toBeNull();
+    expect(verdict.textContent).toContain("建议否决");
+    expect(verdict.textContent).toContain("TaiShan Net");
+  });
+
+  it("未撞库时给出正面结论，不是留白", async () => {
+    await openAuditDialogWith({ conflictsWith: [], usNodeNames: [] });
+
+    expect(dialogEl().querySelector(".audit-verdict-danger")).toBeNull();
+    expect(dialogEl().querySelector(".audit-verdict-ok")!.textContent).toContain("未发现");
+  });
+
+  it("完整列出启发式判定的美国节点供人核对，并注明是启发式判断", async () => {
+    await openAuditDialogWith({
+      conflictsWith: [],
+      usNodeNames: ["🇺🇸[US]San Jose07", "United States 03"],
+    });
+
+    expect(dialogEl().textContent).toContain("🇺🇸[US]San Jose07");
+    expect(dialogEl().textContent).toContain("United States 03");
+    expect(dialogEl().textContent).toContain("判定为启发式");
+  });
+
+  it("尽调失败时用服务端中文提示，不吞掉错误", async () => {
+    auditNodeGroup.mockReset();
+    auditNodeGroup.mockRejectedValueOnce(new BizError(410099, "订阅拉取失败"));
+    const wrapper = await render();
+
+    const auditBtn = wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调")!;
+    await auditBtn.trigger("click");
+    const input = document.querySelector<HTMLInputElement>(".dialog .admin-input")!;
+    input.value = "https://example.com/sub";
+    input.dispatchEvent(new Event("input"));
+    await wrapper.vm.$nextTick();
+    document.querySelector<HTMLButtonElement>(".dialog .admin-btn")!.click();
+    await flushPromises();
+
+    expect(showToast).toHaveBeenCalledWith("error", "订阅拉取失败");
+  });
+});
+
+describe("NodesView 分组额度", () => {
+  it("按 usedBytes / totalBytes 算出使用百分比", async () => {
+    const wrapper = await mountNodesViewWithGroups([
+      {
+        id: 1,
+        name: "TaiShan Net",
+        usedBytes: 36160899072,
+        totalBytes: 137438953472,
+        expiresAt: "2027-05-02T08:04:00Z",
+        fetchedAt: "2026-09-17T07:25:04Z",
+      },
+    ]);
+
+    expect(wrapper.text()).toContain("26%");
+  });
+
+  it("用量超过总量时封顶显示 100%，不越界", async () => {
+    const wrapper = await mountNodesViewWithGroups([
+      {
+        id: 1,
+        name: "爆表机场",
+        usedBytes: 200,
+        totalBytes: 100,
+        expiresAt: null,
+        fetchedAt: null,
+      },
+    ]);
+
+    expect(wrapper.text()).toContain("100%");
+  });
+
+  it("机场未提供额度头（used/total 为 null）时显示占位文案，不是 0%", async () => {
+    const wrapper = await mountNodesViewWithGroups([
+      {
+        id: 1,
+        name: "无额度头的机场",
+        usedBytes: null,
+        totalBytes: null,
+        expiresAt: null,
+        fetchedAt: "2026-09-17T07:25:04Z",
+      },
+    ]);
+
+    expect(wrapper.text()).toContain("机场未提供");
+    expect(wrapper.text()).not.toContain("0%");
+  });
+
+  it("totalBytes 为 0 时视同未提供额度，不能除出 NaN 或 Infinity%", async () => {
+    const wrapper = await mountNodesViewWithGroups([
+      { id: 1, name: "怪异机场", usedBytes: 100, totalBytes: 0, expiresAt: null, fetchedAt: null },
+    ]);
+
+    expect(wrapper.text()).toContain("机场未提供");
+    expect(wrapper.text()).not.toContain("NaN");
+    expect(wrapper.text()).not.toContain("Infinity");
+  });
+
+  it("到期日与最近拉取时间都展示，且用全站统一的时间格式化函数", async () => {
+    const expiresAt = "2027-05-02T08:04:00Z";
+    const fetchedAt = "2026-09-17T07:25:04Z";
+    const wrapper = await mountNodesViewWithGroups([
+      { id: 1, name: "TaiShan Net", usedBytes: 1, totalBytes: 2, expiresAt, fetchedAt },
+    ]);
+
+    expect(wrapper.text()).toContain(formatDate(expiresAt));
+    expect(wrapper.text()).toContain(formatDateTime(fetchedAt));
   });
 });

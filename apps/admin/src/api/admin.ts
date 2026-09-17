@@ -19,6 +19,8 @@ import type {
   PlanResponse,
   PlanSaveRequest,
   RebindRequestStatus,
+  SubAuditRequest,
+  SubAuditResponse,
   SubPreviewNode,
   SubPreviewRequest,
   SubscriptionCreateRequest,
@@ -60,6 +62,8 @@ export interface AdminApi {
   /** 强制解绑订阅当前绑定的设备。与有没有申请无关，故挂在订阅下 */
   unbindSubscriptionDevice(id: number): Promise<void>;
   previewSub(body: SubPreviewRequest): Promise<SubPreviewNode[]>;
+  /** 采购尽调：候选机场的试用订阅是否与库里已有节点撞故障域。只读，不落库 */
+  auditNodeGroup(body: SubAuditRequest): Promise<SubAuditResponse>;
   createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;
   listNodeGroups(): Promise<NodeGroupResponse[]>;
   renameNodeGroup(id: number, body: NodeGroupRenameRequest): Promise<void>;
@@ -187,6 +191,13 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     previewSub(body) {
       return http.request("/admin/node-groups/preview", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+
+    auditNodeGroup(body) {
+      return http.request("/admin/node-groups/audit", {
         method: "POST",
         body: JSON.stringify(body),
       });

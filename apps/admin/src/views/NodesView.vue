@@ -3,7 +3,12 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
-import type { AdminNodeResponse, NodeGroupResponse, NodeRole } from "../api/types";
+import type {
+  AdminNodeResponse,
+  NodeGroupResponse,
+  NodeRole,
+  SubAuditResponse,
+} from "../api/types";
 import AdminModal from "../components/AdminModal.vue";
 import Select from "../components/AdminSelect.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -15,7 +20,7 @@ import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import ViewTabs from "../components/ViewTabs.vue";
 import { showToast } from "../toast";
-import { booleanLabel, formatDateTime } from "../utils/format";
+import { booleanLabel, formatDate, formatDateTime } from "../utils/format";
 
 const currentRole = ref<NodeRole>("FRONT");
 const allNodes = ref<AdminNodeResponse[]>([]);
@@ -39,6 +44,12 @@ const renameInput = ref("");
 const renaming = ref(false);
 const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
 const deletingGroup = ref(false);
+
+// —— 采购尽调：候选机场是否与库里已有节点撞故障域，只读，不落库 ——
+const auditModalOpen = ref(false);
+const auditSubUrl = ref("");
+const auditReport = ref<SubAuditResponse | null>(null);
+const auditing = ref(false);
 
 /** 启用状态筛选，两跳共用：ALL=不筛 */
 const currentStatus = ref<"ALL" | "ENABLED" | "DISABLED">("ALL");
@@ -83,6 +94,18 @@ const groupOptions = computed(() => [
     count: frontNodes.value.filter((node) => node.groupId === group.id).length,
   })),
 ]);
+
+/**
+ * 分组的流量用量百分比。null 表示「该机场没提供额度头」，与 0% 是两回事——
+ * 不能把「没数据」显示成「用了 0%」，那是在骗人。total 缺失或非正也一并视为没有数据，
+ * 避免除出 NaN / Infinity。封顶 100：机场统计口径可能比订阅端晚一拍，用量偶尔会略超总量。
+ */
+function quotaPercent(group: NodeGroupResponse): number | null {
+  if (group.usedBytes === null || group.totalBytes === null || group.totalBytes <= 0) {
+    return null;
+  }
+  return Math.min(100, Math.round((group.usedBytes / group.totalBytes) * 100));
+}
 
 /* 状态对两跳都适用，是附加条件不是主视角，故走下拉、不占常驻带、不带计数 */
 const statusOptions: { value: "ALL" | "ENABLED" | "DISABLED"; label: string }[] = [
@@ -244,6 +267,34 @@ async function confirmDeleteGroup(): Promise<void> {
   }
 }
 
+function openAudit(): void {
+  auditSubUrl.value = "";
+  auditReport.value = null;
+  auditModalOpen.value = true;
+}
+
+function closeAudit(): void {
+  auditModalOpen.value = false;
+}
+
+async function submitAudit(): Promise<void> {
+  if (!auditSubUrl.value.trim()) {
+    showToast("error", "先粘贴候选机场的订阅链接");
+    return;
+  }
+  auditing.value = true;
+  try {
+    auditReport.value = await adminApi().auditNodeGroup({ subUrl: auditSubUrl.value.trim() });
+  } catch (error) {
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `尽调失败：${(error as Error).message}`,
+    );
+  } finally {
+    auditing.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -263,12 +314,39 @@ onMounted(load);
       >
         从订阅导入
       </button>
+      <!-- 采购前的尽调工具：只读探测候选机场，不依赖当前选中的分组，故放页头而不是工具条 -->
+      <button
+        v-if="currentRole === 'FRONT'"
+        type="button"
+        class="admin-btn-ghost"
+        @click="openAudit()"
+      >
+        尽调
+      </button>
       <button type="button" class="admin-btn" @click="create()">新建节点</button>
     </template>
   </PageHead>
 
   <!-- 一级：换的是看哪一跳，用 tab；二级是在这一跳里挑一批看，用 chip。两层不同形，管辖关系才读得出来 -->
   <ViewTabs v-model="currentRole" :options="roleOptions" label="按跳数分" />
+
+  <!-- 分组额度：机场订阅有流量额度，跑满会让该订阅下几十个节点同时全部失效，所以常驻展示、
+       不随「选中哪个分组」筛选变化——正因为不显眼才最该常驻提醒 -->
+  <div v-if="currentRole === 'FRONT' && groupList.length > 0" class="group-quota-panel">
+    <div v-for="g in groupList" :key="g.id" class="group-quota-row">
+      <span class="group-quota-name">{{ g.name }}</span>
+      <template v-if="quotaPercent(g) !== null">
+        <div class="group-quota-bar">
+          <div class="group-quota-bar-fill" :style="{ width: `${quotaPercent(g)}%` }" />
+        </div>
+        <span class="fact group-quota-pct">{{ quotaPercent(g) }}%</span>
+      </template>
+      <!-- 额度头是否存在，与「用了多少」是两回事：拿不到时绝不能显示成 0%，那是在骗人 -->
+      <span v-else class="muted group-quota-pct">机场未提供额度信息</span>
+      <span class="fact muted">到期：{{ formatDate(g.expiresAt) }}</span>
+      <span class="fact muted">最近拉取：{{ formatDateTime(g.fetchedAt) }}</span>
+    </div>
+  </div>
 
   <div class="admin-toolbar">
     <FilterChips
@@ -452,4 +530,195 @@ onMounted(load);
     @confirm="confirmDeleteGroup()"
     @cancel="pendingDeleteGroup = null"
   />
+  <AdminModal
+    v-if="auditModalOpen"
+    title="订阅尽调"
+    :wide="auditReport !== null"
+    @close="closeAudit()"
+  >
+    <div class="admin-form">
+      <div v-if="!auditReport" class="admin-field">
+        <label for="audit-sub-url">候选机场订阅链接</label>
+        <p class="admin-note">
+          只读探测，不写库：解析候选机场的节点域名，判断是否与库里已有分组撞同一个故障域（同一家中转商）。
+        </p>
+        <input
+          id="audit-sub-url"
+          v-model="auditSubUrl"
+          class="admin-input fact"
+          placeholder="https://…?token=…"
+          :disabled="auditing"
+        />
+      </div>
+
+      <template v-else>
+        <div class="audit-summary">
+          <span
+            >机场：<span class="fact">{{ auditReport.airportName ?? "未知" }}</span></span
+          >
+          <span
+            >节点数：<span class="fact">{{ auditReport.totalNodes }}</span></span
+          >
+          <span
+            >协议：<span class="fact">{{ auditReport.protocols.join("、") || "—" }}</span></span
+          >
+        </div>
+
+        <!-- 全份报告最重要的结论：撞了故障域就等于花两份钱买同一个入口，采购上要一眼看到、否决 -->
+        <div v-if="auditReport.conflictsWith.length > 0" class="audit-verdict audit-verdict-danger">
+          <strong>与现有分组同故障域，建议否决这次采购</strong>
+          <p>撞车分组：{{ auditReport.conflictsWith.join("、") }}</p>
+        </div>
+        <div v-else class="audit-verdict audit-verdict-ok">未发现与现有分组撞故障域。</div>
+
+        <div class="admin-field">
+          <p class="admin-note">
+            按节点名匹配 [US] / United States / 美国 / 🇺🇸
+            等关键词，判定为启发式，请核对——机场命名不规范时会误判， 不是确定结论。以下
+            {{ auditReport.usNodeCount }} 个节点被判定为美国落地：
+          </p>
+          <ul v-if="auditReport.usNodeNames.length > 0" class="audit-us-list">
+            <li v-for="name in auditReport.usNodeNames" :key="name">{{ name }}</li>
+          </ul>
+          <p v-else class="muted">未发现疑似美国节点。</p>
+        </div>
+
+        <div v-if="auditReport.failureDomains.length > 0" class="admin-field">
+          <label>故障域分布</label>
+          <table class="admin-table dense">
+            <thead>
+              <tr>
+                <th>域名</th>
+                <th>节点数</th>
+                <th>美国节点数</th>
+                <th>分线路</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="fd in auditReport.failureDomains" :key="fd.domain">
+                <td class="fact">{{ fd.domain }}</td>
+                <td>{{ fd.nodeCount }}</td>
+                <td>{{ fd.usNodeCount }}</td>
+                <td>{{ booleanLabel(fd.lineSplit, "是", "否") }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+
+    <template #footer>
+      <button type="button" class="admin-btn-ghost" @click="closeAudit()">
+        {{ auditReport ? "关闭" : "取消" }}
+      </button>
+      <button
+        v-if="!auditReport"
+        type="button"
+        class="admin-btn"
+        :disabled="auditing"
+        @click="submitAudit()"
+      >
+        {{ auditing ? "尽调中…" : "开始尽调" }}
+      </button>
+    </template>
+  </AdminModal>
 </template>
+
+<style scoped>
+/* —— 分组额度：常驻一条，不随「选中哪个分组」的筛选变化。
+   跑满额度会让整个订阅下的节点同时失效，这条提醒不能只在点开某个分组时才看得到 —— */
+.group-quota-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--color-bg-cloud);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.group-quota-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.group-quota-name {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.group-quota-bar {
+  flex: 1 1 160px;
+  max-width: 240px;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.group-quota-bar-fill {
+  height: 100%;
+  background: var(--color-brand-deep);
+  border-radius: var(--radius-pill);
+}
+
+.group-quota-pct {
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+
+/* —— 尽调报告 —— */
+.audit-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+.audit-verdict {
+  padding: 12px 14px;
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 全份报告最重要的结论：故障域撞车＝花两份钱买同一个入口，必须比其它文案更醒目 */
+.audit-verdict-danger {
+  background: rgba(179, 52, 31, 0.08);
+  border: 1px solid var(--counter-danger);
+  color: var(--counter-danger-deep);
+}
+
+.audit-verdict-danger strong {
+  font-size: 14px;
+}
+
+.audit-verdict-ok {
+  background: var(--color-bg-cloud);
+  border: 1px solid var(--color-border);
+  color: var(--color-ink-secondary);
+}
+
+/* 美国节点名单可能有几十条，限高滚动，别把弹窗撑破 */
+.audit-us-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  font-family: var(--font-fact);
+  font-size: 12px;
+}
+
+.audit-us-list li + li {
+  margin-top: 4px;
+}
+</style>

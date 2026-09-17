@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAdminApi } from "./admin";
 import type { HttpClient } from "./http";
-import type { NodeSaveRequest } from "./types";
+import type { NodeSaveRequest, SubAuditResponse } from "./types";
 
 function fakeClient() {
   const request = vi.fn(async () => null as never);
@@ -212,6 +212,40 @@ describe("createAdminApi", () => {
       body: JSON.stringify({ selectedNames: ["新加坡-01"] }),
     });
     expect(request).toHaveBeenNthCalledWith(7, "/admin/node-groups/3", { method: "DELETE" });
+  });
+
+  it("尽调接口打到 /admin/node-groups/audit，报告原样透传给调用方", async () => {
+    const calls: Array<{ path: string; method?: string; body?: string }> = [];
+    const reportFromServer: SubAuditResponse = {
+      airportName: "泰山云",
+      totalNodes: 12,
+      usNodeCount: 1,
+      usNodeNames: ["🇺🇸[US]San Jose07"],
+      failureDomains: [],
+      conflictsWith: ["TaiShan Net"],
+      protocols: ["vmess"],
+      usedBytes: null,
+      totalBytes: null,
+      expiresAt: null,
+    };
+    const http: HttpClient = {
+      request: async <T>(path: string, init?: RequestInit) => {
+        calls.push({ path, method: init?.method, body: init?.body as string | undefined });
+        return reportFromServer as T;
+      },
+    };
+    const client = createAdminApi(http);
+
+    const report = await client.auditNodeGroup({ subUrl: "https://example.com/sub" });
+
+    expect(calls).toEqual([
+      {
+        path: "/admin/node-groups/audit",
+        method: "POST",
+        body: JSON.stringify({ subUrl: "https://example.com/sub" }),
+      },
+    ]);
+    expect(report.conflictsWith).toEqual(["TaiShan Net"]);
   });
 
   it("套餐接口逐个打到正确的路径与方法", async () => {

@@ -389,6 +389,14 @@ export interface NodeGroupResponse {
   subUrlMasked: string;
   nodeCount: number;
   remark: string | null;
+  /** 已用流量字节数；机场未返回额度头则为 null */
+  usedBytes: number | null;
+  /** 总流量额度字节数；null 同上 */
+  totalBytes: number | null;
+  /** 订阅到期时间；null 同上 */
+  expiresAt: string | null;
+  /** 最近一次成功拉取订阅的时间；从未拉取成功过则为 null */
+  fetchedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -407,6 +415,51 @@ export interface SubPreviewNode {
 
 export interface SubPreviewRequest {
   subUrl: string;
+}
+
+/** 订阅尽调入参：候选机场的试用订阅链接 */
+export interface SubAuditRequest {
+  subUrl: string;
+}
+
+/**
+ * 尽调报告里的一个故障域条目；镜像服务端 SubAuditResponse.FailureDomainReport。
+ * entryIps / asns 的 key 是服务端 DnsVantage 枚举取值（如 CHINA_TELECOM），前端不做展示分支，
+ * 原样按 key 罗列即可，故不额外镜像该枚举。
+ */
+export interface SubAuditFailureDomainReport {
+  domain: string;
+  nodeCount: number;
+  /** 按名称启发式判定为美国落地的节点数 */
+  usNodeCount: number;
+  /** 各视角解析到的入口 IP */
+  entryIps: Record<string, string[]>;
+  /** 入口 IP 对应的 ASN，反查失败为空 */
+  asns: Record<string, string[]>;
+  /** 四个视角是否返回了不同 IP——有分线路者国内优化更好 */
+  lineSplit: boolean;
+}
+
+/**
+ * 订阅尽调报告：给一个候选机场的试用订阅链接，判断它是否与库里已有节点撞故障域。
+ * 全程只读，不写库；conflictsWith 非空即应否决这次采购。
+ */
+export interface SubAuditResponse {
+  /** 机场名，取自订阅响应头；取不到为 null */
+  airportName: string | null;
+  totalNodes: number;
+  /** 按名称启发式判定为美国落地的节点数 */
+  usNodeCount: number;
+  /** 判定出的美国节点名，原样列出供人核对——判定是启发式的，不做纯自动决策 */
+  usNodeNames: string[];
+  failureDomains: SubAuditFailureDomainReport[];
+  /** 与库中已有节点撞故障域的分组名；非空即应否决这次采购 */
+  conflictsWith: string[];
+  /** 订阅里出现过的 mihomo type 集合，用于确认 front-tuning 覆盖表是否已支持 */
+  protocols: string[];
+  usedBytes: number | null;
+  totalBytes: number | null;
+  expiresAt: string | null;
 }
 
 export interface NodeGroupCreateRequest {
