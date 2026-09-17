@@ -1,5 +1,6 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,16 +43,19 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
     private final TransactionTemplate transactionTemplate;
+    private final FailureDomainResolver failureDomainResolver;
 
     public AdminNodeGroupServiceImpl(NodeGroupRepository groupRepository, ProxyNodeRepository nodeRepository,
                                      UserRepository userRepository, SubFetchClient subFetchClient,
-                                     SubYamlParser subYamlParser, TransactionTemplate transactionTemplate) {
+                                     SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
+                                     FailureDomainResolver failureDomainResolver) {
         this.groupRepository = groupRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
         this.transactionTemplate = transactionTemplate;
+        this.failureDomainResolver = failureDomainResolver;
     }
 
     @Override
@@ -69,6 +74,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建分组 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
         List<SubNode> nodes = fetchAndParse(request.getSubUrl());
+        Map<String, String> failureDomains = resolveFailureDomains(nodes);
 
         NodeGroupDto group = new NodeGroupDto();
         group.setName(request.getName());
@@ -77,7 +83,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
         return transactionTemplate.execute(status -> {
             Long groupId = wrapUniqueViolation(() -> groupRepository.create(group));
-            importNodes(groupId, nodes, request.getSelectedNames());
+            importNodes(groupId, nodes, request.getSelectedNames(), failureDomains);
             return groupId;
         });
     }
@@ -126,7 +132,9 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         // 只有真正落库的「导入」交给 transactionTemplate 包事务
         NodeGroupDto group = getGroup(id);
         List<SubNode> nodes = fetchAndParse(group.getSubUrl());
-        transactionTemplate.executeWithoutResult(status -> importNodes(id, nodes, request.getSelectedNames()));
+        Map<String, String> failureDomains = resolveFailureDomains(nodes);
+        transactionTemplate.executeWithoutResult(status ->
+                importNodes(id, nodes, request.getSelectedNames(), failureDomains));
     }
 
     @Override
@@ -175,7 +183,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
      * 按勾选把订阅节点写进分组：同组内 sourceName 已存在的原地更新参数
      * （名称/状态/备注是管理员的手工痕迹，不动），不存在的新建入库。
      */
-    private void importNodes(Long groupId, List<SubNode> nodes, List<String> selectedNames) {
+    private void importNodes(Long groupId, List<SubNode> nodes, List<String> selectedNames,
+                              Map<String, String> failureDomains) {
         Map<String, SubNode> nodesByName = new LinkedHashMap<>();
         nodes.forEach(node -> nodesByName.putIfAbsent(node.sourceName(), node));
 
@@ -191,6 +200,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                 node.setPort(sub.port());
                 node.setSourceType(sub.sourceType());
                 node.setSecret(sub.params());
+                applyFailureDomain(node, sub.serverAddr(), failureDomains);
                 nodeRepository.update(node);
             } else {
                 ProxyNodeDto node = new ProxyNodeDto();
@@ -206,8 +216,35 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                 node.setGroupId(groupId);
                 node.setSourceName(selected);
                 node.setSourceType(sub.sourceType());
+                applyFailureDomain(node, sub.serverAddr(), failureDomains);
                 nodeRepository.create(node);
             }
+        }
+    }
+
+    /**
+     * 按 serverAddr 去重后逐个解析故障域。**必须在事务外调用**——这是 DNS 外呼，
+     * 放进事务会在查询期间独占数据库连接（与本类对订阅拉取的处理同理）。
+     * 解析失败的条目不进表，调用方据此保留节点原值。
+     */
+    private Map<String, String> resolveFailureDomains(List<SubNode> nodes) {
+        Map<String, String> byServerAddr = new LinkedHashMap<>();
+        for (String serverAddr : nodes.stream().map(SubNode::serverAddr).distinct().toList()) {
+            String domain = failureDomainResolver.resolve(serverAddr);
+            if (domain != null) {
+                byServerAddr.put(serverAddr, domain);
+            }
+        }
+        return byServerAddr;
+    }
+
+    /** 写入故障域。表里没有＝本次没解析出来，保留原值不动——网络抖动不代表拓扑变了，
+     *  把旧值抹成 NULL 会让该节点退出二期的分配候选集 */
+    private void applyFailureDomain(ProxyNodeDto node, String serverAddr, Map<String, String> failureDomains) {
+        String domain = failureDomains.get(serverAddr);
+        if (domain != null) {
+            node.setFailureDomain(domain);
+            node.setFailureDomainCheckedAt(Instant.now());
         }
     }
 

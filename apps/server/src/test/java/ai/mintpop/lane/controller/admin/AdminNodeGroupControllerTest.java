@@ -1,6 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.NodeProtocol;
@@ -71,6 +72,9 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @MockitoBean
     private SubFetchClient subFetchClient;
+
+    @MockitoBean
+    private FailureDomainResolver failureDomainResolver;
 
     private DatabaseFixtures fixtures;
     private Long adminId;

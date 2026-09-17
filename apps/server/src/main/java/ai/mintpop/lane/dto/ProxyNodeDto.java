@@ -57,6 +57,12 @@ public class ProxyNodeDto {
     /** 订阅节点的真实 mihomo type（如 anytls），仅供展示；手工节点为 NULL */
     private String sourceType;
 
+    /** 故障域：该节点域名解析链的终点（CNAME 末端；无 CNAME 则为域名本身）。NULL 表示尚未解析或解析失败 */
+    private String failureDomain;
+
+    /** 故障域最近一次解析成功的时间（UTC）；NULL 表示从未解析成功 */
+    private Instant failureDomainCheckedAt;
+
     private Instant createdAt;
 
     private Instant updatedAt;

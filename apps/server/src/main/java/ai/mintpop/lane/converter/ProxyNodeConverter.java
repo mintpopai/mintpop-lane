@@ -45,6 +45,8 @@ public class ProxyNodeConverter {
         dto.setGroupId(entity.getGroupId());
         dto.setSourceName(entity.getSourceName());
         dto.setSourceType(entity.getSourceType());
+        dto.setFailureDomain(entity.getFailureDomain());
+        dto.setFailureDomainCheckedAt(entity.getFailureDomainCheckedAt());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
@@ -68,6 +70,8 @@ public class ProxyNodeConverter {
         entity.setGroupId(dto.getGroupId());
         entity.setSourceName(dto.getSourceName());
         entity.setSourceType(dto.getSourceType());
+        entity.setFailureDomain(dto.getFailureDomain());
+        entity.setFailureDomainCheckedAt(dto.getFailureDomainCheckedAt());
         return entity;
     }
 
