@@ -36,7 +36,14 @@ public class NodeGroup {
     /** 订阅到期时间；null 同上 */
     private Instant trafficExpiresAt;
 
-    /** 已推送过额度告警的档位（80 或 95），服务端内部去重用，不对外展示；null 表示未推过 */
+    /**
+     * 已推送过额度告警的档位（80 或 95），服务端内部去重用，不对外展示；null 表示未推过。
+     * updateStrategy = ALWAYS：MyBatis-Plus 默认跳过 null 字段，没有它
+     * {@code TrafficAlertService} 里「用量回落（月度重置）就清档」那一步会变成静默空操作——
+     * SQL 根本不带这一列，库里仍是旧档位，此后该分组再也推不出额度告警且不报错。
+     * 同 {@link ProxyNode#getEgressIp()} 与 {@link Plan#getDescription()} 的处理。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer trafficAlertedPct;
 
     /** 最近一次成功拉取订阅的时间 */
