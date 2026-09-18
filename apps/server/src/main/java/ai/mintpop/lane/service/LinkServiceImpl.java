@@ -138,12 +138,20 @@ public class LinkServiceImpl implements LinkService {
     }
 
     /**
-     * 按故障域把用户的前置节点分组：组内滤掉非 ENABLED 的节点，空组整组丢弃；
-     * 全部组都空才报 EGRESS_NOT_ASSIGNED——中间任何一步都不提前抛异常，
-     * 保证「组内还有别的候选」时不会因为一个节点被禁用就整体拒绝。
+     * 按故障域把用户的前置节点分组：组内滤掉非 ENABLED 的节点，空组整组丢弃——
+     * 中间任何一步都不提前抛异常，保证「组内还有别的候选」时不会因为一个节点
+     * 被禁用就整体拒绝。
      * <p>
      * 关联表为空（老数据、或分配还没跑）时退回 {@code front_node_id} 单节点，
      * 包成一个只有一个节点的组，与老客户端行为逐字一致。
+     * <p>
+     * 走到本方法时调用方已经确认 {@code front_node_id} 非空（见 {@link #resolveLink}
+     * 开头的校验），也就是说用户**一定**被分配过前置节点。所以这里「全部组都空」
+     * 只可能是「分配过、但当前一个能用的都不剩」，语义上是 {@link BizCodeEnum#NODE_DISABLED}，
+     * 而不是 {@link BizCodeEnum#EGRESS_NOT_ASSIGNED}——后者专指「压根没有分配过」，
+     * 那种情况在 {@link #resolveLink} 里已经被挡在更早的地方，走不到这里。
+     * 两者绝不能混用：报「未分配」会把管理员的排查方向错误地引向「去分配一个」，
+     * 而真正要做的是「把停用的节点启用，或者换一个」。
      */
     private List<LinkConfigResponse.FrontGroup> resolveFrontGroups(UserDto user) {
         List<Long> frontNodeIds = userFrontNodeRepository.findNodeIdsByUserId(user.getId());
@@ -178,7 +186,7 @@ public class LinkServiceImpl implements LinkService {
         }
 
         if (groups.isEmpty()) {
-            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+            throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
         return groups;
     }

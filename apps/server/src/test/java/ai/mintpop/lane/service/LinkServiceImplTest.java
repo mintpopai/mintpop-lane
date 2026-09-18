@@ -299,12 +299,26 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("全部节点都不可用才报 EGRESS_NOT_ASSIGNED")
+    @DisplayName("分配了前置节点但全部被禁用时报 NODE_DISABLED，而不是「未分配」——"
+            + "报未分配会把排查方向错误地引向「去分配一个」，真正要做的是启用/换一个节点")
     void failsOnlyWhenEveryGroupIsEmpty() {
         givenUser(user(UserStatus.ACTIVE));
         givenFrontNodeIds(11L, 12L);
         givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.DISABLED));
         givenFrontNode(frontNode(12L, "relay.other.net", NodeStatus.DISABLED));
+
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode", BizCodeEnum.NODE_DISABLED);
+    }
+
+    @Test
+    @DisplayName("压根没有分配过前置节点时报 EGRESS_NOT_ASSIGNED，与「分配了但全禁用」的 "
+            + "NODE_DISABLED 分界开——这是两种不同的运维动作：前者要去分配，后者要去启用/换节点")
+    void neverAssignedAnyFrontNodeRejectedAsEgressNotAssigned() {
+        UserDto u = user(UserStatus.ACTIVE);
+        u.setFrontNodeId(null);
+        givenUser(u);
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
@@ -473,8 +487,8 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("退回单节点的第一跳被禁用时，唯一的 fallback 组被整组丢弃，报 EGRESS_NOT_ASSIGNED"
-            + "——frontGroups 引入后前置节点改走「组内跳过、空组丢弃」的语义，不再是遇禁用就硬拒")
+    @DisplayName("第一跳节点被禁用时同样不下发链路，避免只守住半条 fail-closed 保障——"
+            + "退回单节点 fallback 组后唯一节点被滤掉、组变空，但用户明明分配过节点，报 NODE_DISABLED 而非「未分配」")
     void disabledFrontNodeRejected() {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
@@ -485,7 +499,7 @@ class LinkServiceImplTest {
         assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+                .isEqualTo(BizCodeEnum.NODE_DISABLED);
     }
 
     @Test
