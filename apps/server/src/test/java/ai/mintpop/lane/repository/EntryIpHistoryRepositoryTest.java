@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class EntryIpHistoryRepositoryTest extends MysqlTestBase {
@@ -50,5 +52,17 @@ class EntryIpHistoryRepositoryTest extends MysqlTestBase {
         EntryIpHistory loaded = repository.findLatest("jp.tsdns.top", DnsVantage.CHINA_UNICOM).orElseThrow();
         assertThat(loaded.getAsns()).isEqualTo("AS1,AS2");
         assertThat(loaded.getObservedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("应用显式塞进来的观测时间不会被写库——这一列的契约是「只由数据库 CURRENT_TIMESTAMP 维护」")
+    void ignoresApplicationSuppliedObservedAt() {
+        EntryIpHistory record = history("jp.tsdns.top", DnsVantage.CHINA_MOBILE, "1.1.1.1");
+        record.setObservedAt(Instant.parse("2000-01-01T00:00:00Z"));
+
+        repository.create(record);
+
+        assertThat(repository.findLatest("jp.tsdns.top", DnsVantage.CHINA_MOBILE).orElseThrow().getObservedAt())
+                .isAfter(Instant.parse("2020-01-01T00:00:00Z"));
     }
 }

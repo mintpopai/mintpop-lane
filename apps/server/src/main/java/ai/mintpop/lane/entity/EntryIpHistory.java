@@ -1,6 +1,8 @@
 package ai.mintpop.lane.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import ai.mintpop.lane.enumeration.DnsVantage;
@@ -34,6 +36,11 @@ public class EntryIpHistory {
     /** 入口 IP 对应的 ASN，顺序与 entryIps 一致；单个 IP 反查失败在对应位置留空，全部失败为 NULL */
     private String asns;
 
-    /** 观测时间（UTC），由数据库默认值 CURRENT_TIMESTAMP 维护，应用不显式写入 */
+    /**
+     * 观测时间（UTC），由数据库默认值 CURRENT_TIMESTAMP 维护，应用永不写入。
+     * 与 User / Plan / NodeGroup / ProxyNode 四个实体的时间列一样显式标注策略：
+     * 「应用不写」是这一列的契约，靠默认的 NOT_NULL 策略恰好不写不算把契约表达出来。
+     */
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant observedAt;
 }
