@@ -86,11 +86,18 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         group.setRemark(request.getRemark());
         applyTrafficInfo(group, fetched.subFetchResult());
 
-        return transactionTemplate.execute(status -> {
-            Long groupId = wrapUniqueViolation(() -> groupRepository.create(group));
-            importNodes(groupId, fetched.nodes(), request.getSelectedNames(), failureDomains);
-            return groupId;
+        Long groupId = transactionTemplate.execute(status -> {
+            Long id = wrapUniqueViolation(() -> groupRepository.create(group));
+            importNodes(id, fetched.nodes(), request.getSelectedNames(), failureDomains);
+            return id;
         });
+        // groupRepository.create 不会把自增主键回写到传入的 group 上，这里补上，
+        // 否则 checkAndNotify 内部的 groupRepository.update(group) 会因 id 为 null 而更新不到任何行
+        group.setId(groupId);
+        // 放在事务外：它自己会视情况 update 落档位，且含飞书通知提交，不应牵连建分组的事务；
+        // 新建即跨档（如刚导入就已 95%）与刷新时跨档同样重要，不能只等下一轮刷新才提醒
+        trafficAlertService.checkAndNotify(group, fetched.subFetchResult());
+        return groupId;
     }
 
     @Override

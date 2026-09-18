@@ -9,6 +9,7 @@ import ai.mintpop.lane.parser.SubYamlParser;
 import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.request.NodeGroupCreateRequest;
 import ai.mintpop.lane.request.NodeGroupImportRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -141,5 +142,28 @@ class AdminNodeGroupServiceImplTest {
         service.importNodes(1L, request);
 
         verify(failureDomainResolver, times(1)).resolve("hk01a.t11-a.app");
+    }
+
+    @Test
+    @DisplayName("新建分组时额度已跨档：当场推送告警，且传给告警服务的分组带着真实自增 id（不是 null）")
+    void alertsOnCreateWhenQuotaAlreadyCrossed() {
+        when(groupRepository.create(any())).thenReturn(42L);
+        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, 95L, 100L, null));
+
+        NodeGroupCreateRequest request = new NodeGroupCreateRequest();
+        request.setName("新机场");
+        request.setSubUrl("https://example.com/sub?token=y");
+        request.setSelectedNames(List.of("US-01"));
+
+        Long groupId = service.create(request);
+
+        assertThat(groupId).isEqualTo(42L);
+        ArgumentCaptor<NodeGroupDto> captor = ArgumentCaptor.forClass(NodeGroupDto.class);
+        verify(trafficAlertService).checkAndNotify(captor.capture(), any());
+        // groupRepository.create 不会把自增主键回写到传入的 DTO 上；这里锁住「调用前必须手动补上 id」
+        // 这一步，漏了的话 TrafficAlertService 内部的 groupRepository.update(group) 会因 id 为 null
+        // 而更新不到任何行，档位悄悄丢失且没有任何报错
+        assertThat(captor.getValue().getId()).isEqualTo(42L);
     }
 }
