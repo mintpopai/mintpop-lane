@@ -726,6 +726,22 @@ describe("UserDetailView · 前置节点组", () => {
     expect(document.body.textContent).toContain("🇺🇸[US]B1");
   });
 
+  // failureDomainCount === 0：管理员手工指定单个节点是保留的运维逃生口，不走分配算法，
+  // 完全可能挂着一个 failureDomain 还没解析出来（null）的节点。这种「未知」比「已知只
+  // 有 1 个」更糟——如果警告只在 === 1 时出现，这条路径会把最该出现的信号漏掉
+  it("一个故障域都没解析出来时（failureDomainCount 为 0）也显式警告「入口无冗余」", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [{ id: 1, name: "🇺🇸[US]A1", failureDomain: null }],
+        failureDomainCount: 0,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("入口无冗余"));
+    expect(document.querySelector(".front-domain-warning")).not.toBeNull();
+  });
+
   it("只有一个故障域时显式警告「入口无冗余」", async () => {
     getUser.mockResolvedValue(
       user({

@@ -151,12 +151,31 @@ const frontNodeGroups = computed<FrontDomainGroup[]>(() => {
 });
 
 /**
- * 只有 1 个故障域＝入口无冗余：这一组前置节点共用同一台中转入口机，入口一挂全部失效，
- * fallback 是假冗余。这是长期状态（现状是只有一家机场），不是一次性通知，故不做成 toast。
+ * 「入口无冗余」的常驻警示文案；不需要显示时为 null。
+ *
+ * 覆盖两种同样糟糕的处境，判定条件是 `< 2` 而不是 `=== 1`：
+ * - failureDomainCount === 1：所有前置节点解析到同一个故障域，共用一台中转入口机，
+ *   入口一挂全部失效，fallback 是假冗余。
+ * - failureDomainCount === 0：这组节点里没有任何一个解析出故障域——管理员手工指定单个
+ *   节点是保留的运维逃生口（不走分配算法），完全可能挂着一个 failureDomain 还是 null
+ *   的节点。这种「未知」比「已知只有 1 个」更糟：既没有任何已确认的冗余，故障域本身
+ *   还没解析出来，必须一并点出来，不能被 `=== 1` 的判定漏掉。
+ *
+ * 这是长期状态（现状是只有一家机场），不是一次性通知，故不做成 toast。
  */
-const singleFailureDomain = computed(
-  () => user.value !== null && user.value.failureDomainCount === 1,
-);
+const frontRedundancyWarning = computed<string | null>(() => {
+  const count = user.value?.failureDomainCount;
+  if (count === undefined || count >= 2) {
+    return null;
+  }
+  if (count === 0) {
+    return (
+      "入口无冗余：这一组前置节点的故障域尚未解析成功，暂无法确认是否共用同一台中转入口机——" +
+      "按最坏情况处理，视同没有冗余。需要采购第二家机场，并尽快让节点解析出故障域。"
+    );
+  }
+  return "入口无冗余：当前只有 1 个故障域，这一组节点共用同一台中转入口机，入口一挂全部失效。需要采购第二家机场。";
+});
 
 /** 第一步选 agent 类型：只列有上架套餐的类型 */
 const agentOptions = computed(() => agentTypeOptions(plans.value));
@@ -566,15 +585,13 @@ async function confirmUnbind(): Promise<void> {
 
       <!-- 前置节点组：只读展示当前实际分配到的完整一组（不止上面下拉里的「主」节点），
            按故障域分桶——同一故障域下的节点共用一台中转入口机，入口一挂它们一起挂，
-           彼此不构成真冗余。只有 1 个故障域时给出常驻警示，而不是可关闭的 toast：
-           这是长期状态（现状只有一家机场），会一直显示到采购第二家机场为止 -->
+           彼此不构成真冗余。少于 2 个故障域（含「一个都没解析出来」）时给出常驻警示，
+           而不是可关闭的 toast：这是长期状态（现状只有一家机场），会一直显示到采购
+           第二家机场为止 -->
       <section v-if="user && frontNodeGroups.length > 0" class="admin-card front-domain-card">
         <h4 class="block-title">前置节点组</h4>
-        <div v-if="singleFailureDomain" class="front-domain-warning">
-          <p>
-            入口无冗余：当前只有 1
-            个故障域，这一组节点共用同一台中转入口机，入口一挂全部失效。需要采购第二家机场。
-          </p>
+        <div v-if="frontRedundancyWarning" class="front-domain-warning">
+          <p>{{ frontRedundancyWarning }}</p>
         </div>
         <ul class="front-domain-list">
           <li
