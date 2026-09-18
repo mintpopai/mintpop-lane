@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 
 /**
  * 节点事件飞书通知（推给运营者的提醒，文案固定中文、不走 i18n）。
@@ -89,6 +90,49 @@ public class NodeNotifyService {
             feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅额度告警", fields);
         } catch (Exception e) {
             log.warn("额度告警飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /**
+     * 订阅节点增减（异步）：订阅定时刷新发现节点集合与库里不一致时推送，两个列表都空则不推。
+     * 只告知，不代替人做决定——是否要把新节点拉进来、是否要清掉消失的节点，都需要人工确认。
+     */
+    @Async
+    public void notifySubNodesChanged(NodeGroupDto group, List<String> added, List<String> removed) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        if (added.isEmpty() && removed.isEmpty()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("新增节点", added.isEmpty() ? "无" : String.join("、", added));
+            fields.put("消失节点", removed.isEmpty() ? "无" : String.join("、", removed));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认", fields);
+        } catch (Exception e) {
+            log.warn("订阅节点增减飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /**
+     * 节点端点（地址:端口）已变更（异步）：意味着此前下发给用户的配置已经失效，是需要人知道的事件，
+     * 与「节点增删」性质不同、单独推一条。用 RED——这是最紧急的一类，用户可能已经连不上了。
+     */
+    @Async
+    public void notifyNodeEndpointChanged(ProxyNodeDto node, String previousEndpoint, String currentEndpoint) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("节点", node.getName() + "（ID " + node.getId() + "）");
+            fields.put("原端点", previousEndpoint);
+            fields.put("新端点", currentEndpoint);
+            feishuBotClient.sendCard(FeishuCardTemplate.RED, "MintPop Lane 节点端点已变更，此前下发配置已失效", fields);
+        } catch (Exception e) {
+            log.warn("节点端点变更飞书通知失败 nodeId={}", node.getId(), e);
         }
     }
 
