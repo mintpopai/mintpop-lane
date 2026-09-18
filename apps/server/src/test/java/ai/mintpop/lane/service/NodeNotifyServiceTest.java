@@ -4,6 +4,7 @@ import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
 import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.FeishuCardTemplate;
 import ai.mintpop.lane.enumeration.NodeRole;
@@ -218,5 +219,38 @@ class NodeNotifyServiceTest {
 
         assertThatCode(() -> service.notifyNodeEndpointChanged(land("203.0.113.9", null), "a:1", "a:2"))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("入口 IP 变更：橙色卡片，故障域/视角/原新 IP 与提示语依次展示")
+    void entryIpChangedSendsOrangeCard() {
+        service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS, "13.192.233.178", "34.84.255.241");
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 中转入口 IP 已变更")).containsExactly(
+                entry("故障域", "jp.tsdns.top"),
+                entry("视角", "OVERSEAS"),
+                entry("原入口 IP", "13.192.233.178"),
+                entry("新入口 IP", "34.84.255.241"),
+                entry("提示", "入口 IP 变更通常意味着该入口刚被封过"));
+    }
+
+    @Test
+    @DisplayName("入口 IP 变更：未配置 webhook 整体静默")
+    void entryIpChangedSilentWhenNotConfigured() {
+        properties.setWebhookUrl(null);
+
+        service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS, "13.192.233.178", "34.84.255.241");
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("入口 IP 变更：客户端抛异常只记日志，不向调用方冒泡")
+    void entryIpChangedSwallowsClientFailure() {
+        doThrow(new IllegalStateException("飞书机器人返回异常"))
+                .when(feishuBotClient).sendCard(any(), anyString(), any());
+
+        assertThatCode(() -> service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS,
+                "13.192.233.178", "34.84.255.241")).doesNotThrowAnyException();
     }
 }

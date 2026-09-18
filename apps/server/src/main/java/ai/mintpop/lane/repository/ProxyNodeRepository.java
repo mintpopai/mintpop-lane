@@ -67,4 +67,7 @@ public interface ProxyNodeRepository {
 
     /** 某分组下的节点数，分组列表展示用 */
     long countByGroupId(Long groupId);
+
+    /** 库里出现过的全部故障域，去重；未解析（NULL）的不算。入口 IP 巡检据此取要监测的域名集合 */
+    List<String> findDistinctFailureDomains();
 }

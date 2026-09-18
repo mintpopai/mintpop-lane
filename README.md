@@ -227,6 +227,11 @@ UPDATE app_user SET role = 'MEMBER' WHERE email = '<用户邮箱>';  -- 撤销
 | `CONSOLE_PORT` | `8084` | 控制台的宿主监听端口 |
 | `TZ` | `UTC` | 服务端容器时区，仅影响日志时间显示。业务时间全链路按 UTC 存取、按查看者本地时区显示，与本变量无关 |
 
+服务端另外两个定时任务的间隔在 `application.yml` 里调（默认值见 `apps/server/config/application.example.yml`），与是否配置飞书通知无关：
+
+- `sub-refresh.interval`（默认 `24h`）：订阅定时刷新间隔——周期性对齐各分组已有节点的参数/端口/故障域与分组自身额度；订阅里新增或消失的节点只推飞书告知，绝不自动新增或删除。
+- `entry-ip-watch.interval`（默认 `5m`）：中转入口 IP 巡检间隔——服务端不带 mihomo 内核，拨不动 anytls，测不到第一跳「通不通」，但机场的中转入口域名 TTL 只有 30 秒（为「被封即换 IP」准备），服务端测得到「换没换」；入口 IP 一变，大概率意味着该入口刚被封过。同目录下 `entry-ip-watch.vantages` 是四个运营商视角各自的代表性子网（DNS EDNS Client Subnet），中转入口按运营商分线路返回不同 IP，只从一个视角解析会漏掉另外几条线的故障。
+
 ## 备份
 
 要备份两样东西，**且必须分开存放**：
