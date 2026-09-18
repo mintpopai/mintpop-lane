@@ -105,6 +105,15 @@ class TrafficAlertServiceTest {
     }
 
     @Test
+    @DisplayName("用量低于最低档且此前没推过：不推也不落库")
+    void staysUntouchedWhenBelowLowestThresholdWithNoPriorAlert() {
+        service.checkAndNotify(group(null), used(42));
+
+        verifyNoInteractions(nodeNotifyService);
+        verifyNoInteractions(groupRepository); // 关键：连一次 update 都不该有——最常见的运行态不能白白落库
+    }
+
+    @Test
     @DisplayName("通知抛异常不影响已完成的改库")
     void notifyFailureDoesNotBreakPersistence() {
         NodeGroupDto group = group(null);
