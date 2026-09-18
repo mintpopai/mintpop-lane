@@ -52,6 +52,9 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        // mihomo fallback 组探活靶子：必须匿名可达，且不能挂在 /actuator/health 之下——
+                        // 那个查数据库，库一抖就 DOWN，内核会把好节点误判成坏的切掉
+                        .requestMatchers(HttpMethod.GET, "/api/ping").permitAll()
                         // 登录握手与票据兑换发生在拿到会话之前，必须匿名可达
                         .requestMatchers("/auth/**", "/oauth2/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/desktop/exchange").permitAll()

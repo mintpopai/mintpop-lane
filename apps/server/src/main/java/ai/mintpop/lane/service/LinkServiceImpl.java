@@ -17,6 +17,7 @@ import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
@@ -24,11 +25,14 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -41,6 +45,7 @@ public class LinkServiceImpl implements LinkService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserDeviceRepository userDeviceRepository;
     private final DeviceRebindRequestRepository rebindRequestRepository;
+    private final UserFrontNodeRepository userFrontNodeRepository;
     private final Clock clock;
 
     public LinkServiceImpl(LinkProperties linkProperties,
@@ -50,6 +55,7 @@ public class LinkServiceImpl implements LinkService {
                            SubscriptionRepository subscriptionRepository,
                            UserDeviceRepository userDeviceRepository,
                            DeviceRebindRequestRepository rebindRequestRepository,
+                           UserFrontNodeRepository userFrontNodeRepository,
                            Clock clock) {
         this.linkProperties = linkProperties;
         this.frontTuningProperties = frontTuningProperties;
@@ -58,6 +64,7 @@ public class LinkServiceImpl implements LinkService {
         this.subscriptionRepository = subscriptionRepository;
         this.userDeviceRepository = userDeviceRepository;
         this.rebindRequestRepository = rebindRequestRepository;
+        this.userFrontNodeRepository = userFrontNodeRepository;
         this.clock = clock;
     }
 
@@ -77,18 +84,20 @@ public class LinkServiceImpl implements LinkService {
         }
 
         // 外键保证节点必然存在，查不到说明数据被绕过约束改坏了，按内部错误处理
-        ProxyNodeDto front = nodeRepository.findById(user.getFrontNodeId())
-                .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR));
         ProxyNodeDto land = nodeRepository.findById(user.getLandNodeId())
                 .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR));
 
-        if (front.getStatus() != NodeStatus.ENABLED || land.getStatus() != NodeStatus.ENABLED) {
+        // 落地节点只此一跳，没有 fallback 组可言：禁用即刻拒绝，语义与二期前一致
+        if (land.getStatus() != NodeStatus.ENABLED) {
             throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
 
         if (land.getEgressIp() == null || land.getEgressIp().isBlank()) {
             throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
+
+        List<LinkConfigResponse.FrontGroup> frontGroups = resolveFrontGroups(user);
+        Map<String, Object> front = frontGroups.get(0).nodes().get(0);
 
         // 已知设备与待处理申请各取一次：一个人的设备是个位数、待办更少，
         // 一次取回好过在下面逐条席位去查库
@@ -117,7 +126,8 @@ public class LinkServiceImpl implements LinkService {
                 .toList();
 
         return new LinkConfigResponse(
-                front.toMihomoNode(frontTuning(front)),
+                front,
+                frontGroups,
                 // 落地节点不接客户端的保活诉求，原样透传，不传覆盖表
                 land.toMihomoNode(),
                 land.getEgressIp(),
@@ -125,6 +135,52 @@ public class LinkServiceImpl implements LinkService {
                 credentials,
                 linkProperties.getTtlSeconds()
         );
+    }
+
+    /**
+     * 按故障域把用户的前置节点分组：组内滤掉非 ENABLED 的节点，空组整组丢弃；
+     * 全部组都空才报 EGRESS_NOT_ASSIGNED——中间任何一步都不提前抛异常，
+     * 保证「组内还有别的候选」时不会因为一个节点被禁用就整体拒绝。
+     * <p>
+     * 关联表为空（老数据、或分配还没跑）时退回 {@code front_node_id} 单节点，
+     * 包成一个只有一个节点的组，与老客户端行为逐字一致。
+     */
+    private List<LinkConfigResponse.FrontGroup> resolveFrontGroups(UserDto user) {
+        List<Long> frontNodeIds = userFrontNodeRepository.findNodeIdsByUserId(user.getId());
+        if (frontNodeIds.isEmpty()) {
+            frontNodeIds = List.of(user.getFrontNodeId());
+        }
+
+        // 外键保证节点必然存在，查不到说明数据被绕过约束改坏了，按内部错误处理
+        List<ProxyNodeDto> frontNodes = frontNodeIds.stream()
+                .map(id -> nodeRepository.findById(id)
+                        .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR)))
+                .toList();
+
+        // TreeMap + nullsFirst：按 failureDomain 字典序稳定排序，同时容忍尚未解析成功（null）的节点
+        Map<String, List<ProxyNodeDto>> byDomain =
+                new TreeMap<>(Comparator.nullsFirst(Comparator.naturalOrder()));
+        for (ProxyNodeDto node : frontNodes) {
+            byDomain.computeIfAbsent(node.getFailureDomain(), k -> new ArrayList<>()).add(node);
+        }
+
+        List<LinkConfigResponse.FrontGroup> groups = new ArrayList<>();
+        for (Map.Entry<String, List<ProxyNodeDto>> entry : byDomain.entrySet()) {
+            List<Map<String, Object>> enabledNodes = entry.getValue().stream()
+                    .filter(node -> node.getStatus() == NodeStatus.ENABLED)
+                    // 保活参数覆盖对组里每个节点都要套，不能只套第一个，否则组内其余节点
+                    // fallback 切过去就退化成每请求重握手
+                    .map(node -> node.toMihomoNode(frontTuning(node)))
+                    .toList();
+            if (!enabledNodes.isEmpty()) {
+                groups.add(new LinkConfigResponse.FrontGroup(entry.getKey(), enabledNodes));
+            }
+        }
+
+        if (groups.isEmpty()) {
+            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+        }
+        return groups;
     }
 
     @Override
