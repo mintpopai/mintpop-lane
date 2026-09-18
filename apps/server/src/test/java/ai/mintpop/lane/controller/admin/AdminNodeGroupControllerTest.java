@@ -324,10 +324,12 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(410013));
         assertThat(nodeRepository.findByGroupId(groupId)).hasSize(2);
 
-        // 解绑后可整组删除
+        // 解绑后可整组删除。断言要落到库上：只看 code=0 的话，删除若是空操作也发现不了
         userFrontNodeRepository.deleteByUserId(userId);
         jdbc.update("UPDATE app_user SET front_node_id = NULL WHERE id = ?", userId);
         mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
+        assertThat(nodeRepository.findByGroupId(groupId)).isEmpty();
+        assertThat(groupRepository.findById(groupId)).isEmpty();
     }
 }
