@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -532,6 +533,79 @@ class SchemaMigrationTest extends MysqlTestBase {
             assertThat(columnExists(conn, "node_group", "traffic_alerted_pct")).isTrue();
             assertThat(columnExists(conn, "node_group", "fetched_at")).isTrue();
             assertThat(tableExists(conn, "entry_ip_history")).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("V21 建出 user_front_node 表，并把现有 front_node_id 回填进去")
+    void v21AddsUserFrontNodeTable() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(tableExists(conn, "user_front_node")).isTrue();
+            assertThat(columnExists(conn, "user_front_node", "user_id")).isTrue();
+            assertThat(columnExists(conn, "user_front_node", "node_id")).isTrue();
+            assertThat(columnComment(conn, "user_front_node", "node_id")).isNotBlank();
+            assertThat(columnComment(conn, "user_front_node", "user_id")).isNotBlank();
+            assertThat(columnComment(conn, "user_front_node", "id")).isNotBlank();
+            assertThat(columnComment(conn, "user_front_node", "created_at")).isNotBlank();
+            assertThat(isNullable(conn, "user_front_node", "user_id")).isFalse();
+            assertThat(isNullable(conn, "user_front_node", "node_id")).isFalse();
+        }
+
+        // app_user.front_node_id 保留不动，但注释应已收窄为「主前置节点」语义
+        String frontNodeComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'app_user' AND column_name = 'front_node_id'
+                """, String.class);
+        assertThat(frontNodeComment).contains("主前置节点");
+
+        // user_front_node 与 proxy_node/app_user 之间的外键存在，且 (user_id, node_id) 唯一，
+        // 这两点直接决定「回填不会产出脏数据、重复回填不会插出重复行」，比迁移时机上不可控的行数计数更有区分力
+        Integer fkToUser = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.key_column_usage
+                WHERE table_schema = DATABASE() AND table_name = 'user_front_node'
+                  AND column_name = 'user_id' AND referenced_table_name = 'app_user'
+                """, Integer.class);
+        assertThat(fkToUser).isEqualTo(1);
+
+        Integer fkToNode = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.key_column_usage
+                WHERE table_schema = DATABASE() AND table_name = 'user_front_node'
+                  AND column_name = 'node_id' AND referenced_table_name = 'proxy_node'
+                """, Integer.class);
+        assertThat(fkToNode).isEqualTo(1);
+
+        Integer uniqueOnPair = jdbc.queryForObject("""
+                SELECT COUNT(DISTINCT column_name) FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'user_front_node'
+                  AND index_name = 'uk_user_front_node' AND non_unique = 0
+                """, Integer.class);
+        assertThat(uniqueOnPair).isEqualTo(2);
+    }
+
+    private String columnComment(Connection conn, String table, String column) throws Exception {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT column_comment FROM information_schema.columns "
+              + "WHERE table_schema = ? AND table_name = ? AND column_name = ?")) {
+            ps.setString(1, conn.getCatalog());
+            ps.setString(2, table);
+            ps.setString(3, column);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
+    private boolean isNullable(Connection conn, String table, String column) throws Exception {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT is_nullable FROM information_schema.columns "
+              + "WHERE table_schema = ? AND table_name = ? AND column_name = ?")) {
+            ps.setString(1, conn.getCatalog());
+            ps.setString(2, table);
+            ps.setString(3, column);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return "YES".equals(rs.getString(1));
+            }
         }
     }
 
