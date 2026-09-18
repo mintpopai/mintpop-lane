@@ -1,6 +1,8 @@
+import { FRONT_ACTION } from "../api/types";
 import type {
   AdminNodeResponse,
   AdminUserResponse,
+  FrontAction,
   UserSaveRequest,
   UserStatus,
 } from "../api/types";
@@ -20,15 +22,12 @@ export interface UserFormModel {
   id: number;
   status: UserStatus;
   /**
-   * 第一跳主节点：null 就是字面上的「不分配」，具体 id 是手工指定这一个。
-   * 与服务端现值相同即「这次没动第一跳」，前置节点组原样不动。
+   * 这次保存要对第一跳做什么。userToForm 一律回填 KEEP——改备注、改状态这些保存
+   * 绝不该顺手动别人的前置组；只有链路卡上真的操作了第一跳下拉才会变成别的值。
    */
+  frontAction: FrontAction;
+  /** 第一跳主节点 id，只在 frontAction 为 PIN 时有意义，其余三态一律 null */
   frontNodeId: number | null;
-  /**
-   * 是否要服务端按故障域重新分配一组前置节点。只有链路卡上明确选了「自动分配」才为真；
-   * userToForm 一律回填 false——改备注、改状态这些保存绝不该顺手重算别人的前置组。
-   */
-  reallocateFront: boolean;
   landNodeId: number | null;
   /**
    * 管理员自用说明。刻意设成必填而不是可选：更新接口是整体保存，
@@ -42,9 +41,11 @@ export function userToForm(user: AdminUserResponse): UserFormModel {
   return {
     id: user.id,
     status: user.status,
-    frontNodeId: user.frontNodeId,
-    // 「重新分配」是一次性动作、不是用户身上的状态，回填永远是 false
-    reallocateFront: false,
+    // 第一跳的处置是一次性意图、不是用户身上的状态，回填永远是「这次没动它」
+    frontAction: FRONT_ACTION.KEEP,
+    // KEEP 下服务端忽略 frontNodeId，这里就回填 null，让「这个字段此刻无意义」在数据上也成立：
+    // 回填用户当前的主节点只会让下一个人以为它被用到了，而那个值还可能是过期快照
+    frontNodeId: null,
     landNodeId: user.landNodeId,
     // 服务端没写备注时回 null，输入框要的是空串
     remark: user.remark ?? "",
@@ -53,25 +54,28 @@ export function userToForm(user: AdminUserResponse): UserFormModel {
 
 /**
  * 把第一跳下拉的三态取值翻译成接口上的两个字段。
- * 服务端的解读见 UserSaveRequest：reallocateFront 为真时忽略 frontNodeId；
- * 否则 frontNodeId 就是字面意思，且与库里现值相同即「这次没有动第一跳」。
+ * 下拉的三个档位与服务端四态里的三个一一对应；第四态 KEEP 不在下拉里——
+ * 它表示「这次压根没碰这个下拉」，由调用方（详情页的 frontTouched）决定，见 UserDetailView。
  */
 export function frontSelectionToPayload(
   selection: FrontSelection,
-): Pick<UserFormModel, "frontNodeId" | "reallocateFront"> {
+): Pick<UserFormModel, "frontAction" | "frontNodeId"> {
   if (selection === FRONT_SELECTION.AUTO_ALLOCATE) {
-    return { frontNodeId: null, reallocateFront: true };
+    return { frontAction: FRONT_ACTION.AUTO, frontNodeId: null };
   }
-  return { frontNodeId: selection, reallocateFront: false };
+  if (selection === null) {
+    return { frontAction: FRONT_ACTION.CLEAR, frontNodeId: null };
+  }
+  return { frontAction: FRONT_ACTION.PIN, frontNodeId: selection };
 }
 
 export function buildUserPayload(form: UserFormModel): UserSaveRequest {
   return {
     status: form.status,
+    frontAction: form.frontAction,
     // 下拉清空时可能产出 undefined 而非 null，这里统一收成 null，
     // 让「未分配」在接口上只有一种表示，类型契约才与实际下发的 JSON 一致
     frontNodeId: form.frontNodeId ?? null,
-    reallocateFront: form.reallocateFront,
     landNodeId: form.landNodeId ?? null,
     remark: form.remark.trim(),
   };

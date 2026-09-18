@@ -1,6 +1,7 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BizError } from "../api/http";
 import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
@@ -546,8 +547,8 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
-        frontNodeId: 1,
-        reallocateFront: false,
+        frontAction: "KEEP",
+        frontNodeId: null,
         landNodeId: 12,
         remark: "",
       }),
@@ -587,7 +588,7 @@ describe("UserDetailView · 链路资源", () => {
     await option.trigger("click");
   }
 
-  it("第一跳下拉给出「自动分配（按故障域）」这一档：选中保存后请服务端重算一组", async () => {
+  it("第一跳下拉给出「自动分配（按故障域）」这一档：选中保存后发 frontAction=AUTO", async () => {
     getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
     listNodes.mockResolvedValue([
       node({ id: 1, name: "US-01", role: "FRONT" }),
@@ -602,12 +603,12 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(
         3,
-        expect.objectContaining({ reallocateFront: true, frontNodeId: null }),
+        expect.objectContaining({ frontAction: "AUTO", frontNodeId: null }),
       ),
     );
   });
 
-  it("「不分配」就是字面上的不分配：提交 frontNodeId 为 null 且不要求重新分配", async () => {
+  it("「不分配」就是字面上的不分配：发 frontAction=CLEAR", async () => {
     getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
     listNodes.mockResolvedValue([
       node({ id: 1, name: "US-01", role: "FRONT" }),
@@ -622,12 +623,12 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(
         3,
-        expect.objectContaining({ reallocateFront: false, frontNodeId: null }),
+        expect.objectContaining({ frontAction: "CLEAR", frontNodeId: null }),
       ),
     );
   });
 
-  it("只改落地节点时第一跳原样带回、也不要求重算——否则每次保存都在动别人的前置组", async () => {
+  it("只改落地节点时第一跳发 KEEP——没碰下拉就是没碰，服务端不必也不该去猜", async () => {
     getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
     listNodes.mockResolvedValue([
       node({ id: 1, name: "US-01", role: "FRONT" }),
@@ -643,9 +644,54 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(
         3,
-        expect.objectContaining({ frontNodeId: 1, reallocateFront: false }),
+        expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
       ),
     );
+  });
+
+  it("选回该用户当前的主节点是合法意图：保存按钮可用，发出的是 frontAction=PIN（把多节点组收敛成这一个）", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 2, name: "US-02", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    // 下拉回显的就是 US-01，这里再点一次它——「值没变」但意图变了，按「值是否等于初始值」判断会把按钮锁死
+    await pickOption("第一跳节点", "US-01");
+
+    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeUndefined();
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontAction: "PIN", frontNodeId: 1 }),
+      ),
+    );
+  });
+
+  it("自动分配落空时把服务端的说法原样提示出来，不当作保存成功", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    updateUser.mockRejectedValueOnce(
+      new BizError(410048, "没有可分配的美国前置节点，无法自动分配"),
+    );
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    await pickOption("第一跳节点", "自动分配（按故障域）");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("error", "没有可分配的美国前置节点，无法自动分配"),
+    );
+    expect(showToast).not.toHaveBeenCalledWith("success", "已保存");
   });
 });
 
@@ -713,8 +759,8 @@ describe("UserDetailView · 备注", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
-        frontNodeId: 1,
-        reallocateFront: false,
+        frontAction: "KEEP",
+        frontNodeId: null,
         landNodeId: 11,
         remark: "试用期，月底回访",
       }),
@@ -722,7 +768,7 @@ describe("UserDetailView · 备注", () => {
     expect(showToast).toHaveBeenCalledWith("success", "已保存");
   });
 
-  it("改备注绝不要求重新分配前置组——服务端据此判断「这次没动第一跳」，组才不会被改掉", async () => {
+  it("改备注一律发 frontAction=KEEP——它是「本项未被触碰」的显式表达，组因此不会被改掉", async () => {
     getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11, remark: "老客户" }));
     await mountView([]);
     await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户"));
@@ -733,7 +779,7 @@ describe("UserDetailView · 备注", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(
         3,
-        expect.objectContaining({ frontNodeId: 1, reallocateFront: false }),
+        expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
       ),
     );
   });

@@ -3,7 +3,13 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { AGENT_TYPE, AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
+import {
+  AGENT_TYPE,
+  AGENT_TYPE_LABELS,
+  FRONT_ACTION,
+  USER_ROLE_LABELS,
+  USER_STATUS_LABELS,
+} from "../api/types";
 import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
@@ -68,17 +74,32 @@ const nodes = ref<AdminNodeResponse[]>([]);
  * 回填只会是前两者——「自动分配」是动作不是状态，保存后页面重拉就变回算出来的主节点 id。
  */
 const frontSelection = ref<FrontSelection>(null);
+/**
+ * 管理员这次<b>有没有真的操作过第一跳下拉</b>。只在 onFrontSelected（下拉真的选中某一项）里置 true，
+ * 页面回填（loadUser）不算，保存成功重拉之后归零。
+ * <p>
+ * 刻意用「碰没碰过」而不是「当前值是否等于初始值」——后者看着更简洁，但它是在<b>从取值反推意图</b>，
+ * 本期要铲掉的正是这套推理，换个地方重现而已，而且两个失败形态都会跟着搬过来：
+ * ① 回填值只是打开页面那一刻的快照，其间别人改过这个用户的第一跳，比值就会判错；
+ * ② 「把这个用户钉死到他当前的主节点这一个」与「这次没动第一跳」取值完全相同，比值永远分不开——
+ *    上一版的表现就是选回当前主节点后保存按钮禁用、这个意图根本提交不出去。
+ */
+const frontTouched = ref(false);
 const landNodeId = ref<number | null>(null);
 const savingNodes = ref(false);
 /**
- * 与库里的分配比出来的「有没有改动」：没改动就没有可保存的东西，按钮禁用。
- * 选了「自动分配」时取值既不是现有 id 也不是 null，天然算作有改动。
+ * 「有没有可保存的东西」：第一跳看「碰没碰过」，落地节点仍然比值（它只有一个字段、
+ * 也没有「钉死到当前值」这种与「没动」同形的意图，比值在这里是够用的）。
  */
 const linkDirty = computed(
-  () =>
-    user.value !== null &&
-    (frontSelection.value !== user.value.frontNodeId || landNodeId.value !== user.value.landNodeId),
+  () => user.value !== null && (frontTouched.value || landNodeId.value !== user.value.landNodeId),
 );
+
+/** 下拉真的被选中某一项时才走到这里：页面回填不会触发，因此 frontTouched 只记录人的操作 */
+function onFrontSelected(value: FrontSelection): void {
+  frontSelection.value = value;
+  frontTouched.value = true;
+}
 
 /**
  * 备注字数上限，与服务端 UserSaveRequest 的 @Size 同值。
@@ -287,6 +308,8 @@ async function loadUser(): Promise<void> {
   try {
     user.value = await adminApi().getUser(userId);
     frontSelection.value = user.value.frontNodeId;
+    // 重拉即是一次回填：这一轮的操作已经落库，下一轮从「没碰过」重新开始
+    frontTouched.value = false;
     landNodeId.value = user.value.landNodeId;
     remark.value = user.value.remark ?? "";
     userError.value = "";
@@ -315,7 +338,10 @@ async function saveNodes(): Promise<void> {
       userId,
       buildUserPayload({
         ...userToForm(user.value),
-        ...frontSelectionToPayload(frontSelection.value),
+        // 没碰过第一跳下拉就显式说「这次没动它」，碰过才把下拉的档位翻译成处置
+        ...(frontTouched.value
+          ? frontSelectionToPayload(frontSelection.value)
+          : { frontAction: FRONT_ACTION.KEEP, frontNodeId: null }),
         landNodeId: landNodeId.value,
       }),
     );
@@ -571,11 +597,13 @@ async function confirmUnbind(): Promise<void> {
         <div class="link-grid">
           <div class="admin-field">
             <label for="user-front">第一跳节点</label>
+            <!-- 刻意不用 v-model：要区分「人选的」与「页面回填的」，只有前者算动过第一跳 -->
             <Select
               id="user-front"
-              v-model="frontSelection"
+              :model-value="frontSelection"
               :options="frontOptions"
               aria-label="第一跳节点"
+              @update:model-value="onFrontSelected($event as FrontSelection)"
             />
           </div>
           <div class="admin-field">

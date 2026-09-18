@@ -15,6 +15,23 @@ export const USER_ROLE = {
 } as const;
 export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 
+/**
+ * 保存用户时对第一跳（前置节点）的处置意图，与服务端 FrontAction 枚举逐字一致。
+ * 它是一个**意图**而不是状态：更新用户是整体保存接口，每个调用点都必须显式表态，
+ * 服务端不拿 frontNodeId 与库里现值作比较去反推（回带的值可能是过期快照）。
+ */
+export const FRONT_ACTION = {
+  /** 这次保存没动第一跳：前置组原样不碰，主节点沿用库里现值 */
+  KEEP: "KEEP",
+  /** 按故障域重新分配一组；一个候选都算不出来时服务端报 410048，而不是把人清空 */
+  AUTO: "AUTO",
+  /** 钉死到 frontNodeId 这一个（运维逃生口），此时 frontNodeId 必填 */
+  PIN: "PIN",
+  /** 真的不分配：整组清空、主节点置 null */
+  CLEAR: "CLEAR",
+} as const;
+export type FrontAction = (typeof FRONT_ACTION)[keyof typeof FRONT_ACTION];
+
 export const NODE_ROLE = {
   FRONT: "FRONT",
   LAND: "LAND",
@@ -214,17 +231,17 @@ export interface AdminNodeResponse {
 export interface UserSaveRequest {
   status: UserStatus;
   /**
-   * 第一跳主节点 id，字面语义：null 表示不分配（连同整组清空），具体 id 表示手工指定这一个。
-   * 这个接口是整体保存，本字段与服务端现值相同即「这次没有动第一跳」，前置节点组原样不动。
-   * 「按故障域自动分配一组」是另一件事，走 reallocateFront。
+   * 这次保存要对第一跳做什么。服务端必填（漏传直接 400），不给缺省值：
+   * 整体保存接口的每个调用点都要显式表态，「忘了传」必须当场暴露，
+   * 而不是悄悄落到某一种处置上——二期出事正是那个形态。
+   */
+  frontAction: FrontAction;
+  /**
+   * 第一跳主节点 id，**只在 frontAction 为 PIN 时有意义**（此时必填）。
+   * 其余三态服务端一律忽略它，前端也一律发 null：这个字段此刻无意义，
+   * 带着一个可能过期的值只会让人以为它被用到了。
    */
   frontNodeId: number | null;
-  /**
-   * 是否按故障域重新分配一组前置节点。这是一个动作而不是状态：为真时服务端忽略 frontNodeId，
-   * 重新算一组写入。常规保存（改备注、改状态、只改落地节点）一律传 false，
-   * 否则就会把按故障域分散好的一组顺手改掉。
-   */
-  reallocateFront: boolean;
   landNodeId: number | null;
   /** 管理员自用说明，空串表示没写。整体保存接口，不带就等于清空 */
   remark: string;
