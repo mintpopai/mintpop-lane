@@ -117,7 +117,7 @@ function vantageRows(
                 <th>域名</th>
                 <th>节点数</th>
                 <th>美国节点数</th>
-                <th>入口 IP / ASN（按视角）</th>
+                <th class="audit-entry-col">入口 IP / ASN（按视角）</th>
                 <th>分线路</th>
               </tr>
             </thead>
@@ -126,12 +126,14 @@ function vantageRows(
                 <td class="fact">{{ fd.domain }}</td>
                 <td>{{ fd.nodeCount }}</td>
                 <td>{{ fd.usNodeCount }}</td>
-                <td>
+                <td class="audit-entry-col">
                   <ul v-if="fd.entryIps" class="audit-vantage-list">
                     <li v-for="row in vantageRows(fd)" :key="row.vantage">
                       <span class="audit-vantage-name">{{ row.vantage }}</span>
-                      <span class="fact">{{ row.ips }}</span>
-                      <span class="muted">{{ row.asns }}</span>
+                      <span>
+                        <span class="fact">{{ row.ips }}</span>
+                        <span class="muted"> · {{ row.asns }}</span>
+                      </span>
                     </li>
                   </ul>
                   <!-- 未查询 ≠ 查了没结果：必须说清楚，否则会被读成「这个故障域没入口 IP」 -->
@@ -209,6 +211,15 @@ function vantageRows(
   margin-top: 4px;
 }
 
+/* 这一列必须钉死宽度：全局 .admin-table tr > *:last-child 会把富余宽度全给最后一列，
+   本列不给定宽就会被压到只剩几个字符宽，IP 逐字竖排。定宽 + 允许换行，
+   一个视角解析到两个 IP（jp.tsdns.top 实测就是两个 AWS 东京 IP 轮询）时在格子里折行，
+   不会横向撑出去压到右边的「分线路」列上 */
+.audit-entry-col {
+  width: 340px;
+  min-width: 340px;
+}
+
 /* 一个故障域四个视角，塞在同一格里逐行列出，别把表撑成四倍行数 */
 .audit-vantage-list {
   margin: 0;
@@ -217,19 +228,28 @@ function vantageRows(
   font-size: 12px;
 }
 
+/* 两列网格而不是 flex-wrap：窄屏下 flex 换行会让 ASN 掉到下一行、
+   与下一个视角名并排，读起来像是「AS15169 属于 CHINA_UNICOM」。
+   网格把「视角名」与「IP · ASN」钉在各自的列里，换行只发生在值那一列内部 */
 .audit-vantage-list li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  white-space: nowrap;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: baseline;
 }
 
 .audit-vantage-list li + li {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .audit-vantage-name {
-  min-width: 108px;
   color: var(--color-ink-secondary);
+}
+
+/* 全局 .admin-table td 是 white-space: nowrap（邮箱、Logto id 这类长 ASCII 串没有断点，
+   靠卡片自身横向滚动兜底），这一格例外：它是我们自己排的多行列表、断点明确。
+   只放开换行、不用 overflow-wrap: anywhere——后者会让 IP 从中间断开，读起来更糟 */
+.audit-vantage-list li > span:last-child {
+  white-space: normal;
 }
 </style>
