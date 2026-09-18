@@ -6,7 +6,7 @@ CREATE TABLE user_front_node
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间（UTC）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_front_node (user_id, node_id),
-    CONSTRAINT fk_user_front_node_user FOREIGN KEY (user_id) REFERENCES app_user (id),
+    CONSTRAINT fk_user_front_node_user FOREIGN KEY (user_id) REFERENCES app_user (id) ON DELETE CASCADE,
     CONSTRAINT fk_user_front_node_node FOREIGN KEY (node_id) REFERENCES proxy_node (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT = '用户可用的前置节点集合：按故障域分散下发，供客户端组 fallback 组';

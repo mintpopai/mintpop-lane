@@ -7,6 +7,7 @@ import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -53,6 +54,9 @@ class AdminNodeControllerTest extends MysqlTestBase {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserFrontNodeRepository userFrontNodeRepository;
 
     @Autowired
     private SubscriptionRepository subscriptionRepository;
@@ -475,6 +479,34 @@ class AdminNodeControllerTest extends MysqlTestBase {
         mockMvc.perform(put("/api/admin/nodes/" + idle).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(idleNodeChangeToFront)))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("是某人前置集合里的非主成员（不在 front_node_id 上）的节点也报 410003，而不是数据库异常")
+    void deleteAndChangeRoleBlockedByNonPrimaryFrontMembership() throws Exception {
+        Long primary = fixtures.createFrontNode("FRONT-主");
+        Long secondary = fixtures.createFrontNode("FRONT-非主成员");
+        // existsByFrontNodeId(secondary) 是 false——它不是任何人的主节点，只在 user_front_node 里
+        Long userId = fixtures.createUser("logto-user-1", primary, null);
+        userFrontNodeRepository.replaceForUser(userId, List.of(primary, secondary));
+
+        mockMvc.perform(delete("/api/admin/nodes/" + secondary).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(410003));
+
+        var changeToLand = Map.of(
+                "name", "FRONT-非主成员", "role", "LAND", "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.30", "port", 50101,
+                "egressIp", "203.0.113.30", "status", "ENABLED");
+        mockMvc.perform(put("/api/admin/nodes/" + secondary).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(changeToLand)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(410003));
+        assertThat(nodeRepository.findById(secondary).orElseThrow().getRole()).isEqualTo(NodeRole.FRONT);
+
+        // 解绑后可以正常删除
+        userFrontNodeRepository.replaceForUser(userId, List.of(primary));
+        mockMvc.perform(delete("/api/admin/nodes/" + secondary).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
     }
 

@@ -10,6 +10,7 @@ import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
@@ -34,15 +35,18 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
+    private final UserFrontNodeRepository userFrontNodeRepository;
     private final NodeGroupRepository groupRepository;
     private final EgressIpVerifier.EgressProbe egressProbe;
     private final NodeNotifyService nodeNotifyService;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
+                                 UserFrontNodeRepository userFrontNodeRepository,
                                  NodeGroupRepository groupRepository, EgressIpVerifier.EgressProbe egressProbe,
                                  NodeNotifyService nodeNotifyService) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
+        this.userFrontNodeRepository = userFrontNodeRepository;
         this.groupRepository = groupRepository;
         this.egressProbe = egressProbe;
         this.nodeNotifyService = nodeNotifyService;
@@ -115,8 +119,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
         // 角色变更前先查它是否正被用户引用：已被当前端/落地出口使用的节点悄悄改角色，
         // 会让分配它的用户在无人复查的情况下跑到一个用途不符的节点上
-        if (request.getRole() != node.getRole()
-                && (userRepository.existsByFrontNodeId(id) || userRepository.countByLandNodeId(id) > 0)) {
+        if (request.getRole() != node.getRole() && isReferenced(id)) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
 
@@ -149,7 +152,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     public void delete(Long id) {
         nodeRepository.findById(id).orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
 
-        if (userRepository.existsByFrontNodeId(id) || userRepository.countByLandNodeId(id) > 0) {
+        if (isReferenced(id)) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
         nodeRepository.deleteById(id);
@@ -181,6 +184,17 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     private static long elapsedMillis(long startedAtNanos) {
         return (System.nanoTime() - startedAtNanos) / 1_000_000;
+    }
+
+    /**
+     * 该节点是否正被引用：三种引用形状都要查——某人的主前置节点、某人的落地节点、
+     * 或某人前置集合里的非主成员（二期新增，只在 user_front_node 里，不体现在
+     * app_user.front_node_id 上，漏查会在真正删除时撞上外键抛出原始数据库异常）。
+     */
+    private boolean isReferenced(Long nodeId) {
+        return userRepository.existsByFrontNodeId(nodeId)
+                || userRepository.countByLandNodeId(nodeId) > 0
+                || userFrontNodeRepository.existsByNodeId(nodeId);
     }
 
     /** 取异常链上最内层的说明：Netty 的代理失败通常裹在 ResourceAccessException 里，外层信息不可读 */

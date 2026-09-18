@@ -10,6 +10,7 @@ import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -64,6 +65,9 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserFrontNodeRepository userFrontNodeRepository;
 
     @Autowired
     private SubscriptionRepository subscriptionRepository;
@@ -302,5 +306,28 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0));
         assertThat(nodeRepository.findByGroupId(groupId)).isEmpty();
         assertThat(groupRepository.findById(groupId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("组内节点是某人前置集合里的非主成员（不在任何人的 front_node_id 上）时，删分组同样报 410013 而不是数据库异常")
+    void deleteGroupBlockedByNonPrimaryFrontMembership() throws Exception {
+        Long groupId = createGroupImportingTwoNodes();
+        List<ProxyNodeDto> nodes = nodeRepository.findByGroupId(groupId);
+        Long primaryNodeId = nodes.get(0).getId();
+        Long secondaryNodeId = nodes.get(1).getId();
+        // 该用户的「主」前置节点是 primaryNodeId，secondaryNodeId 只是它前置集合里的非主成员——
+        // existsByFrontNodeId 查不到 secondaryNodeId，必须靠 user_front_node 的引用检查才能挡住
+        Long userId = fixtures.createUser("logto-user-1", primaryNodeId, null);
+        userFrontNodeRepository.replaceForUser(userId, List.of(primaryNodeId, secondaryNodeId));
+
+        mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(410013));
+        assertThat(nodeRepository.findByGroupId(groupId)).hasSize(2);
+
+        // 解绑后可整组删除
+        userFrontNodeRepository.deleteByUserId(userId);
+        jdbc.update("UPDATE app_user SET front_node_id = NULL WHERE id = ?", userId);
+        mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

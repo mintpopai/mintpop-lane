@@ -138,9 +138,8 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (user.getRole() == UserRole.ADMIN) {
             throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
         }
-        // user_front_node 的外键未设 ON DELETE CASCADE（与 subscription/user_device 等表不同），
-        // 先手工清空，否则已分配过前置节点的用户会被数据库外键挡住无法删除
-        userFrontNodeRepository.deleteByUserId(id);
+        // user_front_node 对 app_user 的外键带 ON DELETE CASCADE，关联行由数据库自动清掉，
+        // 与 subscription/user_device 等表一致，不需要应用层重复处理
         userRepository.deleteById(id);
     }
 

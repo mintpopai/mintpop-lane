@@ -50,4 +50,9 @@ public class MybatisUserFrontNodeRepository implements UserFrontNodeRepository {
         return mapper.selectList(Wrappers.<UserFrontNode>lambdaQuery()).stream()
                 .collect(Collectors.groupingBy(UserFrontNode::getNodeId, Collectors.counting()));
     }
+
+    @Override
+    public boolean existsByNodeId(Long nodeId) {
+        return mapper.selectCount(Wrappers.<UserFrontNode>lambdaQuery().eq(UserFrontNode::getNodeId, nodeId)) > 0;
+    }
 }
