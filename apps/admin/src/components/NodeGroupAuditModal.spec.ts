@@ -1,7 +1,7 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
-import type { SubAuditResponse } from "../api/types";
+import type { SubAuditFailureDomainReport, SubAuditResponse } from "../api/types";
 import { showToast } from "../toast";
 import NodeGroupAuditModal from "./NodeGroupAuditModal.vue";
 
@@ -26,6 +26,43 @@ function auditReport(overrides: Partial<SubAuditResponse> = {}): SubAuditRespons
     expiresAt: null,
     ...overrides,
   };
+}
+
+/** 故障域条目的夹具；默认是「查过的美国故障域」，未查询态由用例显式传 null */
+function failureDomain(
+  overrides: Partial<SubAuditFailureDomainReport> = {},
+): SubAuditFailureDomainReport {
+  return {
+    domain: "jp.tsdns.top",
+    nodeCount: 23,
+    usNodeCount: 12,
+    entryIps: {
+      CHINA_TELECOM: ["34.84.255.241"],
+      CHINA_UNICOM: ["43.199.66.164"],
+      CHINA_MOBILE: ["43.199.66.164"],
+      OVERSEAS: ["43.199.66.164"],
+    },
+    asns: {
+      CHINA_TELECOM: ["AS15169"],
+      CHINA_UNICOM: ["AS16509"],
+      CHINA_MOBILE: ["AS16509"],
+      OVERSEAS: ["AS16509"],
+    },
+    lineSplit: true,
+    ...overrides,
+  };
+}
+
+/** 取「故障域分布」表里某一行的单元格文本，按表头名定位列，不写死下标 */
+function failureDomainCell(columnHeader: string, rowIndex = 0): string {
+  const table = document.querySelectorAll("table.admin-table")[0]!;
+  const headers = [...table.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+  const index = headers.indexOf(columnHeader);
+  expect(
+    index,
+    `故障域表里没有「${columnHeader}」列，表头是 ${headers.join(" / ")}`,
+  ).toBeGreaterThan(-1);
+  return table.querySelectorAll("tbody tr")[rowIndex]!.querySelectorAll("td")[index]!.textContent!;
 }
 
 beforeEach(() => {
@@ -119,5 +156,65 @@ describe("NodeGroupAuditModal", () => {
     expect(document.querySelector(".dialog.wide")).not.toBeNull();
     expect(document.querySelectorAll("footer button")).toHaveLength(1);
     expect(document.querySelector("footer button")!.textContent).toContain("关闭");
+  });
+
+  it("故障域表列出各视角的入口 IP 与 ASN——采购标准要卡「入口 ASN ≠ AS16509」，光有域名执行不了", async () => {
+    await submitAuditWith({ failureDomains: [failureDomain()] });
+
+    const cell = failureDomainCell("入口 IP / ASN（按视角）");
+    expect(cell).toContain("CHINA_TELECOM");
+    expect(cell).toContain("34.84.255.241");
+    expect(cell).toContain("AS15169");
+    expect(cell).toContain("OVERSEAS");
+    expect(cell).toContain("43.199.66.164");
+    expect(cell).toContain("AS16509");
+  });
+
+  it("某视角解析为空时说「解析为空」，不是渲染成空白", async () => {
+    await submitAuditWith({
+      failureDomains: [
+        failureDomain({
+          entryIps: { CHINA_TELECOM: [], OVERSEAS: ["43.199.66.164"] },
+          asns: { CHINA_TELECOM: [], OVERSEAS: ["AS16509"] },
+        }),
+      ],
+    });
+
+    expect(failureDomainCell("入口 IP / ASN（按视角）")).toContain("解析为空");
+  });
+
+  it("ASN 反查不到时说「ASN 未知」，不留空", async () => {
+    await submitAuditWith({
+      failureDomains: [
+        failureDomain({ entryIps: { OVERSEAS: ["43.199.66.164"] }, asns: { OVERSEAS: [] } }),
+      ],
+    });
+
+    expect(failureDomainCell("入口 IP / ASN（按视角）")).toContain("ASN 未知");
+  });
+
+  it("服务端未查询的故障域标「未查询」，不能让人误以为查了但没结果", async () => {
+    await submitAuditWith({
+      failureDomains: [
+        failureDomain({
+          domain: "hk.tsdns.top",
+          usNodeCount: 0,
+          entryIps: null,
+          asns: null,
+          lineSplit: null,
+        }),
+      ],
+    });
+
+    expect(failureDomainCell("入口 IP / ASN（按视角）")).toContain("未查询入口 IP");
+    expect(failureDomainCell("分线路")).toContain("未查询");
+    // 未查询绝不能渲染成「否」——那会被读成「查了，没分线路」
+    expect(failureDomainCell("分线路")).not.toContain("否");
+  });
+
+  it("查过的故障域照常给出分线路结论", async () => {
+    await submitAuditWith({ failureDomains: [failureDomain({ lineSplit: false })] });
+
+    expect(failureDomainCell("分线路").trim()).toBe("否");
   });
 });

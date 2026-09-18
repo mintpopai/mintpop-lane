@@ -5,7 +5,7 @@
 import { ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import type { SubAuditResponse } from "../api/types";
+import type { SubAuditFailureDomainReport, SubAuditResponse } from "../api/types";
 import { showToast } from "../toast";
 import { booleanLabel } from "../utils/format";
 import Modal from "./AdminModal.vue";
@@ -32,6 +32,26 @@ async function submit(): Promise<void> {
   } finally {
     auditing.value = false;
   }
+}
+
+/**
+ * 把一个故障域的各视角入口 IP 与 ASN 拉平成可渲染的行。
+ * 视角名（CHINA_TELECOM 等）是服务端 DnsVantage 的枚举取值，前端不做映射、原样罗列——
+ * 与 types.ts 上「不额外镜像该枚举」的约定保持一致。
+ * entryIps 为 null（服务端未查询该故障域）时返回空数组，由模板走「未查询」那一支。
+ */
+function vantageRows(
+  fd: SubAuditFailureDomainReport,
+): { vantage: string; ips: string; asns: string }[] {
+  if (!fd.entryIps) {
+    return [];
+  }
+  return Object.entries(fd.entryIps).map(([vantage, ips]) => ({
+    vantage,
+    // 该视角解析失败时服务端给的就是空列表，说清楚「解析为空」，别渲染成空白
+    ips: ips.length > 0 ? ips.join("、") : "解析为空",
+    asns: (fd.asns?.[vantage] ?? []).join("、") || "ASN 未知",
+  }));
 }
 </script>
 
@@ -86,12 +106,18 @@ async function submit(): Promise<void> {
 
         <div v-if="report.failureDomains.length > 0" class="admin-field">
           <label>故障域分布</label>
+          <p class="admin-note">
+            入口 IP 与 ASN 只对判定为美国落地的故障域查（LAND 的国家级 GeoIP
+            限制决定了前置只能选美国落地的节点）， 其余故障域标「未查询」。采购标准里「入口 ASN ≠
+            AS16509（现有是 AWS 东京）」就看这一列。
+          </p>
           <table class="admin-table dense">
             <thead>
               <tr>
                 <th>域名</th>
                 <th>节点数</th>
                 <th>美国节点数</th>
+                <th>入口 IP / ASN（按视角）</th>
                 <th>分线路</th>
               </tr>
             </thead>
@@ -100,7 +126,21 @@ async function submit(): Promise<void> {
                 <td class="fact">{{ fd.domain }}</td>
                 <td>{{ fd.nodeCount }}</td>
                 <td>{{ fd.usNodeCount }}</td>
-                <td>{{ booleanLabel(fd.lineSplit, "是", "否") }}</td>
+                <td>
+                  <ul v-if="fd.entryIps" class="audit-vantage-list">
+                    <li v-for="row in vantageRows(fd)" :key="row.vantage">
+                      <span class="audit-vantage-name">{{ row.vantage }}</span>
+                      <span class="fact">{{ row.ips }}</span>
+                      <span class="muted">{{ row.asns }}</span>
+                    </li>
+                  </ul>
+                  <!-- 未查询 ≠ 查了没结果：必须说清楚，否则会被读成「这个故障域没入口 IP」 -->
+                  <span v-else class="muted">未查询入口 IP</span>
+                </td>
+                <td>
+                  <span v-if="fd.lineSplit === null" class="muted">未查询</span>
+                  <span v-else>{{ booleanLabel(fd.lineSplit, "是", "否") }}</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -167,5 +207,29 @@ async function submit(): Promise<void> {
 
 .audit-us-list li + li {
   margin-top: 4px;
+}
+
+/* 一个故障域四个视角，塞在同一格里逐行列出，别把表撑成四倍行数 */
+.audit-vantage-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.audit-vantage-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.audit-vantage-list li + li {
+  margin-top: 2px;
+}
+
+.audit-vantage-name {
+  min-width: 108px;
+  color: var(--color-ink-secondary);
 }
 </style>

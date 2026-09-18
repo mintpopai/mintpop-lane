@@ -545,9 +545,12 @@ describe("NodesView 表格内容", () => {
     const wrapper = await render();
     await switchTo(wrapper, "LAND");
 
-    // 落地列序：节点名/协议/地址/故障域/出口 IP/…（落地没有分组列），故障域是第 4 格
-    const failureDomainCell = wrapper.findAll("tbody tr")[0].findAll("td")[3];
-    expect(failureDomainCell.text()).toBe("—");
+    // 按表头名定位列，不写死下标：夹具的 egressIp 也是 null、也渲染成「—」，
+    // 写死下标的话这条用例在「故障域」这一列还不存在时就能通过，等于没有区分力
+    const headers = wrapper.findAll("thead th").map((th) => th.text());
+    expect(headers).toContain("故障域");
+    const failureDomainIndex = headers.indexOf("故障域");
+    expect(wrapper.findAll("tbody tr")[0].findAll("td")[failureDomainIndex].text()).toBe("—");
   });
 });
 
