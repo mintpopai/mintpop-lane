@@ -18,7 +18,11 @@ public class UserSaveRequest {
     @NotNull(message = "状态不能为空")
     private UserStatus status;
 
-    /** 第一跳节点 id，null 表示不分配 */
+    /**
+     * 第一跳节点 id；null 表示交给分配器按故障域自动分配一组前置节点
+     * （见 {@link ai.mintpop.lane.service.FrontNodeAllocator}），本字段留下的是其中的主节点。
+     * 管理员显式传具体节点 id 时按原路径走，只绑定这一个节点——这是运维逃生口，手工指定仍然允许。
+     */
     private Long frontNodeId;
 
     /** 落地节点 id，null 表示不分配 */

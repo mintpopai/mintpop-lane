@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -89,5 +90,19 @@ class UserFrontNodeRepositoryTest extends MysqlTestBase {
     @DisplayName("未分配任何前置节点的用户查询结果是空列表而非报错")
     void findNodeIdsByUserIdReturnsEmptyListWhenUnassigned() {
         assertThat(repository.findNodeIdsByUserId(userId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("countUsersByNodeId 按节点分组统计已分配用户数，未被任何人用的节点不出现在结果里")
+    void countUsersByNodeIdGroupsByNode() {
+        Long otherUserId = fixtures.createUser("u2", nodeA, null);
+        repository.replaceForUser(userId, List.of(nodeA, nodeB));
+        repository.replaceForUser(otherUserId, List.of(nodeA));
+        // nodeC 没有任何用户绑定，不该出现在统计结果里
+
+        Map<Long, Long> counts = repository.countUsersByNodeId();
+
+        assertThat(counts).containsExactlyInAnyOrderEntriesOf(Map.of(nodeA, 2L, nodeB, 1L));
+        assertThat(counts).doesNotContainKey(nodeC);
     }
 }

@@ -27,7 +27,7 @@ class UsLandingNodesTest {
     @DisplayName("不该命中的写法——收窄正是为了挡住这些")
     @ValueSource(strings = {
             "🇭🇰[HK]HongKong01-GPT优化",
-            "🇷🇺[RU]俄罗斯-Moscow",      // 裸 US 会命中 Russia
+            "🇷🇺[RU]Russia-Moscow",      // 裸 US 会命中 Russia
             "🇧🇾[BY]Belarus",             // 同上
             "🇨🇾[CY]Cyprus",              // 同上
             "Bonus 节点",                  // 同上

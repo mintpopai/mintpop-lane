@@ -11,6 +11,7 @@ import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.UserSaveRequest;
 import ai.mintpop.lane.response.AdminUserResponse;
@@ -31,13 +32,19 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final UserFrontNodeRepository userFrontNodeRepository;
+    private final FrontNodeAllocator frontNodeAllocator;
     private final Clock clock;
 
     public AdminUserServiceImpl(UserRepository userRepository, ProxyNodeRepository nodeRepository,
-                                 SubscriptionRepository subscriptionRepository, Clock clock) {
+                                 SubscriptionRepository subscriptionRepository,
+                                 UserFrontNodeRepository userFrontNodeRepository,
+                                 FrontNodeAllocator frontNodeAllocator, Clock clock) {
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.userFrontNodeRepository = userFrontNodeRepository;
+        this.frontNodeAllocator = frontNodeAllocator;
         this.clock = clock;
     }
 
@@ -98,18 +105,29 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
         }
 
+        // 前置节点：管理员显式指定单个节点时按原路径走（手工指定仍然允许，这是运维逃生口）；
+        // 留空则调分配器按故障域分桶自动分配一组，primaryNodeId 写入 front_node_id（老客户端唯一认得的字段）
+        List<Long> frontNodeIds;
+        Long primaryFrontNodeId;
         if (request.getFrontNodeId() != null) {
             validateNode(request.getFrontNodeId(), NodeRole.FRONT);
+            primaryFrontNodeId = request.getFrontNodeId();
+            frontNodeIds = List.of(primaryFrontNodeId);
+        } else {
+            FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
+            primaryFrontNodeId = allocation.primaryNodeId();
+            frontNodeIds = allocation.nodeIds();
         }
         validateLandAvailable(request.getLandNodeId(), id);
 
         user.setStatus(request.getStatus());
-        user.setFrontNodeId(request.getFrontNodeId());
+        user.setFrontNodeId(primaryFrontNodeId);
         user.setLandNodeId(request.getLandNodeId());
         user.setRemark(request.getRemark());
         // subject/email/role 不从入参取，沿用库里的值（邮箱是身份标识，由登录同步维护，管理端不提供改动入口）
 
         userRepository.update(user);
+        userFrontNodeRepository.replaceForUser(id, frontNodeIds);
     }
 
     @Override
@@ -120,6 +138,9 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (user.getRole() == UserRole.ADMIN) {
             throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
         }
+        // user_front_node 的外键未设 ON DELETE CASCADE（与 subscription/user_device 等表不同），
+        // 先手工清空，否则已分配过前置节点的用户会被数据库外键挡住无法删除
+        userFrontNodeRepository.deleteByUserId(id);
         userRepository.deleteById(id);
     }
 

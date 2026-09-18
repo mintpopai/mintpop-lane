@@ -7,6 +7,8 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /** 用户前置节点集合的 MySQL 实现。 */
 @Repository
@@ -39,5 +41,13 @@ public class MybatisUserFrontNodeRepository implements UserFrontNodeRepository {
     @Override
     public void deleteByUserId(Long userId) {
         mapper.delete(Wrappers.<UserFrontNode>lambdaQuery().eq(UserFrontNode::getUserId, userId));
+    }
+
+    @Override
+    public Map<Long, Long> countUsersByNodeId() {
+        // 表规模是「用户数 × 每用户节点数」量级，全量取出在 Java 侧 GROUP BY 足够快，
+        // 且避免了 MyBatis-Plus selectMaps 在不同数据库驱动下列名大小写不一致的坑
+        return mapper.selectList(Wrappers.<UserFrontNode>lambdaQuery()).stream()
+                .collect(Collectors.groupingBy(UserFrontNode::getNodeId, Collectors.counting()));
     }
 }

@@ -1,14 +1,18 @@
 package ai.mintpop.lane.controller.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.DeviceRebindRequest;
 import ai.mintpop.lane.enumeration.AgentType;
+import ai.mintpop.lane.enumeration.NodeProtocol;
+import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.RebindRequestStatus;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.util.RebindRequestNo;
 import ai.mintpop.lane.service.SessionTokenService;
@@ -65,6 +69,9 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Autowired
     private UserDeviceRepository userDeviceRepository;
+
+    @Autowired
+    private UserFrontNodeRepository userFrontNodeRepository;
 
     @Autowired
     private DeviceRebindRequestRepository rebindRequestRepository;
@@ -180,6 +187,64 @@ class AdminUserControllerTest extends MysqlTestBase {
         // 更新接口不收身份字段：邮箱与 subject 的原值不受影响（改邮箱只能靠登录同步）
         assertThat(user.getEmail()).isEqualTo(before.getEmail());
         assertThat(user.getSubject()).isEqualTo("logto-m2");
+    }
+
+    @Test
+    @DisplayName("显式指定前置节点：手工指定仍然允许，user_front_node 只留这一个")
+    void updateWithExplicitFrontNodeReplacesSetWithJustThatNode() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(frontId);
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(frontId);
+    }
+
+    @Test
+    @DisplayName("不指定前置节点时自动按故障域分配，主节点写入 front_node_id，全集写入 user_front_node")
+    void updateWithoutFrontNodeIdTriggersAutoAllocation() throws Exception {
+        // fixtures.createFrontNode 造出的节点名字不含美国标记、failureDomain 也是 null，不会被分配器选中；
+        // 这里单独造一个真正会被选中的候选：美国落地 + 已解析的故障域
+        ProxyNodeDto usFront = new ProxyNodeDto();
+        usFront.setName("🇺🇸[US]Auto-01");
+        usFront.setRole(NodeRole.FRONT);
+        usFront.setProtocol(NodeProtocol.TROJAN);
+        usFront.setServerAddr("us-auto.example.com");
+        usFront.setPort(443);
+        usFront.setSecret(Map.of("password", "自动分配密码"));
+        usFront.setFailureDomain("relay.auto.example.net");
+        Long autoFrontId = nodeRepository.create(usFront);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", "ACTIVE");
+        body.put("frontNodeId", null);
+        body.put("landNodeId", null);
+        body.put("remark", null);
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(autoFrontId);
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(autoFrontId);
+    }
+
+    @Test
+    @DisplayName("删除已分配前置节点的用户不被外键挡住：user_front_node 无 ON DELETE CASCADE，需应用层先清")
+    void deleteUserCascadesFrontNodeAssignment() throws Exception {
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null))))
+                .andExpect(jsonPath("$.code").value(0));
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isNotEmpty();
+
+        mockMvc.perform(delete("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(memberNoSubId)).isEmpty();
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isEmpty();
     }
 
     @Test
