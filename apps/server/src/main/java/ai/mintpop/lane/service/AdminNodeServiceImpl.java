@@ -282,6 +282,7 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getGroupId(),
                 node.getGroupId() == null ? null : groupNames.get(node.getGroupId()),
                 node.getSourceType(),
+                node.getFailureDomain(),
                 node.getCreatedAt(),
                 node.getUpdatedAt());
     }

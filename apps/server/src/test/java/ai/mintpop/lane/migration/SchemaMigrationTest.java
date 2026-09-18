@@ -7,12 +7,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.ResultSet;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SchemaMigrationTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private DataSource dataSource;
 
     @BeforeEach
     void setUp() {
@@ -511,5 +518,32 @@ class SchemaMigrationTest extends MysqlTestBase {
                   AND column_name IN ('bound_device_id', 'bound_at') AND referenced_table_name IS NOT NULL
                 """, Integer.class);
         assertThat(foreignKeys).isZero();
+    }
+
+    @Test
+    @DisplayName("V20 建出故障域列、订阅额度列与入口 IP 历史表")
+    void v20AddsFrontStabilitySchema() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(columnExists(conn, "proxy_node", "failure_domain")).isTrue();
+            assertThat(columnExists(conn, "proxy_node", "failure_domain_checked_at")).isTrue();
+            assertThat(columnExists(conn, "node_group", "traffic_used_bytes")).isTrue();
+            assertThat(columnExists(conn, "node_group", "traffic_total_bytes")).isTrue();
+            assertThat(columnExists(conn, "node_group", "traffic_expires_at")).isTrue();
+            assertThat(columnExists(conn, "node_group", "traffic_alerted_pct")).isTrue();
+            assertThat(columnExists(conn, "node_group", "fetched_at")).isTrue();
+            assertThat(tableExists(conn, "entry_ip_history")).isTrue();
+        }
+    }
+
+    private boolean columnExists(Connection conn, String table, String column) throws Exception {
+        try (ResultSet rs = conn.getMetaData().getColumns(conn.getCatalog(), null, table, column)) {
+            return rs.next();
+        }
+    }
+
+    private boolean tableExists(Connection conn, String table) throws Exception {
+        try (ResultSet rs = conn.getMetaData().getTables(conn.getCatalog(), null, table, null)) {
+            return rs.next();
+        }
     }
 }

@@ -99,4 +99,9 @@ public class MybatisProxyNodeRepository implements ProxyNodeRepository {
     public long countByGroupId(Long groupId) {
         return mapper.selectCount(Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getGroupId, groupId));
     }
+
+    @Override
+    public List<String> findDistinctFailureDomains() {
+        return mapper.selectDistinctFailureDomains();
+    }
 }

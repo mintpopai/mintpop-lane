@@ -57,19 +57,41 @@ public class ProxyNodeDto {
     /** 订阅节点的真实 mihomo type（如 anytls），仅供展示；手工节点为 NULL */
     private String sourceType;
 
+    /** 故障域：该节点域名解析链的终点（CNAME 末端；无 CNAME 则为域名本身）。NULL 表示尚未解析或解析失败 */
+    private String failureDomain;
+
+    /** 故障域最近一次解析成功的时间（UTC）；NULL 表示从未解析成功 */
+    private Instant failureDomainCheckedAt;
+
     private Instant createdAt;
 
     private Instant updatedAt;
 
     /**
-     * 组装成一个 mihomo 节点配置。
-     * 不含 name 与 dialer-proxy：这两项由客户端强制覆盖，服务端下发了也会被改掉。
+     * 组装成一个 mihomo 节点配置，不做任何参数覆盖。
+     * 既有调用点（如落地节点下发）继续用这个签名，无需感知覆盖表的存在。
      */
     public Map<String, Object> toMihomoNode() {
+        return toMihomoNode(Map.of());
+    }
+
+    /**
+     * 组装成一个 mihomo 节点配置，并按 {@code sourceType} 合并保活参数覆盖表。
+     * 不含 name 与 dialer-proxy：这两项由客户端强制覆盖，服务端下发了也会被改掉。
+     *
+     * @param tuning 按 mihomo type 分派的覆盖表（{@link ai.mintpop.lane.config.FrontTuningProperties}），
+     *               只应对前置节点传非空表；表里没有本节点的 sourceType 时相当于不传
+     */
+    public Map<String, Object> toMihomoNode(Map<String, Object> tuning) {
         // MIHOMO（订阅导入）节点：整份参数都在 secret 里（含 type/server/port），原样透传；
         // 列上的 serverAddr/port 只是展示用副本，这里不读，避免两处数据不一致时下发错值
         if (protocol == NodeProtocol.MIHOMO) {
-            return new LinkedHashMap<>(secret == null ? Map.of() : secret);
+            Map<String, Object> node = new LinkedHashMap<>(secret == null ? Map.of() : secret);
+            // 后放即覆盖：订阅带来的默认值不如我们的调优结论权威
+            if (tuning != null) {
+                node.putAll(tuning);
+            }
+            return node;
         }
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("type", protocol.mihomoType());

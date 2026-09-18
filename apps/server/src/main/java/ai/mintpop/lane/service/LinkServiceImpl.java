@@ -1,5 +1,6 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.config.FrontTuningProperties;
 import ai.mintpop.lane.config.LinkProperties;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 public class LinkServiceImpl implements LinkService {
 
     private final LinkProperties linkProperties;
+    private final FrontTuningProperties frontTuningProperties;
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubscriptionRepository subscriptionRepository;
@@ -42,6 +44,7 @@ public class LinkServiceImpl implements LinkService {
     private final Clock clock;
 
     public LinkServiceImpl(LinkProperties linkProperties,
+                           FrontTuningProperties frontTuningProperties,
                            UserRepository userRepository,
                            ProxyNodeRepository nodeRepository,
                            SubscriptionRepository subscriptionRepository,
@@ -49,6 +52,7 @@ public class LinkServiceImpl implements LinkService {
                            DeviceRebindRequestRepository rebindRequestRepository,
                            Clock clock) {
         this.linkProperties = linkProperties;
+        this.frontTuningProperties = frontTuningProperties;
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
@@ -113,7 +117,8 @@ public class LinkServiceImpl implements LinkService {
                 .toList();
 
         return new LinkConfigResponse(
-                front.toMihomoNode(),
+                front.toMihomoNode(frontTuning(front)),
+                // 落地节点不接客户端的保活诉求，原样透传，不传覆盖表
                 land.toMihomoNode(),
                 land.getEgressIp(),
                 land.getEgressTimezone(),
@@ -137,6 +142,17 @@ public class LinkServiceImpl implements LinkService {
                     return new HeartbeatResponse(LinkStatus.ACTIVE);
                 })
                 .orElse(new HeartbeatResponse(LinkStatus.REVOKED));
+    }
+
+    /**
+     * 按前置节点的真实 mihomo type（sourceType，不是 protocol）查保活参数覆盖表。
+     * 手工新建的前置节点没有 sourceType（订阅导入才有），此时视同表里查不到，原样透传。
+     */
+    private Map<String, Object> frontTuning(ProxyNodeDto front) {
+        if (front.getSourceType() == null) {
+            return Map.of();
+        }
+        return frontTuningProperties.getProtocols().getOrDefault(front.getSourceType(), Map.of());
     }
 
     /**

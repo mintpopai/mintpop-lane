@@ -2,7 +2,9 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
+import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.FeishuCardTemplate;
 import ai.mintpop.lane.enumeration.NodeRole;
@@ -15,7 +17,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -121,5 +127,196 @@ class NodeNotifyServiceTest {
 
         assertThatCode(() -> service.notifyEgressIpChanged(land("203.0.113.9", null), "203.0.113.7", null,
                 EgressIpChangeSource.ADMIN)).doesNotThrowAnyException();
+    }
+
+    private NodeGroupDto group(long id, String name) {
+        NodeGroupDto group = new NodeGroupDto();
+        group.setId(id);
+        group.setName(name);
+        return group;
+    }
+
+    @SuppressWarnings("unchecked")
+    private LinkedHashMap<String, String> sentFields(FeishuCardTemplate template, String title) {
+        ArgumentCaptor<LinkedHashMap<String, String>> captor = ArgumentCaptor.forClass(LinkedHashMap.class);
+        verify(feishuBotClient).sendCard(eq(template), eq(title), captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("订阅节点增减：橙色卡片，分组、新增、消失节点依次展示")
+    void subNodesChangedSendsOrangeCard() {
+        service.notifySubNodesChanged(group(3L, "A 家"), List.of("US-02"), List.of("US-99"));
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认")).containsExactly(
+                entry("分组", "A 家（ID 3）"),
+                entry("新增节点", "US-02"),
+                entry("消失节点", "US-99"));
+    }
+
+    @Test
+    @DisplayName("订阅节点增减：只有一侧有变化时另一侧显示「无」")
+    void subNodesChangedShowsNoneOnEmptySide() {
+        service.notifySubNodesChanged(group(3L, "A 家"), List.of("US-02"), List.of());
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认"))
+                .containsEntry("新增节点", "US-02")
+                .containsEntry("消失节点", "无");
+    }
+
+    @Test
+    @DisplayName("订阅节点增减：两个列表都空不推")
+    void doesNotNotifyWhenBothListsEmpty() {
+        service.notifySubNodesChanged(group(3L, "A 家"), List.of(), List.of());
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("订阅节点增减：未配置 webhook 整体静默")
+    void subNodesChangedSilentWhenNotConfigured() {
+        properties.setWebhookUrl(null);
+
+        service.notifySubNodesChanged(group(3L, "A 家"), List.of("US-02"), List.of());
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("订阅节点增减：客户端抛异常只记日志，不向调用方冒泡")
+    void subNodesChangedSwallowsClientFailure() {
+        doThrow(new IllegalStateException("飞书机器人返回异常"))
+                .when(feishuBotClient).sendCard(any(), anyString(), any());
+
+        assertThatCode(() -> service.notifySubNodesChanged(group(3L, "A 家"), List.of("US-02"), List.of()))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("节点端点变更：红色卡片，节点、原/新端点依次展示")
+    void endpointChangedSendsRedCard() {
+        service.notifyNodeEndpointChanged(land("203.0.113.9", null), "us01a.example.com:35555",
+                "us01a.example.com:35660");
+
+        assertThat(sentFields(FeishuCardTemplate.RED, "MintPop Lane 节点端点已变更，此前下发配置已失效")).containsExactly(
+                entry("节点", "LAND-1（ID 7）"),
+                entry("原端点", "us01a.example.com:35555"),
+                entry("新端点", "us01a.example.com:35660"));
+    }
+
+    @Test
+    @DisplayName("节点端点变更：未配置 webhook 整体静默")
+    void endpointChangedSilentWhenNotConfigured() {
+        properties.setWebhookUrl(null);
+
+        service.notifyNodeEndpointChanged(land("203.0.113.9", null), "a:1", "a:2");
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("节点端点变更：客户端抛异常只记日志，不向调用方冒泡")
+    void endpointChangedSwallowsClientFailure() {
+        doThrow(new IllegalStateException("飞书机器人返回异常"))
+                .when(feishuBotClient).sendCard(any(), anyString(), any());
+
+        assertThatCode(() -> service.notifyNodeEndpointChanged(land("203.0.113.9", null), "a:1", "a:2"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("入口 IP 变更：橙色卡片，故障域/视角/原新 IP 与提示语依次展示")
+    void entryIpChangedSendsOrangeCard() {
+        service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS, "13.192.233.178", "34.84.255.241");
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 中转入口 IP 已变更")).containsExactly(
+                entry("故障域", "jp.tsdns.top"),
+                entry("视角", "OVERSEAS"),
+                entry("原入口 IP", "13.192.233.178"),
+                entry("新入口 IP", "34.84.255.241"),
+                entry("提示", "入口 IP 变更通常意味着该入口刚被封过"));
+    }
+
+    @Test
+    @DisplayName("入口 IP 变更：未配置 webhook 整体静默")
+    void entryIpChangedSilentWhenNotConfigured() {
+        properties.setWebhookUrl(null);
+
+        service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS, "13.192.233.178", "34.84.255.241");
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("入口 IP 变更：客户端抛异常只记日志，不向调用方冒泡")
+    void entryIpChangedSwallowsClientFailure() {
+        doThrow(new IllegalStateException("飞书机器人返回异常"))
+                .when(feishuBotClient).sendCard(any(), anyString(), any());
+
+        assertThatCode(() -> service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS,
+                "13.192.233.178", "34.84.255.241")).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("订阅即将到期：橙色卡片（与额度告警同一张），分组/到期时间/剩余依次展示")
+    void expiringSoonSendsOrangeCard() {
+        service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-20T00:00:00Z"),
+                Duration.ofHours(50));
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅即将到期")).containsExactly(
+                entry("分组", "A 家（ID 3）"),
+                entry("到期时间", "2026-09-20T00:00:00Z"),
+                entry("剩余", "2 天 2 小时"));
+    }
+
+    @Test
+    @DisplayName("订阅已过期：标题与剩余都说「已过期」，不显示负的小时数")
+    void expiredSaysExpired() {
+        service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-17T00:00:00Z"),
+                Duration.ofHours(-24));
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅已过期"))
+                .containsEntry("剩余", "已过期");
+    }
+
+    @Test
+    @DisplayName("订阅到期：未配置 webhook 整体静默")
+    void expiringSilentWhenNotConfigured() {
+        properties.setWebhookUrl(null);
+
+        service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-20T00:00:00Z"),
+                Duration.ofHours(5));
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("订阅到期：客户端抛异常只记日志，不向调用方冒泡")
+    void expiringSwallowsClientFailure() {
+        doThrow(new IllegalStateException("飞书机器人返回异常"))
+                .when(feishuBotClient).sendCard(any(), anyString(), any());
+
+        assertThatCode(() -> service.notifySubscriptionExpiring(group(3L, "A 家"),
+                Instant.parse("2026-09-20T00:00:00Z"), Duration.ofHours(5))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("额度告警：橙色卡片；GB 数按 Locale.ROOT 格式化，不随运行环境地区设置漂成逗号小数点")
+    void trafficThresholdFormatsBytesWithRootLocale() {
+        Locale original = Locale.getDefault();
+        // 德语区的小数点是逗号：String.format 不钉 Locale.ROOT 就会输出 "1,50 GB"
+        Locale.setDefault(Locale.GERMANY);
+        try {
+            NodeGroupDto group = group(3L, "A 家");
+            group.setUsedBytes(1_610_612_736L);  // 1.5 GB
+            group.setTotalBytes(3_221_225_472L); // 3 GB
+
+            service.notifyTrafficThreshold(group, 50);
+
+            assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅额度告警"))
+                    .containsEntry("已用 / 总额", "1.50 GB / 3.00 GB");
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 }

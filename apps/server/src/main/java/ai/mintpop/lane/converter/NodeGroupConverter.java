@@ -21,6 +21,11 @@ public class NodeGroupConverter {
         dto.setName(entity.getName());
         dto.setSubUrl(cipher.decrypt(entity.getSubUrlCipher()));
         dto.setRemark(entity.getRemark());
+        dto.setUsedBytes(entity.getTrafficUsedBytes());
+        dto.setTotalBytes(entity.getTrafficTotalBytes());
+        dto.setExpiresAt(entity.getTrafficExpiresAt());
+        dto.setTrafficAlertedPct(entity.getTrafficAlertedPct());
+        dto.setFetchedAt(entity.getFetchedAt());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
@@ -32,6 +37,11 @@ public class NodeGroupConverter {
         entity.setName(dto.getName());
         entity.setSubUrlCipher(cipher.encrypt(dto.getSubUrl()));
         entity.setRemark(dto.getRemark());
+        entity.setTrafficUsedBytes(dto.getUsedBytes());
+        entity.setTrafficTotalBytes(dto.getTotalBytes());
+        entity.setTrafficExpiresAt(dto.getExpiresAt());
+        entity.setTrafficAlertedPct(dto.getTrafficAlertedPct());
+        entity.setFetchedAt(dto.getFetchedAt());
         return entity;
     }
 }

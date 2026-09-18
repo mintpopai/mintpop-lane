@@ -10,12 +10,13 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import FilterChips from "../components/FilterChips.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
+import NodeGroupAuditModal from "../components/NodeGroupAuditModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import ViewTabs from "../components/ViewTabs.vue";
 import { showToast } from "../toast";
-import { booleanLabel, formatDateTime } from "../utils/format";
+import { booleanLabel, formatDate, formatDateTime } from "../utils/format";
 
 const currentRole = ref<NodeRole>("FRONT");
 const allNodes = ref<AdminNodeResponse[]>([]);
@@ -39,6 +40,10 @@ const renameInput = ref("");
 const renaming = ref(false);
 const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
 const deletingGroup = ref(false);
+
+// —— 采购尽调：候选机场是否与库里已有节点撞故障域，只读，不落库。
+// 弹窗自身的状态与逻辑都在 NodeGroupAuditModal 组件里，这里只管开关 ——
+const auditModalOpen = ref(false);
 
 /** 启用状态筛选，两跳共用：ALL=不筛 */
 const currentStatus = ref<"ALL" | "ENABLED" | "DISABLED">("ALL");
@@ -83,6 +88,18 @@ const groupOptions = computed(() => [
     count: frontNodes.value.filter((node) => node.groupId === group.id).length,
   })),
 ]);
+
+/**
+ * 分组的流量用量百分比。null 表示「该机场没提供额度头」，与 0% 是两回事——
+ * 不能把「没数据」显示成「用了 0%」，那是在骗人。total 缺失或非正也一并视为没有数据，
+ * 避免除出 NaN / Infinity。封顶 100：机场统计口径可能比订阅端晚一拍，用量偶尔会略超总量。
+ */
+function quotaPercent(group: NodeGroupResponse): number | null {
+  if (group.usedBytes === null || group.totalBytes === null || group.totalBytes <= 0) {
+    return null;
+  }
+  return Math.min(100, Math.round((group.usedBytes / group.totalBytes) * 100));
+}
 
 /* 状态对两跳都适用，是附加条件不是主视角，故走下拉、不占常驻带、不带计数 */
 const statusOptions: { value: "ALL" | "ENABLED" | "DISABLED"; label: string }[] = [
@@ -263,12 +280,39 @@ onMounted(load);
       >
         从订阅导入
       </button>
+      <!-- 采购前的尽调工具：只读探测候选机场，不依赖当前选中的分组，故放页头而不是工具条 -->
+      <button
+        v-if="currentRole === 'FRONT'"
+        type="button"
+        class="admin-btn-ghost"
+        @click="auditModalOpen = true"
+      >
+        尽调
+      </button>
       <button type="button" class="admin-btn" @click="create()">新建节点</button>
     </template>
   </PageHead>
 
   <!-- 一级：换的是看哪一跳，用 tab；二级是在这一跳里挑一批看，用 chip。两层不同形，管辖关系才读得出来 -->
   <ViewTabs v-model="currentRole" :options="roleOptions" label="按跳数分" />
+
+  <!-- 分组额度：机场订阅有流量额度，跑满会让该订阅下几十个节点同时全部失效，所以常驻展示、
+       不随「选中哪个分组」筛选变化——正因为不显眼才最该常驻提醒 -->
+  <div v-if="currentRole === 'FRONT' && groupList.length > 0" class="group-quota-panel">
+    <div v-for="g in groupList" :key="g.id" class="group-quota-row">
+      <span class="group-quota-name">{{ g.name }}</span>
+      <template v-if="quotaPercent(g) !== null">
+        <div class="group-quota-bar">
+          <div class="group-quota-bar-fill" :style="{ width: `${quotaPercent(g)}%` }" />
+        </div>
+        <span class="fact group-quota-pct">{{ quotaPercent(g) }}%</span>
+      </template>
+      <!-- 额度头是否存在，与「用了多少」是两回事：拿不到时绝不能显示成 0%，那是在骗人 -->
+      <span v-else class="muted group-quota-pct">机场未提供额度信息</span>
+      <span class="fact muted">到期：{{ formatDate(g.expiresAt) }}</span>
+      <span class="fact muted">最近拉取：{{ formatDateTime(g.fetchedAt) }}</span>
+    </div>
+  </div>
 
   <div class="admin-toolbar">
     <FilterChips
@@ -326,6 +370,7 @@ onMounted(load);
           <th>协议</th>
           <th v-if="currentRole === 'FRONT'">分组</th>
           <th>地址</th>
+          <th>故障域</th>
           <template v-if="currentRole === 'LAND'">
             <th>出口 IP</th>
             <th>出口时区</th>
@@ -346,6 +391,13 @@ onMounted(load);
             <span v-else class="muted">—</span>
           </td>
           <td class="fact">{{ row.serverAddr }}:{{ row.port }}</td>
+          <!-- 故障域＝该节点域名 CNAME 链的终点，只对前置节点有意义；落地节点没有这个概念 -->
+          <td
+            class="fact muted"
+            :title="row.role === 'FRONT' ? (row.failureDomain ?? '尚未解析或解析失败') : undefined"
+          >
+            {{ row.role === "FRONT" ? (row.failureDomain ?? "未解析") : "—" }}
+          </td>
           <template v-if="currentRole === 'LAND'">
             <td class="fact muted">{{ row.egressIp ?? "—" }}</td>
             <td class="fact muted">{{ row.egressTimezone ?? "—" }}</td>
@@ -444,4 +496,54 @@ onMounted(load);
     @confirm="confirmDeleteGroup()"
     @cancel="pendingDeleteGroup = null"
   />
+  <NodeGroupAuditModal v-if="auditModalOpen" @close="auditModalOpen = false" />
 </template>
+
+<style scoped>
+/* —— 分组额度：常驻一条，不随「选中哪个分组」的筛选变化。
+   跑满额度会让整个订阅下的节点同时失效，这条提醒不能只在点开某个分组时才看得到 —— */
+.group-quota-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--color-bg-cloud);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.group-quota-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.group-quota-name {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.group-quota-bar {
+  flex: 1 1 160px;
+  max-width: 240px;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.group-quota-bar-fill {
+  height: 100%;
+  background: var(--color-brand-deep);
+  border-radius: var(--radius-pill);
+}
+
+.group-quota-pct {
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+</style>

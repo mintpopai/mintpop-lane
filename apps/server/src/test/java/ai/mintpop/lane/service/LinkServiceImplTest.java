@@ -1,5 +1,6 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.config.FrontTuningProperties;
 import ai.mintpop.lane.config.LinkProperties;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
@@ -55,6 +56,7 @@ class LinkServiceImplTest {
     private SubscriptionRepository subscriptionRepository;
     private UserDeviceRepository userDeviceRepository;
     private DeviceRebindRequestRepository rebindRequestRepository;
+    private FrontTuningProperties frontTuningProperties;
     private LinkServiceImpl service;
 
     private static ProxyNodeDto node(long id, NodeRole role, NodeProtocol protocol, String server) {
@@ -131,8 +133,10 @@ class LinkServiceImplTest {
 
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
-        service = new LinkServiceImpl(props, userRepository, nodeRepository, subscriptionRepository,
-                userDeviceRepository, rebindRequestRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+        frontTuningProperties = new FrontTuningProperties();
+        service = new LinkServiceImpl(props, frontTuningProperties, userRepository, nodeRepository,
+                subscriptionRepository, userDeviceRepository, rebindRequestRepository,
+                Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
         when(nodeRepository.findById(10L))
@@ -180,6 +184,22 @@ class LinkServiceImplTest {
         assertThat(resp.agentCredentials().getFirst().agentType()).isEqualTo(AgentType.CLAUDE);
         assertThat(resp.agentCredentials().getFirst().assignmentNo()).isEqualTo("7K3M9QX2FT");
         assertThat(resp.ttlSeconds()).isEqualTo(1800);
+    }
+
+    @Test
+    @DisplayName("前置节点按 sourceType 命中覆盖表时，保活参数被注入下发配置；落地节点不受影响")
+    void frontTuningAppliedBySourceTypeButNotToLand() {
+        frontTuningProperties.setProtocols(Map.of("anytls", Map.of("min-idle-session", 1)));
+        ProxyNodeDto front = node(10L, NodeRole.FRONT, NodeProtocol.MIHOMO, "us.example.com");
+        front.setSourceType("anytls");
+        front.setSecret(Map.of("type", "anytls", "server", "us.example.com"));
+        when(nodeRepository.findById(10L)).thenReturn(Optional.of(front));
+        givenUser(user(UserStatus.ACTIVE));
+
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.front()).containsEntry("min-idle-session", 1);
+        assertThat(resp.land()).doesNotContainKey("min-idle-session");
     }
 
     @Test

@@ -2,14 +2,21 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
+import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
+import ai.mintpop.lane.enumeration.FeishuCardTemplate;
 import ai.mintpop.lane.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 
 /**
  * 节点事件飞书通知（推给运营者的提醒，文案固定中文、不走 i18n）。
@@ -65,5 +72,133 @@ public class NodeNotifyService {
 
     private static String orUnregistered(String value) {
         return value == null || value.isBlank() ? "未登记" : value;
+    }
+
+    /**
+     * 订阅额度跨档（异步）。用 ORANGE：这是要人去续费或换机场的告警，不是好消息。
+     * 调用方在档位已落库之后再调本方法——通知失败不该让档位丢失。
+     */
+    @Async
+    public void notifyTrafficThreshold(NodeGroupDto group, int percent) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("已用占比", percent + "%");
+            fields.put("已用 / 总额", formatBytes(group.getUsedBytes())
+                    + " / " + formatBytes(group.getTotalBytes()));
+            fields.put("到期时间", group.getExpiresAt() == null
+                    ? "未提供" : group.getExpiresAt().toString());
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅额度告警", fields);
+        } catch (Exception e) {
+            log.warn("额度告警飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /**
+     * 订阅即将到期 / 已过期（异步）。与额度告警共用 ORANGE 卡片：到期与额度跑满的后果一模一样——
+     * 整组节点同时失效，只是到期是确定性事件、比额度更可预测，所以更该提前说。
+     * 本方法不写库，调用方也不记去重状态：告警窗口只有 3 天、刷新周期 24h，重复也就两三条。
+     */
+    @Async
+    public void notifySubscriptionExpiring(NodeGroupDto group, Instant expiresAt, Duration remaining) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("到期时间", expiresAt.toString());
+            fields.put("剩余", formatRemaining(remaining));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE,
+                    remaining.isNegative() ? "MintPop Lane 订阅已过期" : "MintPop Lane 订阅即将到期", fields);
+        } catch (Exception e) {
+            log.warn("订阅到期告警飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /** 剩余时长的人话展示；已过期（负数）直接说「已过期」，不显示负的小时数 */
+    private static String formatRemaining(Duration remaining) {
+        if (remaining.isNegative()) {
+            return "已过期";
+        }
+        long hours = remaining.toHours();
+        return hours >= 24 ? (hours / 24) + " 天 " + (hours % 24) + " 小时" : hours + " 小时";
+    }
+
+    /**
+     * 订阅节点增减（异步）：订阅定时刷新发现节点集合与库里不一致时推送，两个列表都空则不推。
+     * 只告知，不代替人做决定——是否要把新节点拉进来、是否要清掉消失的节点，都需要人工确认。
+     */
+    @Async
+    public void notifySubNodesChanged(NodeGroupDto group, List<String> added, List<String> removed) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        if (added.isEmpty() && removed.isEmpty()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("新增节点", added.isEmpty() ? "无" : String.join("、", added));
+            fields.put("消失节点", removed.isEmpty() ? "无" : String.join("、", removed));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认", fields);
+        } catch (Exception e) {
+            log.warn("订阅节点增减飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /**
+     * 节点端点（地址:端口）已变更（异步）：意味着此前下发给用户的配置已经失效，是需要人知道的事件，
+     * 与「节点增删」性质不同、单独推一条。用 RED——这是最紧急的一类，用户可能已经连不上了。
+     */
+    @Async
+    public void notifyNodeEndpointChanged(ProxyNodeDto node, String previousEndpoint, String currentEndpoint) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("节点", node.getName() + "（ID " + node.getId() + "）");
+            fields.put("原端点", previousEndpoint);
+            fields.put("新端点", currentEndpoint);
+            feishuBotClient.sendCard(FeishuCardTemplate.RED, "MintPop Lane 节点端点已变更，此前下发配置已失效", fields);
+        } catch (Exception e) {
+            log.warn("节点端点变更飞书通知失败 nodeId={}", node.getId(), e);
+        }
+    }
+
+    /**
+     * 中转入口 IP 已变更（异步）：机场的中转入口域名 TTL 只有 30 秒，是为「被封即换 IP」准备的，
+     * 入口 IP 一变，大概率意味着该入口刚被封过——用 ORANGE，这是需要人知道的封锁事件信号，不是好消息。
+     * 调用方在历史已落库之后再调本方法，通知失败不该让观测记录丢失。
+     */
+    @Async
+    public void notifyEntryIpChanged(String failureDomain, DnsVantage vantage, String previousIps, String currentIps) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("故障域", failureDomain);
+            fields.put("视角", vantage.name());
+            fields.put("原入口 IP", previousIps);
+            fields.put("新入口 IP", currentIps);
+            fields.put("提示", "入口 IP 变更通常意味着该入口刚被封过");
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 中转入口 IP 已变更", fields);
+        } catch (Exception e) {
+            log.warn("入口 IP 变更飞书通知失败 domain={} vantage={}", failureDomain, vantage, e);
+        }
+    }
+
+    /** 字节数转 GB 展示，保留两位小数；null（机场未返回额度头）显示「未知」 */
+    private static String formatBytes(Long bytes) {
+        if (bytes == null) {
+            return "未知";
+        }
+        return String.format(Locale.ROOT, "%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0);
     }
 }

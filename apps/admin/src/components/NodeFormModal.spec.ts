@@ -32,6 +32,7 @@ function landNode(): AdminNodeResponse {
     groupId: null,
     groupName: null,
     sourceType: null,
+    failureDomain: null,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
   };

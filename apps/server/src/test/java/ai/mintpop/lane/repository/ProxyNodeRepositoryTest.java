@@ -204,6 +204,23 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         assertThat(loaded.toMihomoNode()).isEqualTo(loaded.getSecret());
     }
 
+    @Test
+    @DisplayName("库里全部故障域去重返回，NULL 与重复值都不计")
+    void distinctFailureDomains() {
+        Long id1 = fixtures.createFrontNode("FRONT-1");
+        Long id2 = fixtures.createFrontNode("FRONT-2");
+        fixtures.createFrontNode("FRONT-3");    // 保留 failureDomain 为 NULL，不应出现在结果里
+
+        ProxyNodeDto node1 = repository.findById(id1).orElseThrow();
+        node1.setFailureDomain("jp.tsdns.top");
+        repository.update(node1);
+        ProxyNodeDto node2 = repository.findById(id2).orElseThrow();
+        node2.setFailureDomain("jp.tsdns.top");   // 与 node1 撞同一故障域，去重后只出现一次
+        repository.update(node2);
+
+        assertThat(repository.findDistinctFailureDomains()).containsExactly("jp.tsdns.top");
+    }
+
     private Long createGroup() {
         jdbc.update("INSERT INTO node_group (name, sub_url_cipher) VALUES ('测试组', '密文占位')");
         return jdbc.queryForObject("SELECT id FROM node_group WHERE name = '测试组'", Long.class);

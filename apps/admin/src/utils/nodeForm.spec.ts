@@ -365,6 +365,7 @@ describe("nodeToForm", () => {
       groupId: null,
       groupName: null,
       sourceType: null,
+      failureDomain: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     };
@@ -401,6 +402,7 @@ describe("nodeToForm", () => {
       groupId: null,
       groupName: null,
       sourceType: null,
+      failureDomain: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     } as AdminNodeResponse;
@@ -430,6 +432,7 @@ describe("nodeToForm", () => {
       groupId: null,
       groupName: null,
       sourceType: null,
+      failureDomain: null,
       createdAt: "2026-08-18T10:00:00",
       updatedAt: "2026-08-18T10:00:00",
     } as AdminNodeResponse;
@@ -456,6 +459,7 @@ describe("nodeForm 对 MIHOMO 的处理", () => {
     groupId: 3,
     groupName: "机场A",
     sourceType: "anytls",
+    failureDomain: null,
     createdAt: "2026-08-21T00:00:00Z",
     updatedAt: "2026-08-21T00:00:00Z",
   } as AdminNodeResponse;
