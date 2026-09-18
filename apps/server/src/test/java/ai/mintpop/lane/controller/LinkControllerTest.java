@@ -4,6 +4,7 @@ import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -18,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
@@ -50,11 +52,15 @@ class LinkControllerTest extends MysqlTestBase {
     private UserDeviceRepository userDeviceRepository;
 
     @Autowired
+    private UserFrontNodeRepository userFrontNodeRepository;
+
+    @Autowired
     private SessionTokenService sessionTokenService;
 
     /** 全用例统一用这台设备的机器码请求头，与下方 setUp 里登记、绑定的那台设备一致 */
     private static final String DEVICE_ID = "a".repeat(64);
 
+    private DatabaseFixtures fixtures;
     private Long user1Id;
     private Long user2Id;
 
@@ -64,7 +70,7 @@ class LinkControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
         Long land1 = fixtures.createLandNode("LAND-1", "77.47.143.6");
@@ -101,6 +107,32 @@ class LinkControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.agentCredentials[0].agentType").value("CLAUDE"))
                 .andExpect(jsonPath("$.data.agentCredentials[0].assignmentNo",
                         matchesPattern("[0-9A-HJKMNP-TV-Z]{10}")));
+    }
+
+    @Test
+    @DisplayName("前置组按分配顺序下发，front 就是 front_node_id 指向的那个节点——"
+            + "取回若按 node_id 排序，客户端的首选位就会被 id 顺序覆盖掉分配器的负载排名")
+    void frontGroupKeepsAllocationOrderAndFrontMatchesPrimary() throws Exception {
+        String domain = "relay.order.example.net";
+        Long first = fixtures.createFrontNode("ORDER-1", "order-1.example.com", domain);
+        Long second = fixtures.createFrontNode("ORDER-2", "order-2.example.com", domain);
+        Long third = fixtures.createFrontNode("ORDER-3", "order-3.example.com", domain);
+        // 分配器挑出的顺序刻意与 node_id 升序不同：负载最低（＝排第一、写进 front_node_id）的
+        // 恰好是 id 最大的那个。三个节点同一个故障域，因此只有一个组
+        userFrontNodeRepository.replaceForUser(user1Id, List.of(third, first, second));
+        jdbc.update("UPDATE app_user SET front_node_id = ? WHERE id = ?", third, user1Id);
+
+        mockMvc.perform(get("/api/link/config")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Device-Id", DEVICE_ID))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.frontGroups").isArray())
+                .andExpect(jsonPath("$.data.frontGroups[0].failureDomain").value(domain))
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes[0].server").value("order-3.example.com"))
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes[1].server").value("order-1.example.com"))
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes[2].server").value("order-2.example.com"))
+                // front 是老客户端唯一认得的字段，必须与 front_node_id 指向同一个节点
+                .andExpect(jsonPath("$.data.front.server").value("order-3.example.com"));
     }
 
     @Test

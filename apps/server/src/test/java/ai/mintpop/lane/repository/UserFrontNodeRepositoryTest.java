@@ -59,6 +59,30 @@ class UserFrontNodeRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("取回的顺序就是写入顺序（＝分配器的排名），不是 node_id 顺序——"
+            + "首选位是客户端真正走的那一跳，被 id 顺序覆盖掉等于把负载摊平的设计作废")
+    void findNodeIdsByUserIdKeepsInsertionOrder() {
+        // 刻意写成与 node_id 升序不同的顺序：不写 ORDER BY id 时 MySQL 多半按
+        // uk_user_front_node(user_id, node_id) 索引返回，也就是 A、B、C
+        repository.replaceForUser(userId, List.of(nodeC, nodeA, nodeB));
+
+        assertThat(repository.findNodeIdsByUserId(userId)).containsExactly(nodeC, nodeA, nodeB);
+    }
+
+    @Test
+    @DisplayName("批量取回同样保住各用户自己的写入顺序")
+    void findNodeIdsByUserIdsKeepsInsertionOrder() {
+        Long otherUserId = fixtures.createUser("u2", nodeA, null);
+        repository.replaceForUser(userId, List.of(nodeC, nodeA));
+        repository.replaceForUser(otherUserId, List.of(nodeB, nodeA));
+
+        Map<Long, List<Long>> result = repository.findNodeIdsByUserIds(List.of(userId, otherUserId));
+
+        assertThat(result.get(userId)).containsExactly(nodeC, nodeA);
+        assertThat(result.get(otherUserId)).containsExactly(nodeB, nodeA);
+    }
+
+    @Test
     @DisplayName("replaceForUser 传空集合等价于清空")
     void replaceWithEmptyClears() {
         repository.replaceForUser(userId, List.of(nodeA));

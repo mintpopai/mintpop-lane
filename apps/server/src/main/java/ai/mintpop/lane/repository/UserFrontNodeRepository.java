@@ -10,11 +10,19 @@ import java.util.Map;
  */
 public interface UserFrontNodeRepository {
 
-    /** 该用户当前的前置节点 id 集合；未分配时返回空列表 */
+    /**
+     * 该用户当前的前置节点 id 集合，<b>按当初写入的顺序返回</b>（即分配器的排名：
+     * 负载升序、同负载按 id）；未分配时返回空列表。
+     * <p>
+     * 顺序是契约的一部分，不是巧合：下发时 {@code frontGroups[0].nodes[0]} 就是客户端的首选，
+     * 必须与 {@code app_user.front_node_id} 指向同一个节点，否则管理端显示的与客户端实际
+     * 用的不是同一个，「按已分配用户数最少优先摊平负载」这条设计也会在真正决定流量落点的
+     * 首选位上被别的顺序覆盖掉。
+     */
     List<Long> findNodeIdsByUserId(Long userId);
 
     /**
-     * 一次取回多个用户各自的前置节点 id 集合，供列表页避免逐行查询
+     * 一次取回多个用户各自的前置节点 id 集合（每个用户的集合同样按写入顺序），供列表页避免逐行查询
      * （与 {@link SubscriptionRepository#findByUserIds} 同一种「批量取、按 userId 分组」
      * 的做法）。没有任何前置节点的用户不出现在返回的 Map 里，调用方按
      * {@code getOrDefault(id, List.of())} 取值；传空集合返回空 Map，不查库。
