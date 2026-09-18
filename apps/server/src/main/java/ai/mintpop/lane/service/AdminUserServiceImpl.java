@@ -23,6 +23,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -181,6 +182,21 @@ public class AdminUserServiceImpl implements AdminUserService {
         ProxyNodeDto front = nodes.get(user.getFrontNodeId());
         ProxyNodeDto land = user.getLandNodeId() == null ? null : nodes.get(user.getLandNodeId());
 
+        // 完整前置组（不止 front_node_id 那个「主」节点）：管理端按故障域分组展示，
+        // 并据 failureDomainCount 判断是否「入口无冗余」（详见 AdminUserResponse 字段注释）
+        List<AdminUserResponse.FrontNodeBrief> frontNodes = userFrontNodeRepository
+                .findNodeIdsByUserId(user.getId()).stream()
+                .map(nodes::get)
+                .filter(Objects::nonNull)
+                .map(node -> new AdminUserResponse.FrontNodeBrief(
+                        node.getId(), node.getName(), node.getFailureDomain()))
+                .toList();
+        int failureDomainCount = (int) frontNodes.stream()
+                .map(AdminUserResponse.FrontNodeBrief::failureDomain)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+
         return new AdminUserResponse(
                 user.getId(),
                 user.getSubject(),
@@ -189,6 +205,8 @@ public class AdminUserServiceImpl implements AdminUserService {
                 user.getStatus(),
                 user.getFrontNodeId(),
                 front == null ? null : front.getName(),
+                frontNodes,
+                failureDomainCount,
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),
                 land == null ? null : land.getEgressIp(),

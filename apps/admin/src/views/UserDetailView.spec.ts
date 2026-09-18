@@ -52,6 +52,8 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     status: "ACTIVE",
     frontNodeId: null,
     frontNodeName: null,
+    frontNodes: [],
+    failureDomainCount: 0,
     landNodeId: null,
     landNodeName: null,
     egressIp: null,
@@ -701,5 +703,55 @@ describe("UserDetailView · 待开通订阅", () => {
     expect(document.querySelector(".pill.pending")).toBeNull();
     const issue = buttonByText("签发凭证");
     expect(issue.attributes("disabled")).toBeUndefined();
+  });
+});
+
+describe("UserDetailView · 前置节点组", () => {
+  it("按故障域分组列出用户被分配的前置节点", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [
+          { id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" },
+          { id: 2, name: "🇺🇸[US]A2", failureDomain: "jp.tsdns.top" },
+          { id: 5, name: "🇺🇸[US]B1", failureDomain: "relay.other.net" },
+        ],
+        failureDomainCount: 2,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("jp.tsdns.top"));
+    expect(document.body.textContent).toContain("relay.other.net");
+    expect(document.body.textContent).toContain("🇺🇸[US]A1");
+    expect(document.body.textContent).toContain("🇺🇸[US]B1");
+  });
+
+  it("只有一个故障域时显式警告「入口无冗余」", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [{ id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" }],
+        failureDomainCount: 1,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("入口无冗余"));
+    expect(document.querySelector(".front-domain-warning")).not.toBeNull();
+  });
+
+  it("有两个及以上故障域时不显示警告", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [
+          { id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" },
+          { id: 5, name: "🇺🇸[US]B1", failureDomain: "relay.other.net" },
+        ],
+        failureDomainCount: 2,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("jp.tsdns.top"));
+    expect(document.querySelector(".front-domain-warning")).toBeNull();
   });
 });

@@ -33,6 +33,8 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     status: "ACTIVE",
     frontNodeId: null,
     frontNodeName: null,
+    frontNodes: [],
+    failureDomainCount: 0,
     landNodeId: null,
     landNodeName: null,
     egressIp: null,

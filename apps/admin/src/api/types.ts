@@ -142,6 +142,13 @@ export interface AdminUserResponse {
   /** 注册即无资源，未分配时为 null */
   frontNodeId: number | null;
   frontNodeName: string | null;
+  /** 该用户当前分配到的一组前置节点（按故障域分桶后的完整集合，不止 frontNodeId 那个「主」节点） */
+  frontNodes: FrontNodeBrief[];
+  /**
+   * frontNodes 覆盖的故障域个数；等于 1 说明这一组节点共用同一台中转入口机，
+   * 入口一挂全部失效——需要在管理端显式警示，提醒采购第二家机场
+   */
+  failureDomainCount: number;
   landNodeId: number | null;
   landNodeName: string | null;
   /** 取自其落地节点，未分配或落地未填出口时为 null */
@@ -152,6 +159,13 @@ export interface AdminUserResponse {
   remark: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** 前置节点摘要：管理端按 failureDomain 分组展示，null 表示该节点尚未解析出故障域 */
+export interface FrontNodeBrief {
+  id: number;
+  name: string;
+  failureDomain: string | null;
 }
 
 export interface ActiveSubscriptionBrief {

@@ -9,6 +9,7 @@ import type {
   AdminSubscriptionResponse,
   AdminUserResponse,
   EnterpriseResponse,
+  FrontNodeBrief,
   PlanResponse,
 } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -127,6 +128,35 @@ const landOptions = computed(() => [
     label: `${node.name}（${node.egressIp ?? "未填出口 IP"} · ${node.assignedUserCount ?? 0}/${node.capacity ?? 0}）`,
   })),
 ]);
+
+/** 该用户被分配的一组前置节点，按故障域分桶：同一故障域的节点共用一台中转入口机 */
+interface FrontDomainGroup {
+  failureDomain: string;
+  nodes: FrontNodeBrief[];
+}
+
+const frontNodeGroups = computed<FrontDomainGroup[]>(() => {
+  const map = new Map<string, FrontNodeBrief[]>();
+  for (const node of user.value?.frontNodes ?? []) {
+    // failureDomain 未解析出来时用占位字符串归一桶，避免 Map key 为 null 时互相拆散
+    const domain = node.failureDomain ?? "（未解析）";
+    const bucket = map.get(domain) ?? [];
+    bucket.push(node);
+    map.set(domain, bucket);
+  }
+  // 字典序排列，与服务端 FrontNodeAllocator 分桶时的遍历顺序一致，方便对照
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([failureDomain, groupNodes]) => ({ failureDomain, nodes: groupNodes }));
+});
+
+/**
+ * 只有 1 个故障域＝入口无冗余：这一组前置节点共用同一台中转入口机，入口一挂全部失效，
+ * fallback 是假冗余。这是长期状态（现状是只有一家机场），不是一次性通知，故不做成 toast。
+ */
+const singleFailureDomain = computed(
+  () => user.value !== null && user.value.failureDomainCount === 1,
+);
 
 /** 第一步选 agent 类型：只列有上架套餐的类型 */
 const agentOptions = computed(() => agentTypeOptions(plans.value));
@@ -532,6 +562,32 @@ async function confirmUnbind(): Promise<void> {
             {{ savingNodes ? "保存中…" : "保存" }}
           </button>
         </div>
+      </section>
+
+      <!-- 前置节点组：只读展示当前实际分配到的完整一组（不止上面下拉里的「主」节点），
+           按故障域分桶——同一故障域下的节点共用一台中转入口机，入口一挂它们一起挂，
+           彼此不构成真冗余。只有 1 个故障域时给出常驻警示，而不是可关闭的 toast：
+           这是长期状态（现状只有一家机场），会一直显示到采购第二家机场为止 -->
+      <section v-if="user && frontNodeGroups.length > 0" class="admin-card front-domain-card">
+        <h4 class="block-title">前置节点组</h4>
+        <div v-if="singleFailureDomain" class="front-domain-warning">
+          <p>
+            入口无冗余：当前只有 1
+            个故障域，这一组节点共用同一台中转入口机，入口一挂全部失效。需要采购第二家机场。
+          </p>
+        </div>
+        <ul class="front-domain-list">
+          <li
+            v-for="group in frontNodeGroups"
+            :key="group.failureDomain"
+            class="front-domain-group"
+          >
+            <p class="front-domain-name fact">{{ group.failureDomain }}</p>
+            <ul class="front-domain-nodes">
+              <li v-for="node in group.nodes" :key="node.id">{{ node.name }}</li>
+            </ul>
+          </li>
+        </ul>
       </section>
 
       <!-- 备注：管理员自用说明，只在管理端可见，不下发给用户。
@@ -956,6 +1012,62 @@ async function confirmUnbind(): Promise<void> {
   grid-template-columns: 1fr 1fr auto;
   gap: 16px;
   align-items: end;
+}
+
+/* 前置节点组：与链路资源卡视觉同族，夹在它与备注卡之间 */
+.front-domain-card {
+  padding: 20px 24px;
+  margin-top: 16px;
+}
+
+/* 「入口无冗余」是长期状态、不是一次性通知，与 .revoke-warn 同一套「需要停下来看」的
+   琥珀色语义，但没有关闭按钮——它不该被关掉，要一直挂到采购第二家机场为止 */
+.front-domain-warning {
+  margin-bottom: 16px;
+  padding: 14px 20px;
+  border-radius: var(--radius-card);
+  border: 1px solid color-mix(in srgb, #b4720b 35%, var(--color-border));
+  background: color-mix(in srgb, #b4720b 10%, #ffffff);
+}
+
+.front-domain-warning p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-ink);
+}
+
+.front-domain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.front-domain-group {
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+/* 故障域名是系统事实（域名），走等宽字体与其它 .fact 一致 */
+.front-domain-name {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+.front-domain-nodes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 14px;
+  color: var(--color-ink);
 }
 
 .remark-card {

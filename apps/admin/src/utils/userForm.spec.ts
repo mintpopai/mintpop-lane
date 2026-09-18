@@ -42,6 +42,8 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
     status: "ACTIVE",
     frontNodeId: 1,
     frontNodeName: "US-01",
+    frontNodes: [],
+    failureDomainCount: 0,
     landNodeId: 11,
     landNodeName: "LAND-东京-03",
     egressIp: "1.2.3.4",
