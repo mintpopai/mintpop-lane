@@ -2,8 +2,10 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
+import ai.mintpop.lane.dto.NodeGroupDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
+import ai.mintpop.lane.enumeration.FeishuCardTemplate;
 import ai.mintpop.lane.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -65,5 +67,36 @@ public class NodeNotifyService {
 
     private static String orUnregistered(String value) {
         return value == null || value.isBlank() ? "未登记" : value;
+    }
+
+    /**
+     * 订阅额度跨档（异步）。用 ORANGE：这是要人去续费或换机场的告警，不是好消息。
+     * 调用方在档位已落库之后再调本方法——通知失败不该让档位丢失。
+     */
+    @Async
+    public void notifyTrafficThreshold(NodeGroupDto group, int percent) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("已用占比", percent + "%");
+            fields.put("已用 / 总额", formatBytes(group.getUsedBytes())
+                    + " / " + formatBytes(group.getTotalBytes()));
+            fields.put("到期时间", group.getExpiresAt() == null
+                    ? "未提供" : group.getExpiresAt().toString());
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅额度告警", fields);
+        } catch (Exception e) {
+            log.warn("额度告警飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /** 字节数转 GB 展示，保留两位小数；null（机场未返回额度头）显示「未知」 */
+    private static String formatBytes(Long bytes) {
+        if (bytes == null) {
+            return "未知";
+        }
+        return String.format("%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0);
     }
 }

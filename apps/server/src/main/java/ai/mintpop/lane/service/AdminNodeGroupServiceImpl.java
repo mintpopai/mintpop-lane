@@ -45,11 +45,13 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     private final SubYamlParser subYamlParser;
     private final TransactionTemplate transactionTemplate;
     private final FailureDomainResolver failureDomainResolver;
+    private final TrafficAlertService trafficAlertService;
 
     public AdminNodeGroupServiceImpl(NodeGroupRepository groupRepository, ProxyNodeRepository nodeRepository,
                                      UserRepository userRepository, SubFetchClient subFetchClient,
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
-                                     FailureDomainResolver failureDomainResolver) {
+                                     FailureDomainResolver failureDomainResolver,
+                                     TrafficAlertService trafficAlertService) {
         this.groupRepository = groupRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
@@ -57,6 +59,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         this.subYamlParser = subYamlParser;
         this.transactionTemplate = transactionTemplate;
         this.failureDomainResolver = failureDomainResolver;
+        this.trafficAlertService = trafficAlertService;
     }
 
     @Override
@@ -144,6 +147,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
             groupRepository.update(group);
             importNodes(id, fetched.nodes(), request.getSelectedNames(), failureDomains);
         });
+        // 放在事务外：它自己会视情况 update 落档位，且含飞书通知提交，不应牵连节点导入的事务
+        trafficAlertService.checkAndNotify(group, fetched.subFetchResult());
     }
 
     @Override

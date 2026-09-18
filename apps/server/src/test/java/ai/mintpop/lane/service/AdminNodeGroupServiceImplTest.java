@@ -48,6 +48,7 @@ class AdminNodeGroupServiceImplTest {
     @Mock private SubFetchClient subFetchClient;
     @Mock private FailureDomainResolver failureDomainResolver;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private TrafficAlertService trafficAlertService;
 
     private AdminNodeGroupServiceImpl service;
 
@@ -70,7 +71,8 @@ class AdminNodeGroupServiceImplTest {
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
         service = new AdminNodeGroupServiceImpl(groupRepository, nodeRepository, userRepository,
-                subFetchClient, new SubYamlParser(), transactionTemplate, failureDomainResolver);
+                subFetchClient, new SubYamlParser(), transactionTemplate, failureDomainResolver,
+                trafficAlertService);
     }
 
     private NodeGroupDto group(long id) {
