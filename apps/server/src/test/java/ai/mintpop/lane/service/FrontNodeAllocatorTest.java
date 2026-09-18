@@ -125,6 +125,45 @@ class FrontNodeAllocatorTest {
     }
 
     @Test
+    @DisplayName("对同一用户重复分配结果稳定：统计负载时扣掉他自己占的那几份，"
+            + "否则他正在用的节点会被自己顶到队尾，每次重算都换一组新节点")
+    void repeatedAllocationForSameUserIsStable() {
+        when(nodeRepository.findAll(NodeRole.FRONT)).thenReturn(List.of(
+                node(1, "🇺🇸[US]A1", "jp.tsdns.top", NodeStatus.ENABLED),
+                node(2, "🇺🇸[US]A2", "jp.tsdns.top", NodeStatus.ENABLED),
+                node(3, "🇺🇸[US]A3", "jp.tsdns.top", NodeStatus.ENABLED),
+                node(4, "🇺🇸[US]A4", "jp.tsdns.top", NodeStatus.ENABLED)));
+
+        // 第一次：全表零负载，K=3 取 1/2/3
+        FrontNodeAllocator.AllocationResult first = allocator.allocate(7L);
+        assertThat(first.nodeIds()).containsExactly(1L, 2L, 3L);
+
+        // 第一次的结果已落库：这三个节点各有 1 个用户，就是 7 号自己
+        when(userFrontNodeRepository.countUsersByNodeId()).thenReturn(Map.of(1L, 1L, 2L, 1L, 3L, 1L));
+        when(userFrontNodeRepository.findNodeIdsByUserId(7L)).thenReturn(first.nodeIds());
+
+        FrontNodeAllocator.AllocationResult second = allocator.allocate(7L);
+
+        assertThat(second.nodeIds()).isEqualTo(first.nodeIds());
+        assertThat(second.primaryNodeId()).isEqualTo(first.primaryNodeId());
+    }
+
+    @Test
+    @DisplayName("只扣自己那一份，别人的占用照算——4 号仍然因为别人用得少而胜出")
+    void excludingSelfDoesNotHideOtherUsersLoad() {
+        when(nodeRepository.findAll(NodeRole.FRONT)).thenReturn(List.of(
+                node(1, "🇺🇸[US]A1", "jp.tsdns.top", NodeStatus.ENABLED),
+                node(2, "🇺🇸[US]A2", "jp.tsdns.top", NodeStatus.ENABLED),
+                node(3, "🇺🇸[US]A3", "jp.tsdns.top", NodeStatus.ENABLED),
+                node(4, "🇺🇸[US]A4", "jp.tsdns.top", NodeStatus.ENABLED)));
+        // 1 号共 10 个用户，其中一个是 7 号自己 —— 扣掉自己仍有 9 个，照样该被排到队尾
+        when(userFrontNodeRepository.countUsersByNodeId()).thenReturn(Map.of(1L, 10L, 2L, 1L, 3L, 1L));
+        when(userFrontNodeRepository.findNodeIdsByUserId(7L)).thenReturn(List.of(1L));
+
+        assertThat(allocator.allocate(7L).nodeIds()).containsExactly(4L, 2L, 3L);
+    }
+
+    @Test
     @DisplayName("一个可用节点都没有时返回空结果，不抛")
     void returnsEmptyWhenNoCandidate() {
         when(nodeRepository.findAll(NodeRole.FRONT)).thenReturn(List.of());
