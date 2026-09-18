@@ -31,7 +31,15 @@ public record LinkConfigResponse(
 
     /** 一个故障域下的候选前置节点 */
     public record FrontGroup(
-            /** 故障域标识，仅作接口上的分组键与三期上报的关联键；客户端不得拿它当 mihomo 组名 */
+            /**
+             * 故障域标识，仅作接口上的分组键与三期上报的关联键；客户端不得拿它当 mihomo 组名。
+             * <p>
+             * <b>可以为 null</b>，含义是「该组节点尚未解析出故障域」——手工新建的前置节点永远没有
+             * failure_domain（管理端建/改节点的路径从不设它），而手工指定单节点是本期保留的运维逃生口；
+             * 订阅刷新还没跑第一轮时，回填出来的节点也可能全都没有故障域。服务端不开全局
+             * JsonInclude(NON_NULL)，这里为 null 会实打实下发成 {@code "failureDomain": null}，
+             * <b>客户端 DTO 必须按可空类型声明</b>，否则整份链路配置会解析失败（详见 spec §7.3）。
+             */
             String failureDomain,
             /** 该故障域下的候选节点，逐个是完整 mihomo 节点定义 */
             List<Map<String, Object>> nodes

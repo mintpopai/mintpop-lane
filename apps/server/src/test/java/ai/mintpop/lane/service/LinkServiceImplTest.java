@@ -271,6 +271,42 @@ class LinkServiceImplTest {
     }
 
     @Test
+    @DisplayName("故障域尚未解析（null）的节点照常成组下发，failureDomain 就是 null——"
+            + "契约上这个字段可空，客户端 DTO 必须按可空声明，否则整份链路配置解析失败")
+    void deliversGroupWithNullFailureDomain() {
+        givenUser(user(UserStatus.ACTIVE));
+        // 11 号尚未解析出故障域：手工新建的前置节点永远是这样（建/改节点的路径从不设 failure_domain），
+        // 而「手工指定单节点」正是本期保留的运维逃生口，这条路真实可达
+        givenFrontNodeIds(11L, 12L);
+        givenFrontNode(frontNode(11L, null, NodeStatus.ENABLED));
+        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        // null 组不被丢掉、也不抛异常：组内节点仍是可用的前置节点，只是暂时说不清它跨不跨入口
+        assertThat(resp.frontGroups()).hasSize(2);
+        assertThat(resp.frontGroups().get(0).failureDomain()).isNull();
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
+        assertThat(resp.frontGroups().get(1).failureDomain()).isEqualTo("jp.tsdns.top");
+        assertThat(resp.front()).isEqualTo(resp.frontGroups().get(0).nodes().get(0));
+    }
+
+    @Test
+    @DisplayName("整组节点都没解析出故障域时同样照常下发，不退化成「没有可用前置节点」")
+    void deliversSoleGroupWhenEveryNodeHasNullFailureDomain() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L);
+        givenFrontNode(frontNode(11L, null, NodeStatus.ENABLED));
+        givenFrontNode(frontNode(12L, null, NodeStatus.ENABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups()).hasSize(1);
+        assertThat(resp.frontGroups().get(0).failureDomain()).isNull();
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(2);
+    }
+
+    @Test
     @DisplayName("组内被禁用的节点跳过，不影响该组其余节点")
     void skipsDisabledNodeWithinGroup() {
         givenUser(user(UserStatus.ACTIVE));

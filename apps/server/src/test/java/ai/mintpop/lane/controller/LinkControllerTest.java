@@ -104,6 +104,24 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("故障域未解析时 failureDomain 实打实下发成 null，而不是整个字段消失——"
+            + "服务端没有全局 JsonInclude(NON_NULL)，客户端 DTO 必须按可空类型声明")
+    void nullFailureDomainIsSerializedAsJsonNull() throws Exception {
+        // 夹具造的 FRONT-1 没有 failure_domain（手工新建的前置节点永远是这样），
+        // 走的正是「关联表为空时退回 front_node_id 单节点」那条路
+        String body = mockMvc.perform(get("/api/link/config")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Device-Id", DEVICE_ID))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes[0].type").value("trojan"))
+                .andReturn().getResponse().getContentAsString();
+
+        // 用原始报文断言：jsonPath 分不清「值是 null」与「字段不存在」，而这两者对客户端
+        // 是天壤之别——非可空 DTO 收到 null 会让整份链路配置解析失败
+        assertThat(body).contains("\"failureDomain\":null");
+    }
+
+    @Test
     @DisplayName("已吊销用户拿不到链路，HTTP 仍为 200 但业务码非 0")
     void revokedUserCannotGetLink() throws Exception {
         mockMvc.perform(get("/api/link/config")
