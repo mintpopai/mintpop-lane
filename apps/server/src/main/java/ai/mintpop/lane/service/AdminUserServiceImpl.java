@@ -66,9 +66,14 @@ public class AdminUserServiceImpl implements AdminUserService {
                                 Collectors.mapping(s -> new AdminUserResponse.ActiveSubscriptionBrief(
                                         s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()),
                                         Collectors.toList())));
+        // 同上，前置节点也一次取回本页所有用户的，避免逐行查询
+        // （UsersView 列表页目前虽不展示 frontNodes/failureDomainCount，但 toResponse 是
+        // page()/get() 共用的同一份组装逻辑，响应形状必须一致，不能靠「列表页不查」取巧）
+        Map<Long, List<Long>> frontNodeIdsByUser = userFrontNodeRepository.findNodeIdsByUserIds(userIds);
 
         List<AdminUserResponse> records = page.records().stream()
-                .map(user -> toResponse(user, nodes, briefs.getOrDefault(user.getId(), List.of())))
+                .map(user -> toResponse(user, nodes, briefs.getOrDefault(user.getId(), List.of()),
+                        frontNodeIdsByUser.getOrDefault(user.getId(), List.of())))
                 .toList();
         return new PageResult<>(records, page.total(), page.pageNo(), page.pageSize());
     }
@@ -85,7 +90,8 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .map(s -> new AdminUserResponse.ActiveSubscriptionBrief(
                         s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()))
                 .toList();
-        return toResponse(user, nodes, briefs);
+        List<Long> frontNodeIds = userFrontNodeRepository.findNodeIdsByUserId(id);
+        return toResponse(user, nodes, briefs, frontNodeIds);
     }
 
     /**
@@ -177,15 +183,19 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
     }
 
+    /**
+     * frontNodeIds 由调用方传入（page() 批量取、get() 单个取），本方法不再自己查库——
+     * 与上面 activeSubscriptions 的组装方式保持一致，两条批量路径不能一条批量一条逐行。
+     */
     private AdminUserResponse toResponse(UserDto user, Map<Long, ProxyNodeDto> nodes,
-                                         List<AdminUserResponse.ActiveSubscriptionBrief> activeSubscriptions) {
+                                         List<AdminUserResponse.ActiveSubscriptionBrief> activeSubscriptions,
+                                         List<Long> frontNodeIds) {
         ProxyNodeDto front = nodes.get(user.getFrontNodeId());
         ProxyNodeDto land = user.getLandNodeId() == null ? null : nodes.get(user.getLandNodeId());
 
         // 完整前置组（不止 front_node_id 那个「主」节点）：管理端按故障域分组展示，
         // 并据 failureDomainCount 判断是否「入口无冗余」（详见 AdminUserResponse 字段注释）
-        List<AdminUserResponse.FrontNodeBrief> frontNodes = userFrontNodeRepository
-                .findNodeIdsByUserId(user.getId()).stream()
+        List<AdminUserResponse.FrontNodeBrief> frontNodes = frontNodeIds.stream()
                 .map(nodes::get)
                 .filter(Objects::nonNull)
                 .map(node -> new AdminUserResponse.FrontNodeBrief(

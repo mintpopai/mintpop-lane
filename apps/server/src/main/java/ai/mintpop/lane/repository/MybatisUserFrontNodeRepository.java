@@ -6,6 +6,7 @@ import ai.mintpop.lane.mapper.UserFrontNodeMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -24,6 +25,17 @@ public class MybatisUserFrontNodeRepository implements UserFrontNodeRepository {
     public List<Long> findNodeIdsByUserId(Long userId) {
         return mapper.selectList(Wrappers.<UserFrontNode>lambdaQuery().eq(UserFrontNode::getUserId, userId))
                 .stream().map(UserFrontNode::getNodeId).toList();
+    }
+
+    @Override
+    public Map<Long, List<Long>> findNodeIdsByUserIds(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        return mapper.selectList(Wrappers.<UserFrontNode>lambdaQuery().in(UserFrontNode::getUserId, userIds))
+                .stream()
+                .collect(Collectors.groupingBy(UserFrontNode::getUserId,
+                        Collectors.mapping(UserFrontNode::getNodeId, Collectors.toList())));
     }
 
     @Override

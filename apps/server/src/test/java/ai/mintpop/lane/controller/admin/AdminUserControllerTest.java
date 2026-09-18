@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
@@ -133,6 +134,27 @@ class AdminUserControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].activeSubscriptions[0].agentType")
                         .value("CLAUDE"))
                 .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].activeSubscriptions[0]")
+                        .isEmpty());
+    }
+
+    @Test
+    @DisplayName("列表页按用户各自返回前置节点组，批量取回时不会串味")
+    void listReturnsFrontNodesPerUserWithoutCrossContamination() throws Exception {
+        // 两个用户的前置组显式配成互不相同的一对一节点，用于验证批量查询（Map<userId, List<nodeId>>）
+        // 按 userId 分组正确，不会把 A 的节点混进 B 的结果、或反过来
+        Long secondFront = fixtures.createFrontNode("FRONT-2");
+        userFrontNodeRepository.replaceForUser(memberWithSubId, List.of(frontId));
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(secondFront));
+
+        mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].frontNodes[0].name")
+                        .value("FRONT-1"))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].frontNodes[?(@.name=='FRONT-2')]")
+                        .isEmpty())
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].frontNodes[0].name")
+                        .value("FRONT-2"))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].frontNodes[?(@.name=='FRONT-1')]")
                         .isEmpty());
     }
 

@@ -1,5 +1,6 @@
 package ai.mintpop.lane.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -11,6 +12,14 @@ public interface UserFrontNodeRepository {
 
     /** 该用户当前的前置节点 id 集合；未分配时返回空列表 */
     List<Long> findNodeIdsByUserId(Long userId);
+
+    /**
+     * 一次取回多个用户各自的前置节点 id 集合，供列表页避免逐行查询
+     * （与 {@link SubscriptionRepository#findByUserIds} 同一种「批量取、按 userId 分组」
+     * 的做法）。没有任何前置节点的用户不出现在返回的 Map 里，调用方按
+     * {@code getOrDefault(id, List.of())} 取值；传空集合返回空 Map，不查库。
+     */
+    Map<Long, List<Long>> findNodeIdsByUserIds(Collection<Long> userIds);
 
     /** 整体替换该用户的前置节点集合：先清空该用户原有记录再写入，入参按 id 去重 */
     void replaceForUser(Long userId, List<Long> nodeIds);

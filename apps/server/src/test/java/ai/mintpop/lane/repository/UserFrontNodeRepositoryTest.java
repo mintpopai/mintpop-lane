@@ -93,6 +93,40 @@ class UserFrontNodeRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("findNodeIdsByUserIds 一次批量取回多个用户各自的前置节点集合，互不串味")
+    void findNodeIdsByUserIdsGroupsPerUserWithoutCrossContamination() {
+        Long otherUserId = fixtures.createUser("u2", nodeA, null);
+        repository.replaceForUser(userId, List.of(nodeA, nodeB));
+        repository.replaceForUser(otherUserId, List.of(nodeC));
+
+        Map<Long, List<Long>> result = repository.findNodeIdsByUserIds(List.of(userId, otherUserId));
+
+        assertThat(result.get(userId)).containsExactlyInAnyOrder(nodeA, nodeB);
+        assertThat(result.get(otherUserId)).containsExactlyInAnyOrder(nodeC);
+        // 关键断言：A 的节点不能混进 B 的结果里，反之亦然
+        assertThat(result.get(userId)).doesNotContain(nodeC);
+        assertThat(result.get(otherUserId)).doesNotContain(nodeA, nodeB);
+    }
+
+    @Test
+    @DisplayName("findNodeIdsByUserIds 未分配的用户不出现在返回的 Map 里")
+    void findNodeIdsByUserIdsOmitsUsersWithoutAnyAssignment() {
+        Long otherUserId = fixtures.createUser("u2", nodeA, null);
+        repository.replaceForUser(userId, List.of(nodeA));
+        // otherUserId 没有调用 replaceForUser，不应出现在结果里
+
+        Map<Long, List<Long>> result = repository.findNodeIdsByUserIds(List.of(userId, otherUserId));
+
+        assertThat(result).containsOnlyKeys(userId);
+    }
+
+    @Test
+    @DisplayName("findNodeIdsByUserIds 传空集合返回空 Map，不查库、不报错")
+    void findNodeIdsByUserIdsWithEmptyCollectionReturnsEmptyMap() {
+        assertThat(repository.findNodeIdsByUserIds(List.of())).isEmpty();
+    }
+
+    @Test
     @DisplayName("countUsersByNodeId 按节点分组统计已分配用户数，未被任何人用的节点不出现在结果里")
     void countUsersByNodeIdGroupsByNode() {
         Long otherUserId = fixtures.createUser("u2", nodeA, null);
