@@ -43,6 +43,16 @@ lane:
     # 32 字节密钥的 Base64。生成：openssl rand -base64 32
     # 换了这个值，库里已有的密文全部解不开，必须重录所有凭据与节点密码
     key: 填入生成的密钥
+  front-tuning:
+    # 按 mihomo type 分派的下发参数覆盖。表里没有的协议原样透传；
+    # 整段留空即恢复现状——出问题时这就是回退开关。
+    # ⚠️ 下列数值未经实测：拉长空闲超时理论上可能触发机场的异常长连接限速。
+    #    若出现「连接建立后很快被掐」的新症状，先把 idle-session-timeout 调回 30。
+    protocols:
+      anytls:
+        idle-session-check-interval: 30
+        idle-session-timeout: 300
+        min-idle-session: 1
 
 # —— 落地出口 IP 巡检 ——定时探测启用中的落地节点，实际出口与登记不一致就自动回填库；与是否配置通知无关——
 egress-check:
