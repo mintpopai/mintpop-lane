@@ -39,9 +39,12 @@ import {
 } from "../utils/subscriptionForm";
 import {
   buildUserPayload,
+  FRONT_SELECTION,
+  frontSelectionToPayload,
   selectableFrontNodes,
   selectableLandNodes,
   userToForm,
+  type FrontSelection,
 } from "../utils/userForm";
 
 /**
@@ -59,14 +62,22 @@ const userError = ref("");
 
 /** 链路资源表单：初值取自用户当前分配，保存后随重拉的用户刷新 */
 const nodes = ref<AdminNodeResponse[]>([]);
-const frontNodeId = ref<number | null>(null);
+/**
+ * 第一跳下拉的当前取值，三态：具体节点 id（手工指定）/ null（不分配）/
+ * AUTO_ALLOCATE（请服务端按故障域重新分配一组）。
+ * 回填只会是前两者——「自动分配」是动作不是状态，保存后页面重拉就变回算出来的主节点 id。
+ */
+const frontSelection = ref<FrontSelection>(null);
 const landNodeId = ref<number | null>(null);
 const savingNodes = ref(false);
-/** 与库里的分配比出来的「有没有改动」：没改动就没有可保存的东西，按钮禁用 */
+/**
+ * 与库里的分配比出来的「有没有改动」：没改动就没有可保存的东西，按钮禁用。
+ * 选了「自动分配」时取值既不是现有 id 也不是 null，天然算作有改动。
+ */
 const linkDirty = computed(
   () =>
     user.value !== null &&
-    (frontNodeId.value !== user.value.frontNodeId || landNodeId.value !== user.value.landNodeId),
+    (frontSelection.value !== user.value.frontNodeId || landNodeId.value !== user.value.landNodeId),
 );
 
 /**
@@ -115,8 +126,12 @@ const rebind = useRebindStore();
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+// 三个档位对应服务端的三条互斥处置：「不分配」真的清空整组（取消分配、腾出节点以便删除的
+// 唯一入口），「自动分配」按故障域重算一组，选具体节点则收敛成那一个（运维逃生口）。
+// 二期上线时「不分配」反而是自动分配的暗号，标签与行为相反，这里一并纠正
 const frontOptions = computed(() => [
   { value: null, label: "不分配" },
+  { value: FRONT_SELECTION.AUTO_ALLOCATE, label: "自动分配（按故障域）" },
   ...selectableFrontNodes(nodes.value).map((node) => ({ value: node.id, label: node.name })),
 ]);
 // 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
@@ -271,7 +286,7 @@ function reportError(error: unknown, prefix: string): void {
 async function loadUser(): Promise<void> {
   try {
     user.value = await adminApi().getUser(userId);
-    frontNodeId.value = user.value.frontNodeId;
+    frontSelection.value = user.value.frontNodeId;
     landNodeId.value = user.value.landNodeId;
     remark.value = user.value.remark ?? "";
     userError.value = "";
@@ -300,7 +315,7 @@ async function saveNodes(): Promise<void> {
       userId,
       buildUserPayload({
         ...userToForm(user.value),
-        frontNodeId: frontNodeId.value,
+        ...frontSelectionToPayload(frontSelection.value),
         landNodeId: landNodeId.value,
       }),
     );
@@ -558,7 +573,7 @@ async function confirmUnbind(): Promise<void> {
             <label for="user-front">第一跳节点</label>
             <Select
               id="user-front"
-              v-model="frontNodeId"
+              v-model="frontSelection"
               :options="frontOptions"
               aria-label="第一跳节点"
             />

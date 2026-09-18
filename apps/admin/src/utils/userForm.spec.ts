@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
 import {
   buildUserPayload,
+  FRONT_SELECTION,
+  frontSelectionToPayload,
   selectableFrontNodes,
   selectableLandNodes,
   userToForm,
@@ -61,6 +63,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: null,
+      reallocateFront: false,
       landNodeId: null,
       remark: "",
     });
@@ -74,6 +77,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: 3,
+      reallocateFront: false,
       landNodeId: 11,
       remark: "",
     });
@@ -88,6 +92,7 @@ describe("buildUserPayload", () => {
       status: "ACTIVE",
       // el-select clearable 清空后 v-model 拿到的是 undefined，类型上仍标成 null
       frontNodeId: undefined as unknown as null,
+      reallocateFront: false,
       landNodeId: undefined as unknown as null,
       remark: "",
     });
@@ -101,6 +106,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: null,
+      reallocateFront: false,
       landNodeId: null,
       remark: "  老客户，续费谈过  ",
     });
@@ -113,6 +119,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: null,
+      reallocateFront: false,
       landNodeId: null,
       remark: "   ",
     });
@@ -125,6 +132,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "SUSPENDED",
       frontNodeId: null,
+      reallocateFront: false,
       landNodeId: null,
       remark: "",
     });
@@ -181,6 +189,7 @@ describe("userToForm", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: 1,
+      reallocateFront: false,
       landNodeId: 11,
       remark: "",
     });
@@ -192,5 +201,26 @@ describe("userToForm", () => {
 
   it("有备注就原样回填", () => {
     expect(userToForm(makeUser({ remark: "试用期" })).remark).toBe("试用期");
+  });
+
+  it("回填永远不要求重新分配——改备注、改状态这些保存不该顺手重算别人的前置组", () => {
+    expect(userToForm(makeUser({ frontNodeId: 7 })).reallocateFront).toBe(false);
+  });
+});
+
+describe("frontSelectionToPayload", () => {
+  it("选「自动分配」时请服务端按故障域重算，节点 id 不再有意义", () => {
+    expect(frontSelectionToPayload(FRONT_SELECTION.AUTO_ALLOCATE)).toEqual({
+      frontNodeId: null,
+      reallocateFront: true,
+    });
+  });
+
+  it("选「不分配」时是字面意思：清空，而不是暗示自动分配", () => {
+    expect(frontSelectionToPayload(null)).toEqual({ frontNodeId: null, reallocateFront: false });
+  });
+
+  it("选具体节点时手工指定这一个，不触发重新分配", () => {
+    expect(frontSelectionToPayload(9)).toEqual({ frontNodeId: 9, reallocateFront: false });
   });
 });

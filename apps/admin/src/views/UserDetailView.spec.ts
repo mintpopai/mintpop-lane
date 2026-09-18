@@ -547,6 +547,7 @@ describe("UserDetailView · 链路资源", () => {
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
         frontNodeId: 1,
+        reallocateFront: false,
         landNodeId: 12,
         remark: "",
       }),
@@ -573,6 +574,77 @@ describe("UserDetailView · 链路资源", () => {
 
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ remark: "老客户" })),
+    );
+  });
+
+  /** 展开某个下拉并点中文案含 text 的那一项 */
+  async function pickOption(selectLabel: string, text: string): Promise<void> {
+    await selectTrigger(selectLabel).trigger("click");
+    const option = queryAll("li").find((li) => li.text().includes(text));
+    if (!option) {
+      throw new Error(`选项未找到：${text}`);
+    }
+    await option.trigger("click");
+  }
+
+  it("第一跳下拉给出「自动分配（按故障域）」这一档：选中保存后请服务端重算一组", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    await pickOption("第一跳节点", "自动分配（按故障域）");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ reallocateFront: true, frontNodeId: null }),
+      ),
+    );
+  });
+
+  it("「不分配」就是字面上的不分配：提交 frontNodeId 为 null 且不要求重新分配", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    await pickOption("第一跳节点", "不分配");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ reallocateFront: false, frontNodeId: null }),
+      ),
+    );
+  });
+
+  it("只改落地节点时第一跳原样带回、也不要求重算——否则每次保存都在动别人的前置组", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
+
+    await pickOption("落地节点", "LAND-新宿");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontNodeId: 1, reallocateFront: false }),
+      ),
     );
   });
 });
@@ -642,11 +714,28 @@ describe("UserDetailView · 备注", () => {
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
         frontNodeId: 1,
+        reallocateFront: false,
         landNodeId: 11,
         remark: "试用期，月底回访",
       }),
     );
     expect(showToast).toHaveBeenCalledWith("success", "已保存");
+  });
+
+  it("改备注绝不要求重新分配前置组——服务端据此判断「这次没动第一跳」，组才不会被改掉", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11, remark: "老客户" }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户"));
+
+    await remarkInput().setValue("老客户，续费谈过");
+    await buttonInCard(".remark-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontNodeId: 1, reallocateFront: false }),
+      ),
+    );
   });
 
   it("清空备注也算改动，能提交出去", async () => {

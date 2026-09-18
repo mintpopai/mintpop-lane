@@ -213,7 +213,18 @@ export interface AdminNodeResponse {
  */
 export interface UserSaveRequest {
   status: UserStatus;
+  /**
+   * 第一跳主节点 id，字面语义：null 表示不分配（连同整组清空），具体 id 表示手工指定这一个。
+   * 这个接口是整体保存，本字段与服务端现值相同即「这次没有动第一跳」，前置节点组原样不动。
+   * 「按故障域自动分配一组」是另一件事，走 reallocateFront。
+   */
   frontNodeId: number | null;
+  /**
+   * 是否按故障域重新分配一组前置节点。这是一个动作而不是状态：为真时服务端忽略 frontNodeId，
+   * 重新算一组写入。常规保存（改备注、改状态、只改落地节点）一律传 false，
+   * 否则就会把按故障域分散好的一组顺手改掉。
+   */
+  reallocateFront: boolean;
   landNodeId: number | null;
   /** 管理员自用说明，空串表示没写。整体保存接口，不带就等于清空 */
   remark: string;
