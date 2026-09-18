@@ -23,6 +23,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,8 +74,10 @@ class AdminNodeGroupServiceImplTest {
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
         service = new AdminNodeGroupServiceImpl(groupRepository, nodeRepository, userRepository,
-                subFetchClient, new SubYamlParser(), transactionTemplate, failureDomainResolver,
-                trafficAlertService);
+                subFetchClient, new SubYamlParser(), transactionTemplate,
+                // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
+                // 「按 serverAddr 去重」「跳过伪条目」这些口径正是本类要守的行为，不该被 mock 掉
+                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), trafficAlertService);
     }
 
     private NodeGroupDto group(long id) {
@@ -165,5 +169,45 @@ class AdminNodeGroupServiceImplTest {
         // 这一步，漏了的话 TrafficAlertService 内部的 groupRepository.update(group) 会因 id 为 null
         // 而更新不到任何行，档位悄悄丢失且没有任何报错
         assertThat(captor.getValue().getId()).isEqualTo(42L);
+    }
+
+    @Test
+    @DisplayName("只为勾选的节点解析故障域：订阅里几十个节点、只导入其中几个时，不为没勾的白查一次 DNS")
+    void resolvesOnlySelectedNodes() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
+                proxies:
+                  - { name: 'US-01', type: anytls, server: us01a.t11-a.app, port: 35660, password: p }
+                  - { name: 'HK-99', type: anytls, server: hk99a.t11-a.app, port: 35355, password: p }
+                """, null, null, null, null));
+
+        NodeGroupImportRequest request = new NodeGroupImportRequest();
+        request.setSelectedNames(List.of("US-01"));
+        service.importNodes(1L, request);
+
+        verify(failureDomainResolver).resolve("us01a.t11-a.app");
+        verify(failureDomainResolver, never()).resolve("hk99a.t11-a.app");
+    }
+
+    @Test
+    @DisplayName("机场塞的伪条目即便被勾中也不查 DNS：它不是节点，server 字段也不是真实中转入口")
+    void skipsSuspectedInfoEntries() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
+                proxies:
+                  - { name: '剩余流量：18.2 GB', type: anytls, server: info.t11-a.app, port: 1, password: p }
+                  - { name: 'US-01', type: anytls, server: us01a.t11-a.app, port: 35660, password: p }
+                """, null, null, null, null));
+
+        NodeGroupImportRequest request = new NodeGroupImportRequest();
+        request.setSelectedNames(List.of("剩余流量：18.2 GB", "US-01"));
+        service.importNodes(1L, request);
+
+        verify(failureDomainResolver, never()).resolve("info.t11-a.app");
+        verify(failureDomainResolver).resolve("us01a.t11-a.app");
     }
 }

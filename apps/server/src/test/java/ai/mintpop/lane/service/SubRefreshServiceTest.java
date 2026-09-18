@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.time.Clock;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -65,7 +67,9 @@ class SubRefreshServiceTest {
     void setUp() {
         when(failureDomainResolver.resolve(anyString())).thenReturn("jp.tsdns.top");
         service = new SubRefreshService(groupRepository, nodeRepository, subFetchClient,
-                new SubYamlParser(), failureDomainResolver, nodeNotifyService, trafficAlertService);
+                // syncer 用真实实现、只替换最底层的 DNS 解析口（理由同 AdminNodeGroupServiceImplTest）
+                new SubYamlParser(), new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()),
+                nodeNotifyService, trafficAlertService);
     }
 
     private NodeGroupDto group(long id, String name) {
@@ -198,5 +202,40 @@ class SubRefreshServiceTest {
         assertThat(group.getUsedBytes()).isEqualTo(100L);
         assertThat(group.getTotalBytes()).isEqualTo(1000L);
         assertThat(group.getFetchedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("订阅里同名节点出现两次时只对齐一次——与 added 那一侧的去重口径对称")
+    void deduplicatesExistingNodesBySourceName() {
+        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
+                proxies:
+                  - { name: 'US-01', type: anytls, server: us01a.example.com, port: 35660, password: p }
+                  - { name: 'US-01', type: anytls, server: us01a.example.com, port: 35661, password: p }
+                """, null, null, null, null));
+        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
+
+        service.refreshAll();
+
+        // 不去重的话同一个节点会被更新两遍，端点变更告警也会跟着重复推
+        verify(nodeRepository, times(1)).update(any());
+        verify(nodeNotifyService, times(1)).notifyNodeEndpointChanged(any(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("伪条目不查 DNS：刷新时同样走 FailureDomainSyncer 的统一口径")
+    void skipsSuspectedInfoEntriesOnRefresh() {
+        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
+                proxies:
+                  - { name: '到期时间：2027-05-02', type: anytls, server: info.example.com, port: 1, password: p }
+                  - { name: 'US-01', type: anytls, server: us01a.example.com, port: 35660, password: p }
+                """, null, null, null, null));
+        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
+
+        service.refreshAll();
+
+        verify(failureDomainResolver, never()).resolve("info.example.com");
+        verify(failureDomainResolver).resolve("us01a.example.com");
     }
 }

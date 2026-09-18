@@ -25,15 +25,23 @@ public record SubAuditResponse(
         List<String> protocols,
         Long usedBytes, Long totalBytes, Instant expiresAt
 ) {
+    /**
+     * 一个故障域的尽调结论。
+     * <p>
+     * {@code entryIps} / {@code asns} / {@code lineSplit} **三个字段一起为 null 表示「本次未查询」**：
+     * 入口 IP 与 ASN 只对判定为美国落地的故障域查（见 {@code SubAuditServiceImpl}），
+     * 港日故障域用不上、查了只是白白放大外呼扇出。留 null 而不是空表/false，是为了让页面能说
+     * 「未查询入口 IP」——空表会被读成「查了但没结果」，false 会被读成「查了，没分线路」，都是误导。
+     */
     public record FailureDomainReport(
             String domain,
             int nodeCount,
             int usNodeCount,
-            /** 各视角解析到的入口 IP */
+            /** 各视角解析到的入口 IP；null 表示本次未查询该故障域 */
             Map<DnsVantage, List<String>> entryIps,
-            /** 入口 IP 对应的 ASN，反查失败为空 */
+            /** 入口 IP 对应的 ASN，反查失败为空；null 表示本次未查询该故障域 */
             Map<DnsVantage, List<String>> asns,
-            /** 四个视角是否返回了不同 IP——有分线路者国内优化更好 */
-            boolean lineSplit
+            /** 各视角是否解析到不同 IP——有分线路者国内优化更好；null 表示本次未查询该故障域 */
+            Boolean lineSplit
     ) {}
 }

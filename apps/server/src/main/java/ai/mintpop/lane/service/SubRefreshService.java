@@ -1,6 +1,5 @@
 package ai.mintpop.lane.service;
 
-import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.NodeGroupDto;
@@ -40,19 +39,19 @@ public class SubRefreshService {
     private final ProxyNodeRepository nodeRepository;
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
-    private final FailureDomainResolver failureDomainResolver;
+    private final FailureDomainSyncer failureDomainSyncer;
     private final NodeNotifyService nodeNotifyService;
     private final TrafficAlertService trafficAlertService;
 
     public SubRefreshService(NodeGroupRepository groupRepository, ProxyNodeRepository nodeRepository,
                              SubFetchClient subFetchClient, SubYamlParser subYamlParser,
-                             FailureDomainResolver failureDomainResolver, NodeNotifyService nodeNotifyService,
+                             FailureDomainSyncer failureDomainSyncer, NodeNotifyService nodeNotifyService,
                              TrafficAlertService trafficAlertService) {
         this.groupRepository = groupRepository;
         this.nodeRepository = nodeRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
-        this.failureDomainResolver = failureDomainResolver;
+        this.failureDomainSyncer = failureDomainSyncer;
         this.nodeNotifyService = nodeNotifyService;
         this.trafficAlertService = trafficAlertService;
     }
@@ -78,7 +77,7 @@ public class SubRefreshService {
         // 不能包进事务——与 AdminNodeGroupServiceImpl 对同类操作的处理一致
         SubFetchResult result = subFetchClient.fetch(group.getSubUrl());
         List<SubNode> subNodes = subYamlParser.parse(result.body());
-        Map<String, String> failureDomains = resolveFailureDomains(subNodes);
+        Map<String, String> failureDomains = failureDomainSyncer.resolve(subNodes);
 
         applyTrafficInfo(group, result);
         groupRepository.update(group);
@@ -100,13 +99,13 @@ public class SubRefreshService {
         Map<String, ProxyNodeDto> existingByName = new LinkedHashMap<>();
         existingNodes.forEach(node -> existingByName.putIfAbsent(node.getSourceName(), node));
 
+        // 遍历去重后的 subByName 而不是原始 subNodes：订阅里同名节点出现两次时，
+        // added 那一侧本来就按名字去了重，existing 那一侧却会把同一个节点更新两遍——两侧口径要一致
         List<String> added = new ArrayList<>();
-        for (SubNode sub : subNodes) {
+        for (SubNode sub : subByName.values()) {
             ProxyNodeDto existing = existingByName.get(sub.sourceName());
             if (existing == null) {
-                if (!added.contains(sub.sourceName())) {
-                    added.add(sub.sourceName());
-                }
+                added.add(sub.sourceName());
                 continue;
             }
             updateExisting(existing, sub, failureDomains);
@@ -129,7 +128,7 @@ public class SubRefreshService {
         node.setPort(sub.port());
         node.setSourceType(sub.sourceType());
         node.setSecret(sub.params());
-        applyFailureDomain(node, sub.serverAddr(), failureDomains);
+        failureDomainSyncer.apply(node, sub.serverAddr(), failureDomains);
         nodeRepository.update(node);
 
         String currentEndpoint = endpointOf(node.getServerAddr(), node.getPort());
@@ -140,30 +139,6 @@ public class SubRefreshService {
 
     private static String endpointOf(String serverAddr, Integer port) {
         return serverAddr + ":" + port;
-    }
-
-    /**
-     * 按 serverAddr 去重后逐个解析故障域，同样必须在数据库写入之前调用（DNS 外呼）。
-     * 解析失败的条目不进表，调用方据此保留节点原有故障域，不抹成 null——网络抖动不代表拓扑变了。
-     */
-    private Map<String, String> resolveFailureDomains(List<SubNode> nodes) {
-        Map<String, String> byServerAddr = new LinkedHashMap<>();
-        for (String serverAddr : nodes.stream().map(SubNode::serverAddr).distinct().toList()) {
-            String domain = failureDomainResolver.resolve(serverAddr);
-            if (domain != null) {
-                byServerAddr.put(serverAddr, domain);
-            }
-        }
-        return byServerAddr;
-    }
-
-    /** 表里没有＝本次没解析出来，保留原值不动 */
-    private void applyFailureDomain(ProxyNodeDto node, String serverAddr, Map<String, String> failureDomains) {
-        String domain = failureDomains.get(serverAddr);
-        if (domain != null) {
-            node.setFailureDomain(domain);
-            node.setFailureDomainCheckedAt(Instant.now());
-        }
     }
 
     /** 把本次拉取带回的额度信息写进分组 DTO；三个额度字段可能都是 null（机场未返回额度头） */
