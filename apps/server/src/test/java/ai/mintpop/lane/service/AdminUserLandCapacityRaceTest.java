@@ -1,6 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -54,10 +55,14 @@ class AdminUserLandCapacityRaceTest extends MysqlTestBase {
         fixtures.clearAll();
     }
 
-    private UserSaveRequest saveRequest(Long frontNodeId, Long landNodeId) {
+    /**
+     * 本用例只关心落地节点的容量竞争，第一跳一概不动：frontAction 传 KEEP
+     * （必填、无缺省值，整体保存的每个调用点都要显式表态）。
+     */
+    private UserSaveRequest saveRequest(Long landNodeId) {
         UserSaveRequest request = new UserSaveRequest();
         request.setStatus(UserStatus.ACTIVE);
-        request.setFrontNodeId(frontNodeId);
+        request.setFrontAction(FrontAction.KEEP);
         request.setLandNodeId(landNodeId);
         return request;
     }
@@ -91,14 +96,14 @@ class AdminUserLandCapacityRaceTest extends MysqlTestBase {
         doAnswer(invocation -> {
             if (firstLockingRead.compareAndSet(true, false)) {
                 runInSeparateTransaction(() -> {
-                    adminUserService.update(userU, saveRequest(front, null));
-                    adminUserService.update(userW, saveRequest(front, land));
+                    adminUserService.update(userU, saveRequest(null));
+                    adminUserService.update(userW, saveRequest(land));
                 });
             }
             return invocation.callRealMethod();
         }).when(nodeRepository).findByIdForUpdate(anyLong());
 
-        assertThatThrownBy(() -> adminUserService.update(userU, saveRequest(front, land)))
+        assertThatThrownBy(() -> adminUserService.update(userU, saveRequest(land)))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.LAND_NODE_FULL));
         assertThat(userRepository.countByLandNodeId(land)).isEqualTo(1);

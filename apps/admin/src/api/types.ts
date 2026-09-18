@@ -15,6 +15,23 @@ export const USER_ROLE = {
 } as const;
 export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 
+/**
+ * 保存用户时对第一跳（前置节点）的处置意图，与服务端 FrontAction 枚举逐字一致。
+ * 它是一个**意图**而不是状态：更新用户是整体保存接口，每个调用点都必须显式表态，
+ * 服务端不拿 frontNodeId 与库里现值作比较去反推（回带的值可能是过期快照）。
+ */
+export const FRONT_ACTION = {
+  /** 这次保存没动第一跳：前置组原样不碰，主节点沿用库里现值 */
+  KEEP: "KEEP",
+  /** 按故障域重新分配一组；一个候选都算不出来时服务端报 410048，而不是把人清空 */
+  AUTO: "AUTO",
+  /** 钉死到 frontNodeId 这一个（运维逃生口），此时 frontNodeId 必填 */
+  PIN: "PIN",
+  /** 真的不分配：整组清空、主节点置 null */
+  CLEAR: "CLEAR",
+} as const;
+export type FrontAction = (typeof FRONT_ACTION)[keyof typeof FRONT_ACTION];
+
 export const NODE_ROLE = {
   FRONT: "FRONT",
   LAND: "LAND",
@@ -142,6 +159,13 @@ export interface AdminUserResponse {
   /** 注册即无资源，未分配时为 null */
   frontNodeId: number | null;
   frontNodeName: string | null;
+  /** 该用户当前分配到的一组前置节点（按故障域分桶后的完整集合，不止 frontNodeId 那个「主」节点） */
+  frontNodes: FrontNodeBrief[];
+  /**
+   * frontNodes 覆盖的故障域个数；等于 1 说明这一组节点共用同一台中转入口机，
+   * 入口一挂全部失效——需要在管理端显式警示，提醒采购第二家机场
+   */
+  failureDomainCount: number;
   landNodeId: number | null;
   landNodeName: string | null;
   /** 取自其落地节点，未分配或落地未填出口时为 null */
@@ -152,6 +176,13 @@ export interface AdminUserResponse {
   remark: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** 前置节点摘要：管理端按 failureDomain 分组展示，null 表示该节点尚未解析出故障域 */
+export interface FrontNodeBrief {
+  id: number;
+  name: string;
+  failureDomain: string | null;
 }
 
 export interface ActiveSubscriptionBrief {
@@ -199,6 +230,17 @@ export interface AdminNodeResponse {
  */
 export interface UserSaveRequest {
   status: UserStatus;
+  /**
+   * 这次保存要对第一跳做什么。服务端必填（漏传直接 400），不给缺省值：
+   * 整体保存接口的每个调用点都要显式表态，「忘了传」必须当场暴露，
+   * 而不是悄悄落到某一种处置上——二期出事正是那个形态。
+   */
+  frontAction: FrontAction;
+  /**
+   * 第一跳主节点 id，**只在 frontAction 为 PIN 时有意义**（此时必填）。
+   * 其余三态服务端一律忽略它，前端也一律发 null：这个字段此刻无意义，
+   * 带着一个可能过期的值只会让人以为它被用到了。
+   */
   frontNodeId: number | null;
   landNodeId: number | null;
   /** 管理员自用说明，空串表示没写。整体保存接口，不带就等于清空 */

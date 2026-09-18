@@ -12,6 +12,7 @@ import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
 import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeGroupCreateRequest;
 import ai.mintpop.lane.request.NodeGroupImportRequest;
@@ -42,6 +43,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     private final NodeGroupRepository groupRepository;
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
+    private final UserFrontNodeRepository userFrontNodeRepository;
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
     private final TransactionTemplate transactionTemplate;
@@ -49,13 +51,15 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     private final TrafficAlertService trafficAlertService;
 
     public AdminNodeGroupServiceImpl(NodeGroupRepository groupRepository, ProxyNodeRepository nodeRepository,
-                                     UserRepository userRepository, SubFetchClient subFetchClient,
+                                     UserRepository userRepository, UserFrontNodeRepository userFrontNodeRepository,
+                                     SubFetchClient subFetchClient,
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
                                      FailureDomainSyncer failureDomainSyncer,
                                      TrafficAlertService trafficAlertService) {
         this.groupRepository = groupRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
+        this.userFrontNodeRepository = userFrontNodeRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
         this.transactionTemplate = transactionTemplate;
@@ -168,8 +172,11 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         List<ProxyNodeDto> nodes = nodeRepository.findByGroupId(id);
         // 先整体校验再删：不做「删到一半发现被引用」的部分删除
         for (ProxyNodeDto node : nodes) {
+            // 三种引用形状都要查：主前置节点、落地节点，或前置集合里的非主成员（二期新增，
+            // 只在 user_front_node 里，漏查会在真正删除时撞上外键抛出原始数据库异常）
             if (userRepository.existsByFrontNodeId(node.getId())
-                    || userRepository.countByLandNodeId(node.getId()) > 0) {
+                    || userRepository.countByLandNodeId(node.getId()) > 0
+                    || userFrontNodeRepository.existsByNodeId(node.getId())) {
                 throw new BizException(BizCodeEnum.NODE_GROUP_IN_USE);
             }
         }

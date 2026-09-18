@@ -21,6 +21,7 @@ import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.LinkConfigResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +57,7 @@ class LinkServiceImplTest {
     private SubscriptionRepository subscriptionRepository;
     private UserDeviceRepository userDeviceRepository;
     private DeviceRebindRequestRepository rebindRequestRepository;
+    private UserFrontNodeRepository userFrontNodeRepository;
     private FrontTuningProperties frontTuningProperties;
     private LinkServiceImpl service;
 
@@ -72,6 +74,14 @@ class LinkServiceImplTest {
             n.setEgressIp("203.0.113.10");
             n.setEgressTimezone("Asia/Tokyo");
         }
+        return n;
+    }
+
+    /** 造一个带故障域的前置节点，供 frontGroups 分组测试专用 */
+    private static ProxyNodeDto frontNode(long id, String failureDomain, NodeStatus status) {
+        ProxyNodeDto n = node(id, NodeRole.FRONT, NodeProtocol.TROJAN, "front-" + id + ".example.com");
+        n.setFailureDomain(failureDomain);
+        n.setStatus(status);
         return n;
     }
 
@@ -130,12 +140,13 @@ class LinkServiceImplTest {
         subscriptionRepository = mock(SubscriptionRepository.class);
         userDeviceRepository = mock(UserDeviceRepository.class);
         rebindRequestRepository = mock(DeviceRebindRequestRepository.class);
+        userFrontNodeRepository = mock(UserFrontNodeRepository.class);
 
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
         frontTuningProperties = new FrontTuningProperties();
         service = new LinkServiceImpl(props, frontTuningProperties, userRepository, nodeRepository,
-                subscriptionRepository, userDeviceRepository, rebindRequestRepository,
+                subscriptionRepository, userDeviceRepository, rebindRequestRepository, userFrontNodeRepository,
                 Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
@@ -146,6 +157,18 @@ class LinkServiceImplTest {
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of());
         when(userDeviceRepository.findByUserId(any())).thenReturn(List.of());
         when(rebindRequestRepository.findPendingByUserId(any())).thenReturn(List.of());
+        // 默认关联表为空：多数既有用例走「退回 front_node_id 单节点」这条路径
+        when(userFrontNodeRepository.findNodeIdsByUserId(any())).thenReturn(List.of());
+    }
+
+    /** 登记用户在关联表里的前置节点 id 集合，供 frontGroups 分组测试用 */
+    private void givenFrontNodeIds(Long... ids) {
+        when(userFrontNodeRepository.findNodeIdsByUserId(USER_ID)).thenReturn(List.of(ids));
+    }
+
+    /** 登记一个可被 nodeRepository 查到的前置节点 */
+    private void givenFrontNode(ProxyNodeDto node) {
+        when(nodeRepository.findById(node.getId())).thenReturn(Optional.of(node));
     }
 
     private void givenUser(UserDto user) {
@@ -200,6 +223,155 @@ class LinkServiceImplTest {
 
         assertThat(resp.front()).containsEntry("min-idle-session", 1);
         assertThat(resp.land()).doesNotContainKey("min-idle-session");
+    }
+
+    @Test
+    @DisplayName("前置节点保活参数覆盖对组里每个节点都要套，不能只套第一个")
+    void frontTuningAppliedToEveryNodeInGroup() {
+        frontTuningProperties.setProtocols(Map.of("anytls", Map.of("min-idle-session", 1)));
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L);
+        ProxyNodeDto first = frontNode(11L, "jp.tsdns.top", NodeStatus.ENABLED);
+        first.setProtocol(NodeProtocol.MIHOMO);
+        first.setSourceType("anytls");
+        first.setSecret(Map.of("type", "anytls", "server", "front-11.example.com"));
+        ProxyNodeDto second = frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED);
+        second.setProtocol(NodeProtocol.MIHOMO);
+        second.setSourceType("anytls");
+        second.setSecret(Map.of("type", "anytls", "server", "front-12.example.com"));
+        givenFrontNode(first);
+        givenFrontNode(second);
+
+        var resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups()).hasSize(1);
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(2);
+        // 两个节点都要带上保活覆盖，漏了任何一个都说明只套了第一个
+        assertThat(resp.frontGroups().get(0).nodes().get(0)).containsEntry("min-idle-session", 1);
+        assertThat(resp.frontGroups().get(0).nodes().get(1)).containsEntry("min-idle-session", 1);
+    }
+
+    @Test
+    @DisplayName("下发按故障域分组的前置节点，front 取第一组第一个")
+    void deliversFrontGroupsAndKeepsFrontAsPrimary() {
+        // 用户分到 jp.tsdns.top 下 2 个、relay.other.net 下 1 个
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L, 13L);
+        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.ENABLED));
+        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED));
+        givenFrontNode(frontNode(13L, "relay.other.net", NodeStatus.ENABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups()).hasSize(2);
+        assertThat(resp.frontGroups().get(0).failureDomain()).isEqualTo("jp.tsdns.top");
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(2);
+        // front 必须等于第一组第一个节点——老客户端只读它
+        assertThat(resp.front()).isEqualTo(resp.frontGroups().get(0).nodes().get(0));
+    }
+
+    @Test
+    @DisplayName("故障域尚未解析（null）的节点照常成组下发，failureDomain 就是 null——"
+            + "契约上这个字段可空，客户端 DTO 必须按可空声明，否则整份链路配置解析失败")
+    void deliversGroupWithNullFailureDomain() {
+        givenUser(user(UserStatus.ACTIVE));
+        // 11 号尚未解析出故障域：手工新建的前置节点永远是这样（建/改节点的路径从不设 failure_domain），
+        // 而「手工指定单节点」正是本期保留的运维逃生口，这条路真实可达
+        givenFrontNodeIds(11L, 12L);
+        givenFrontNode(frontNode(11L, null, NodeStatus.ENABLED));
+        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        // null 组不被丢掉、也不抛异常：组内节点仍是可用的前置节点，只是暂时说不清它跨不跨入口
+        assertThat(resp.frontGroups()).hasSize(2);
+        assertThat(resp.frontGroups().get(0).failureDomain()).isNull();
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
+        assertThat(resp.frontGroups().get(1).failureDomain()).isEqualTo("jp.tsdns.top");
+        assertThat(resp.front()).isEqualTo(resp.frontGroups().get(0).nodes().get(0));
+    }
+
+    @Test
+    @DisplayName("整组节点都没解析出故障域时同样照常下发，不退化成「没有可用前置节点」")
+    void deliversSoleGroupWhenEveryNodeHasNullFailureDomain() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L);
+        givenFrontNode(frontNode(11L, null, NodeStatus.ENABLED));
+        givenFrontNode(frontNode(12L, null, NodeStatus.ENABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups()).hasSize(1);
+        assertThat(resp.frontGroups().get(0).failureDomain()).isNull();
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("组内被禁用的节点跳过，不影响该组其余节点")
+    void skipsDisabledNodeWithinGroup() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L);
+        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.ENABLED));
+        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.DISABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("整组都被禁用时丢掉这一组，不下发空组")
+    void dropsGroupWhenAllNodesDisabled() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L, 13L);
+        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.DISABLED));
+        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.DISABLED));
+        givenFrontNode(frontNode(13L, "relay.other.net", NodeStatus.ENABLED));
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups()).hasSize(1);
+        assertThat(resp.frontGroups().get(0).failureDomain()).isEqualTo("relay.other.net");
+    }
+
+    @Test
+    @DisplayName("分配了前置节点但全部被禁用时报 NODE_DISABLED，而不是「未分配」——"
+            + "报未分配会把排查方向错误地引向「去分配一个」，真正要做的是启用/换一个节点")
+    void failsOnlyWhenEveryGroupIsEmpty() {
+        givenUser(user(UserStatus.ACTIVE));
+        givenFrontNodeIds(11L, 12L);
+        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.DISABLED));
+        givenFrontNode(frontNode(12L, "relay.other.net", NodeStatus.DISABLED));
+
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode", BizCodeEnum.NODE_DISABLED);
+    }
+
+    @Test
+    @DisplayName("压根没有分配过前置节点时报 EGRESS_NOT_ASSIGNED，与「分配了但全禁用」的 "
+            + "NODE_DISABLED 分界开——这是两种不同的运维动作：前者要去分配，后者要去启用/换节点")
+    void neverAssignedAnyFrontNodeRejectedAsEgressNotAssigned() {
+        UserDto u = user(UserStatus.ACTIVE);
+        u.setFrontNodeId(null);
+        givenUser(u);
+
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
+                .isInstanceOf(BizException.class)
+                .hasFieldOrPropertyWithValue("bizCode", BizCodeEnum.EGRESS_NOT_ASSIGNED);
+    }
+
+    @Test
+    @DisplayName("关联表为空时退回 front_node_id 单节点，老数据照常可用")
+    void fallsBackToSingleFrontNodeWhenAssociationEmpty() {
+        givenUser(user(UserStatus.ACTIVE));
+        // 关联表为空是 setUp 里的默认桩，这里不额外调用 givenFrontNodeIds
+
+        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(resp.frontGroups()).hasSize(1);
+        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
+        assertThat(resp.front()).isNotNull();
     }
 
     @Test
@@ -351,7 +523,8 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("第一跳节点被禁用时同样不下发链路，避免只守住半条 fail-closed 保障")
+    @DisplayName("第一跳节点被禁用时同样不下发链路，避免只守住半条 fail-closed 保障——"
+            + "退回单节点 fallback 组后唯一节点被滤掉、组变空，但用户明明分配过节点，报 NODE_DISABLED 而非「未分配」")
     void disabledFrontNodeRejected() {
         givenUser(user(UserStatus.ACTIVE));
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));

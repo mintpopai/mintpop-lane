@@ -1,6 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
@@ -49,9 +50,12 @@ class AdminUserProtectionTest extends MysqlTestBase {
         fixtures.clearAll();
     }
 
-    private UserSaveRequest saveRequest(UserStatus status, Long frontNodeId, Long landNodeId) {
+    /** frontAction 必填、没有缺省值：每个调用点都要说清这次对第一跳做什么，测试里也一样 */
+    private UserSaveRequest saveRequest(UserStatus status, FrontAction frontAction, Long frontNodeId,
+                                        Long landNodeId) {
         UserSaveRequest request = new UserSaveRequest();
         request.setStatus(status);
+        request.setFrontAction(frontAction);
         request.setFrontNodeId(frontNodeId);
         request.setLandNodeId(landNodeId);
         return request;
@@ -62,7 +66,7 @@ class AdminUserProtectionTest extends MysqlTestBase {
     void shouldRejectSuspendingAdmin() {
         Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
 
-        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.SUSPENDED, null, null)))
+        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.SUSPENDED, FrontAction.KEEP, null, null)))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.ADMIN_USER_PROTECTED));
         assertThat(userRepository.findById(adminId).orElseThrow().getStatus()).isEqualTo(UserStatus.ACTIVE);
@@ -73,7 +77,7 @@ class AdminUserProtectionTest extends MysqlTestBase {
     void shouldRejectRevokingAdmin() {
         Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
 
-        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.REVOKED, null, null)))
+        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.REVOKED, FrontAction.KEEP, null, null)))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.ADMIN_USER_PROTECTED));
         assertThat(userRepository.findById(adminId).orElseThrow().getStatus()).isEqualTo(UserStatus.ACTIVE);
@@ -97,7 +101,7 @@ class AdminUserProtectionTest extends MysqlTestBase {
         Long land = fixtures.createLandNode("land-1", "203.0.113.1");
         Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
 
-        adminUserService.update(adminId, saveRequest(UserStatus.ACTIVE, front, land));
+        adminUserService.update(adminId, saveRequest(UserStatus.ACTIVE, FrontAction.PIN, front, land));
 
         assertThat(userRepository.findById(adminId).orElseThrow().getLandNodeId()).isEqualTo(land);
     }
@@ -107,7 +111,7 @@ class AdminUserProtectionTest extends MysqlTestBase {
     void shouldStillAllowDisposingMember() {
         Long memberId = fixtures.createUser("member-1", UserRole.MEMBER, UserStatus.ACTIVE, null, null);
 
-        adminUserService.update(memberId, saveRequest(UserStatus.SUSPENDED, null, null));
+        adminUserService.update(memberId, saveRequest(UserStatus.SUSPENDED, FrontAction.KEEP, null, null));
         assertThat(userRepository.findById(memberId).orElseThrow().getStatus()).isEqualTo(UserStatus.SUSPENDED);
 
         adminUserService.delete(memberId);

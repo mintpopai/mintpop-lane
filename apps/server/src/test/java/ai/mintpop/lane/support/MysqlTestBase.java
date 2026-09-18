@@ -14,6 +14,10 @@ import org.testcontainers.mysql.MySQLContainer;
  *
  * @ServiceConnection 让 Spring Boot 自动把容器的 JDBC 连接信息注入 DataSource，
  * 因此测试配置里不需要写 spring.datasource.*。
+ *
+ * MYSQL 字段是 protected：数据迁移类测试（如 UserFrontNodeBackfillMigrationTest）需要在同一容器里
+ * 另建一个独立 schema、绕开 Spring 已经跑到最新版本的默认 schema，用 Flyway Java API 分段跑迁移，
+ * 因此要拿到容器的连接坐标（host/port/密码）自己拼 JDBC URL。
  */
 // 配置来源钉死 classpath：默认位置含 file:./config/，开发机若放了真实 application.yml
 // 会以更高优先级盖过 application-test.yaml，测试值被真实配置污染、甚至触发联网的 OIDC 发现
@@ -22,7 +26,7 @@ import org.testcontainers.mysql.MySQLContainer;
 public abstract class MysqlTestBase {
 
     @ServiceConnection
-    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4");
+    protected static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4");
 
     static {
         // 与生产 JDBC URL 的时区参数一致：编解码与会话时区都钉 UTC

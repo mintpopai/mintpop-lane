@@ -1,6 +1,7 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BizError } from "../api/http";
 import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
@@ -52,6 +53,8 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     status: "ACTIVE",
     frontNodeId: null,
     frontNodeName: null,
+    frontNodes: [],
+    failureDomainCount: 0,
     landNodeId: null,
     landNodeName: null,
     egressIp: null,
@@ -544,7 +547,8 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
-        frontNodeId: 1,
+        frontAction: "KEEP",
+        frontNodeId: null,
         landNodeId: 12,
         remark: "",
       }),
@@ -572,6 +576,122 @@ describe("UserDetailView · 链路资源", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ remark: "老客户" })),
     );
+  });
+
+  /** 展开某个下拉并点中文案含 text 的那一项 */
+  async function pickOption(selectLabel: string, text: string): Promise<void> {
+    await selectTrigger(selectLabel).trigger("click");
+    const option = queryAll("li").find((li) => li.text().includes(text));
+    if (!option) {
+      throw new Error(`选项未找到：${text}`);
+    }
+    await option.trigger("click");
+  }
+
+  it("第一跳下拉给出「自动分配（按故障域）」这一档：选中保存后发 frontAction=AUTO", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    await pickOption("第一跳节点", "自动分配（按故障域）");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontAction: "AUTO", frontNodeId: null }),
+      ),
+    );
+  });
+
+  it("「不分配」就是字面上的不分配：发 frontAction=CLEAR", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    await pickOption("第一跳节点", "不分配");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontAction: "CLEAR", frontNodeId: null }),
+      ),
+    );
+  });
+
+  it("只改落地节点时第一跳发 KEEP——没碰下拉就是没碰，服务端不必也不该去猜", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
+
+    await pickOption("落地节点", "LAND-新宿");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
+      ),
+    );
+  });
+
+  it("选回该用户当前的主节点是合法意图：保存按钮可用，发出的是 frontAction=PIN（把多节点组收敛成这一个）", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 2, name: "US-02", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    // 下拉回显的就是 US-01，这里再点一次它——「值没变」但意图变了，按「值是否等于初始值」判断会把按钮锁死
+    await pickOption("第一跳节点", "US-01");
+
+    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeUndefined();
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontAction: "PIN", frontNodeId: 1 }),
+      ),
+    );
+  });
+
+  it("自动分配落空时把服务端的说法原样提示出来，不当作保存成功", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    updateUser.mockRejectedValueOnce(
+      new BizError(410048, "没有可分配的美国前置节点，无法自动分配"),
+    );
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+
+    await pickOption("第一跳节点", "自动分配（按故障域）");
+    await buttonInCard(".link-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("error", "没有可分配的美国前置节点，无法自动分配"),
+    );
+    expect(showToast).not.toHaveBeenCalledWith("success", "已保存");
   });
 });
 
@@ -639,12 +759,29 @@ describe("UserDetailView · 备注", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
-        frontNodeId: 1,
+        frontAction: "KEEP",
+        frontNodeId: null,
         landNodeId: 11,
         remark: "试用期，月底回访",
       }),
     );
     expect(showToast).toHaveBeenCalledWith("success", "已保存");
+  });
+
+  it("改备注一律发 frontAction=KEEP——它是「本项未被触碰」的显式表达，组因此不会被改掉", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11, remark: "老客户" }));
+    await mountView([]);
+    await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户"));
+
+    await remarkInput().setValue("老客户，续费谈过");
+    await buttonInCard(".remark-card", "保存").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
+      ),
+    );
   });
 
   it("清空备注也算改动，能提交出去", async () => {
@@ -701,5 +838,71 @@ describe("UserDetailView · 待开通订阅", () => {
     expect(document.querySelector(".pill.pending")).toBeNull();
     const issue = buttonByText("签发凭证");
     expect(issue.attributes("disabled")).toBeUndefined();
+  });
+});
+
+describe("UserDetailView · 前置节点组", () => {
+  it("按故障域分组列出用户被分配的前置节点", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [
+          { id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" },
+          { id: 2, name: "🇺🇸[US]A2", failureDomain: "jp.tsdns.top" },
+          { id: 5, name: "🇺🇸[US]B1", failureDomain: "relay.other.net" },
+        ],
+        failureDomainCount: 2,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("jp.tsdns.top"));
+    expect(document.body.textContent).toContain("relay.other.net");
+    expect(document.body.textContent).toContain("🇺🇸[US]A1");
+    expect(document.body.textContent).toContain("🇺🇸[US]B1");
+  });
+
+  // failureDomainCount === 0：管理员手工指定单个节点是保留的运维逃生口，不走分配算法，
+  // 完全可能挂着一个 failureDomain 还没解析出来（null）的节点。这种「未知」比「已知只
+  // 有 1 个」更糟——如果警告只在 === 1 时出现，这条路径会把最该出现的信号漏掉
+  it("一个故障域都没解析出来时（failureDomainCount 为 0）也显式警告「入口无冗余」", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [{ id: 1, name: "🇺🇸[US]A1", failureDomain: null }],
+        failureDomainCount: 0,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("入口无冗余"));
+    expect(document.querySelector(".front-domain-warning")).not.toBeNull();
+  });
+
+  it("只有一个故障域时显式警告「入口无冗余」", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [{ id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" }],
+        failureDomainCount: 1,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("入口无冗余"));
+    expect(document.querySelector(".front-domain-warning")).not.toBeNull();
+  });
+
+  it("有两个及以上故障域时不显示警告", async () => {
+    getUser.mockResolvedValue(
+      user({
+        frontNodes: [
+          { id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" },
+          { id: 5, name: "🇺🇸[US]B1", failureDomain: "relay.other.net" },
+        ],
+        failureDomainCount: 2,
+      }),
+    );
+    await mountView([]);
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("jp.tsdns.top"));
+    expect(document.querySelector(".front-domain-warning")).toBeNull();
   });
 });

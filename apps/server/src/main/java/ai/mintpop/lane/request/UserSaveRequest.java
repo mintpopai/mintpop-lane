@@ -1,5 +1,6 @@
 package ai.mintpop.lane.request;
 
+import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.UserStatus;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -18,7 +19,26 @@ public class UserSaveRequest {
     @NotNull(message = "状态不能为空")
     private UserStatus status;
 
-    /** 第一跳节点 id，null 表示不分配 */
+    /**
+     * 这次保存要对第一跳（前置节点）做什么：{@link FrontAction} 的四态之一。
+     * <p>
+     * <b>刻意必填</b>：这个接口是整体保存，每个调用点都必须显式表态。缺省值会让「忘了传」
+     * 悄悄落到某一种处置上——二期出事正是这个形态（`frontNodeId` 一个字段兼职两种意图，
+     * 于是每一次常规保存都被读成「管理员显式指定了单个节点」，把按故障域分散好的一组静默砍成一个）。
+     * 现在「忘了传」会在 400 上当场暴露。
+     */
+    @NotNull(message = "第一跳处置不能为空")
+    private FrontAction frontAction;
+
+    /**
+     * 第一跳（前置）主节点 id，<b>只在 {@code frontAction == PIN} 时有意义</b>，
+     * 此时表示「把该用户钉死到这一个节点」，且必填。
+     * <p>
+     * 其余三态（{@code KEEP} / {@code AUTO} / {@code CLEAR}）<b>一律忽略本字段</b>：
+     * 意图已经由 {@code frontAction} 说全了，本字段不再兼职表达任何意图，服务端也不拿它
+     * 与库里现值作比较去反推「这次动没动第一跳」——调用方带回的可能是过期快照，
+     * 比值必然会在并发窗口里判错。
+     */
     private Long frontNodeId;
 
     /** 落地节点 id，null 表示不分配 */

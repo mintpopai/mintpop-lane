@@ -77,6 +77,9 @@ public enum BizCodeEnum {
     IMAGE_TOO_LARGE(410045, "图片不能超过 5 MB"),
     IMAGE_TYPE_UNSUPPORTED(410046, "只支持 JPEG / PNG / WebP / GIF 图片"),
     IMAGE_STORAGE_ERROR(410047, "图片存储写入失败，请稍后重试"),
+    // 自动分配落空必须报错而不是清空：管理员显式要了「按故障域分配一组」，
+    // 静默清空等于把人下线、界面还不提示（二期上线定时刷新未跑首轮时全库 failure_domain 可能都是 null）
+    FRONT_NODE_UNALLOCATABLE(410048, "没有可分配的美国前置节点，无法自动分配"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

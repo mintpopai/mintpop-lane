@@ -8,6 +8,7 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.parser.SubYamlParser;
 import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
+import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeGroupCreateRequest;
 import ai.mintpop.lane.request.NodeGroupImportRequest;
@@ -48,6 +49,7 @@ class AdminNodeGroupServiceImplTest {
     @Mock private NodeGroupRepository groupRepository;
     @Mock private ProxyNodeRepository nodeRepository;
     @Mock private UserRepository userRepository;
+    @Mock private UserFrontNodeRepository userFrontNodeRepository;
     @Mock private SubFetchClient subFetchClient;
     @Mock private FailureDomainResolver failureDomainResolver;
     @Mock private TransactionTemplate transactionTemplate;
@@ -74,6 +76,7 @@ class AdminNodeGroupServiceImplTest {
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
         service = new AdminNodeGroupServiceImpl(groupRepository, nodeRepository, userRepository,
+                userFrontNodeRepository,
                 subFetchClient, new SubYamlParser(), transactionTemplate,
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
                 // 「按 serverAddr 去重」「跳过伪条目」这些口径正是本类要守的行为，不该被 mock 掉

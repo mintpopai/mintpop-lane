@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
 import {
   buildUserPayload,
+  FRONT_SELECTION,
+  frontSelectionToPayload,
   selectableFrontNodes,
   selectableLandNodes,
   userToForm,
@@ -42,6 +44,8 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
     status: "ACTIVE",
     frontNodeId: 1,
     frontNodeName: "US-01",
+    frontNodes: [],
+    failureDomainCount: 0,
     landNodeId: 11,
     landNodeName: "LAND-东京-03",
     egressIp: "1.2.3.4",
@@ -59,6 +63,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: null,
+      frontAction: "KEEP",
       landNodeId: null,
       remark: "",
     });
@@ -72,6 +77,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: 3,
+      frontAction: "KEEP",
       landNodeId: 11,
       remark: "",
     });
@@ -86,6 +92,7 @@ describe("buildUserPayload", () => {
       status: "ACTIVE",
       // el-select clearable 清空后 v-model 拿到的是 undefined，类型上仍标成 null
       frontNodeId: undefined as unknown as null,
+      frontAction: "KEEP",
       landNodeId: undefined as unknown as null,
       remark: "",
     });
@@ -99,6 +106,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: null,
+      frontAction: "KEEP",
       landNodeId: null,
       remark: "  老客户，续费谈过  ",
     });
@@ -111,6 +119,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "ACTIVE",
       frontNodeId: null,
+      frontAction: "KEEP",
       landNodeId: null,
       remark: "   ",
     });
@@ -123,6 +132,7 @@ describe("buildUserPayload", () => {
       id: 5,
       status: "SUSPENDED",
       frontNodeId: null,
+      frontAction: "KEEP",
       landNodeId: null,
       remark: "",
     });
@@ -172,13 +182,14 @@ describe("selectableLandNodes", () => {
 });
 
 describe("userToForm", () => {
-  it("按新模型逐字段回填", () => {
+  it("按新模型逐字段回填：第一跳一律是 KEEP，且 frontNodeId 回填成 null", () => {
     const form = userToForm(makeUser());
 
     expect(form).toEqual({
       id: 5,
       status: "ACTIVE",
-      frontNodeId: 1,
+      frontAction: "KEEP",
+      frontNodeId: null,
       landNodeId: 11,
       remark: "",
     });
@@ -190,5 +201,30 @@ describe("userToForm", () => {
 
   it("有备注就原样回填", () => {
     expect(userToForm(makeUser({ remark: "试用期" })).remark).toBe("试用期");
+  });
+
+  it("回填永远是 KEEP——改备注、改状态这些保存不该顺手动别人的前置组", () => {
+    expect(userToForm(makeUser({ frontNodeId: 7 })).frontAction).toBe("KEEP");
+  });
+
+  it("回填不把用户当前的 frontNodeId 带出来：KEEP 下服务端忽略它，带着一个过期快照只会误导下一个人", () => {
+    expect(userToForm(makeUser({ frontNodeId: 7 })).frontNodeId).toBeNull();
+  });
+});
+
+describe("frontSelectionToPayload", () => {
+  it("选「自动分配」发 AUTO：请服务端按故障域重算一组，节点 id 不再有意义", () => {
+    expect(frontSelectionToPayload(FRONT_SELECTION.AUTO_ALLOCATE)).toEqual({
+      frontAction: "AUTO",
+      frontNodeId: null,
+    });
+  });
+
+  it("选「不分配」发 CLEAR：字面意思的清空，而不是暗示自动分配", () => {
+    expect(frontSelectionToPayload(null)).toEqual({ frontAction: "CLEAR", frontNodeId: null });
+  });
+
+  it("选具体节点发 PIN：钉死到这一个（运维逃生口）", () => {
+    expect(frontSelectionToPayload(9)).toEqual({ frontAction: "PIN", frontNodeId: 9 });
   });
 });

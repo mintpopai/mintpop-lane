@@ -33,6 +33,8 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     status: "ACTIVE",
     frontNodeId: null,
     frontNodeName: null,
+    frontNodes: [],
+    failureDomainCount: 0,
     landNodeId: null,
     landNodeName: null,
     egressIp: null,
@@ -131,6 +133,7 @@ describe("UsersView 处置态转换", () => {
 
     expect(updateUser).toHaveBeenCalledWith(1, {
       status: "SUSPENDED",
+      frontAction: "KEEP",
       frontNodeId: null,
       landNodeId: null,
       remark: "",
@@ -150,7 +153,7 @@ describe("UsersView 处置态转换", () => {
     expect(showToast).toHaveBeenCalledWith("success", "已恢复");
   });
 
-  it("改状态时把节点分配原样带回，不会顺手把人的链路清了", async () => {
+  it("改状态时落地节点原样带回，不会顺手把人的链路清了", async () => {
     pageUsers.mockResolvedValue(page([user({ frontNodeId: 4, landNodeId: 7 })]));
     const wrapper = await render();
 
@@ -159,10 +162,24 @@ describe("UsersView 处置态转换", () => {
 
     expect(updateUser).toHaveBeenCalledWith(1, {
       status: "SUSPENDED",
-      frontNodeId: 4,
+      frontAction: "KEEP",
+      frontNodeId: null,
       landNodeId: 7,
       remark: "",
     });
+  });
+
+  it("改状态一律发 frontAction=KEEP，且不回带列表快照里的 frontNodeId——列表快照可能已经过期，回带它等于让服务端拿旧值去猜意图", async () => {
+    pageUsers.mockResolvedValue(page([user({ frontNodeId: 4, landNodeId: 7 })]));
+    const wrapper = await render();
+
+    await action(wrapper, 0, "停用").trigger("click");
+    await flushPromises();
+
+    expect(updateUser).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
+    );
   });
 
   it("改状态时备注也原样带回——整体保存接口，不带就等于顺手清空", async () => {

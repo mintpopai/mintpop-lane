@@ -15,6 +15,7 @@ import ai.mintpop.lane.repository.NodeGroupRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.response.SubAuditResponse;
 import ai.mintpop.lane.response.SubAuditResponse.FailureDomainReport;
+import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -26,7 +27,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -39,9 +39,6 @@ import java.util.stream.Collectors;
  */
 @Service
 public class SubAuditServiceImpl implements SubAuditService {
-
-    /** 节点名含 US/美/United States/🇺🇸 即判为美国落地。启发式，结果必须列出来给人核对，不做纯自动决策 */
-    private static final Pattern US_NODE = Pattern.compile("(?i)(\\[US]|United States|美国|🇺🇸)");
 
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
@@ -80,7 +77,7 @@ public class SubAuditServiceImpl implements SubAuditService {
 
         List<String> usNodeNames = nodes.stream()
                 .map(SubNode::sourceName)
-                .filter(SubAuditServiceImpl::isUsNode)
+                .filter(UsLandingNodes::isUsLanding)
                 .toList();
 
         List<String> protocols = nodes.stream()
@@ -122,10 +119,6 @@ public class SubAuditServiceImpl implements SubAuditService {
                 fetchResult.expiresAt());
     }
 
-    private static boolean isUsNode(String sourceName) {
-        return sourceName != null && US_NODE.matcher(sourceName).find();
-    }
-
     /**
      * 逐个视角查入口 IP 与对应 ASN，并判断是否分线路（各视角解析到不同 IP）。
      * <p>
@@ -137,7 +130,7 @@ public class SubAuditServiceImpl implements SubAuditService {
      */
     private FailureDomainReport buildFailureDomainReport(String domain, List<SubNode> domainNodes,
                                                           Map<String, Optional<String>> asnCache) {
-        int usCount = (int) domainNodes.stream().filter(node -> isUsNode(node.sourceName())).count();
+        int usCount = (int) domainNodes.stream().filter(node -> UsLandingNodes.isUsLanding(node.sourceName())).count();
         if (usCount == 0) {
             // 三个字段一律留 null 表示「本次未查询」。不能给空表或 false——
             // 那会被读成「查了但没结果」「查了，没分线路」，是比不给更糟的误导

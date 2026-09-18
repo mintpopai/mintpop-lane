@@ -48,6 +48,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE plan_order");
         jdbc.execute("TRUNCATE TABLE device_rebind_request");
         jdbc.execute("TRUNCATE TABLE user_device");
+        jdbc.execute("TRUNCATE TABLE user_front_node");
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
@@ -57,16 +58,26 @@ public class DatabaseFixtures {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
-    /** 建一个 trojan 协议的第一跳节点 */
+    /** 建一个 trojan 协议的第一跳节点；故障域为 null，与管理端手工新建的节点一致 */
     public Long createFrontNode(String name) {
+        return createFrontNode(name, "us.example.com", null);
+    }
+
+    /**
+     * 建一个 trojan 协议的第一跳节点，服务器地址与故障域由调用方指定。
+     * serverAddr 可区分：下发的 mihomo 节点定义里只有它能认出是哪个节点。
+     * failureDomain 传 null 表示尚未解析出来。
+     */
+    public Long createFrontNode(String name, String serverAddr, String failureDomain) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.FRONT);
         node.setProtocol(NodeProtocol.TROJAN);
-        node.setServerAddr("us.example.com");
+        node.setServerAddr(serverAddr);
         node.setPort(443);
-        node.setExtraConfig(Map.of("sni", "us.example.com"));
+        node.setExtraConfig(Map.of("sni", serverAddr));
         node.setSecret(Map.of("password", "front-密码"));
+        node.setFailureDomain(failureDomain);
         return nodeRepository.create(node);
     }
 
