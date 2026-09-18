@@ -5,6 +5,7 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
@@ -160,33 +161,40 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     /**
-     * 判定这次保存对前置节点组的意图。三条路互斥，判定顺序就是优先级：
-     * <ol>
-     *   <li><b>显式要求重新分配</b>（{@code reallocateFront}）→ 调分配器按故障域算一组，
-     *       忽略 {@code frontNodeId}；算不出候选时结果是空组，与「清空」同样落库。</li>
-     *   <li><b>声明的主节点与库里现值不同</b> → 按 {@code frontNodeId} 的字面语义应用：
-     *       null 即清空整组，具体 id 即手工指定这一个节点（运维逃生口）。</li>
-     *   <li><b>与现值相同</b> → 这次保存没有动第一跳，user_front_node 原样不碰。</li>
-     * </ol>
-     * 第 3 条是这个整体保存接口的必要条款，不是可省的优化：管理端改备注、停用/恢复/吊销、
-     * 只改落地节点，全都经 userToForm 把现值原样带回来。二期上线时这些保存被当作
-     * 「管理员显式指定了单个节点」，每一次都把按故障域分散好的一组砍成一个，而且静默
-     * ——冗余在生产里根本不会发生。要把已有多节点组强行收敛成当前这个主节点（而不是换一个），
-     * 先选「不分配」保存、再指定它；这个方向极少用，不值得为它在接口上再加一种取值。
+     * 把入参里<b>显式声明</b>的意图（{@link FrontAction}）翻译成对 user_front_node 的动作。
+     * <p>
+     * 这里<b>不做任何取值比较</b>——尤其不比较 {@code request.getFrontNodeId()} 与库里现值。
+     * 这个接口是整体保存，调用方带回来的取值只是它打开页面那一刻的快照：
+     * <ul>
+     *   <li>快照可能过期（另一个标签页、另一个管理员、后台重分配改过这个用户的第一跳），
+     *       「与现值不同」就会被误读成「管理员这次显式指定了单个节点」，把整组静默砍成一个；</li>
+     *   <li>「把这个用户钉死到他当前的主节点这一个」与「这次根本没动第一跳」取值完全相同，
+     *       靠比值永远分不开，前者于是成了表达不出来的盲区。</li>
+     * </ul>
+     * 两条都是「从取值反推意图」的必然产物，所以意图一律由调用方显式说出来，服务端只做翻译。
      */
     private FrontAssignment resolveFrontAssignment(Long id, UserDto user, UserSaveRequest request) {
-        if (request.isReallocateFront()) {
-            FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
-            return FrontAssignment.replace(allocation.primaryNodeId(), allocation.nodeIds());
-        }
-        if (Objects.equals(request.getFrontNodeId(), user.getFrontNodeId())) {
-            return FrontAssignment.keep(user.getFrontNodeId());
-        }
-        if (request.getFrontNodeId() == null) {
-            return FrontAssignment.clear();
-        }
-        validateNode(request.getFrontNodeId(), NodeRole.FRONT);
-        return FrontAssignment.replace(request.getFrontNodeId(), List.of(request.getFrontNodeId()));
+        return switch (request.getFrontAction()) {
+            case KEEP -> FrontAssignment.keep(user.getFrontNodeId());
+            case CLEAR -> FrontAssignment.clear();
+            case PIN -> {
+                if (request.getFrontNodeId() == null) {
+                    // 意图是「钉死到某一个节点」却没说是哪个：直接报错，不猜、也不退化成别的处置
+                    throw new BizException(BizCodeEnum.PARAM_INVALID);
+                }
+                validateNode(request.getFrontNodeId(), NodeRole.FRONT);
+                yield FrontAssignment.replace(request.getFrontNodeId(), List.of(request.getFrontNodeId()));
+            }
+            case AUTO -> {
+                FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
+                if (allocation.nodeIds().isEmpty()) {
+                    // 一个候选都算不出来时必须报错：沿用旧的「按空组落库」等于把人静默下线，
+                    // 而管理员显式要的是「分配一组」。事务在此回滚，原有的组一个不少
+                    throw new BizException(BizCodeEnum.FRONT_NODE_UNALLOCATABLE);
+                }
+                yield FrontAssignment.replace(allocation.primaryNodeId(), allocation.nodeIds());
+            }
+        };
     }
 
     @Override
