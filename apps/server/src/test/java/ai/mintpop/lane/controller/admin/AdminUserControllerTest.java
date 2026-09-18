@@ -111,6 +111,26 @@ class AdminUserControllerTest extends MysqlTestBase {
         return body;
     }
 
+    /** 显式要求按故障域重新分配前置组的那一路；frontNodeId 照旧原样带回，用于验证它被忽略 */
+    private Map<String, Object> reallocateRequest(String status, Long front, Long land) {
+        Map<String, Object> body = updateRequest(status, front, land, null);
+        body.put("reallocateFront", true);
+        return body;
+    }
+
+    /** 造一个真会被分配器选中的候选前置节点：美国落地（名字带 [US]）+ 已解析的故障域 */
+    private Long createAllocatableFrontNode(String name, String failureDomain) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName(name);
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.TROJAN);
+        node.setServerAddr(name + ".example.com");
+        node.setPort(443);
+        node.setSecret(Map.of("password", "自动分配密码"));
+        node.setFailureDomain(failureDomain);
+        return nodeRepository.create(node);
+    }
+
     @BeforeEach
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
@@ -212,54 +232,110 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("显式指定前置节点：手工指定仍然允许，user_front_node 只留这一个")
+    @DisplayName("只改备注的保存不动前置组——整体保存接口会把 frontNodeId 现值原样带回，"
+            + "把它当成「管理员显式指定了单节点」会让二期的冗余在生产里静默塌回一个节点")
+    void remarkOnlySaveLeavesFrontGroupIntact() throws Exception {
+        Long second = fixtures.createFrontNode("FRONT-2");
+        Long third = fixtures.createFrontNode("FRONT-3");
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second, third));
+
+        // 逐字模拟管理端保存备注时的载荷：frontNodeId 是 userToForm 摊平带回来的现值
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null, "老客户"))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
+                .containsExactly(frontId, second, third);
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getRemark()).isEqualTo("老客户");
+    }
+
+    @Test
+    @DisplayName("只改处置态的保存同样不动前置组——停用/恢复/吊销走的也是这个整体保存接口")
+    void statusOnlySaveLeavesFrontGroupIntact() throws Exception {
+        Long second = fixtures.createFrontNode("FRONT-2");
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("SUSPENDED", frontId, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getStatus())
+                .isEqualTo(UserStatus.SUSPENDED);
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
+                .containsExactly(frontId, second);
+
+        // 恢复也是同一条路，一并验一次：两次处置转换下来组仍是原样
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", frontId, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
+                .containsExactly(frontId, second);
+    }
+
+    @Test
+    @DisplayName("显式指定另一个前置节点：手工指定仍然允许，user_front_node 收敛成这一个")
     void updateWithExplicitFrontNodeReplacesSetWithJustThatNode() throws Exception {
+        Long second = fixtures.createFrontNode("FRONT-2");
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
+
+        // 指定的节点与库里现值（frontId）不同，才是「管理员这次真的改了第一跳」
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", frontId, null))))
+                        .content(json(updateRequest("ACTIVE", second, null))))
                 .andExpect(jsonPath("$.code").value(0));
 
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(frontId);
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(frontId);
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(second);
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(second);
     }
 
     @Test
-    @DisplayName("不指定前置节点时自动按故障域分配，主节点写入 front_node_id，全集写入 user_front_node")
-    void updateWithoutFrontNodeIdTriggersAutoAllocation() throws Exception {
+    @DisplayName("第一跳选「不分配」就真的不分配：front_node_id 置空、关联表清空——"
+            + "这是取消分配、腾出节点以便删除的唯一入口")
+    void clearingFrontNodeEmptiesPrimaryAndGroup() throws Exception {
+        Long second = fixtures.createFrontNode("FRONT-2");
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
+        // 库里存在一个可被分配器选中的候选：二期上线时 frontNodeId=null 是「自动分配」的暗号，
+        // 于是「不分配」反而会把这个节点分下去。有它在，本用例才真的守得住「不分配就是不分配」
+        createAllocatableFrontNode("🇺🇸[US]Auto-01", "relay.auto.example.net");
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", null, null))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isNull();
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("显式要求重新分配时才调分配器：按故障域算出的全集写入 user_front_node，"
+            + "主节点写入 front_node_id，且 frontNodeId 带回来的现值被忽略")
+    void reallocateFrontRebuildsGroupByFailureDomain() throws Exception {
         // fixtures.createFrontNode 造出的节点名字不含美国标记、failureDomain 也是 null，不会被分配器选中；
-        // 这里单独造一个真正会被选中的候选：美国落地 + 已解析的故障域
-        ProxyNodeDto usFront = new ProxyNodeDto();
-        usFront.setName("🇺🇸[US]Auto-01");
-        usFront.setRole(NodeRole.FRONT);
-        usFront.setProtocol(NodeProtocol.TROJAN);
-        usFront.setServerAddr("us-auto.example.com");
-        usFront.setPort(443);
-        usFront.setSecret(Map.of("password", "自动分配密码"));
-        usFront.setFailureDomain("relay.auto.example.net");
-        Long autoFrontId = nodeRepository.create(usFront);
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", "ACTIVE");
-        body.put("frontNodeId", null);
-        body.put("landNodeId", null);
-        body.put("remark", null);
+        // 这里单独造两个真正会被选中的候选：美国落地 + 已解析的故障域
+        Long autoFirst = createAllocatableFrontNode("🇺🇸[US]Auto-01", "relay.auto.example.net");
+        Long autoSecond = createAllocatableFrontNode("🇺🇸[US]Auto-02", "relay.auto.example.net");
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(body)))
+                        .content(json(reallocateRequest("ACTIVE", frontId, null))))
                 .andExpect(jsonPath("$.code").value(0));
 
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(autoFrontId);
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(autoFrontId);
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(autoFirst);
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
+                .containsExactly(autoFirst, autoSecond);
     }
 
     @Test
-    @DisplayName("删除已分配前置节点的用户不被外键挡住：user_front_node 无 ON DELETE CASCADE，需应用层先清")
+    @DisplayName("删除已分配前置节点的用户不被外键挡住：user_front_node 对 app_user 的外键带 "
+            + "ON DELETE CASCADE，关联行由数据库自动清掉，应用层不再重复删")
     void deleteUserCascadesFrontNodeAssignment() throws Exception {
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", frontId, null))))
-                .andExpect(jsonPath("$.code").value(0));
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
         assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isNotEmpty();
 
         mockMvc.perform(delete("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))

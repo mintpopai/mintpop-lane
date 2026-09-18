@@ -112,29 +112,81 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
         }
 
-        // 前置节点：管理员显式指定单个节点时按原路径走（手工指定仍然允许，这是运维逃生口）；
-        // 留空则调分配器按故障域分桶自动分配一组，primaryNodeId 写入 front_node_id（老客户端唯一认得的字段）
-        List<Long> frontNodeIds;
-        Long primaryFrontNodeId;
-        if (request.getFrontNodeId() != null) {
-            validateNode(request.getFrontNodeId(), NodeRole.FRONT);
-            primaryFrontNodeId = request.getFrontNodeId();
-            frontNodeIds = List.of(primaryFrontNodeId);
-        } else {
-            FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
-            primaryFrontNodeId = allocation.primaryNodeId();
-            frontNodeIds = allocation.nodeIds();
-        }
+        FrontAssignment front = resolveFrontAssignment(id, user, request);
         validateLandAvailable(request.getLandNodeId(), id);
 
         user.setStatus(request.getStatus());
-        user.setFrontNodeId(primaryFrontNodeId);
+        user.setFrontNodeId(front.primaryNodeId());
         user.setLandNodeId(request.getLandNodeId());
         user.setRemark(request.getRemark());
         // subject/email/role 不从入参取，沿用库里的值（邮箱是身份标识，由登录同步维护，管理端不提供改动入口）
 
         userRepository.update(user);
-        userFrontNodeRepository.replaceForUser(id, frontNodeIds);
+        switch (front.write()) {
+            // 「不碰」与「清空」是两种截然不同的处置，分成两个枚举值而不是让空列表兼职表达
+            case KEEP -> { }
+            case CLEAR -> userFrontNodeRepository.deleteByUserId(id);
+            case REPLACE -> userFrontNodeRepository.replaceForUser(id, front.nodeIds());
+        }
+    }
+
+    /** 本次保存要对 user_front_node 做什么 */
+    private enum FrontGroupWrite {
+        /** 本次保存没有动第一跳，关联表原样不碰 */
+        KEEP,
+        /** 按算出来的节点集合整体替换 */
+        REPLACE,
+        /** 清空该用户的前置节点组 */
+        CLEAR
+    }
+
+    /**
+     * 本次保存对前置节点的处置：写回 {@code front_node_id} 的主节点 + 对 user_front_node 的动作。
+     * {@code nodeIds} 只在 {@link FrontGroupWrite#REPLACE} 下有意义。
+     */
+    private record FrontAssignment(FrontGroupWrite write, Long primaryNodeId, List<Long> nodeIds) {
+
+        static FrontAssignment keep(Long primaryNodeId) {
+            return new FrontAssignment(FrontGroupWrite.KEEP, primaryNodeId, List.of());
+        }
+
+        static FrontAssignment clear() {
+            return new FrontAssignment(FrontGroupWrite.CLEAR, null, List.of());
+        }
+
+        static FrontAssignment replace(Long primaryNodeId, List<Long> nodeIds) {
+            return new FrontAssignment(FrontGroupWrite.REPLACE, primaryNodeId, nodeIds);
+        }
+    }
+
+    /**
+     * 判定这次保存对前置节点组的意图。三条路互斥，判定顺序就是优先级：
+     * <ol>
+     *   <li><b>显式要求重新分配</b>（{@code reallocateFront}）→ 调分配器按故障域算一组，
+     *       忽略 {@code frontNodeId}；算不出候选时结果是空组，与「清空」同样落库。</li>
+     *   <li><b>声明的主节点与库里现值不同</b> → 按 {@code frontNodeId} 的字面语义应用：
+     *       null 即清空整组，具体 id 即手工指定这一个节点（运维逃生口）。</li>
+     *   <li><b>与现值相同</b> → 这次保存没有动第一跳，user_front_node 原样不碰。</li>
+     * </ol>
+     * 第 3 条是这个整体保存接口的必要条款，不是可省的优化：管理端改备注、停用/恢复/吊销、
+     * 只改落地节点，全都经 userToForm 把现值原样带回来。二期上线时这些保存被当作
+     * 「管理员显式指定了单个节点」，每一次都把按故障域分散好的一组砍成一个，而且静默
+     * ——冗余在生产里根本不会发生。要把已有多节点组强行收敛成当前这个主节点（而不是换一个），
+     * 先选「不分配」保存、再指定它；这个方向极少用，不值得为它在接口上再加一种取值。
+     */
+    private FrontAssignment resolveFrontAssignment(Long id, UserDto user, UserSaveRequest request) {
+        if (request.isReallocateFront()) {
+            FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
+            return FrontAssignment.replace(allocation.primaryNodeId(), allocation.nodeIds());
+        }
+        if (Objects.equals(request.getFrontNodeId(), user.getFrontNodeId())) {
+            return FrontAssignment.keep(user.getFrontNodeId());
+        }
+        if (request.getFrontNodeId() == null) {
+            return FrontAssignment.clear();
+        }
+        validateNode(request.getFrontNodeId(), NodeRole.FRONT);
+        return FrontAssignment.replace(request.getFrontNodeId(), List.of(request.getFrontNodeId()));
     }
 
     @Override

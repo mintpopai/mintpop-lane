@@ -24,7 +24,13 @@ public interface UserFrontNodeRepository {
     /** 整体替换该用户的前置节点集合：先清空该用户原有记录再写入，入参按 id 去重 */
     void replaceForUser(Long userId, List<Long> nodeIds);
 
-    /** 清空该用户的全部前置节点记录 */
+    /**
+     * 清空该用户的全部前置节点记录。
+     * 生产调用点是管理端把第一跳选成「不分配」那条路
+     * （见 {@code AdminUserServiceImpl.FrontGroupWrite#CLEAR}）——「取消分配、腾出节点以便删除」
+     * 的唯一入口。它与 {@code replaceForUser(userId, List.of())} 落库效果相同，
+     * 但「清空」是一种独立意图，写成独立方法才能在调用点一眼读出来。
+     */
     void deleteByUserId(Long userId);
 
     /**

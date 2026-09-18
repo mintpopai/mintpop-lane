@@ -19,11 +19,26 @@ public class UserSaveRequest {
     private UserStatus status;
 
     /**
-     * 第一跳节点 id；null 表示交给分配器按故障域自动分配一组前置节点
-     * （见 {@link ai.mintpop.lane.service.FrontNodeAllocator}），本字段留下的是其中的主节点。
-     * 管理员显式传具体节点 id 时按原路径走，只绑定这一个节点——这是运维逃生口，手工指定仍然允许。
+     * 第一跳（前置）主节点 id，语义就是字面意思：**null 表示不分配**（连同整组一起清空），
+     * 具体 id 表示手工指定这一个节点——这是运维逃生口，手工指定仍然允许。
+     * <p>
+     * 本字段刻意**不再**兼职表达「自动分配」：那是 {@link #reallocateFront} 的职责。
+     * 二期上线时两种意图曾挤在这一个字段里（null＝自动分配），而这个接口是整体保存、
+     * 调用方每次都把现值原样带回来，于是「改备注」「停用/恢复」这类保存全都被当成
+     * 「管理员显式指定了单个节点」，把按故障域分散好的一组静默砍成一个。
+     * <p>
+     * 因为是整体保存，本字段与库里现值相同即「这次没有动第一跳」，前置节点组原样不动。
      */
     private Long frontNodeId;
+
+    /**
+     * 是否按故障域重新分配一组前置节点（见 {@link ai.mintpop.lane.service.FrontNodeAllocator}）。
+     * <p>
+     * 这是一个**动作**而不是状态：为真时忽略 {@link #frontNodeId}，算出的组整体写入
+     * user_front_node，其中的主节点写回 {@code front_node_id}。缺省 false——
+     * 没有显式要求就绝不重算，管理端那些只改备注/状态/落地节点的保存因此碰不到前置组。
+     */
+    private boolean reallocateFront;
 
     /** 落地节点 id，null 表示不分配 */
     private Long landNodeId;
