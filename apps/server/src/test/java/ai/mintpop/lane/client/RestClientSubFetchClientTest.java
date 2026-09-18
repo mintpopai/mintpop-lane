@@ -148,4 +148,29 @@ class RestClientSubFetchClientTest {
         assertThat(result.body()).isNotBlank();
         assertThat(result.airportName()).isNull();
     }
+
+    @Test
+    @DisplayName("expire=0（部分机场用它表示不限期）归一成 null，不是 1970-01-01")
+    void treatsZeroExpireAsUnlimited() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN)
+                        .header("subscription-userinfo",
+                                "upload=1; download=2; total=100; expire=0"));
+
+        SubFetchResult result = client.fetch("https://sub.example.com/c?token=t");
+
+        // 不归一的话到期告警会把它当成「早已过期」，每轮刷新推一条，变成纯误报源
+        assertThat(result.expiresAt()).isNull();
+        assertThat(result.totalBytes()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("expire 为负数同样归一成 null，不当成真实到期时间")
+    void treatsNegativeExpireAsUnlimited() {
+        server.expect(requestTo("https://sub.example.com/c?token=t"))
+                .andRespond(withSuccess("proxies: []", MediaType.TEXT_PLAIN)
+                        .header("subscription-userinfo", "upload=1; download=2; total=100; expire=-1"));
+
+        assertThat(client.fetch("https://sub.example.com/c?token=t").expiresAt()).isNull();
+    }
 }

@@ -17,8 +17,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -252,5 +255,68 @@ class NodeNotifyServiceTest {
 
         assertThatCode(() -> service.notifyEntryIpChanged("jp.tsdns.top", DnsVantage.OVERSEAS,
                 "13.192.233.178", "34.84.255.241")).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("订阅即将到期：橙色卡片（与额度告警同一张），分组/到期时间/剩余依次展示")
+    void expiringSoonSendsOrangeCard() {
+        service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-20T00:00:00Z"),
+                Duration.ofHours(50));
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅即将到期")).containsExactly(
+                entry("分组", "A 家（ID 3）"),
+                entry("到期时间", "2026-09-20T00:00:00Z"),
+                entry("剩余", "2 天 2 小时"));
+    }
+
+    @Test
+    @DisplayName("订阅已过期：标题与剩余都说「已过期」，不显示负的小时数")
+    void expiredSaysExpired() {
+        service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-17T00:00:00Z"),
+                Duration.ofHours(-24));
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅已过期"))
+                .containsEntry("剩余", "已过期");
+    }
+
+    @Test
+    @DisplayName("订阅到期：未配置 webhook 整体静默")
+    void expiringSilentWhenNotConfigured() {
+        properties.setWebhookUrl(null);
+
+        service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-20T00:00:00Z"),
+                Duration.ofHours(5));
+
+        verifyNoInteractions(feishuBotClient);
+    }
+
+    @Test
+    @DisplayName("订阅到期：客户端抛异常只记日志，不向调用方冒泡")
+    void expiringSwallowsClientFailure() {
+        doThrow(new IllegalStateException("飞书机器人返回异常"))
+                .when(feishuBotClient).sendCard(any(), anyString(), any());
+
+        assertThatCode(() -> service.notifySubscriptionExpiring(group(3L, "A 家"),
+                Instant.parse("2026-09-20T00:00:00Z"), Duration.ofHours(5))).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("额度告警：橙色卡片；GB 数按 Locale.ROOT 格式化，不随运行环境地区设置漂成逗号小数点")
+    void trafficThresholdFormatsBytesWithRootLocale() {
+        Locale original = Locale.getDefault();
+        // 德语区的小数点是逗号：String.format 不钉 Locale.ROOT 就会输出 "1,50 GB"
+        Locale.setDefault(Locale.GERMANY);
+        try {
+            NodeGroupDto group = group(3L, "A 家");
+            group.setUsedBytes(1_610_612_736L);  // 1.5 GB
+            group.setTotalBytes(3_221_225_472L); // 3 GB
+
+            service.notifyTrafficThreshold(group, 50);
+
+            assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅额度告警"))
+                    .containsEntry("已用 / 总额", "1.50 GB / 3.00 GB");
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 }

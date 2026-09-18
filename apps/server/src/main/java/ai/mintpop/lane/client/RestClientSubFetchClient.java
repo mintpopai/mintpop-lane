@@ -108,7 +108,9 @@ public class RestClientSubFetchClient implements SubFetchClient {
             Long total = parseLong(fields.get("total"));
             Long expire = parseLong(fields.get("expire"));
             Long used = (upload != null && download != null) ? upload + download : null;
-            Instant expiresAt = expire != null ? Instant.ofEpochSecond(expire) : null;
+            // expire=0（有些机场用它表示「不限期」）与负数都不是真实到期时间，归一成 null。
+            // 直接 ofEpochSecond 会得到 1970-01-01，到期告警会把它当成「早已过期」每轮刷屏
+            Instant expiresAt = (expire != null && expire > 0) ? Instant.ofEpochSecond(expire) : null;
             return new SubFetchResult(body, airportName, used, total, expiresAt);
         } catch (Exception e) {
             log.warn("subscription-userinfo 头解析失败，降级为无额度信息，原因={}", e.getClass().getSimpleName());

@@ -12,8 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 节点事件飞书通知（推给运营者的提醒，文案固定中文、不走 i18n）。
@@ -95,6 +98,37 @@ public class NodeNotifyService {
     }
 
     /**
+     * 订阅即将到期 / 已过期（异步）。与额度告警共用 ORANGE 卡片：到期与额度跑满的后果一模一样——
+     * 整组节点同时失效，只是到期是确定性事件、比额度更可预测，所以更该提前说。
+     * 本方法不写库，调用方也不记去重状态：告警窗口只有 3 天、刷新周期 24h，重复也就两三条。
+     */
+    @Async
+    public void notifySubscriptionExpiring(NodeGroupDto group, Instant expiresAt, Duration remaining) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("到期时间", expiresAt.toString());
+            fields.put("剩余", formatRemaining(remaining));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE,
+                    remaining.isNegative() ? "MintPop Lane 订阅已过期" : "MintPop Lane 订阅即将到期", fields);
+        } catch (Exception e) {
+            log.warn("订阅到期告警飞书通知失败 groupId={}", group.getId(), e);
+        }
+    }
+
+    /** 剩余时长的人话展示；已过期（负数）直接说「已过期」，不显示负的小时数 */
+    private static String formatRemaining(Duration remaining) {
+        if (remaining.isNegative()) {
+            return "已过期";
+        }
+        long hours = remaining.toHours();
+        return hours >= 24 ? (hours / 24) + " 天 " + (hours % 24) + " 小时" : hours + " 小时";
+    }
+
+    /**
      * 订阅节点增减（异步）：订阅定时刷新发现节点集合与库里不一致时推送，两个列表都空则不推。
      * 只告知，不代替人做决定——是否要把新节点拉进来、是否要清掉消失的节点，都需要人工确认。
      */
@@ -165,6 +199,6 @@ public class NodeNotifyService {
         if (bytes == null) {
             return "未知";
         }
-        return String.format("%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0);
+        return String.format(Locale.ROOT, "%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0);
     }
 }
