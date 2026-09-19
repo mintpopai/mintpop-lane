@@ -1,6 +1,6 @@
 package ai.mintpop.lane.repository;
 
-import ai.mintpop.lane.entity.LinkReportDto;
+import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,9 +47,9 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         userId = fixtures.createUser("u1", null, null);
     }
 
-    private LinkReportDto newReport(Long userId, String failureDomain, Instant windowStart,
+    private LinkReport newReport(Long userId, String failureDomain, Instant windowStart,
                                      int samples, int aliveCount) {
-        LinkReportDto report = new LinkReportDto();
+        LinkReport report = new LinkReport();
         report.setUserId(userId);
         report.setFailureDomain(failureDomain);
         report.setWindowStart(windowStart);
@@ -67,10 +67,10 @@ class LinkReportRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("同一窗口重复上报只留一行，且是覆盖不是累加")
     void repeatedUpsertOfSameWindowOverwrites() {
-        LinkReportDto first = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 9);
+        LinkReport first = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 9);
         repository.upsertWindow(first);
 
-        LinkReportDto second = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 3);
+        LinkReport second = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 3);
         repository.upsertWindow(second);
 
         assertThat(countRowsForUser(userId)).isEqualTo(1);
@@ -85,10 +85,10 @@ class LinkReportRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("故障域为空串与为具体值是两个不同的窗口，不会互相覆盖")
     void emptyFailureDomainIsItsOwnWindow() {
-        LinkReportDto unresolved = newReport(userId, "", WINDOW_START, 5, 5);
+        LinkReport unresolved = newReport(userId, "", WINDOW_START, 5, 5);
         repository.upsertWindow(unresolved);
 
-        LinkReportDto resolved = newReport(userId, "jp.tsdns.top", WINDOW_START, 5, 1);
+        LinkReport resolved = newReport(userId, "jp.tsdns.top", WINDOW_START, 5, 1);
         repository.upsertWindow(resolved);
 
         assertThat(countRowsForUser(userId)).isEqualTo(2);
@@ -103,11 +103,11 @@ class LinkReportRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("p50 可以从有值改回 null，updateStrategy 没被漏配")
     void p50CanBeClearedBackToNull() {
-        LinkReportDto withLatency = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 10);
+        LinkReport withLatency = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 10);
         withLatency.setP50LatencyMs(180);
         repository.upsertWindow(withLatency);
 
-        LinkReportDto withoutLatency = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 0);
+        LinkReport withoutLatency = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 0);
         withoutLatency.setP50LatencyMs(null);
         repository.upsertWindow(withoutLatency);
 
@@ -134,7 +134,7 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         repository.upsertWindow(newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 10));
         repository.upsertWindow(newReport(userId, "jp.tsdns.top", WINDOW_START.plusSeconds(300), 10, 10));
 
-        List<LinkReportDto> before = repository.findWindowsBefore(WINDOW_START.plusSeconds(300));
+        List<LinkReport> before = repository.findWindowsBefore(WINDOW_START.plusSeconds(300));
 
         assertThat(before).hasSize(1);
         assertThat(before.get(0).getWindowStart()).isEqualTo(WINDOW_START);
@@ -161,21 +161,21 @@ class LinkReportRepositoryTest extends MysqlTestBase {
     void aggregateByDomainAndIspSumsWithinRangePerUser() {
         Long otherUserId = fixtures.createUser("u2", null, null);
 
-        LinkReportDto a1 = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 9);
+        LinkReport a1 = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 9);
         a1.setIsp("CTC");
         repository.upsertWindow(a1);
 
-        LinkReportDto a2 = newReport(userId, "jp.tsdns.top", WINDOW_START.plusSeconds(300), 10, 5);
+        LinkReport a2 = newReport(userId, "jp.tsdns.top", WINDOW_START.plusSeconds(300), 10, 5);
         a2.setIsp("CTC");
         repository.upsertWindow(a2);
 
         // 区间外，不该被计入
-        LinkReportDto outOfRange = newReport(userId, "jp.tsdns.top", WINDOW_START.minusSeconds(300), 100, 100);
+        LinkReport outOfRange = newReport(userId, "jp.tsdns.top", WINDOW_START.minusSeconds(300), 100, 100);
         outOfRange.setIsp("CTC");
         repository.upsertWindow(outOfRange);
 
         // 别的用户，不该被计入
-        LinkReportDto otherUserReport = newReport(otherUserId, "jp.tsdns.top", WINDOW_START, 100, 100);
+        LinkReport otherUserReport = newReport(otherUserId, "jp.tsdns.top", WINDOW_START, 100, 100);
         otherUserReport.setIsp("CTC");
         repository.upsertWindow(otherUserReport);
 

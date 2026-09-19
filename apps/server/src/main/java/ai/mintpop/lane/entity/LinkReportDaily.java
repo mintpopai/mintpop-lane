@@ -15,12 +15,12 @@ import java.time.LocalDate;
  * 全部字段明文，不设 DTO。
  * <p>
  * 刻意不带 p50 延迟——中位数不可跨窗口相加，硬算会得到一个没有意义的数。
- * {@code failureDomain}/{@code isp} 与 {@link LinkReportDto} 同一套空串编码：
+ * {@code failureDomain}/{@code isp} 与 {@link LinkReport} 同一套空串编码：
  * 空串表示"尚未解析"/"ASN 反查失败"，不是 null，否则可空列进了唯一键会去不了重。
  */
 @Data
 @TableName("link_report_daily")
-public class LinkReportDailyDto {
+public class LinkReportDaily {
 
     @TableId(type = IdType.AUTO)
     private Long id;

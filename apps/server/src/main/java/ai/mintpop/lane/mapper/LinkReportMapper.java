@@ -1,13 +1,13 @@
 package ai.mintpop.lane.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import ai.mintpop.lane.entity.LinkReportDto;
+import ai.mintpop.lane.entity.LinkReport;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 
 /** link_report 表的 SQL 层。查询/删除由 BaseMapper 提供，upsert 需要 ON DUPLICATE KEY UPDATE，单写一条。 */
 @Mapper
-public interface LinkReportMapper extends BaseMapper<LinkReportDto> {
+public interface LinkReportMapper extends BaseMapper<LinkReport> {
 
     /**
      * 按唯一键 (user_id, failure_domain, window_start) 幂等写入：命中则整行覆盖，不累加。
@@ -32,5 +32,5 @@ public interface LinkReportMapper extends BaseMapper<LinkReportDto> {
                 source_asn = VALUES(source_asn),
                 isp = VALUES(isp)
             """)
-    int upsertWindow(LinkReportDto report);
+    int upsertWindow(LinkReport report);
 }
