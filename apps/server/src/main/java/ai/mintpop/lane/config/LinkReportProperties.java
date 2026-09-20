@@ -31,6 +31,12 @@ public class LinkReportProperties {
     private int dailyRetentionDays = 90;
 
     /**
+     * 归档扫描周期：定时任务多久跑一次，把超过 {@link #rawRetentionDays} 的原始窗口压成按天聚合，
+     * 并顺带清理超过 {@link #dailyRetentionDays} 的按天聚合行。⚠️ 未经生产实测，可回退
+     */
+    private Duration archiveInterval = Duration.ofHours(1);
+
+    /**
      * 上报窗口起点允许比「现在」落后多久，超过就丢弃整条上报块。
      * 客户端时钟不准、或请求被构造出任意时间时，过旧的窗口会污染按天聚合的口径——
      * 归档任务按「当天」聚合，一条几天前的窗口混进「今天」的聚合行没有任何校验能拦住

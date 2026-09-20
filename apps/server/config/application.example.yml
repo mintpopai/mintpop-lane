@@ -96,6 +96,9 @@ link-report:
   raw-retention-days: 7
   # 按天聚合保留天数
   daily-retention-days: 90
+  # 归档扫描周期：定时任务多久跑一次，把超过 raw-retention-days 的原始窗口压成按天聚合，
+  # 并顺带清理超过 daily-retention-days 的按天聚合行。⚠️ 未经生产实测，可回退
+  archive-interval: 1h
   # 上报窗口起点允许比「现在」落后多久，超过就丢弃整条上报块——避免客户端时钟不准/被构造出
   # 任意时间的窗口污染按天聚合的口径。Spring Boot 时长写法
   window-max-past: 1h
