@@ -39,6 +39,21 @@ function formatRate(rate: number | null): string {
   return rate === null ? "无数据" : `${(rate * 100).toFixed(1)}%`;
 }
 
+/**
+ * 成功率低于这个值就标红。取值刻意与服务端 `link-report.alert-threshold` 的默认值同一条线：
+ * 页面上标红的格子，正是服务端会推飞书告警的那些，两边口径一致，人不用在心里再换算一次。
+ * 服务端那个值可配置，这里是写死的常量——真调整了阈值，记得两边一起改。
+ */
+const ALERT_THRESHOLD = 0.8;
+
+/**
+ * 成功率是否已经低到会触发告警。null（无样本）不算——「没有数据」不是「跌破阈值」，
+ * 把它也标红会让人以为出了故障，实际只是这段时间没人从那个运营商上来。
+ */
+function isDegraded(rate: number | null): boolean {
+  return rate !== null && rate < ALERT_THRESHOLD;
+}
+
 function ispLabel(isp: string): string {
   return isp === "" ? "未知运营商" : isp;
 }
@@ -109,8 +124,11 @@ onMounted(load);
             <span v-else class="fact">{{ domain.failureDomain }}</span>
           </span>
           <span class="domain-stats muted">
-            成功率 {{ formatRate(domainRate(domain)) }} · 样本 {{ domain.samples }} · 故障切换
-            {{ domain.failovers }} 次
+            成功率
+            <span :class="{ 'cell-degraded': isDegraded(domainRate(domain)) }">{{
+              formatRate(domainRate(domain))
+            }}</span>
+            · 样本 {{ domain.samples }} · 故障切换 {{ domain.failovers }} 次
           </span>
         </header>
 
@@ -133,7 +151,13 @@ onMounted(load);
               <td>{{ ispLabel(cell.isp) }}</td>
               <td class="fact">{{ cell.samples }}</td>
               <td class="fact">{{ cell.aliveCount }}</td>
-              <td class="fact" :class="{ 'cell-no-data': cell.successRate === null }">
+              <td
+                class="fact"
+                :class="{
+                  'cell-no-data': cell.successRate === null,
+                  'cell-degraded': isDegraded(cell.successRate),
+                }"
+              >
                 {{ formatRate(cell.successRate) }}
               </td>
             </tr>
@@ -234,6 +258,16 @@ onMounted(load);
   font-size: 13px;
   line-height: 1.6;
   color: var(--color-ink);
+}
+
+/*
+ * 跌破告警阈值的成功率标红加粗。这个页面的用途是「一眼看出哪里不对」，
+ * 而在加这条之前，40.0% 与 96.4% 的颜色、字重、背景完全相同，得逐个读数字才看得出问题。
+ * 不靠颜色单独传达：数字本身仍然完整显示，色只是让扫视时先落到它身上。
+ */
+.cell-degraded {
+  color: #b42318;
+  font-weight: 600;
 }
 
 /* 无数据的格子弱化显示，但不是靠颜色单独传达——文案本身已经说清「无数据」与「0%」不同 */

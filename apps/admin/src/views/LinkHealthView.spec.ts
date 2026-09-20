@@ -84,6 +84,51 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
     expect(rateCell.text()).not.toContain("%");
   });
 
+  it("成功率跌破告警阈值的格子标红，阈值之上的不标", async () => {
+    // 这个页面的用途是「一眼看出哪里不对」。加这条之前，40.0% 与 96.4% 的颜色、
+    // 字重、背景在真实浏览器里完全相同（实测量过 computed style），得逐个读数字
+    // 才看得出问题。标红的门槛与服务端 link-report.alert-threshold 同一条线：
+    // 页面上红的，正是服务端会推飞书的那些
+    getLinkHealth.mockResolvedValue(
+      health({
+        domains: [
+          domain({
+            isps: [
+              { isp: "中国移动", samples: 100, aliveCount: 40, successRate: 0.4 },
+              { isp: "中国电信", samples: 100, aliveCount: 96, successRate: 0.96 },
+            ],
+          }),
+        ],
+      }),
+    );
+    const wrapper = await render();
+
+    const cells = wrapper.findAll("tbody tr td:last-child");
+    expect(cells[0].text()).toBe("40.0%");
+    expect(cells[0].classes()).toContain("cell-degraded");
+    expect(cells[1].text()).toBe("96.0%");
+    expect(cells[1].classes()).not.toContain("cell-degraded");
+  });
+
+  it("没有样本的格子不标红——「没有数据」不是「跌破阈值」", async () => {
+    // 守的是把 null 也当成低成功率标红：那会让人以为出了故障，
+    // 实际只是这段时间没人从那个运营商上来。与上一条是相反方向的两个错
+    getLinkHealth.mockResolvedValue(
+      health({
+        domains: [
+          domain({
+            isps: [{ isp: "中国联通", samples: 0, aliveCount: 0, successRate: null }],
+          }),
+        ],
+      }),
+    );
+    const wrapper = await render();
+
+    const rateCell = wrapper.get("tbody tr td:last-child");
+    expect(rateCell.text()).toBe("无数据");
+    expect(rateCell.classes()).not.toContain("cell-degraded");
+  });
+
   it("故障域为空串时显示「未解析」并带警示", async () => {
     getLinkHealth.mockResolvedValue(
       health({
