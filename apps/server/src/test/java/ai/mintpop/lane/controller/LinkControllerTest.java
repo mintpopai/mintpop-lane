@@ -1,5 +1,6 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -14,17 +15,24 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -56,6 +64,9 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Autowired
     private SessionTokenService sessionTokenService;
+
+    @MockitoBean
+    private IpAsnClient ipAsnClient;
 
     /** 全用例统一用这台设备的机器码请求头，与下方 setUp 里登记、绑定的那台设备一致 */
     private static final String DEVICE_ID = "a".repeat(64);
@@ -222,5 +233,118 @@ class LinkControllerTest extends MysqlTestBase {
 
     private Instant lastSeenOf(Long userId) {
         return userDeviceRepository.findByUserId(userId).getFirst().getLastSeenAt();
+    }
+
+    private long countLinkReportRows(Long userId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM link_report WHERE user_id = ?", Long.class, userId);
+    }
+
+    @Test
+    @DisplayName("不带请求体的心跳与从前行为逐字一致，老客户端不受影响")
+    void heartbeatWithoutBodyBehavesExactlyAsBefore() throws Exception {
+        String body = mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andReturn().getResponse().getContentAsString();
+
+        // 只断言 200/code=0 没有判别力：这条要连同「响应体逐字未变」与「没写库」一起断言，
+        // 否则悄悄多出一个字段、或悄悄写了一行观测数据，这个测试都发现不了
+        assertThat(body).isEqualTo("{\"code\":0,\"data\":{\"status\":\"ACTIVE\"},\"msg\":null,\"success\":true}");
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN")
+    void heartbeatWithReportPersistsRowWithAsn() throws Exception {
+        when(ipAsnClient.lookupAsn("203.0.113.9")).thenReturn(Optional.of("AS4134"));
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 12, "alive": 11, "noSample": 0},
+                  "p50LatencyMs": 180,
+                  "failovers": 1,
+                  "resolvedEntryIp": "10.0.0.9"
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Forwarded-For", "203.0.113.9, 10.0.0.1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        // X-Forwarded-For 取第一段：反查用的是真实客户端 IP，不是链路上的中间代理
+        verify(ipAsnClient).lookupAsn("203.0.113.9");
+
+        assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT failure_domain, samples, alive_count, no_sample_count, p50_latency_ms, failovers, "
+                        + "resolved_entry_ip, source_asn, isp FROM link_report WHERE user_id = ?", user1Id);
+        assertThat(row.get("failure_domain")).isEqualTo("jp.tsdns.top");
+        assertThat(row.get("samples")).isEqualTo(12);
+        assertThat(row.get("alive_count")).isEqualTo(11);
+        assertThat(row.get("no_sample_count")).isEqualTo(0);
+        assertThat(row.get("p50_latency_ms")).isEqualTo(180);
+        assertThat(row.get("failovers")).isEqualTo(1);
+        assertThat(row.get("resolved_entry_ip")).isEqualTo("10.0.0.9");
+        assertThat(row.get("source_asn")).isEqualTo("AS4134");
+        // isp 本任务全程不填：IpAsnClient 只返回 ASN，没有运营商名可填
+        assertThat(row.get("isp")).isNull();
+    }
+
+    @Test
+    @DisplayName("failureDomain 为 null 时落库存空串")
+    void nullFailureDomainStoresAsEmptyStringInDb() throws Exception {
+        when(ipAsnClient.lookupAsn(anyString())).thenReturn(Optional.empty());
+
+        String reportJson = """
+                {
+                  "failureDomain": null,
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 5, "alive": 5, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk());
+
+        String failureDomain = jdbc.queryForObject(
+                "SELECT failure_domain FROM link_report WHERE user_id = ?", String.class, user1Id);
+        assertThat(failureDomain).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("上报块格式有问题（残缺必填字段）不影响心跳本身返回正常结果")
+    void malformedReportDoesNotBreakHeartbeat() throws Exception {
+        // window 整段缺失：契约里 window.samples/alive/noSample 都不可空，
+        // 但心跳绝不能因为上报块残缺而跟着失败——这里就是验证这条底线
+        String malformedJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(malformedJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
     }
 }
