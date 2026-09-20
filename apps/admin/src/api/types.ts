@@ -592,3 +592,64 @@ export interface PlanSaveRequest {
 export interface ImageUploadResponse {
   url: string;
 }
+
+/**
+ * 管理端「链路健康」查询结果（GET /admin/link-health）：故障域 × 运营商成功率矩阵 + 入口 IP
+ * 变更时间线（spec §8.3）。矩阵全库跨全部用户求和——分析维度只到故障域与运营商，
+ * 不按节点也不按用户，页面渲染时同样只能按这两个维度展开，不能顺手加节点明细。
+ */
+export interface LinkHealthResponse {
+  /** 故障域 × 运营商的成功率矩阵，按故障域分组 */
+  domains: LinkHealthDomainRow[];
+  /** 入口 IP 变更时间线，取自一期的 entry_ip_history，按变更时刻倒序（最近的在前） */
+  entryIpTimeline: LinkHealthEntryIpChange[];
+}
+
+/**
+ * 一个故障域下按运营商展开的一行。samples/aliveCount/failovers 是该故障域下全部运营商
+ * （含未知运营商）之和。
+ *
+ * failureDomain 为空串表示"尚未解析出故障域"（与 link_report 的存储编码一致），前端要显式
+ * 显示成「未解析」，不能显示成空白——故障域未解析意味着这组节点的冗余情况是未知的，
+ * 比"只有一个故障域"更糟（与用户详情页「入口无冗余」同一口径）。
+ */
+export interface LinkHealthDomainRow {
+  failureDomain: string;
+  samples: number;
+  aliveCount: number;
+  failovers: number;
+  isps: LinkHealthIspCell[];
+}
+
+/**
+ * 一个"故障域 × 运营商"格子。isp 为空串表示这一组样本的 ASN 反查全部失败，运营商未知。
+ *
+ * successRate 在 samples 为 0 时是 null，不是 0——"没有数据"与"全挂"是两回事：把没有样本的
+ * 格子画成 0% 会让人以为某个运营商彻底不通，实际只是这段时间没人从那个运营商上来。
+ */
+export interface LinkHealthIspCell {
+  isp: string;
+  samples: number;
+  aliveCount: number;
+  successRate: number | null;
+}
+
+/**
+ * 一次入口 IP 变更事件。vantage 是服务端 DnsVantage 枚举的取值（如 CHINA_TELECOM），
+ * 服务端可能新增本前端不认识的取值，故用 string 承载。changedAt 是变更后那次观测的时刻。
+ */
+export interface LinkHealthEntryIpChange {
+  failureDomain: string;
+  vantage: string;
+  previousIps: string;
+  currentIps: string;
+  changedAt: string;
+}
+
+/** DnsVantage 枚举取值 → 中文标签，服务端新增未收录的取值时原样展示取值本身 */
+export const DNS_VANTAGE_LABELS: Record<string, string> = {
+  CHINA_TELECOM: "中国电信",
+  CHINA_UNICOM: "中国联通",
+  CHINA_MOBILE: "中国移动",
+  OVERSEAS: "海外",
+};

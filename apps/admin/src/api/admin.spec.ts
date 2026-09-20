@@ -324,6 +324,17 @@ describe("createAdminApi", () => {
     expect(init.body).toBeInstanceOf(FormData);
     expect((init.body as FormData).get("file")).toBeInstanceOf(File);
   });
+
+  it("链路健康查询把天数拼进查询串，不传天数时默认 7", async () => {
+    const { http, request } = fakeClient();
+    const api = createAdminApi(http);
+
+    await api.getLinkHealth(30);
+    await api.getLinkHealth();
+
+    expect(request).toHaveBeenNthCalledWith(1, "/admin/link-health?days=30");
+    expect(request).toHaveBeenNthCalledWith(2, "/admin/link-health?days=7");
+  });
 });
 
 describe("createAdminApi 换机申请", () => {

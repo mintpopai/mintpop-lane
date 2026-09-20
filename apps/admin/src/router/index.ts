@@ -9,6 +9,7 @@ import AppLayout from "../layouts/AppLayout.vue";
 import DeviceRequestsView from "../views/DeviceRequestsView.vue";
 import EnterprisesView from "../views/EnterprisesView.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
+import LinkHealthView from "../views/LinkHealthView.vue";
 import LoginErrorView from "../views/LoginErrorView.vue";
 import LoginView from "../views/LoginView.vue";
 import NodesView from "../views/NodesView.vue";
@@ -55,6 +56,8 @@ export function createAppRouter(
           { path: "nodes", name: "NODES", component: NodesView },
           { path: "plans", name: "PLANS", component: PlansView },
           { path: "enterprises", name: "ENTERPRISES", component: EnterprisesView },
+          // 三期新增：故障域 × 运营商成功率矩阵 + 入口 IP 变更时间线，跨用户的整体链路视角
+          { path: "link-health", name: "LINK_HEALTH", component: LinkHealthView },
         ],
       },
       { path: "/:pathMatch(.*)*", redirect: { name: "USERS" } },
