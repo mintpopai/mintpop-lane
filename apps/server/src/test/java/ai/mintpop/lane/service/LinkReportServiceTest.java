@@ -1,6 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.IpAsnClient;
+import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.request.LinkHeartbeatRequest;
@@ -11,7 +12,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -24,9 +28,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link LinkReportServiceImpl} 单测：契约字段映射、ASN 反查、异常兜底。
+ * {@link LinkReportServiceImpl} 单测：JSON 解析、契约字段映射、窗口时间范围校验、
+ * ASN 反查、异常兜底。
  * 心跳承载的是「用户还能不能用」，本类反复验证的核心不变量是——
- * ingest 无论输入多脏、下游多失败，都绝不向外抛异常。
+ * ingest 无论输入多脏（语法错误的 JSON、类型不匹配的字段、越界的窗口时间、
+ * 下游异常），都绝不向外抛异常，格式/范围有问题时最多整条上报块被丢弃。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("链路上报落库")
@@ -38,20 +44,28 @@ class LinkReportServiceTest {
     @Mock
     private IpAsnClient ipAsnClient;
 
+    @Mock
+    private Clock clock;
+
     private LinkReportService service;
+    private final ObjectMapper objectMapper = new JsonMapper();
+    private final LinkReportProperties properties = new LinkReportProperties();
 
     private static final Long USER_ID = 1L;
     private static final String SOURCE_IP = "203.0.113.9";
 
+    /** 测试用的固定「现在」；下面各上报窗口的 windowStart 都以它为基准取相对偏移 */
+    private static final Instant NOW = Instant.parse("2026-09-19T00:03:00Z");
+
     @BeforeEach
     void setUp() {
-        service = new LinkReportServiceImpl(linkReportRepository, ipAsnClient);
+        service = new LinkReportServiceImpl(linkReportRepository, ipAsnClient, objectMapper, clock, properties);
     }
 
-    private LinkHeartbeatRequest newRequest(String failureDomain) {
+    private LinkHeartbeatRequest newRequest(String failureDomain, Instant windowStart) {
         LinkHeartbeatRequest request = new LinkHeartbeatRequest();
         request.setFailureDomain(failureDomain);
-        request.setWindowStart(Instant.parse("2026-09-19T00:00:00Z"));
+        request.setWindowStart(windowStart);
         LinkHeartbeatRequest.Window window = new LinkHeartbeatRequest.Window();
         window.setSamples(10);
         window.setAlive(9);
@@ -61,12 +75,19 @@ class LinkReportServiceTest {
         return request;
     }
 
+    private String json(LinkHeartbeatRequest request) {
+        return objectMapper.writeValueAsString(request);
+    }
+
+    // —— 契约字段映射 ——
+
     @Test
     @DisplayName("failureDomain 为 null 时落库存空串")
     void nullFailureDomainStoresAsEmptyString() {
+        when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
 
-        service.ingest(USER_ID, newRequest(null), SOURCE_IP);
+        service.ingest(USER_ID, json(newRequest(null, NOW.minusSeconds(180))), SOURCE_IP);
 
         ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
         verify(linkReportRepository).upsertWindow(captor.capture());
@@ -76,21 +97,25 @@ class LinkReportServiceTest {
     @Test
     @DisplayName("具体故障域原样落库，不做任何转换")
     void concreteFailureDomainPassesThroughUnchanged() {
+        when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
 
-        service.ingest(USER_ID, newRequest("jp.tsdns.top"), SOURCE_IP);
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
         ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
         verify(linkReportRepository).upsertWindow(captor.capture());
         assertThat(captor.getValue().getFailureDomain()).isEqualTo("jp.tsdns.top");
     }
 
+    // —— ASN 反查 ——
+
     @Test
     @DisplayName("ASN 反查失败不影响上报落库，只是 asn 与 isp 为 null")
     void asnLookupFailureStillPersistsReport() {
+        when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
 
-        service.ingest(USER_ID, newRequest("jp.tsdns.top"), SOURCE_IP);
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
         ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
         verify(linkReportRepository).upsertWindow(captor.capture());
@@ -102,9 +127,10 @@ class LinkReportServiceTest {
     @Test
     @DisplayName("ASN 反查成功时落库 sourceAsn，isp 仍为 null——IpAsnClient 只返回 ASN，不提供运营商名")
     void asnLookupSuccessStoresAsnButNotIsp() {
+        when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.of("AS4134"));
 
-        service.ingest(USER_ID, newRequest("jp.tsdns.top"), SOURCE_IP);
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
         ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
         verify(linkReportRepository).upsertWindow(captor.capture());
@@ -113,24 +139,107 @@ class LinkReportServiceTest {
         assertThat(persisted.getIsp()).isNull();
     }
 
+    // —— 异常兜底：下游异常、格式残缺 ——
+
     @Test
     @DisplayName("落库异常被吞掉，不向外抛出——心跳不能被上报拖挂")
     void persistenceFailureIsSwallowed() {
+        when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
         doThrow(new RuntimeException("db down")).when(linkReportRepository).upsertWindow(any());
 
-        assertThatCode(() -> service.ingest(USER_ID, newRequest("jp.tsdns.top"), SOURCE_IP))
+        assertThatCode(() -> service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP))
                 .doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("上报块残缺（window 为 null）不向外抛出，且不落库")
     void malformedReportMissingWindowIsSwallowedWithoutPersisting() {
-        LinkHeartbeatRequest request = newRequest("jp.tsdns.top");
+        when(clock.instant()).thenReturn(NOW);
+
+        LinkHeartbeatRequest request = newRequest("jp.tsdns.top", NOW.minusSeconds(180));
         request.setWindow(null);
 
-        assertThatCode(() -> service.ingest(USER_ID, request, SOURCE_IP))
+        assertThatCode(() -> service.ingest(USER_ID, json(request), SOURCE_IP))
                 .doesNotThrowAnyException();
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    // —— C1 修复：JSON 层面的错误必须被 ingest 自己的 try/catch 吞掉，不能让 Spring/Jackson
+    //    在方法体执行前就把请求判成参数错误（那会让整条心跳失败，客户端因此误判链路失效断链）——
+    //    这类输入现在应该在 objectMapper.readValue 这一步就抛出，根本不会摸到 clock/ipAsnClient，
+    //    所以这几条不 stub 它们，也不应该被调用
+
+    @Test
+    @DisplayName("JSON 语法错误不向外抛出，且不落库")
+    void syntacticallyInvalidJsonIsSwallowedWithoutPersisting() {
+        assertThatCode(() -> service.ingest(USER_ID, "{{{", SOURCE_IP))
+                .doesNotThrowAnyException();
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("字段类型完全不匹配（window 是字符串不是对象）不向外抛出，且不落库")
+    void fieldTypeMismatchIsSwallowedWithoutPersisting() {
+        assertThatCode(() -> service.ingest(USER_ID, "{\"window\":\"not-an-object\"}", SOURCE_IP))
+                .doesNotThrowAnyException();
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("数字字段传了非数字字符串（JSON 语法合法但类型全错）不向外抛出，且不落库")
+    void numericFieldWithNonNumericStringIsSwallowedWithoutPersisting() {
+        assertThatCode(() -> service.ingest(USER_ID, "{\"failovers\":\"abc\"}", SOURCE_IP))
+                .doesNotThrowAnyException();
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    // —— I1 修复：窗口起点必须落在 [现在 - windowMaxPast, 现在 + windowMaxFuture] 内 ——
+
+    @Test
+    @DisplayName("窗口起点在未来超过容忍范围（默认 5 分钟）时丢弃，不落库")
+    void futureWindowOutsideToleranceIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        Instant tooFarInFuture = NOW.plusSeconds(600); // 10 分钟后，超过默认 5 分钟容忍
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", tooFarInFuture)), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("窗口起点在过去超过容忍范围（默认 1 小时）时丢弃，不落库")
+    void pastWindowOutsideToleranceIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        Instant tooFarInPast = NOW.minusSeconds(7200); // 2 小时前，超过默认 1 小时容忍
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", tooFarInPast)), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("窗口起点在容忍范围内时正常落库")
+    void windowWithinToleranceIsPersisted() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
+
+        Instant withinTolerance = NOW.minusSeconds(1800); // 30 分钟前，在默认 1 小时容忍内
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", withinTolerance)), SOURCE_IP);
+
+        verify(linkReportRepository).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("窗口起点缺失（null）视同越界，丢弃，不落库")
+    void missingWindowStartIsDiscarded() {
+        // windowStart 为 null 时短路返回，压根不会调 clock.instant()，这里不 stub 它
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", null)), SOURCE_IP);
 
         verify(linkReportRepository, never()).upsertWindow(any());
     }

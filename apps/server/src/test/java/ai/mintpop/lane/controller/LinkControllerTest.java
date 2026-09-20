@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -68,8 +69,18 @@ class LinkControllerTest extends MysqlTestBase {
     @MockitoBean
     private IpAsnClient ipAsnClient;
 
+    @MockitoBean
+    private Clock clock;
+
     /** 全用例统一用这台设备的机器码请求头，与下方 setUp 里登记、绑定的那台设备一致 */
     private static final String DEVICE_ID = "a".repeat(64);
+
+    /**
+     * 测试用的固定「现在」：本类里所有上报块的 windowStart 字面量都是
+     * {@code 2026-09-19T00:00:00Z}，这里取它 3 分钟之后，让那些字面量安全落在
+     * 窗口容忍范围（默认过去 1 小时/未来 5 分钟）内，不受真实系统时钟影响
+     */
+    private static final Instant FIXED_NOW = Instant.parse("2026-09-19T00:03:00Z");
 
     private DatabaseFixtures fixtures;
     private Long user1Id;
@@ -81,6 +92,13 @@ class LinkControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
+        // 默认让 clock 表现得跟真实时钟一样：GET /config 等与心跳窗口无关的用例依赖
+        // fixture 建的订阅有效期是按「真实现在」算的（见 DatabaseFixtures），这里必须贴近
+        // 真实时间。心跳窗口边界相关的用例会在各自方法里用 when(...) 覆盖这个默认桩，
+        // 改用与其 windowStart 字面量对齐的固定时间，不依赖当前系统时间是否恰好落在
+        // 容忍范围内（那样测试会随沙箱系统时间漂移而变得不稳定）
+        when(clock.instant()).thenReturn(Instant.now());
+
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
@@ -258,6 +276,7 @@ class LinkControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN")
     void heartbeatWithReportPersistsRowWithAsn() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
         when(ipAsnClient.lookupAsn("203.0.113.9")).thenReturn(Optional.of("AS4134"));
 
         String reportJson = """
@@ -302,6 +321,7 @@ class LinkControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("failureDomain 为 null 时落库存空串")
     void nullFailureDomainStoresAsEmptyStringInDb() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
         when(ipAsnClient.lookupAsn(anyString())).thenReturn(Optional.empty());
 
         String reportJson = """
@@ -327,6 +347,8 @@ class LinkControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("上报块格式有问题（残缺必填字段）不影响心跳本身返回正常结果")
     void malformedReportDoesNotBreakHeartbeat() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
         // window 整段缺失：契约里 window.samples/alive/noSample 都不可空，
         // 但心跳绝不能因为上报块残缺而跟着失败——这里就是验证这条底线
         String malformedJson = """
@@ -341,6 +363,81 @@ class LinkControllerTest extends MysqlTestBase {
                         .header("Authorization", bearer(user1Id))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(malformedJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    // —— C1 修复：JSON 层面的错误必须只丢一个上报窗口，不能打断整条心跳 ——
+    // 这三条曾经实测复现过 code=110001（HttpMessageNotReadableException 在方法体执行前
+    // 被 GlobalExceptionHandler 接住）：把 report 参数从 LinkHeartbeatRequest 改成裸
+    // String、解析挪进 LinkReportService#ingest 内部的 try/catch 后，这里必须变绿
+
+    @Test
+    @DisplayName("请求体 JSON 语法错误不影响心跳本身返回正常结果，且不落库")
+    void syntacticallyInvalidJsonDoesNotBreakHeartbeat() throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{{{"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("window 字段类型完全不匹配（字符串而不是对象）不影响心跳本身返回正常结果，且不落库")
+    void fieldTypeMismatchDoesNotBreakHeartbeat() throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"window\":\"not-an-object\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("数字字段传了非数字字符串（JSON 语法合法但类型全错）不影响心跳本身返回正常结果，且不落库")
+    void numericFieldWithNonNumericStringDoesNotBreakHeartbeat() throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"failovers\":\"abc\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    // —— I1 修复：窗口起点越界（客户端时钟不准/被构造出任意时间）时丢弃整条上报块 ——
+
+    @Test
+    @DisplayName("窗口起点超出未来容忍范围时被丢弃，心跳仍返回正常结果")
+    void futureWindowIsDiscardedButHeartbeatStillSucceeds() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:20:00Z",
+                  "window": {"samples": 5, "alive": 5, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+        // FIXED_NOW 是 2026-09-19T00:03:00Z，窗口起点比它晚 17 分钟，超过默认 5 分钟的未来容忍
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"));

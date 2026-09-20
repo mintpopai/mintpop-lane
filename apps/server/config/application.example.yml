@@ -96,6 +96,12 @@ link-report:
   raw-retention-days: 7
   # 按天聚合保留天数
   daily-retention-days: 90
+  # 上报窗口起点允许比「现在」落后多久，超过就丢弃整条上报块——避免客户端时钟不准/被构造出
+  # 任意时间的窗口污染按天聚合的口径。Spring Boot 时长写法
+  window-max-past: 1h
+  # 上报窗口起点允许比「现在」超前多久，超过就丢弃整条上报块——未来时间戳会让窗口永远绕开
+  # 归档任务的 findWindowsBefore 扫描
+  window-max-future: 5m
 
 # —— 订单 ——
 order:
