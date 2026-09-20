@@ -6,6 +6,7 @@ import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.mapper.EntryIpHistoryMapper;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /** 中转入口 IP 观测历史的 MySQL 实现。 */
@@ -34,5 +35,14 @@ public class MybatisEntryIpHistoryRepository implements EntryIpHistoryRepository
                         .orderByDesc(EntryIpHistory::getId)
                         .last("LIMIT 1"))
                 .stream().findFirst();
+    }
+
+    @Override
+    public List<EntryIpHistory> findAllOrderByDomainVantageAndTime() {
+        return mapper.selectList(Wrappers.<EntryIpHistory>lambdaQuery()
+                .orderByAsc(EntryIpHistory::getFailureDomain)
+                .orderByAsc(EntryIpHistory::getVantage)
+                .orderByAsc(EntryIpHistory::getObservedAt)
+                .orderByAsc(EntryIpHistory::getId));
     }
 }

@@ -37,6 +37,15 @@ public interface LinkReportRepository {
     List<UserDomainIspAggregate> aggregateAllUsersByDomainAndIsp(Instant from, Instant to);
 
     /**
+     * 全库范围「故障域 × 运营商」聚合，不含用户维度，SQL 层 GROUP BY——供管理端链路健康矩阵使用。
+     * 与 {@link #aggregateAllUsersByDomainAndIsp} 的区别：那个还按用户切分；管理端矩阵没有用户维度
+     * （spec §8.3：按「故障域 × 运营商」展示，不按节点也不按用户），因此这里连用户也在 SQL 层
+     * 求和掉——不能先调 {@link #aggregateAllUsersByDomainAndIsp} 再在 Java 侧把 userId 合并掉，
+     * 那样仍会把「分组数 × 用户数」的行拉回内存。
+     */
+    List<DomainIspAggregate> aggregateGlobalByDomainAndIsp(Instant from, Instant to);
+
+    /**
      * 一行「故障域 × 运营商」的聚合结果。{@code isp} 为 {@code null} 表示这些窗口的 ASN 反查失败，
      * 与 {@link LinkReport#getIsp()} 同一语义。这是只读投影，不对应任何表。
      */

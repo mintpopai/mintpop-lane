@@ -76,6 +76,14 @@ public class MybatisLinkReportRepository implements LinkReportRepository {
                 .toList();
     }
 
+    @Override
+    public List<DomainIspAggregate> aggregateGlobalByDomainAndIsp(Instant from, Instant to) {
+        return mapper.selectGlobalGroupedByDomainAndIsp(from, to).stream()
+                .map(row -> new DomainIspAggregate(row.getFailureDomain(), row.getIsp(),
+                        row.getSamples(), row.getAliveCount(), row.getFailovers()))
+                .toList();
+    }
+
     /** Java 侧分组用的复合键：故障域 + 运营商，两者都可能为 null */
     private record DomainIspKey(String failureDomain, String isp) {
     }

@@ -53,4 +53,19 @@ public interface LinkReportMapper extends BaseMapper<LinkReport> {
             """)
     List<LinkReportUserAggregateRow> selectAllUsersGroupedByDomainAndIsp(@Param("from") Instant from,
                                                                           @Param("to") Instant to);
+
+    /**
+     * 全库范围「故障域 × 运营商」聚合，连用户维度也在 SQL 层求和掉：管理端链路健康矩阵
+     * 没有用户维度（spec §8.3：按「故障域 × 运营商」展示，不按节点也不按用户），
+     * 照单用户查询那样取原始行再在 Java 侧分组求和会把全库全部用户的原始窗口行拉进内存。
+     */
+    @Select("""
+            SELECT failure_domain, isp,
+                   SUM(samples) AS samples, SUM(alive_count) AS alive_count, SUM(failovers) AS failovers
+            FROM link_report
+            WHERE window_start >= #{from} AND window_start < #{to}
+            GROUP BY failure_domain, isp
+            """)
+    List<LinkReportDomainIspAggregateRow> selectGlobalGroupedByDomainAndIsp(@Param("from") Instant from,
+                                                                             @Param("to") Instant to);
 }

@@ -6,6 +6,7 @@ import ai.mintpop.lane.mapper.LinkReportDailyMapper;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 /** 链路上报按天聚合的 MySQL 实现。 */
@@ -36,5 +37,16 @@ public class MybatisLinkReportDailyRepository implements LinkReportDailyReposito
     public void deleteBefore(LocalDate before) {
         mapper.delete(Wrappers.<LinkReportDaily>lambdaQuery()
                 .lt(LinkReportDaily::getStatDate, before));
+    }
+
+    @Override
+    public List<LinkReportRepository.DomainIspAggregate> aggregateGlobalByDomainAndIsp(LocalDate from, LocalDate to) {
+        return mapper.selectGlobalGroupedByDomainAndIsp(from, to).stream()
+                // 本表 isp 是 NOT NULL DEFAULT ''，空串表示反查失败；归一化成 null，
+                // 与 link_report.isp 的 null 编码对齐，调用方合并两表结果时不用记两套判断条件
+                .map(row -> new LinkReportRepository.DomainIspAggregate(row.getFailureDomain(),
+                        row.getIsp() == null || row.getIsp().isEmpty() ? null : row.getIsp(),
+                        row.getSamples(), row.getAliveCount(), row.getFailovers()))
+                .toList();
     }
 }

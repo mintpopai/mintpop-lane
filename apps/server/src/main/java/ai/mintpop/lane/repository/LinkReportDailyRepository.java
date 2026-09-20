@@ -1,8 +1,10 @@
 package ai.mintpop.lane.repository;
 
 import ai.mintpop.lane.entity.LinkReportDaily;
+import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 /** 链路上报按天聚合（link_report_daily）的读写口。上层只依赖这个接口，看不到 MyBatis-Plus。 */
@@ -20,4 +22,15 @@ public interface LinkReportDailyRepository {
 
     /** 删除统计日早于 {@code before} 的全部按天聚合行，供归档任务清理过保留期的数据 */
     void deleteBefore(LocalDate before);
+
+    /**
+     * 全库范围「故障域 × 运营商」聚合（统计日闭区间 [{@code from}, {@code to}]），SQL 层 GROUP BY，
+     * 供管理端链路健康矩阵覆盖超过原始保留期（{@code link_report} 只保留 7 天）的历史。
+     * <p>
+     * 返回形状复用 {@link LinkReportRepository.DomainIspAggregate}，但 {@code isp} 的空串已经在
+     * 这里被归一化成 {@code null}——本表 {@code isp} 是 {@code NOT NULL DEFAULT ''} 编码（空串表示
+     * ASN 反查失败），与 {@code link_report.isp} 的 null 编码不同；归一化到 null 让调用方合并两张表
+     * 的结果时不用记两套"未知运营商"的判断条件。
+     */
+    List<DomainIspAggregate> aggregateGlobalByDomainAndIsp(LocalDate from, LocalDate to);
 }

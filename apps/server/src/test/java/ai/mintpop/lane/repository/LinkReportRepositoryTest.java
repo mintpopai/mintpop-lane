@@ -231,4 +231,44 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         assertThat(userBRow.samples()).isEqualTo(20);
         assertThat(userBRow.aliveCount()).isEqualTo(18);
     }
+
+    @Test
+    @DisplayName("aggregateGlobalByDomainAndIsp 连用户维度也在 SQL 层求和掉：不同用户同一故障域×运营商"
+            + "合并成 1 行，行数是分组数，不是原始窗口数，也不是「用户×分组」数")
+    void aggregateGlobalByDomainAndIspGroupsAcrossUsersWithoutUserDimension() {
+        Long userA = userId;
+        Long userB = fixtures.createUser("u2", null, null);
+
+        // 两个不同用户落在同一个故障域×运营商，应合并成 1 行且不含用户维度
+        LinkReport a1 = newReport(userA, "jp.tsdns.top", WINDOW_START, 10, 9);
+        a1.setIsp("CTC");
+        repository.upsertWindow(a1);
+        LinkReport b1 = newReport(userB, "jp.tsdns.top", WINDOW_START.plusSeconds(300), 20, 15);
+        b1.setIsp("CTC");
+        repository.upsertWindow(b1);
+
+        // 另一个故障域×运营商，单独一行
+        LinkReport b2 = newReport(userB, "us.tsdns.top", WINDOW_START, 5, 5);
+        b2.setIsp("CUCC");
+        repository.upsertWindow(b2);
+
+        List<LinkReportRepository.DomainIspAggregate> aggregates = repository
+                .aggregateGlobalByDomainAndIsp(WINDOW_START, WINDOW_START.plusSeconds(301));
+
+        // 3 条原始窗口、跨 2 个用户，但只有 2 个「故障域×运营商」分组：若退化成先按用户查
+        // 再拼起来，或者漏了某个用户，行数或数值就会不对
+        assertThat(aggregates).hasSize(2);
+
+        LinkReportRepository.DomainIspAggregate jpRow = aggregates.stream()
+                .filter(row -> row.failureDomain().equals("jp.tsdns.top")).findFirst().orElseThrow();
+        assertThat(jpRow.isp()).isEqualTo("CTC");
+        assertThat(jpRow.samples()).isEqualTo(30);
+        assertThat(jpRow.aliveCount()).isEqualTo(24);
+
+        LinkReportRepository.DomainIspAggregate usRow = aggregates.stream()
+                .filter(row -> row.failureDomain().equals("us.tsdns.top")).findFirst().orElseThrow();
+        assertThat(usRow.isp()).isEqualTo("CUCC");
+        assertThat(usRow.samples()).isEqualTo(5);
+        assertThat(usRow.aliveCount()).isEqualTo(5);
+    }
 }
