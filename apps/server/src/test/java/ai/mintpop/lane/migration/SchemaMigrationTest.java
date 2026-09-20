@@ -640,6 +640,30 @@ class SchemaMigrationTest extends MysqlTestBase {
         }
     }
 
+    @Test
+    @DisplayName("V23 建出 link_alert_state 表，表与全部列注释落库")
+    void v23AddsLinkAlertStateTable() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(tableExists(conn, "link_alert_state")).isTrue();
+
+            for (String column : List.of("user_id", "failure_domain", "isp", "alerted", "alerted_at", "updated_at")) {
+                assertThat(columnComment(conn, "link_alert_state", column))
+                        .as("link_alert_state.%s 应带中文注释", column)
+                        .isNotBlank();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("link_alert_state 的唯一键列全部非空，否则同一故障域×运营商的去重状态会分裂成多行")
+    void linkAlertStateUniqueKeyColumnsAreNotNullable() throws Exception {
+        for (String column : List.of("user_id", "failure_domain", "isp")) {
+            assertThat(isNullable("link_alert_state", column))
+                    .as("link_alert_state.%s 进了唯一键，必须 NOT NULL", column)
+                    .isFalse();
+        }
+    }
+
     /** 复用既有的 {@link #isNullable(Connection, String, String)} 查询方式，只是省去调用方自己开关连接 */
     private boolean isNullable(String table, String column) throws Exception {
         try (Connection conn = dataSource.getConnection()) {

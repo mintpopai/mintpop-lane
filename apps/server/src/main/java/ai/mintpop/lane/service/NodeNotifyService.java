@@ -194,6 +194,53 @@ public class NodeNotifyService {
         }
     }
 
+    /**
+     * 故障域级成功率告警（异步）：跨该故障域下全部运营商求和的成功率跌破阈值。用 ORANGE——
+     * 这是需要人去排查中转入口的信号，不代表用户已经完全连不上。
+     * 调用方在去重状态已落库之后再调本方法，通知失败不该让去重状态丢失。
+     */
+    @Async
+    public void notifyFailureDomainDegraded(String failureDomain, double successRate, long samples) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("故障域", failureDomain);
+            fields.put("成功率", formatRate(successRate));
+            fields.put("样本量", String.valueOf(samples));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 故障域成功率告警", fields);
+        } catch (Exception e) {
+            log.warn("故障域成功率告警飞书通知失败 domain={}", failureDomain, e);
+        }
+    }
+
+    /**
+     * 运营商级成功率告警（异步）：同一故障域下某个运营商的成功率单独跌破阈值，与故障域级
+     * 共用阈值与最小样本量，但各自独立去重。{@code isp} 为 null 表示 ASN 反查失败。
+     */
+    @Async
+    public void notifyIspDegraded(String failureDomain, String isp, double successRate, long samples) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("故障域", failureDomain);
+            fields.put("运营商", isp == null || isp.isBlank() ? "未知" : isp);
+            fields.put("成功率", formatRate(successRate));
+            fields.put("样本量", String.valueOf(samples));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警", fields);
+        } catch (Exception e) {
+            log.warn("运营商成功率告警飞书通知失败 domain={} isp={}", failureDomain, isp, e);
+        }
+    }
+
+    /** 成功率转百分比展示，保留一位小数；钉 Locale.ROOT 避免小数点在部分地区被渲染成逗号 */
+    private static String formatRate(double rate) {
+        return String.format(Locale.ROOT, "%.1f%%", rate * 100);
+    }
+
     /** 字节数转 GB 展示，保留两位小数；null（机场未返回额度头）显示「未知」 */
     private static String formatBytes(Long bytes) {
         if (bytes == null) {

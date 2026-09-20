@@ -51,6 +51,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE user_front_node");
         jdbc.execute("TRUNCATE TABLE link_report");
         jdbc.execute("TRUNCATE TABLE link_report_daily");
+        jdbc.execute("TRUNCATE TABLE link_alert_state");
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
