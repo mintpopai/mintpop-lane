@@ -80,6 +80,20 @@ class AdminLinkHealthServiceImplTest {
     }
 
     @Test
+    @DisplayName("days 正好等于原始保留期这个边界上，仍只查 link_report")
+    void daysExactlyAtRawRetentionStillSkipsDailyTable() {
+        // 边界值单独立一条：读哪张表的判据是「严格大于 rawRetentionDays」，
+        // 与归档任务 findWindowsBefore / deleteWindowsBefore 的「严格早于」语义配套。
+        // 把 > 写成 >= 的话，days=7 会多查一张此刻还没有任何数据的 daily 表；
+        // 反过来若归档那边改成非严格，这里就会漏掉刚被归档走的那一天。
+        // 前后两条测试只覆盖了 5 和 10，这个边界原本是空的
+        service.getLinkHealth(7); // == rawRetentionDays(7)
+
+        verify(linkReportRepository).aggregateGlobalByDomainAndIsp(NOW.minus(Duration.ofDays(7)), NOW);
+        verify(linkReportDailyRepository, never()).aggregateGlobalByDomainAndIsp(any(), any());
+    }
+
+    @Test
     @DisplayName("days 超过原始保留期，两张表都查")
     void daysAboveRawRetentionQueriesBothTables() {
         service.getLinkHealth(10); // > rawRetentionDays(7)
