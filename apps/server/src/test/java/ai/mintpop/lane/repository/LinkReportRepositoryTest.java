@@ -189,4 +189,46 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         assertThat(row.samples()).isEqualTo(20);
         assertThat(row.aliveCount()).isEqualTo(14);
     }
+
+    @Test
+    @DisplayName("aggregateAllUsersByDomainAndIsp 在 SQL 层按用户×故障域×运营商分组求和，一次查出全部用户："
+            + "3 条原始窗口只应合并成 2 行——行数是分组数，不是原始窗口数")
+    void aggregateAllUsersByDomainAndIspGroupsAcrossUsersInSql() {
+        Long userA = userId;
+        Long userB = fixtures.createUser("u2", null, null);
+
+        // userA：同一分组两条窗口，应合并成 1 行
+        LinkReport a1 = newReport(userA, "jp.tsdns.top", WINDOW_START, 10, 9);
+        a1.setIsp("CTC");
+        repository.upsertWindow(a1);
+        LinkReport a2 = newReport(userA, "jp.tsdns.top", WINDOW_START.plusSeconds(300), 10, 5);
+        a2.setIsp("CTC");
+        repository.upsertWindow(a2);
+
+        // userB：不同用户、不同故障域，单独一行，不会与 userA 的合并到一起
+        LinkReport b1 = newReport(userB, "us.tsdns.top", WINDOW_START, 20, 18);
+        b1.setIsp("CUCC");
+        repository.upsertWindow(b1);
+
+        List<LinkReportRepository.UserDomainIspAggregate> aggregates = repository
+                .aggregateAllUsersByDomainAndIsp(WINDOW_START, WINDOW_START.plusSeconds(301));
+
+        // 3 条原始窗口，但只有 2 个「用户×故障域×运营商」分组：若实现退化成把原始行原样搬回来
+        // （而不是真的在 SQL 层 GROUP BY），这里会看到 3 行而不是 2 行
+        assertThat(aggregates).hasSize(2);
+
+        LinkReportRepository.UserDomainIspAggregate userARow = aggregates.stream()
+                .filter(row -> row.userId().equals(userA)).findFirst().orElseThrow();
+        assertThat(userARow.failureDomain()).isEqualTo("jp.tsdns.top");
+        assertThat(userARow.isp()).isEqualTo("CTC");
+        assertThat(userARow.samples()).isEqualTo(20);
+        assertThat(userARow.aliveCount()).isEqualTo(14);
+
+        LinkReportRepository.UserDomainIspAggregate userBRow = aggregates.stream()
+                .filter(row -> row.userId().equals(userB)).findFirst().orElseThrow();
+        assertThat(userBRow.failureDomain()).isEqualTo("us.tsdns.top");
+        assertThat(userBRow.isp()).isEqualTo("CUCC");
+        assertThat(userBRow.samples()).isEqualTo(20);
+        assertThat(userBRow.aliveCount()).isEqualTo(18);
+    }
 }

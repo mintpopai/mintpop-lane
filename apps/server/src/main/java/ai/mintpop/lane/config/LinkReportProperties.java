@@ -43,4 +43,16 @@ public class LinkReportProperties {
      * 「窗口起点早于给定时刻」），归档任务因此永远清不掉这一行
      */
     private Duration windowMaxFuture = Duration.ofMinutes(5);
+
+    /**
+     * 告警扫描周期：定时任务多久跑一次，与 5 分钟上报窗口对齐。⚠️ 未经生产实测，可回退
+     */
+    private Duration alertCheckInterval = Duration.ofMinutes(5);
+
+    /**
+     * 每次告警扫描回看多久的数据。刻意取 3 个上报窗口（15 分钟）而不是 1 个（5 分钟）：
+     * 单窗口的样本量在用户少、上报稀疏时过不了 {@link #alertMinSamples}（默认 20）的门槛，
+     * 会让告警永远不触发。⚠️ 未经生产实测，可回退
+     */
+    private Duration alertLookback = Duration.ofMinutes(15);
 }

@@ -102,6 +102,11 @@ link-report:
   # 上报窗口起点允许比「现在」超前多久，超过就丢弃整条上报块——未来时间戳会让窗口永远绕开
   # 归档任务的 findWindowsBefore 扫描
   window-max-future: 5m
+  # 告警扫描周期：定时任务多久跑一次，与 5 分钟上报窗口对齐。⚠️ 未经生产实测，可回退
+  alert-check-interval: 5m
+  # 每次告警扫描回看多久的数据。取 3 个上报窗口而不是 1 个：单窗口的样本量在用户少时
+  # 过不了 alert-min-samples 的门槛，会让告警永远不触发
+  alert-lookback: 15m
 
 # —— 订单 ——
 order:

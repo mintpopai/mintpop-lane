@@ -3,15 +3,20 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkAlertState;
 import ai.mintpop.lane.repository.LinkAlertStateRepository;
+import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
+import ai.mintpop.lane.repository.LinkReportRepository.UserDomainIspAggregate;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 成功率跌破阈值告警：对同一用户的「故障域 × 运营商」聚合结果分别做故障域级（跨运营商求和）
@@ -27,17 +32,51 @@ import java.util.Map;
 @Service
 public class LinkReportAlertService {
 
+    private final LinkReportRepository linkReportRepository;
     private final LinkAlertStateRepository alertStateRepository;
     private final NodeNotifyService notifyService;
     private final LinkReportProperties properties;
     private final Clock clock;
 
-    public LinkReportAlertService(LinkAlertStateRepository alertStateRepository, NodeNotifyService notifyService,
+    public LinkReportAlertService(LinkReportRepository linkReportRepository,
+                                  LinkAlertStateRepository alertStateRepository, NodeNotifyService notifyService,
                                   LinkReportProperties properties, Clock clock) {
+        this.linkReportRepository = linkReportRepository;
         this.alertStateRepository = alertStateRepository;
         this.notifyService = notifyService;
         this.properties = properties;
         this.clock = clock;
+    }
+
+    /**
+     * 定时扫描全部用户：按 {@link LinkReportProperties#getAlertLookback()} 回看窗口，
+     * 从全库聚合（SQL 层 GROUP BY，见 {@link LinkReportRepository#aggregateAllUsersByDomainAndIsp}）
+     * 里按用户切分后逐个调用 {@link #checkAndNotify}。形态照抄 {@link EntryIpWatchService}：
+     * fixedDelay 让上一轮跑完再计时，initialDelay 同样取周期，避免每次重启都立刻扫一遍全库。
+     * 单个用户处理失败（多半是去重状态落库异常）只记日志、跳过该用户，不影响其余用户被扫到。
+     */
+    @Scheduled(fixedDelayString = "#{@linkReportProperties.alertCheckInterval.toMillis()}",
+            initialDelayString = "#{@linkReportProperties.alertCheckInterval.toMillis()}")
+    public void checkAll() {
+        Instant now = clock.instant();
+        Instant from = now.minus(properties.getAlertLookback());
+
+        Map<Long, List<UserDomainIspAggregate>> byUser = linkReportRepository
+                .aggregateAllUsersByDomainAndIsp(from, now).stream()
+                .collect(Collectors.groupingBy(UserDomainIspAggregate::userId));
+
+        for (Map.Entry<Long, List<UserDomainIspAggregate>> entry : byUser.entrySet()) {
+            Long userId = entry.getKey();
+            List<DomainIspAggregate> aggregates = entry.getValue().stream()
+                    .map(row -> new DomainIspAggregate(row.failureDomain(), row.isp(), row.samples(),
+                            row.aliveCount(), row.failovers()))
+                    .toList();
+            try {
+                checkAndNotify(userId, aggregates);
+            } catch (Exception e) {
+                log.warn("链路成功率告警扫描失败，跳过 userId={}", userId, e);
+            }
+        }
     }
 
     /**

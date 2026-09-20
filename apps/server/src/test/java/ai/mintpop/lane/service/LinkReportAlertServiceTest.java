@@ -1,7 +1,9 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.config.LinkReportProperties;
+import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.repository.LinkAlertStateRepository;
+import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -16,6 +18,7 @@ import org.springframework.core.task.TaskRejectedException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -48,6 +51,8 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @Autowired
     private JdbcTemplate jdbc;
     @Autowired
+    private LinkReportRepository linkReportRepository;
+    @Autowired
     private LinkAlertStateRepository alertStateRepository;
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -73,8 +78,22 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     /** 每次都 new 一个新实例，模拟「重启」不共享任何内存态；去重状态全部靠 alertStateRepository 落库读回 */
     private LinkReportAlertService newService() {
-        return new LinkReportAlertService(alertStateRepository, notifyService, properties,
+        return new LinkReportAlertService(linkReportRepository, alertStateRepository, notifyService, properties,
                 Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /** 真实落一条 link_report 窗口，供 checkAll 相关测试驱动全库聚合查询 */
+    private void insertWindow(Long userId, String domain, String isp, Instant windowStart, int samples, int alive) {
+        LinkReport report = new LinkReport();
+        report.setUserId(userId);
+        report.setFailureDomain(domain);
+        report.setWindowStart(windowStart);
+        report.setSamples(samples);
+        report.setAliveCount(alive);
+        report.setNoSampleCount(0);
+        report.setFailovers(0);
+        report.setIsp(isp);
+        linkReportRepository.upsertWindow(report);
     }
 
     /** 100 个样本、50 个存活 → 成功率 50%，跌破默认阈值 0.80 */
@@ -107,9 +126,14 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("samples 为 0 时不做除法、不告警")
-    void zeroSamplesNeitherDividesNorAlerts() {
-        // 守的是 0/0：整段窗口离线的用户不该被报成 0% 可用，也不该抛 ArithmeticException/算出 NaN
+    @DisplayName("samples 为 0 时不抛 ArithmeticException（“不告警”那半由 staysSilentWhenSamplesBelowMinimum 守）")
+    void zeroSamplesDoesNotThrowArithmeticException() {
+        // 本实现用 (double) aliveCount / samples：0.0/0 在 Java 里是 NaN，不是抛异常，
+        // 且 NaN < threshold 恒为 false，所以"不告警"这半对当前实现天然成立——真正守住
+        // "样本不足就不该告警"这条业务规则的是 staysSilentWhenSamplesBelowMinimum（已用破坏性
+        // 自查验证过它的判别力，去掉门槛会让它变红，而这条不会）。
+        // 这条测试单独守的是"不抛 ArithmeticException"：万一将来有人把除法改成 long/long 的
+        // 整数除法，除数为 0 时会真的抛出，这条测试会因此变红
         assertThatCode(() -> newService().checkAndNotify(userId,
                 List.of(new DomainIspAggregate(DOMAIN, ISP, 0, 0, 0))))
                 .doesNotThrowAnyException();
@@ -195,5 +219,34 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         verify(notifyService).notifyFailureDomainDegraded(DOMAIN, 0.65, 200L);
         verify(notifyService).notifyIspDegraded(DOMAIN, "CTC", 0.4, 100L);
         verify(notifyService, times(0)).notifyIspDegraded(DOMAIN, "CUCC", 0.9, 100L);
+    }
+
+    @Test
+    @DisplayName("checkAll 定时扫描：多个不同用户的劣化各自独立推送，不是只看到第一个用户")
+    void checkAllNotifiesEachDegradedUserIndependently() {
+        Long userA = userId;
+        Long userB = fixtures.createUser("u2", null, null);
+        Instant windowStart = NOW.minus(Duration.ofMinutes(5)); // 落在默认 15 分钟回看窗口内
+
+        insertWindow(userA, "a.tsdns.top", ISP, windowStart, 100, 50); // 50%，跌破阈值
+        insertWindow(userB, "b.tsdns.top", ISP, windowStart, 100, 40); // 40%，跌破阈值
+
+        newService().checkAll();
+
+        verify(notifyService).notifyFailureDomainDegraded("a.tsdns.top", 0.5, 100L);
+        verify(notifyService).notifyIspDegraded("a.tsdns.top", ISP, 0.5, 100L);
+        verify(notifyService).notifyFailureDomainDegraded("b.tsdns.top", 0.4, 100L);
+        verify(notifyService).notifyIspDegraded("b.tsdns.top", ISP, 0.4, 100L);
+    }
+
+    @Test
+    @DisplayName("checkAll 只看回看窗口内的数据，窗口外的旧数据不参与本轮判定")
+    void checkAllIgnoresWindowsOutsideLookback() {
+        Instant tooOld = NOW.minus(properties.getAlertLookback()).minusSeconds(1);
+        insertWindow(userId, DOMAIN, ISP, tooOld, 100, 50);
+
+        newService().checkAll();
+
+        verifyNoInteractions(notifyService);
     }
 }
