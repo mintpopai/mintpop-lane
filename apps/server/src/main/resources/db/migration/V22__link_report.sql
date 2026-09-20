@@ -25,7 +25,7 @@ CREATE TABLE link_report_daily
     id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     user_id         BIGINT       NOT NULL COMMENT '用户 id，引用 app_user',
     failure_domain  VARCHAR(255) NOT NULL DEFAULT '' COMMENT '故障域；空串表示尚未解析（与 link_report 同一编码）',
-    isp             VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '运营商名；空串表示 ASN 反查失败（与 link_report 同一理由：可空列进不了唯一键）',
+    isp             VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '运营商名；空串表示 ASN 反查失败。注意与 link_report.isp 编码不同——那一列是可空的、NULL 表示反查失败；本列进了唯一键，而 MySQL 的 UNIQUE 对 NULL 不做唯一性判断，可空列进唯一键会让去重失效，故必须 NOT NULL DEFAULT。归档时要把 link_report.isp 的 NULL 转成空串',
     stat_date       DATE         NOT NULL COMMENT '统计日（UTC 日历日）',
     samples         BIGINT       NOT NULL COMMENT '当日有效采样总数',
     alive_count     BIGINT       NOT NULL COMMENT '当日 alive 总数',
