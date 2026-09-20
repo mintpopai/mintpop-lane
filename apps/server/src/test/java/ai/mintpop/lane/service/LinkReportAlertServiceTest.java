@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -63,6 +64,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     private DatabaseFixtures fixtures;
     private Long userId;
+    private String email;
     private NodeNotifyService notifyService;
     private LinkReportProperties properties;
 
@@ -71,6 +73,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.clearAll();
         userId = fixtures.createUser("u1", null, null);
+        email = "u1@test.example"; // DatabaseFixtures.createUser 固定拼 subject + "@test.example"
 
         notifyService = mock(NodeNotifyService.class);
         properties = new LinkReportProperties(); // 默认阈值 0.80、最小样本 20，与 spec 一致
@@ -78,8 +81,8 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     /** 每次都 new 一个新实例，模拟「重启」不共享任何内存态；去重状态全部靠 alertStateRepository 落库读回 */
     private LinkReportAlertService newService() {
-        return new LinkReportAlertService(linkReportRepository, alertStateRepository, notifyService, properties,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+        return new LinkReportAlertService(linkReportRepository, alertStateRepository, userRepository, notifyService,
+                properties, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     /** 真实落一条 link_report 窗口，供 checkAll 相关测试驱动全库聚合查询 */
@@ -107,12 +110,12 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("成功率跌破阈值且样本足够时告警，故障域级与运营商级各推一次")
+    @DisplayName("成功率跌破阈值且样本足够时告警，故障域级与运营商级各推一次，且带上用户信息")
     void alertsWhenRateBelowThresholdWithEnoughSamples() {
         newService().checkAndNotify(userId, List.of(degraded()));
 
-        verify(notifyService).notifyFailureDomainDegraded(DOMAIN, 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
     }
 
     @Test
@@ -149,14 +152,14 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         service.checkAndNotify(userId, List.of(degraded()));
         service.checkAndNotify(userId, List.of(degraded()));
         service.checkAndNotify(userId, List.of(degraded()));
-        verify(notifyService, times(1)).notifyFailureDomainDegraded(DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
 
         service.checkAndNotify(userId, List.of(healthy())); // 恢复正常：清掉已告警状态，不推
         service.checkAndNotify(userId, List.of(degraded())); // 再次劣化：应重新推一次
 
-        verify(notifyService, times(2)).notifyFailureDomainDegraded(DOMAIN, 0.5, 100L);
-        verify(notifyService, times(2)).notifyIspDegraded(DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(2)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService, times(2)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
     }
 
     @Test
@@ -164,15 +167,15 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void alertStateSurvivesRestart() {
         LinkReportAlertService first = newService();
         first.checkAndNotify(userId, List.of(degraded()));
-        verify(notifyService, times(1)).notifyFailureDomainDegraded(DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
 
         // 模拟重启：全新实例，不复用 first 的任何字段，只共享同一个落库的 alertStateRepository
         LinkReportAlertService restarted = newService();
         restarted.checkAndNotify(userId, List.of(degraded()));
 
-        verify(notifyService, times(1)).notifyFailureDomainDegraded(DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
     }
 
     @Test
@@ -188,22 +191,23 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         assertThatCode(() -> service.checkAndNotify(userId, List.of(unresolved))).doesNotThrowAnyException();
         service.checkAndNotify(userId, List.of(unresolved)); // 第二轮应被去重，不重推
 
-        verify(notifyService, times(1)).notifyFailureDomainDegraded(DOMAIN, 0.5, 100L);
-        verify(notifyService, never()).notifyIspDegraded(anyString(), any(), anyDouble(), anyLong());
+        verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService, never()).notifyIspDegraded(any(), any(), anyString(), any(), anyDouble(), anyLong());
     }
 
     @Test
     @DisplayName("通知抛异常不影响已落库的去重状态，不会导致重复推送")
     void notifyFailureDoesNotBreakPersistedState() {
         doThrow(new TaskRejectedException("执行器已关闭"))
-                .when(notifyService).notifyFailureDomainDegraded(anyString(), anyDouble(), anyLong());
+                .when(notifyService).notifyFailureDomainDegraded(any(), any(), anyString(), anyDouble(), anyLong());
 
         LinkReportAlertService service = newService();
         assertThatCode(() -> service.checkAndNotify(userId, List.of(degraded()))).doesNotThrowAnyException();
 
         // 去重状态先落库再通知，通知失败不该让状态丢失——第二轮不会因为“没记住已经推过”而重新调用
         service.checkAndNotify(userId, List.of(degraded()));
-        verify(notifyService, times(1)).notifyFailureDomainDegraded(anyString(), anyDouble(), anyLong());
+        verify(notifyService, times(1))
+                .notifyFailureDomainDegraded(any(), any(), anyString(), anyDouble(), anyLong());
     }
 
     @Test
@@ -216,9 +220,9 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
         newService().checkAndNotify(userId, List.of(ctc, cucc));
 
-        verify(notifyService).notifyFailureDomainDegraded(DOMAIN, 0.65, 200L);
-        verify(notifyService).notifyIspDegraded(DOMAIN, "CTC", 0.4, 100L);
-        verify(notifyService, times(0)).notifyIspDegraded(DOMAIN, "CUCC", 0.9, 100L);
+        verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.65, 200L);
+        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, "CTC", 0.4, 100L);
+        verify(notifyService, times(0)).notifyIspDegraded(userId, email, DOMAIN, "CUCC", 0.9, 100L);
     }
 
     @Test
@@ -226,6 +230,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void checkAllNotifiesEachDegradedUserIndependently() {
         Long userA = userId;
         Long userB = fixtures.createUser("u2", null, null);
+        String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5)); // 落在默认 15 分钟回看窗口内
 
         insertWindow(userA, "a.tsdns.top", ISP, windowStart, 100, 50); // 50%，跌破阈值
@@ -233,10 +238,33 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
         newService().checkAll();
 
-        verify(notifyService).notifyFailureDomainDegraded("a.tsdns.top", 0.5, 100L);
-        verify(notifyService).notifyIspDegraded("a.tsdns.top", ISP, 0.5, 100L);
-        verify(notifyService).notifyFailureDomainDegraded("b.tsdns.top", 0.4, 100L);
-        verify(notifyService).notifyIspDegraded("b.tsdns.top", ISP, 0.4, 100L);
+        verify(notifyService).notifyFailureDomainDegraded(userA, email, "a.tsdns.top", 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userA, email, "a.tsdns.top", ISP, 0.5, 100L);
+        verify(notifyService).notifyFailureDomainDegraded(userB, emailB, "b.tsdns.top", 0.4, 100L);
+        verify(notifyService).notifyIspDegraded(userB, emailB, "b.tsdns.top", ISP, 0.4, 100L);
+    }
+
+    @Test
+    @DisplayName("checkAll：两个不同用户共享同一故障域名时，各自按 userId 独立推送、不互相混淆")
+    void checkAllDistinguishesUsersSharingSameFailureDomain() {
+        // 更贴近真实拓扑：多个用户接同一机场分组，共用同一个故障域名
+        Long userA = userId;
+        Long userB = fixtures.createUser("u2", null, null);
+        String emailB = "u2@test.example";
+        Instant windowStart = NOW.minus(Duration.ofMinutes(5));
+
+        insertWindow(userA, DOMAIN, ISP, windowStart, 100, 50); // 50%
+        insertWindow(userB, DOMAIN, ISP, windowStart, 100, 30); // 30%
+
+        newService().checkAll();
+
+        verify(notifyService).notifyFailureDomainDegraded(userA, email, DOMAIN, 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userA, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService).notifyFailureDomainDegraded(userB, emailB, DOMAIN, 0.3, 100L);
+        verify(notifyService).notifyIspDegraded(userB, emailB, DOMAIN, ISP, 0.3, 100L);
+        // 两个用户各自独立推了一次，不是同一条被算了两遍，也不是漏推了其中一个
+        verify(notifyService, times(2)).notifyFailureDomainDegraded(any(), any(), eq(DOMAIN), anyDouble(), anyLong());
+        verify(notifyService, times(2)).notifyIspDegraded(any(), any(), eq(DOMAIN), eq(ISP), anyDouble(), anyLong());
     }
 
     @Test

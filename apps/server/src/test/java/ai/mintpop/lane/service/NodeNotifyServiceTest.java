@@ -301,14 +301,24 @@ class NodeNotifyServiceTest {
     }
 
     @Test
-    @DisplayName("故障域成功率告警：橙色卡片，故障域/成功率/样本量依次展示")
+    @DisplayName("故障域成功率告警：橙色卡片，用户/故障域/成功率/样本量依次展示")
     void failureDomainDegradedSendsOrangeCard() {
-        service.notifyFailureDomainDegraded("jp.tsdns.top", 0.5, 100L);
+        service.notifyFailureDomainDegraded(1L, "u1@test.example", "jp.tsdns.top", 0.5, 100L);
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 故障域成功率告警")).containsExactly(
+                entry("用户", "u1@test.example"),
                 entry("故障域", "jp.tsdns.top"),
                 entry("成功率", "50.0%"),
                 entry("样本量", "100"));
+    }
+
+    @Test
+    @DisplayName("故障域成功率告警：email 为 null（查不到用户）显示「用户 #id」而不是 null，且照常推送")
+    void failureDomainDegradedShowsUserIdWhenEmailIsNull() {
+        service.notifyFailureDomainDegraded(7L, null, "jp.tsdns.top", 0.5, 100L);
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 故障域成功率告警"))
+                .containsEntry("用户", "用户 #7");
     }
 
     @Test
@@ -316,7 +326,7 @@ class NodeNotifyServiceTest {
     void failureDomainDegradedSilentWhenNotConfigured() {
         properties.setWebhookUrl(null);
 
-        service.notifyFailureDomainDegraded("jp.tsdns.top", 0.5, 100L);
+        service.notifyFailureDomainDegraded(1L, "u1@test.example", "jp.tsdns.top", 0.5, 100L);
 
         verifyNoInteractions(feishuBotClient);
     }
@@ -327,16 +337,17 @@ class NodeNotifyServiceTest {
         doThrow(new IllegalStateException("飞书机器人返回异常"))
                 .when(feishuBotClient).sendCard(any(), anyString(), any());
 
-        assertThatCode(() -> service.notifyFailureDomainDegraded("jp.tsdns.top", 0.5, 100L))
+        assertThatCode(() -> service.notifyFailureDomainDegraded(1L, "u1@test.example", "jp.tsdns.top", 0.5, 100L))
                 .doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("运营商成功率告警：橙色卡片，故障域/运营商/成功率/样本量依次展示")
+    @DisplayName("运营商成功率告警：橙色卡片，用户/故障域/运营商/成功率/样本量依次展示")
     void ispDegradedSendsOrangeCard() {
-        service.notifyIspDegraded("jp.tsdns.top", "CTC", 0.4, 100L);
+        service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", "CTC", 0.4, 100L);
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警")).containsExactly(
+                entry("用户", "u1@test.example"),
                 entry("故障域", "jp.tsdns.top"),
                 entry("运营商", "CTC"),
                 entry("成功率", "40.0%"),
@@ -346,10 +357,19 @@ class NodeNotifyServiceTest {
     @Test
     @DisplayName("运营商成功率告警：isp 为 null（ASN 反查失败）显示「未知」而不是 null")
     void ispDegradedShowsUnknownWhenIspIsNull() {
-        service.notifyIspDegraded("jp.tsdns.top", null, 0.4, 100L);
+        service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", null, 0.4, 100L);
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警"))
                 .containsEntry("运营商", "未知");
+    }
+
+    @Test
+    @DisplayName("运营商成功率告警：email 为 null（查不到用户）显示「用户 #id」而不是 null，且照常推送")
+    void ispDegradedShowsUserIdWhenEmailIsNull() {
+        service.notifyIspDegraded(7L, null, "jp.tsdns.top", "CTC", 0.4, 100L);
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警"))
+                .containsEntry("用户", "用户 #7");
     }
 
     @Test
@@ -357,7 +377,7 @@ class NodeNotifyServiceTest {
     void ispDegradedSilentWhenNotConfigured() {
         properties.setWebhookUrl(null);
 
-        service.notifyIspDegraded("jp.tsdns.top", "CTC", 0.4, 100L);
+        service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", "CTC", 0.4, 100L);
 
         verifyNoInteractions(feishuBotClient);
     }
@@ -368,7 +388,7 @@ class NodeNotifyServiceTest {
         doThrow(new IllegalStateException("飞书机器人返回异常"))
                 .when(feishuBotClient).sendCard(any(), anyString(), any());
 
-        assertThatCode(() -> service.notifyIspDegraded("jp.tsdns.top", "CTC", 0.4, 100L))
+        assertThatCode(() -> service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", "CTC", 0.4, 100L))
                 .doesNotThrowAnyException();
     }
 
@@ -379,7 +399,7 @@ class NodeNotifyServiceTest {
         // 德语区的小数点是逗号：String.format 不钉 Locale.ROOT 就会输出 "50,0%"
         Locale.setDefault(Locale.GERMANY);
         try {
-            service.notifyFailureDomainDegraded("jp.tsdns.top", 0.5, 100L);
+            service.notifyFailureDomainDegraded(1L, "u1@test.example", "jp.tsdns.top", 0.5, 100L);
 
             assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 故障域成功率告警"))
                     .containsEntry("成功率", "50.0%");

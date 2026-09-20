@@ -1,11 +1,13 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.config.LinkReportProperties;
+import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.entity.LinkAlertState;
 import ai.mintpop.lane.repository.LinkAlertStateRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
 import ai.mintpop.lane.repository.LinkReportRepository.UserDomainIspAggregate;
+import ai.mintpop.lane.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -34,15 +36,17 @@ public class LinkReportAlertService {
 
     private final LinkReportRepository linkReportRepository;
     private final LinkAlertStateRepository alertStateRepository;
+    private final UserRepository userRepository;
     private final NodeNotifyService notifyService;
     private final LinkReportProperties properties;
     private final Clock clock;
 
     public LinkReportAlertService(LinkReportRepository linkReportRepository,
-                                  LinkAlertStateRepository alertStateRepository, NodeNotifyService notifyService,
-                                  LinkReportProperties properties, Clock clock) {
+                                  LinkAlertStateRepository alertStateRepository, UserRepository userRepository,
+                                  NodeNotifyService notifyService, LinkReportProperties properties, Clock clock) {
         this.linkReportRepository = linkReportRepository;
         this.alertStateRepository = alertStateRepository;
+        this.userRepository = userRepository;
         this.notifyService = notifyService;
         this.properties = properties;
         this.clock = clock;
@@ -83,8 +87,13 @@ public class LinkReportAlertService {
      * 对一个用户在某个窗口区间内「故障域 × 运营商」的聚合结果做告警判定。
      * 先按故障域把各运营商的样本/存活数求和做故障域级判定，再对每一行单独做运营商级判定——
      * 两条判定互不依赖，一个的去重状态不影响另一个。
+     * <p>
+     * 按用户告警，不跨用户聚合：只有一个用户劣化多半是他的分配或本地网络问题，跨用户聚合
+     * 会稀释这个信号；去重按 (user, domain, isp)，同一用户在恢复之前只推一次，不会刷屏。
      */
     public void checkAndNotify(Long userId, List<DomainIspAggregate> aggregates) {
+        String email = resolveEmail(userId);
+
         Map<String, List<DomainIspAggregate>> byDomain = new LinkedHashMap<>();
         for (DomainIspAggregate aggregate : aggregates) {
             byDomain.computeIfAbsent(aggregate.failureDomain(), domain -> new ArrayList<>())
@@ -97,7 +106,7 @@ public class LinkReportAlertService {
 
             long domainSamples = rows.stream().mapToLong(DomainIspAggregate::samples).sum();
             long domainAlive = rows.stream().mapToLong(DomainIspAggregate::aliveCount).sum();
-            evaluateDomainLevel(userId, domain, domainSamples, domainAlive);
+            evaluateDomainLevel(userId, email, domain, domainSamples, domainAlive);
 
             for (DomainIspAggregate row : rows) {
                 // isp == null（ASN 反查失败）时刻意跳过运营商级判定，不只是"没意义"：
@@ -107,20 +116,34 @@ public class LinkReportAlertService {
                 // 已告警直接判去重，导致其中一种通知被永久吞掉）。落地时靠这条测试
                 // （unresolvedIspAggregateSkipsIspLevelToAvoidKeyCollisionWithDomainLevel）抓到过一次真实吞没。
                 if (row.isp() != null) {
-                    evaluateIspLevel(userId, domain, row.isp(), row.samples(), row.aliveCount());
+                    evaluateIspLevel(userId, email, domain, row.isp(), row.samples(), row.aliveCount());
                 }
             }
         }
     }
 
+    /**
+     * 查用户邮箱供告警消息展示；查询异常或查不到都 fail-soft 返回 null，绝不能因为这一步
+     * 失败就让整个用户的告警判定跟着中断——告警本身比消息里那行展示文字重要得多。
+     */
+    private String resolveEmail(Long userId) {
+        try {
+            return userRepository.findById(userId).map(UserDto::getEmail).orElse(null);
+        } catch (Exception e) {
+            log.warn("查询用户邮箱失败，告警消息将展示为「用户 #{}」userId={}", userId, userId, e);
+            return null;
+        }
+    }
+
     /** 故障域级判定：isp 维度不存在，去重键的 isp 段固定存空串 */
-    private void evaluateDomainLevel(Long userId, String domain, long samples, long aliveCount) {
-        evaluate(userId, domain, "", samples, aliveCount, true, null);
+    private void evaluateDomainLevel(Long userId, String email, String domain, long samples, long aliveCount) {
+        evaluate(userId, email, domain, "", samples, aliveCount, true, null);
     }
 
     /** 运营商级判定：调用方保证 isp 非 null（反查失败的行已在 {@link #checkAndNotify} 里跳过） */
-    private void evaluateIspLevel(Long userId, String domain, String isp, long samples, long aliveCount) {
-        evaluate(userId, domain, isp, samples, aliveCount, false, isp);
+    private void evaluateIspLevel(Long userId, String email, String domain, String isp, long samples,
+                                  long aliveCount) {
+        evaluate(userId, email, domain, isp, samples, aliveCount, false, isp);
     }
 
     /**
@@ -129,7 +152,7 @@ public class LinkReportAlertService {
      * @param ispForNotify 传给 notify 方法展示用的原始 isp（可能是 null，表示 ASN 反查失败）；
      *                     domainLevel=true 时未使用
      */
-    private void evaluate(Long userId, String domain, String ispKey, long samples, long aliveCount,
+    private void evaluate(Long userId, String email, String domain, String ispKey, long samples, long aliveCount,
                           boolean domainLevel, String ispForNotify) {
         // 先看样本量，再算比值：samples<=0 时直接跳过，避免除以零；样本不足门槛时比值没有意义，
         // 既不告警也不动已有的去重状态——样本太少什么都判断不出，不该被当成"已恢复"而清档
@@ -160,9 +183,9 @@ public class LinkReportAlertService {
             alertStateRepository.upsert(state);
             try {
                 if (domainLevel) {
-                    notifyService.notifyFailureDomainDegraded(domain, successRate, samples);
+                    notifyService.notifyFailureDomainDegraded(userId, email, domain, successRate, samples);
                 } else {
-                    notifyService.notifyIspDegraded(domain, ispForNotify, successRate, samples);
+                    notifyService.notifyIspDegraded(userId, email, domain, ispForNotify, successRate, samples);
                 }
             } catch (Exception e) {
                 log.warn("链路成功率告警推送失败（去重状态已落库）userId={} domain={} isp={}",
