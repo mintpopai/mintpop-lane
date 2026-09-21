@@ -1,6 +1,7 @@
 package ai.mintpop.lane.controller;
 
 import ai.mintpop.lane.client.IpAsnClient;
+import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -274,10 +275,10 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN")
-    void heartbeatWithReportPersistsRowWithAsn() throws Exception {
+    @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN 与运营商")
+    void heartbeatWithReportPersistsRowWithAsnAndIsp() throws Exception {
         when(clock.instant()).thenReturn(FIXED_NOW);
-        when(ipAsnClient.lookupAsn("203.0.113.9")).thenReturn(Optional.of("AS4134"));
+        when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
 
         String reportJson = """
                 {
@@ -300,7 +301,7 @@ class LinkControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"));
 
         // X-Forwarded-For 取第一段：反查用的是真实客户端 IP，不是链路上的中间代理
-        verify(ipAsnClient).lookupAsn("203.0.113.9");
+        verify(ipAsnClient).lookup("203.0.113.9");
 
         assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
         Map<String, Object> row = jdbc.queryForMap(
@@ -314,15 +315,16 @@ class LinkControllerTest extends MysqlTestBase {
         assertThat(row.get("failovers")).isEqualTo(1);
         assertThat(row.get("resolved_entry_ip")).isEqualTo("10.0.0.9");
         assertThat(row.get("source_asn")).isEqualTo("AS4134");
-        // isp 本任务全程不填：IpAsnClient 只返回 ASN，没有运营商名可填
-        assertThat(row.get("isp")).isNull();
+        // isp 由 ingest 用同一次反查结果填上：这是「故障域 × 运营商」矩阵与运营商级告警
+        // 唯一的数据来源，留 null 整个运营商维度就是空的
+        assertThat(row.get("isp")).isEqualTo("China Telecom");
     }
 
     @Test
     @DisplayName("failureDomain 为 null 时落库存空串")
     void nullFailureDomainStoresAsEmptyStringInDb() throws Exception {
         when(clock.instant()).thenReturn(FIXED_NOW);
-        when(ipAsnClient.lookupAsn(anyString())).thenReturn(Optional.empty());
+        when(ipAsnClient.lookup(anyString())).thenReturn(Optional.empty());
 
         String reportJson = """
                 {

@@ -47,13 +47,22 @@ public class LinkReportServiceImpl implements LinkReportService {
             }
 
             LinkReport report = toEntity(userId, request);
-            // ASN 反查用注入的 IpAsnClient；查不到时 report.sourceAsn 保持 null。
-            // isp 全程不填：IpAsnClient 只返回 ASN 字符串，没有运营商名可填，
-            // ASN → 运营商名的映射留给 Task 5 展示时做；null 是这一列既定的
-            // 「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
-            // DomainIspAggregate.isp() 文档同一语义），不能改存空串——那会与
-            // failureDomain 的空串编码混淆，把「没查到」误判成「查到了空运营商」
-            ipAsnClient.lookupAsn(sourceIp).ifPresent(report::setSourceAsn);
+            // 运营商由服务端按来源 IP 反查，不让客户端自报（spec §8.1：自报不可信，客户端也不知道）。
+            // 反查是**同步**跑在心跳请求线程上的，代价与上界见本类末尾的说明。
+            //
+            // 一次反查同时得到 asn 与运营商名：asn 落 source_asn，isp 优先用可读的运营商名，
+            // 上游没给（AsnInfo.isp() 为 null）时退回 ASN 串（如 "AS4134"）。退回而不是留 null
+            // 是要害——isp 为 null 的样本会被 LinkReportAlertService 跳过运营商级判定、并在
+            // 管理端矩阵里归进「未知运营商」那一行，spec §8.3 的「单运营商成功率异常」就永远不触发。
+            //
+            // 反查整体失败（Optional.empty）时 source_asn 与 isp 都保持 null：null 是本表
+            // 这两列既定的「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
+            // DomainIspAggregate.isp() 文档同一语义），不能改存空串——空串是 link_report_daily
+            // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空运营商」
+            ipAsnClient.lookup(sourceIp).ifPresent(info -> {
+                report.setSourceAsn(info.asn());
+                report.setIsp(info.isp() == null ? info.asn() : info.isp());
+            });
             linkReportRepository.upsertWindow(report);
         } catch (Exception e) {
             log.warn("链路上报处理失败，本窗口丢弃，userId={}", userId, e);

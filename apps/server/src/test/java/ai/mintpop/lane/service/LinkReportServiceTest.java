@@ -1,6 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.IpAsnClient;
+import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.repository.LinkReportRepository;
@@ -85,7 +86,7 @@ class LinkReportServiceTest {
     @DisplayName("failureDomain 为 null 时落库存空串")
     void nullFailureDomainStoresAsEmptyString() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
 
         service.ingest(USER_ID, json(newRequest(null, NOW.minusSeconds(180))), SOURCE_IP);
 
@@ -98,7 +99,7 @@ class LinkReportServiceTest {
     @DisplayName("具体故障域原样落库，不做任何转换")
     void concreteFailureDomainPassesThroughUnchanged() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
 
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
@@ -113,7 +114,7 @@ class LinkReportServiceTest {
     @DisplayName("ASN 反查失败不影响上报落库，只是 asn 与 isp 为 null")
     void asnLookupFailureStillPersistsReport() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
 
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
@@ -125,10 +126,10 @@ class LinkReportServiceTest {
     }
 
     @Test
-    @DisplayName("ASN 反查成功时落库 sourceAsn，isp 仍为 null——IpAsnClient 只返回 ASN，不提供运营商名")
-    void asnLookupSuccessStoresAsnButNotIsp() {
+    @DisplayName("反查成功且带运营商名时，asn 与 isp 一起落库——isp 是整个运营商维度唯一的数据来源")
+    void lookupSuccessStoresAsnAndIspName() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.of("AS4134"));
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
 
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
@@ -136,7 +137,23 @@ class LinkReportServiceTest {
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
         assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
-        assertThat(persisted.getIsp()).isNull();
+        assertThat(persisted.getIsp()).isEqualTo("China Telecom");
+    }
+
+    @Test
+    @DisplayName("反查成功但上游没给运营商名时，isp 退回 ASN 串——宁可显示 AS4134 也不能留 null，"
+            + "留 null 会让这段样本掉进「未知运营商」、运营商级告警永远跳过它")
+    void lookupWithoutIspNameFallsBackToAsnString() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", null)));
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
+
+        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
+        verify(linkReportRepository).upsertWindow(captor.capture());
+        LinkReport persisted = captor.getValue();
+        assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
+        assertThat(persisted.getIsp()).isEqualTo("AS4134");
     }
 
     // —— 异常兜底：下游异常、格式残缺 ——
@@ -145,7 +162,7 @@ class LinkReportServiceTest {
     @DisplayName("落库异常被吞掉，不向外抛出——心跳不能被上报拖挂")
     void persistenceFailureIsSwallowed() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
         doThrow(new RuntimeException("db down")).when(linkReportRepository).upsertWindow(any());
 
         assertThatCode(() -> service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP))
@@ -226,7 +243,7 @@ class LinkReportServiceTest {
     @DisplayName("窗口起点在容忍范围内时正常落库")
     void windowWithinToleranceIsPersisted() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookupAsn(SOURCE_IP)).thenReturn(Optional.empty());
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
 
         Instant withinTolerance = NOW.minusSeconds(1800); // 30 分钟前，在默认 1 小时容忍内
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", withinTolerance)), SOURCE_IP);
