@@ -48,7 +48,14 @@ public class LinkReportServiceImpl implements LinkReportService {
 
             LinkReport report = toEntity(userId, request);
             // 运营商由服务端按来源 IP 反查，不让客户端自报（spec §8.1：自报不可信，客户端也不知道）。
-            // 反查是**同步**跑在心跳请求线程上的，代价与上界见本类末尾的说明。
+            //
+            // 反查刻意保持**同步**跑在心跳请求线程上，不改成 @Async：异步化会让「POST 完立刻
+            // 断言落库」的一整批测试全部改形（要么加等待、要么改成轮询），换来的收益有限。
+            // 代价与上界说清楚：ipAsnClient 外面套了 CachingIpAsnClient（按 IP、TTL 24 小时），
+            // 于是**只有某个来源 IP 在缓存里的第一次**会真打一次 HTTP，最坏情况慢一次反查超时
+            // （GeoIpConfig：connect 5s + read 5s）；此后 24 小时内同一 IP 都是内存命中。
+            // 桌面端心跳的客户端超时是 15s，单次反查超时仍在其内，但这是本路径最接近红线的地方——
+            // 哪天要再往心跳里加外部调用，先回来看这段。
             //
             // 一次反查同时得到 asn 与运营商名：asn 落 source_asn，isp 优先用可读的运营商名，
             // 上游没给（AsnInfo.isp() 为 null）时退回 ASN 串（如 "AS4134"）。退回而不是留 null
