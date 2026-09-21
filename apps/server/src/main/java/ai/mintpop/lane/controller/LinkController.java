@@ -1,14 +1,18 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.enumeration.LinkStatus;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
+import ai.mintpop.lane.service.LinkReportService;
 import ai.mintpop.lane.service.LinkService;
 import ai.mintpop.lane.util.DeviceId;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,9 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class LinkController {
 
     private final LinkService linkService;
+    private final LinkReportService linkReportService;
 
-    public LinkController(LinkService linkService) {
+    public LinkController(LinkService linkService, LinkReportService linkReportService) {
         this.linkService = linkService;
+        this.linkReportService = linkReportService;
     }
 
     @GetMapping("/config")
@@ -40,7 +46,37 @@ public class LinkController {
     }
 
     @PostMapping("/heartbeat")
-    public ApiResponse<HeartbeatResponse> heartbeat(@AuthenticationPrincipal Long userId) {
-        return ApiResponse.success(linkService.heartbeat(userId));
+    public ApiResponse<HeartbeatResponse> heartbeat(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody(required = false) String rawReport,
+            HttpServletRequest httpRequest) {
+        HeartbeatResponse response = linkService.heartbeat(userId);
+        // 上报失败绝不能影响心跳本身：心跳承载的是「这个用户还能不能用」，观测数据丢一个
+        // 窗口无所谓，把心跳搞挂会让客户端误判成链路失效、当场断链。
+        //
+        // 刻意接成原始字符串、不用 @RequestBody LinkHeartbeatRequest：那样 Spring 会在进入
+        // 方法体之前就做 JSON 反序列化，语法错误/字段类型不匹配会被 GlobalExceptionHandler
+        // 的 HttpMessageNotReadableException 分支接住，让整条心跳的 data 变成 null——与上面
+        // 那条原则矛盾（客户端拿不到 status 会误判链路失效并断链），且这与加不加 @Valid
+        // 无关（LinkHeartbeatRequest 本来就没有 Bean Validation 注解，反序列化失败发生在
+        // 绑定阶段，早于任何校验）。解析挪到 LinkReportService#ingest 内部，
+        // 和落库逻辑包进同一个 try/catch，才能保证任何格式问题都只丢一个窗口。
+        //
+        // 只收 ACTIVE 用户的上报：客户端要收到 REVOKED/SUSPENDED 才断链，那一次请求是带着
+        // 上报块来的。放它进库，这个不该存在的用户就会进全库矩阵，checkAll 还会给已吊销用户
+        // 推「成功率告警」，运维排查一个已经没有链路的人。心跳本身照常返回状态，不受影响
+        if (response.status() == LinkStatus.ACTIVE && rawReport != null && !rawReport.isBlank()) {
+            linkReportService.ingest(userId, rawReport, clientIpOf(httpRequest));
+        }
+        return ApiResponse.success(response);
+    }
+
+    /** 取上报请求的来源 IP：服务端在反代之后，只信 X-Forwarded-For 的第一段；缺头时回落 remote addr */
+    private String clientIpOf(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

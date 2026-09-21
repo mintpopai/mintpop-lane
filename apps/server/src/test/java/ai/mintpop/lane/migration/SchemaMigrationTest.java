@@ -11,6 +11,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -580,6 +581,94 @@ class SchemaMigrationTest extends MysqlTestBase {
                   AND index_name = 'uk_user_front_node' AND non_unique = 0
                 """, Integer.class);
         assertThat(uniqueOnPair).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("V22 建出 link_report 与 link_report_daily 两张表，表与关键列注释落库")
+    void v22AddsLinkReportTables() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(tableExists(conn, "link_report")).isTrue();
+            assertThat(tableExists(conn, "link_report_daily")).isTrue();
+
+            for (String column : List.of("user_id", "failure_domain", "window_start", "samples",
+                    "alive_count", "no_sample_count", "p50_latency_ms", "failovers",
+                    "resolved_entry_ip", "source_asn", "isp", "created_at")) {
+                assertThat(columnComment(conn, "link_report", column))
+                        .as("link_report.%s 应带中文注释", column)
+                        .isNotBlank();
+            }
+            for (String column : List.of("user_id", "failure_domain", "isp", "stat_date", "samples",
+                    "alive_count", "no_sample_count", "failovers", "created_at")) {
+                assertThat(columnComment(conn, "link_report_daily", column))
+                        .as("link_report_daily.%s 应带中文注释", column)
+                        .isNotBlank();
+            }
+        }
+
+        // link_report.failure_domain 与 link_report_daily.isp 都刻意用空串而非 NULL 编码「未解析/反查失败」，
+        // 注释必须说清这个编码规则，否则后来者会把它们当成普通的可空业务字段随手改回 NULL
+        String failureDomainComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'link_report' AND column_name = 'failure_domain'
+                """, String.class);
+        assertThat(failureDomainComment).contains("空串");
+
+        String dailyIspComment = jdbc.queryForObject("""
+                SELECT column_comment FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'link_report_daily' AND column_name = 'isp'
+                """, String.class);
+        assertThat(dailyIspComment).contains("空串");
+    }
+
+    @Test
+    @DisplayName("link_report 的唯一键列全部非空，否则重复上报去不了重")
+    void linkReportUniqueKeyColumnsAreNotNullable() throws Exception {
+        for (String column : List.of("user_id", "failure_domain", "window_start")) {
+            assertThat(isNullable("link_report", column))
+                    .as("link_report.%s 进了唯一键，必须 NOT NULL —— MySQL 的 UNIQUE 对 NULL 不做唯一性判断", column)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("link_report_daily 的唯一键列全部非空，同样是为了让唯一键真正去重")
+    void linkReportDailyUniqueKeyColumnsAreNotNullable() throws Exception {
+        for (String column : List.of("user_id", "failure_domain", "isp", "stat_date")) {
+            assertThat(isNullable("link_report_daily", column))
+                    .as("link_report_daily.%s 进了唯一键，必须 NOT NULL", column)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("V23 建出 link_alert_state 表，表与全部列注释落库")
+    void v23AddsLinkAlertStateTable() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(tableExists(conn, "link_alert_state")).isTrue();
+
+            for (String column : List.of("user_id", "failure_domain", "isp", "alerted", "alerted_at", "updated_at")) {
+                assertThat(columnComment(conn, "link_alert_state", column))
+                        .as("link_alert_state.%s 应带中文注释", column)
+                        .isNotBlank();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("link_alert_state 的唯一键列全部非空，否则同一故障域×运营商的去重状态会分裂成多行")
+    void linkAlertStateUniqueKeyColumnsAreNotNullable() throws Exception {
+        for (String column : List.of("user_id", "failure_domain", "isp")) {
+            assertThat(isNullable("link_alert_state", column))
+                    .as("link_alert_state.%s 进了唯一键，必须 NOT NULL", column)
+                    .isFalse();
+        }
+    }
+
+    /** 复用既有的 {@link #isNullable(Connection, String, String)} 查询方式，只是省去调用方自己开关连接 */
+    private boolean isNullable(String table, String column) throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            return isNullable(conn, table, column);
+        }
     }
 
     private String columnComment(Connection conn, String table, String column) throws Exception {

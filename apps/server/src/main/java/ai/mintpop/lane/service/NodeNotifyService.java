@@ -194,6 +194,70 @@ public class NodeNotifyService {
         }
     }
 
+    /**
+     * 故障域级成功率告警（异步）：跨该故障域下全部运营商求和的成功率跌破阈值。用 ORANGE——
+     * 这是需要人去排查中转入口的信号，不代表用户已经完全连不上。
+     * 调用方在去重状态已落库之后再调本方法，通知失败不该让去重状态丢失。
+     * <p>
+     * 按用户告警（不跨用户聚合）：只有一个用户劣化，多半是他的前置分配或本地网络问题，
+     * 不是入口机问题，跨用户聚合会把这个信号稀释掉。带上 {@code userId}/{@code email}
+     * 是为了让运维分清"多个用户各推一条"与"同一条重复推了多次"，也能一眼判断是入口机
+     * 全体受影响还是个别用户的分配问题。{@code email} 由调用方（{@link LinkReportAlertService}）
+     * 查出来传入——本方法不该自己查库，只负责把消息拼出来推出去，与既有 notify 方法的做法一致；
+     * 查不到时传 null，展示成「用户 #id」，绝不能因为查不到 email 就不推告警。
+     */
+    @Async
+    public void notifyFailureDomainDegraded(Long userId, String email, String failureDomain, double successRate,
+                                             long samples) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("用户", displayUser(userId, email));
+            fields.put("故障域", failureDomain);
+            fields.put("成功率", formatRate(successRate));
+            fields.put("样本量", String.valueOf(samples));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 故障域成功率告警", fields);
+        } catch (Exception e) {
+            log.warn("故障域成功率告警飞书通知失败 userId={} domain={}", userId, failureDomain, e);
+        }
+    }
+
+    /**
+     * 运营商级成功率告警（异步）：同一故障域下某个运营商的成功率单独跌破阈值，与故障域级
+     * 共用阈值与最小样本量，但各自独立去重。{@code isp} 为 null 表示 ASN 反查失败。
+     * {@code userId}/{@code email} 语义同 {@link #notifyFailureDomainDegraded}。
+     */
+    @Async
+    public void notifyIspDegraded(Long userId, String email, String failureDomain, String isp, double successRate,
+                                   long samples) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("用户", displayUser(userId, email));
+            fields.put("故障域", failureDomain);
+            fields.put("运营商", isp == null || isp.isBlank() ? "未知" : isp);
+            fields.put("成功率", formatRate(successRate));
+            fields.put("样本量", String.valueOf(samples));
+            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警", fields);
+        } catch (Exception e) {
+            log.warn("运营商成功率告警飞书通知失败 userId={} domain={} isp={}", userId, failureDomain, isp, e);
+        }
+    }
+
+    /** 用户展示文案：有邮箱就显示邮箱，查不到（理论上不该发生）就退化成「用户 #id」，不影响告警本身推出去 */
+    private static String displayUser(Long userId, String email) {
+        return email == null || email.isBlank() ? "用户 #" + userId : email;
+    }
+
+    /** 成功率转百分比展示，保留一位小数；钉 Locale.ROOT 避免小数点在部分地区被渲染成逗号 */
+    private static String formatRate(double rate) {
+        return String.format(Locale.ROOT, "%.1f%%", rate * 100);
+    }
+
     /** 字节数转 GB 展示，保留两位小数；null（机场未返回额度头）显示「未知」 */
     private static String formatBytes(Long bytes) {
         if (bytes == null) {

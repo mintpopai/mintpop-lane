@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.client.IpAsnClient;
+import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -14,17 +16,26 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -57,8 +68,21 @@ class LinkControllerTest extends MysqlTestBase {
     @Autowired
     private SessionTokenService sessionTokenService;
 
+    @MockitoBean
+    private IpAsnClient ipAsnClient;
+
+    @MockitoBean
+    private Clock clock;
+
     /** 全用例统一用这台设备的机器码请求头，与下方 setUp 里登记、绑定的那台设备一致 */
     private static final String DEVICE_ID = "a".repeat(64);
+
+    /**
+     * 测试用的固定「现在」：本类里所有上报块的 windowStart 字面量都是
+     * {@code 2026-09-19T00:00:00Z}，这里取它 3 分钟之后，让那些字面量安全落在
+     * 窗口容忍范围（默认过去 1 小时/未来 5 分钟）内，不受真实系统时钟影响
+     */
+    private static final Instant FIXED_NOW = Instant.parse("2026-09-19T00:03:00Z");
 
     private DatabaseFixtures fixtures;
     private Long user1Id;
@@ -70,6 +94,13 @@ class LinkControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
+        // 默认让 clock 表现得跟真实时钟一样：GET /config 等与心跳窗口无关的用例依赖
+        // fixture 建的订阅有效期是按「真实现在」算的（见 DatabaseFixtures），这里必须贴近
+        // 真实时间。心跳窗口边界相关的用例会在各自方法里用 when(...) 覆盖这个默认桩，
+        // 改用与其 windowStart 字面量对齐的固定时间，不依赖当前系统时间是否恰好落在
+        // 容忍范围内（那样测试会随沙箱系统时间漂移而变得不稳定）
+        when(clock.instant()).thenReturn(Instant.now());
+
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
@@ -222,5 +253,313 @@ class LinkControllerTest extends MysqlTestBase {
 
     private Instant lastSeenOf(Long userId) {
         return userDeviceRepository.findByUserId(userId).getFirst().getLastSeenAt();
+    }
+
+    private long countLinkReportRows(Long userId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM link_report WHERE user_id = ?", Long.class, userId);
+    }
+
+    @Test
+    @DisplayName("不带请求体的心跳与从前行为逐字一致，老客户端不受影响")
+    void heartbeatWithoutBodyBehavesExactlyAsBefore() throws Exception {
+        String body = mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andReturn().getResponse().getContentAsString();
+
+        // 只断言 200/code=0 没有判别力：这条要连同「响应体逐字未变」与「没写库」一起断言，
+        // 否则悄悄多出一个字段、或悄悄写了一行观测数据，这个测试都发现不了
+        assertThat(body).isEqualTo("{\"code\":0,\"data\":{\"status\":\"ACTIVE\"},\"msg\":null,\"success\":true}");
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN 与运营商")
+    void heartbeatWithReportPersistsRowWithAsnAndIsp() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+        when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 12, "alive": 11, "noSample": 0},
+                  "p50LatencyMs": 180,
+                  "failovers": 1,
+                  "resolvedEntryIp": "10.0.0.9"
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Forwarded-For", "203.0.113.9, 10.0.0.1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        // X-Forwarded-For 取第一段：反查用的是真实客户端 IP，不是链路上的中间代理
+        verify(ipAsnClient).lookup("203.0.113.9");
+
+        assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT failure_domain, samples, alive_count, no_sample_count, p50_latency_ms, failovers, "
+                        + "resolved_entry_ip, source_asn, isp FROM link_report WHERE user_id = ?", user1Id);
+        assertThat(row.get("failure_domain")).isEqualTo("jp.tsdns.top");
+        assertThat(row.get("samples")).isEqualTo(12);
+        assertThat(row.get("alive_count")).isEqualTo(11);
+        assertThat(row.get("no_sample_count")).isEqualTo(0);
+        assertThat(row.get("p50_latency_ms")).isEqualTo(180);
+        assertThat(row.get("failovers")).isEqualTo(1);
+        assertThat(row.get("resolved_entry_ip")).isEqualTo("10.0.0.9");
+        assertThat(row.get("source_asn")).isEqualTo("AS4134");
+        // isp 由 ingest 用同一次反查结果填上：这是「故障域 × 运营商」矩阵与运营商级告警
+        // 唯一的数据来源，留 null 整个运营商维度就是空的
+        assertThat(row.get("isp")).isEqualTo("China Telecom");
+    }
+
+    @Test
+    @DisplayName("运营商名反查回来超过 64 字符时截断落库，不再因超长而让整块上报静默丢弃——"
+            + "link_report.isp 是 VARCHAR(64)，MySQL 严格模式下超长直接抛 Data too long")
+    void heartbeatWithOverlongIspIsTruncatedBeforePersisting() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", longIsp)));
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 12, "alive": 11, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        // 超长运营商名截断后仍然只有一行落库：截断之前这里会是 0（Data too long 被 ingest 的
+        // try/catch 吞掉，整块上报窗口静默丢弃）
+        assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
+        String isp = jdbc.queryForObject("SELECT isp FROM link_report WHERE user_id = ?", String.class, user1Id);
+        assertThat(isp).hasSize(64).isEqualTo(longIsp.substring(0, 64));
+    }
+
+    @Test
+    @DisplayName("failureDomain 为 null 时落库存空串")
+    void nullFailureDomainStoresAsEmptyStringInDb() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+        when(ipAsnClient.lookup(anyString())).thenReturn(Optional.empty());
+
+        String reportJson = """
+                {
+                  "failureDomain": null,
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 5, "alive": 5, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk());
+
+        String failureDomain = jdbc.queryForObject(
+                "SELECT failure_domain FROM link_report WHERE user_id = ?", String.class, user1Id);
+        assertThat(failureDomain).isEqualTo("");
+    }
+
+    @Test
+    @DisplayName("上报块格式有问题（残缺必填字段）不影响心跳本身返回正常结果")
+    void malformedReportDoesNotBreakHeartbeat() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        // window 整段缺失：契约里 window.samples/alive/noSample 都不可空，
+        // 但心跳绝不能因为上报块残缺而跟着失败——这里就是验证这条底线
+        String malformedJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(malformedJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    // —— C1 修复：JSON 层面的错误必须只丢一个上报窗口，不能打断整条心跳 ——
+    // 这三条曾经实测复现过 code=110001（HttpMessageNotReadableException 在方法体执行前
+    // 被 GlobalExceptionHandler 接住）：把 report 参数从 LinkHeartbeatRequest 改成裸
+    // String、解析挪进 LinkReportService#ingest 内部的 try/catch 后，这里必须变绿
+
+    @Test
+    @DisplayName("请求体 JSON 语法错误不影响心跳本身返回正常结果，且不落库")
+    void syntacticallyInvalidJsonDoesNotBreakHeartbeat() throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{{{"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("window 字段类型完全不匹配（字符串而不是对象）不影响心跳本身返回正常结果，且不落库")
+    void fieldTypeMismatchDoesNotBreakHeartbeat() throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"window\":\"not-an-object\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("数字字段传了非数字字符串（JSON 语法合法但类型全错）不影响心跳本身返回正常结果，且不落库")
+    void numericFieldWithNonNumericStringDoesNotBreakHeartbeat() throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"failovers\":\"abc\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    // —— I1 修复：窗口起点越界（客户端时钟不准/被构造出任意时间）时丢弃整条上报块 ——
+
+    // —— I2 修复：上报计数不合理（alive > samples、负数）时整块丢弃 ——
+
+    @Test
+    @DisplayName("alive 大于 samples 的上报块被丢弃，心跳仍返回正常结果——不可能超过 100% 的成功率不许进库")
+    void insaneCountsAreDiscardedButHeartbeatStillSucceeds() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 10, "alive": 11, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("负样本数的上报块被丢弃：负 samples 会让告警的样本量门槛把整段判定跳过")
+    void negativeSamplesAreDiscardedButHeartbeatStillSucceeds() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": -100, "alive": -50, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    // —— I3 修复：非 ACTIVE 用户的上报不入库 ——
+
+    @Test
+    @DisplayName("已吊销用户带上报块的心跳：仍返回 REVOKED，但上报不落库——"
+            + "客户端收到 REVOKED 才断链，那一次请求带的数据不该进全库矩阵、更不该给已吊销用户推告警")
+    void revokedUserReportIsNotIngested() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 12, "alive": 3, "noSample": 0},
+                  "failovers": 1
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user2Id))
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("REVOKED"));
+
+        assertThat(countLinkReportRows(user2Id)).isZero();
+        // 连 ASN 反查都不该发生：非 ACTIVE 用户的上报在 ingest 之前就被挡住了
+        verify(ipAsnClient, never()).lookup(anyString());
+    }
+
+    @Test
+    @DisplayName("窗口起点超出未来容忍范围时被丢弃，心跳仍返回正常结果")
+    void futureWindowIsDiscardedButHeartbeatStillSucceeds() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:20:00Z",
+                  "window": {"samples": 5, "alive": 5, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+        // FIXED_NOW 是 2026-09-19T00:03:00Z，窗口起点比它晚 17 分钟，超过默认 5 分钟的未来容忍
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
     }
 }

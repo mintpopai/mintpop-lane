@@ -39,6 +39,12 @@ describe("AppLayout", () => {
     expect(wrapper.findAll(".rail-link").map((el) => el.text())).toContain("换机申请");
   });
 
+  it("导航轨有「链路健康」入口", () => {
+    const wrapper = render();
+
+    expect(wrapper.findAll(".rail-link").map((el) => el.text())).toContain("链路健康");
+  });
+
   it("没有待办时不画角标，有待办时画出数字", async () => {
     const wrapper = render();
 

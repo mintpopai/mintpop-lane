@@ -3,10 +3,62 @@ package ai.mintpop.lane.client;
 import java.util.Optional;
 
 /**
- * IP → ASN（自治系统号）查询口。采购尽调用它判断中转入口是否又落在同一家云厂商（如又一个 AWS 东京）。
+ * IP → ASN（自治系统号）/ 运营商查询口。采购尽调用它判断中转入口是否又落在同一家云厂商
+ * （如又一个 AWS 东京）；三期的链路上报用它把上报请求的来源 IP 反查成运营商，
+ * 落 {@code link_report.isp}——运营商由服务端反查而不让客户端自报（spec §8.1：自报不可信）。
  */
 public interface IpAsnClient {
 
-    /** @return 形如 "AS16509" 的 ASN；查不到或查询失败返回空，不抛 */
-    Optional<String> lookupAsn(String ip);
+    /**
+     * 反查结果。
+     *
+     * @param asn 形如 {@code "AS4134"} 的 ASN，非空
+     * @param isp 可读的运营商名（如 {@code "China Telecom"}）；上游没给或给了空白时为 {@code null}，
+     *            由调用方决定退回什么（链路上报退回 ASN 串）
+     */
+    record AsnInfo(String asn, String isp) {
+    }
+
+    /** @return 来源 IP 的 ASN 与运营商；查不到或查询失败返回空，不抛 */
+    Optional<AsnInfo> lookup(String ip);
+
+    /**
+     * 运营商名允许的最大字符数：与 {@code link_report.isp}、{@code link_report_daily.isp}、
+     * {@code link_alert_state.isp} 三张表的 {@code VARCHAR(64)} 列宽逐字对应
+     * （{@code V22__link_report.sql}、{@code V23__link_alert_state.sql}）。
+     * ipwho.is 的 {@code connection.isp} 是自由文本的组织名，实测能超过 64 字符
+     * （如中国电信完整的英文注册名），严格模式下超长会直接抛 {@code Data too long}，
+     * 把整块上报窗口连累静默丢弃。改这几张表的列宽时必须同步改这里，两处失配这条防线就形同虚设。
+     */
+    int ISP_MAX_LENGTH = 64;
+
+    /**
+     * 把运营商名截到 {@link #ISP_MAX_LENGTH} 字符：按 Unicode 码点而非 {@code String.length()}
+     * 的 UTF-16 code unit 计数——{@code VARCHAR(64)} 是按字符计宽度，增补平面字符（代理对）
+     * 用 {@code length()} 数会多算一倍，稳妥起见用 {@code codePoints()} 重组。
+     * trim 放在截断之前，避免截断点卡在首尾空白上白占一个字符名额。
+     * 两处装配 isp 的地方（{@link ai.mintpop.lane.client.RestClientIpAsnClient} 与
+     * {@code LinkReportServiceImpl}）共用这一份实现，不许各写一份截断逻辑各写各的。
+     *
+     * @return {@code isp} 为 {@code null} 时原样返回 {@code null}；否则返回 trim 且截断后的运营商名
+     */
+    static String truncateIsp(String isp) {
+        if (isp == null) {
+            return null;
+        }
+        String trimmed = isp.trim();
+        if (trimmed.codePointCount(0, trimmed.length()) <= ISP_MAX_LENGTH) {
+            return trimmed;
+        }
+        int[] codePoints = trimmed.codePoints().limit(ISP_MAX_LENGTH).toArray();
+        return new String(codePoints, 0, codePoints.length);
+    }
+
+    /**
+     * @return 形如 "AS16509" 的 ASN；查不到或查询失败返回空，不抛。
+     * 只关心 ASN 的老调用方（尽调、入口 IP 巡检）继续用这个方法，不必改成解构 {@link AsnInfo}
+     */
+    default Optional<String> lookupAsn(String ip) {
+        return lookup(ip).map(AsnInfo::asn);
+    }
 }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,5 +65,27 @@ class EntryIpHistoryRepositoryTest extends MysqlTestBase {
 
         assertThat(repository.findLatest("jp.tsdns.top", DnsVantage.CHINA_MOBILE).orElseThrow().getObservedAt())
                 .isAfter(Instant.parse("2020-01-01T00:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("findAllOrderByDomainVantageAndTime 按故障域、视角分组，组内按观测时间升序")
+    void findAllOrdersByDomainThenVantageThenTime() {
+        // 本类没有每用例清库，用本测试独占的故障域名避免与其它用例的数据互相干扰
+        String domain = "kr.tsdns.top";
+        // 故意乱序写入，断言读出来的顺序与写入顺序无关，只与分组+时间有关
+        repository.create(history(domain, DnsVantage.OVERSEAS, "2.2.2.2"));
+        repository.create(history(domain, DnsVantage.CHINA_TELECOM, "9.9.9.9"));
+        repository.create(history(domain, DnsVantage.OVERSEAS, "1.1.1.1"));
+
+        List<EntryIpHistory> all = repository.findAllOrderByDomainVantageAndTime();
+
+        List<EntryIpHistory> overseas = all.stream()
+                .filter(h -> h.getVantage() == DnsVantage.OVERSEAS && h.getFailureDomain().equals(domain))
+                .toList();
+        assertThat(overseas).hasSize(2);
+        // 先写入的 "2.2.2.2" observed_at 更早，即使后写入的 "1.1.1.1" 在集合里物理顺序更靠后，
+        // 按观测时间升序排出来仍然是 "2.2.2.2" 在前
+        assertThat(overseas.get(0).getEntryIps()).isEqualTo("2.2.2.2");
+        assertThat(overseas.get(1).getEntryIps()).isEqualTo("1.1.1.1");
     }
 }
