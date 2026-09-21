@@ -74,9 +74,12 @@ public class LinkReportServiceImpl implements LinkReportService {
             // 这两列既定的「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
             // DomainIspAggregate.isp() 文档同一语义），不能改存空串——空串是 link_report_daily
             // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空运营商」
+            // 这里再截一次 isp（IpAsnClient.truncateIsp，与 RestClientIpAsnClient 共用同一份实现）
+            // 是因为 IpAsnClient 是接口：测试与将来可能出现的其它实现不保证都在装配处截断，
+            // 这里是运营商名真正落库前的最后一道关卡，不能只指望上游某一个实现自觉
             ipAsnClient.lookup(sourceIp).ifPresent(info -> {
                 report.setSourceAsn(info.asn());
-                report.setIsp(info.isp() == null ? info.asn() : info.isp());
+                report.setIsp(info.isp() == null ? info.asn() : IpAsnClient.truncateIsp(info.isp()));
             });
             linkReportRepository.upsertWindow(report);
         } catch (Exception e) {

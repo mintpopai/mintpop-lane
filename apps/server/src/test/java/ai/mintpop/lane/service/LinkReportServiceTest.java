@@ -162,6 +162,22 @@ class LinkReportServiceTest {
         assertThat(persisted.getIsp()).isEqualTo("AS4134");
     }
 
+    @Test
+    @DisplayName("反查成功但运营商名超过 64 字符时截断后落库——列宽是 VARCHAR(64)，"
+            + "不截会在真实数据库里抛 Data too long，把整块上报窗口连累静默丢弃")
+    void lookupWithOverlongIspNameTruncatesTo64Chars() {
+        when(clock.instant()).thenReturn(NOW);
+        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", longIsp)));
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
+
+        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
+        verify(linkReportRepository).upsertWindow(captor.capture());
+        LinkReport persisted = captor.getValue();
+        assertThat(persisted.getIsp()).hasSize(64).isEqualTo(longIsp.substring(0, 64));
+    }
+
     // —— 异常兜底：下游异常、格式残缺 ——
 
     @Test

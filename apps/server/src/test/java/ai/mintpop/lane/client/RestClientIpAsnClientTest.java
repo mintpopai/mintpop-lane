@@ -90,6 +90,32 @@ class RestClientIpAsnClientTest {
     }
 
     @Test
+    @DisplayName("运营商名超过 64 字符时被截到 64 字符——ipwho.is 的 isp 是自由文本组织名，"
+            + "超长会撑爆 link_report.isp 等三张表的 VARCHAR(64) 列，MySQL 严格模式下抛 Data too long")
+    void ispLongerThan64CharsIsTruncatedTo64() {
+        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        server.expect(requestTo(URL))
+                .andRespond(withSuccess(
+                        "{\"success\":true,\"connection\":{\"asn\":4134,\"isp\":\"" + longIsp + "\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(client.lookup("203.0.113.9"))
+                .contains(new AsnInfo("AS4134", longIsp.substring(0, 64)));
+    }
+
+    @Test
+    @DisplayName("运营商名恰好 64 字符时原样保留，不多截一个——边界值不能被差一错误坑")
+    void ispExactly64CharsIsKeptAsIs() {
+        String isp64 = "A".repeat(64);
+        server.expect(requestTo(URL))
+                .andRespond(withSuccess(
+                        "{\"success\":true,\"connection\":{\"asn\":4134,\"isp\":\"" + isp64 + "\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(client.lookup("203.0.113.9")).contains(new AsnInfo("AS4134", isp64));
+    }
+
+    @Test
     @DisplayName("既有的 lookupAsn 调用方零改动：默认实现委托 lookup 只取 ASN 段")
     void lookupAsnDelegatesToLookup() {
         server.expect(requestTo(URL))

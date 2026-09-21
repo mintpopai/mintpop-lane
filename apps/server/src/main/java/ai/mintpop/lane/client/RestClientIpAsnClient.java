@@ -39,8 +39,11 @@ public class RestClientIpAsnClient implements IpAsnClient {
                 return Optional.empty();
             }
             // isp 缺失或空白一律归一成 null：把空白串当运营商名传下去，会在矩阵上多出一列
-            // 看不出是什么的空表头，也会让告警文案出现「运营商 " " 成功率异常」
-            String isp = connection.get("isp") instanceof String raw && !raw.isBlank() ? raw.trim() : null;
+            // 看不出是什么的空表头，也会让告警文案出现「运营商 " " 成功率异常」。
+            // ipwho.is 的 isp 是自由文本组织名，实测能超过 link_report.isp 等三张表的
+            // VARCHAR(64)，这里先截断，避免超长值一路带到落库那一步才被 MySQL 拒收
+            String isp = connection.get("isp") instanceof String raw && !raw.isBlank()
+                    ? IpAsnClient.truncateIsp(raw) : null;
             return Optional.of(new AsnInfo("AS" + asn.intValue(), isp));
         } catch (Exception e) {
             log.warn("ASN 查询失败 ip={}", ip, e);

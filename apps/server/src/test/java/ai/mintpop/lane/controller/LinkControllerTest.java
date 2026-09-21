@@ -322,6 +322,39 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("运营商名反查回来超过 64 字符时截断落库，不再因超长而让整块上报静默丢弃——"
+            + "link_report.isp 是 VARCHAR(64)，MySQL 严格模式下超长直接抛 Data too long")
+    void heartbeatWithOverlongIspIsTruncatedBeforePersisting() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", longIsp)));
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 12, "alive": 11, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        // 超长运营商名截断后仍然只有一行落库：截断之前这里会是 0（Data too long 被 ingest 的
+        // try/catch 吞掉，整块上报窗口静默丢弃）
+        assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
+        String isp = jdbc.queryForObject("SELECT isp FROM link_report WHERE user_id = ?", String.class, user1Id);
+        assertThat(isp).hasSize(64).isEqualTo(longIsp.substring(0, 64));
+    }
+
+    @Test
     @DisplayName("failureDomain 为 null 时落库存空串")
     void nullFailureDomainStoresAsEmptyStringInDb() throws Exception {
         when(clock.instant()).thenReturn(FIXED_NOW);
