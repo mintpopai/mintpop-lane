@@ -47,6 +47,14 @@ public class LinkReportServiceImpl implements LinkReportService {
             }
 
             LinkReport report = toEntity(userId, request);
+
+            if (!countsAreSane(report)) {
+                log.warn("上报计数不合理，丢弃：userId={} samples={} alive={} noSample={} failovers={} p50={}",
+                        userId, report.getSamples(), report.getAliveCount(), report.getNoSampleCount(),
+                        report.getFailovers(), report.getP50LatencyMs());
+                return;
+            }
+
             // 运营商由服务端按来源 IP 反查，不让客户端自报（spec §8.1：自报不可信，客户端也不知道）。
             //
             // 反查刻意保持**同步**跑在心跳请求线程上，不改成 @Async：异步化会让「POST 完立刻
@@ -91,6 +99,38 @@ public class LinkReportServiceImpl implements LinkReportService {
         Instant earliest = now.minus(properties.getWindowMaxPast());
         Instant latest = now.plus(properties.getWindowMaxFuture());
         return !windowStart.isBefore(earliest) && !windowStart.isAfter(latest);
+    }
+
+    /**
+     * 计数的合理性校验：不满足就整块丢弃（与格式错误、窗口越界同一处置）。
+     * <p>
+     * spec §8.1 之所以让运营商由服务端反查而不让客户端自报，理由是「自报不可信」；
+     * 计数同样是客户端自报的，同一条理由适用。客户端 bug 或手工构造的请求能写进：
+     * <ul>
+     *   <li>{@code alive > samples} → 成功率 >100%，把这个故障域的真实劣化掩盖掉，
+     *       并且带着这个比值进全库矩阵；</li>
+     *   <li>负 {@code samples} → {@link LinkReportAlertService} 的 {@code samples <= 0}
+     *       门槛会把整段判定直接跳过，等于给了一条「让告警闭嘴」的路；</li>
+     *   <li>负延迟 → 没有物理意义，只会污染展示。</li>
+     * </ul>
+     * 必填计数为 null 也判为不合理：这几列在 {@code link_report} 都是 NOT NULL，
+     * 放过去只是把一个清楚的校验失败换成一条数据库异常，日志还更难读。
+     * <p>
+     * {@code p50LatencyMs} 是唯一允许为 null 的（窗口内没有 alive 样本），
+     * 但为 0 是**合法**的低延迟而不是失败（spec §8.1 陷阱二），所以判的是 {@code < 0}。
+     * 全 0 的窗口（整段离线）同样合法，不许被这道校验误杀。
+     */
+    private boolean countsAreSane(LinkReport report) {
+        Integer samples = report.getSamples();
+        Integer alive = report.getAliveCount();
+        Integer noSample = report.getNoSampleCount();
+        Integer failovers = report.getFailovers();
+        Integer p50 = report.getP50LatencyMs();
+        if (samples == null || alive == null || noSample == null || failovers == null) {
+            return false;
+        }
+        return samples >= 0 && alive >= 0 && alive <= samples && noSample >= 0 && failovers >= 0
+                && (p50 == null || p50 >= 0);
     }
 
     /** 契约层 → 存储层的字段映射；failureDomain 的 null ⇄ 空串转换只发生在这一处 */

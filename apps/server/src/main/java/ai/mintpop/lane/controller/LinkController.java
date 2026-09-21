@@ -1,5 +1,6 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.enumeration.LinkStatus;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
@@ -60,7 +61,11 @@ public class LinkController {
         // 无关（LinkHeartbeatRequest 本来就没有 Bean Validation 注解，反序列化失败发生在
         // 绑定阶段，早于任何校验）。解析挪到 LinkReportService#ingest 内部，
         // 和落库逻辑包进同一个 try/catch，才能保证任何格式问题都只丢一个窗口。
-        if (rawReport != null && !rawReport.isBlank()) {
+        //
+        // 只收 ACTIVE 用户的上报：客户端要收到 REVOKED/SUSPENDED 才断链，那一次请求是带着
+        // 上报块来的。放它进库，这个不该存在的用户就会进全库矩阵，checkAll 还会给已吊销用户
+        // 推「成功率告警」，运维排查一个已经没有链路的人。心跳本身照常返回状态，不受影响
+        if (response.status() == LinkStatus.ACTIVE && rawReport != null && !rawReport.isBlank()) {
             linkReportService.ingest(userId, rawReport, clientIpOf(httpRequest));
         }
         return ApiResponse.success(response);

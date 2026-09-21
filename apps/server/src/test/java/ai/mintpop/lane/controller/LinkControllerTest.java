@@ -33,6 +33,7 @@ import static ai.mintpop.lane.enumeration.UserStatus.REVOKED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -420,6 +421,88 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     // —— I1 修复：窗口起点越界（客户端时钟不准/被构造出任意时间）时丢弃整条上报块 ——
+
+    // —— I2 修复：上报计数不合理（alive > samples、负数）时整块丢弃 ——
+
+    @Test
+    @DisplayName("alive 大于 samples 的上报块被丢弃，心跳仍返回正常结果——不可能超过 100% 的成功率不许进库")
+    void insaneCountsAreDiscardedButHeartbeatStillSucceeds() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 10, "alive": 11, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    @Test
+    @DisplayName("负样本数的上报块被丢弃：负 samples 会让告警的样本量门槛把整段判定跳过")
+    void negativeSamplesAreDiscardedButHeartbeatStillSucceeds() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": -100, "alive": -50, "noSample": 0},
+                  "failovers": 0
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        assertThat(countLinkReportRows(user1Id)).isZero();
+    }
+
+    // —— I3 修复：非 ACTIVE 用户的上报不入库 ——
+
+    @Test
+    @DisplayName("已吊销用户带上报块的心跳：仍返回 REVOKED，但上报不落库——"
+            + "客户端收到 REVOKED 才断链，那一次请求带的数据不该进全库矩阵、更不该给已吊销用户推告警")
+    void revokedUserReportIsNotIngested() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "2026-09-19T00:00:00Z",
+                  "window": {"samples": 12, "alive": 3, "noSample": 0},
+                  "failovers": 1
+                }
+                """;
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user2Id))
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.status").value("REVOKED"));
+
+        assertThat(countLinkReportRows(user2Id)).isZero();
+        // 连 ASN 反查都不该发生：非 ACTIVE 用户的上报在 ingest 之前就被挡住了
+        verify(ipAsnClient, never()).lookup(anyString());
+    }
 
     @Test
     @DisplayName("窗口起点超出未来容忍范围时被丢弃，心跳仍返回正常结果")

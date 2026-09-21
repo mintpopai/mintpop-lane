@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,13 +65,18 @@ class LinkReportServiceTest {
     }
 
     private LinkHeartbeatRequest newRequest(String failureDomain, Instant windowStart) {
+        return newRequest(failureDomain, windowStart, 10, 9, 0);
+    }
+
+    private LinkHeartbeatRequest newRequest(String failureDomain, Instant windowStart, Integer samples,
+                                            Integer alive, Integer noSample) {
         LinkHeartbeatRequest request = new LinkHeartbeatRequest();
         request.setFailureDomain(failureDomain);
         request.setWindowStart(windowStart);
         LinkHeartbeatRequest.Window window = new LinkHeartbeatRequest.Window();
-        window.setSamples(10);
-        window.setAlive(9);
-        window.setNoSample(0);
+        window.setSamples(samples);
+        window.setAlive(alive);
+        window.setNoSample(noSample);
         request.setWindow(window);
         request.setFailovers(0);
         return request;
@@ -259,5 +265,91 @@ class LinkReportServiceTest {
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", null)), SOURCE_IP);
 
         verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    // —— I2 修复：计数合理性校验。客户端 bug 或手工构造的请求可以写进 alive > samples、
+    //    负样本、负延迟：spec §8.1 因为「自报不可信」才让运营商由服务端反查，计数同理。
+    //    负 samples 会让告警的 samples <= 0 门槛把整段判定跳过，alive > samples 会算出
+    //    >100% 的成功率把真实劣化掩盖掉，两者都会进全库矩阵
+
+    @Test
+    @DisplayName("alive 大于 samples 时整块丢弃：成功率不可能超过 100%，这种行会把真实劣化掩盖掉")
+    void aliveGreaterThanSamplesIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180), 10, 11, 0)), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("samples 为负数时整块丢弃：负样本会让告警的样本量门槛把整段判定跳过")
+    void negativeSamplesIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180), -5, 0, 0)), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("alive 为负数时整块丢弃")
+    void negativeAliveIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180), 10, -1, 0)), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("noSample 为负数时整块丢弃")
+    void negativeNoSampleIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180), 10, 9, -3)), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("failovers 为负数时整块丢弃")
+    void negativeFailoversIsDiscarded() {
+        when(clock.instant()).thenReturn(NOW);
+
+        LinkHeartbeatRequest request = newRequest("jp.tsdns.top", NOW.minusSeconds(180));
+        request.setFailovers(-1);
+        service.ingest(USER_ID, json(request), SOURCE_IP);
+
+        verify(linkReportRepository, never()).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("p50 延迟为负数时整块丢弃；p50 为 null 是合法的（窗口内没有 alive 样本）")
+    void negativeP50LatencyIsDiscardedButNullIsFine() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
+
+        LinkHeartbeatRequest negative = newRequest("jp.tsdns.top", NOW.minusSeconds(180));
+        negative.setP50LatencyMs(-1);
+        service.ingest(USER_ID, json(negative), SOURCE_IP);
+        verify(linkReportRepository, never()).upsertWindow(any());
+
+        // p50 为 null 走的是另一条路：契约里它本来就可空，不能被当成不合理计数一起丢掉
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
+        verify(linkReportRepository).upsertWindow(any());
+    }
+
+    @Test
+    @DisplayName("alive 恰好等于 samples（全通）与全 0 的窗口都是合法的，不能被校验误杀")
+    void fullySuccessfulAndAllZeroWindowsArePersisted() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180), 10, 10, 0)), SOURCE_IP);
+        // 整段窗口离线：一个样本也没有，是真实会发生的形态，不是脏数据
+        service.ingest(USER_ID, json(newRequest("us.tsdns.top", NOW.minusSeconds(180), 0, 0, 5)), SOURCE_IP);
+
+        verify(linkReportRepository, times(2)).upsertWindow(any());
     }
 }
