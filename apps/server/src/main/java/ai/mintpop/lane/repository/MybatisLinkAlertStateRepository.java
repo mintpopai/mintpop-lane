@@ -18,11 +18,11 @@ public class MybatisLinkAlertStateRepository implements LinkAlertStateRepository
     }
 
     @Override
-    public Optional<LinkAlertState> find(Long userId, String failureDomain, String isp) {
+    public Optional<LinkAlertState> find(Long userId, String failureDomain, String asn) {
         return Optional.ofNullable(mapper.selectOne(Wrappers.<LinkAlertState>lambdaQuery()
                 .eq(LinkAlertState::getUserId, userId)
                 .eq(LinkAlertState::getFailureDomain, failureDomain)
-                .eq(LinkAlertState::getIsp, isp)));
+                .eq(LinkAlertState::getAsn, asn)));
     }
 
     @Override

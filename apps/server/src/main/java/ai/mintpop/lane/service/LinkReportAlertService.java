@@ -167,7 +167,7 @@ public class LinkReportAlertService {
             LinkAlertState fresh = new LinkAlertState();
             fresh.setUserId(userId);
             fresh.setFailureDomain(domain);
-            fresh.setIsp(ispKey);
+            fresh.setAsn(ispKey);
             fresh.setAlerted(false);
             return fresh;
         });

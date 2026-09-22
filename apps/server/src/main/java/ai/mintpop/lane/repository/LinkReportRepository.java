@@ -46,8 +46,9 @@ public interface LinkReportRepository {
     List<DomainIspAggregate> aggregateGlobalByDomainAndIsp(Instant from, Instant to);
 
     /**
-     * 一行「故障域 × 运营商」的聚合结果。{@code isp} 为 {@code null} 表示这些窗口的 ASN 反查失败，
-     * 与 {@link LinkReport#getIsp()} 同一语义。这是只读投影，不对应任何表。
+     * 一行「故障域 × 运营商」的聚合结果。运营商维度的键已经是 <b>ASN</b>（形如 AS4134），
+     * {@code isp} 这个分量名尚未跟着改（展示名接线时一并改）；为 {@code null} 表示这些窗口的
+     * ASN 反查失败，与 {@link LinkReport#getSourceAsn()} 同一语义。这是只读投影，不对应任何表。
      */
     record DomainIspAggregate(String failureDomain, String isp, long samples, long aliveCount, long failovers) {
     }

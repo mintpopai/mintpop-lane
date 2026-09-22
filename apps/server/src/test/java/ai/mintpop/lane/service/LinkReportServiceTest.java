@@ -117,7 +117,7 @@ class LinkReportServiceTest {
     // —— ASN 反查 ——
 
     @Test
-    @DisplayName("ASN 反查失败不影响上报落库，只是 asn 与 isp 为 null")
+    @DisplayName("ASN 反查失败不影响上报落库，只是 source_asn 为 null")
     void asnLookupFailureStillPersistsReport() {
         when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
@@ -128,12 +128,11 @@ class LinkReportServiceTest {
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
         assertThat(persisted.getSourceAsn()).isNull();
-        assertThat(persisted.getIsp()).isNull();
     }
 
     @Test
-    @DisplayName("反查成功且带运营商名时，asn 与 isp 一起落库——isp 是整个运营商维度唯一的数据来源")
-    void lookupSuccessStoresAsnAndIspName() {
+    @DisplayName("反查成功时 ASN 落 source_asn——运营商维度以它做键，展示名不进这张窗口表")
+    void lookupSuccessStoresSourceAsn() {
         when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
 
@@ -143,13 +142,12 @@ class LinkReportServiceTest {
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
         assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
-        assertThat(persisted.getIsp()).isEqualTo("China Telecom");
     }
 
     @Test
-    @DisplayName("反查成功但上游没给运营商名时，isp 退回 ASN 串——宁可显示 AS4134 也不能留 null，"
-            + "留 null 会让这段样本掉进「未知运营商」、运营商级告警永远跳过它")
-    void lookupWithoutIspNameFallsBackToAsnString() {
+    @DisplayName("上游没给运营商名不影响 ASN 落库——运营商维度以 ASN 做键，名字缺失只是没有展示名可用，"
+            + "这段样本照样进得了运营商级判定")
+    void lookupWithoutOrgNameStillStoresSourceAsn() {
         when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", null)));
 
@@ -159,23 +157,21 @@ class LinkReportServiceTest {
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
         assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
-        assertThat(persisted.getIsp()).isEqualTo("AS4134");
     }
 
     @Test
-    @DisplayName("反查成功但运营商名超过 64 字符时截断后落库——列宽是 VARCHAR(64)，"
-            + "不截会在真实数据库里抛 Data too long，把整块上报窗口连累静默丢弃")
-    void lookupWithOverlongIspNameTruncatesTo64Chars() {
+    @DisplayName("上游给的运营商名超长也不影响本窗口落库——名字不进 link_report，超长与这张表无关")
+    void overlongOrgNameDoesNotAffectWindowPersisting() {
         when(clock.instant()).thenReturn(NOW);
-        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
-        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", longIsp)));
+        String longOrgName = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", longOrgName)));
 
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
         ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
-        assertThat(persisted.getIsp()).hasSize(64).isEqualTo(longIsp.substring(0, 64));
+        assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
     }
 
     // —— 异常兜底：下游异常、格式残缺 ——

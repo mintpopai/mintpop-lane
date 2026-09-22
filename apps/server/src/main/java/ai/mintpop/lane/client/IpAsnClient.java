@@ -5,7 +5,8 @@ import java.util.Optional;
 /**
  * IP → ASN（自治系统号）/ 运营商查询口。采购尽调用它判断中转入口是否又落在同一家云厂商
  * （如又一个 AWS 东京）；三期的链路上报用它把上报请求的来源 IP 反查成运营商，
- * 落 {@code link_report.isp}——运营商由服务端反查而不让客户端自报（spec §8.1：自报不可信）。
+ * 落 {@code link_report.source_asn}（运营商维度的键）与 {@code asn_org.org_name}（只做展示的名字）——
+ * 运营商由服务端反查而不让客户端自报（spec §8.1：自报不可信）。
  */
 public interface IpAsnClient {
 
@@ -23,12 +24,11 @@ public interface IpAsnClient {
     Optional<AsnInfo> lookup(String ip);
 
     /**
-     * 运营商名允许的最大字符数：与 {@code link_report.isp}、{@code link_report_daily.isp}、
-     * {@code link_alert_state.isp} 三张表的 {@code VARCHAR(64)} 列宽逐字对应
-     * （{@code V22__link_report.sql}、{@code V23__link_alert_state.sql}）。
+     * 运营商名允许的最大字符数：与 {@code asn_org.org_name} 的 {@code VARCHAR(64)} 列宽逐字对应
+     * （{@code V24__asn_org.sql}）。运营商维度的键是 ASN，名字只进这一张映射表。
      * ipwho.is 的 {@code connection.isp} 是自由文本的组织名，实测能超过 64 字符
-     * （如中国电信完整的英文注册名），严格模式下超长会直接抛 {@code Data too long}，
-     * 把整块上报窗口连累静默丢弃。改这几张表的列宽时必须同步改这里，两处失配这条防线就形同虚设。
+     * （如中国电信完整的英文注册名），严格模式下超长会直接抛 {@code Data too long}。
+     * 改这张表的列宽时必须同步改这里，两处失配这条防线就形同虚设。
      */
     int ISP_MAX_LENGTH = 64;
 
@@ -37,8 +37,8 @@ public interface IpAsnClient {
      * 的 UTF-16 code unit 计数——{@code VARCHAR(64)} 是按字符计宽度，增补平面字符（代理对）
      * 用 {@code length()} 数会多算一倍，稳妥起见用 {@code codePoints()} 重组。
      * trim 放在截断之前，避免截断点卡在首尾空白上白占一个字符名额。
-     * 两处装配 isp 的地方（{@link ai.mintpop.lane.client.RestClientIpAsnClient} 与
-     * {@code LinkReportServiceImpl}）共用这一份实现，不许各写一份截断逻辑各写各的。
+     * 装配 isp 的地方共用这一份实现（{@link ai.mintpop.lane.client.RestClientIpAsnClient} 等），
+     * 不许各写一份截断逻辑各写各的。
      *
      * @return {@code isp} 为 {@code null} 时原样返回 {@code null}；否则返回 trim 且截断后的运营商名
      */

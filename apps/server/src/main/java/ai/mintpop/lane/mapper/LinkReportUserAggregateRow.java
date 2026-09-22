@@ -13,7 +13,8 @@ public class LinkReportUserAggregateRow {
 
     private Long userId;
     private String failureDomain;
-    private String isp;
+    /** 运营商维度的键：ASN（形如 AS4134），由 source_asn 取别名而来 */
+    private String asn;
     private Long samples;
     private Long aliveCount;
     private Long failovers;

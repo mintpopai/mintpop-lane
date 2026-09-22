@@ -592,12 +592,16 @@ class SchemaMigrationTest extends MysqlTestBase {
 
             for (String column : List.of("user_id", "failure_domain", "window_start", "samples",
                     "alive_count", "no_sample_count", "p50_latency_ms", "failovers",
-                    "resolved_entry_ip", "source_asn", "isp", "created_at")) {
+                    "resolved_entry_ip", "source_asn", "created_at")) {
                 assertThat(columnComment(conn, "link_report", column))
                         .as("link_report.%s 应带中文注释", column)
                         .isNotBlank();
             }
-            for (String column : List.of("user_id", "failure_domain", "isp", "stat_date", "samples",
+            // 运营商维度改用 ASN 做键，展示名挪去 asn_org；link_report 不再留自由文本的 isp 列
+            assertThat(columnExists(conn, "link_report", "isp"))
+                    .as("link_report.isp 已被 asn 取代，不该再存在")
+                    .isFalse();
+            for (String column : List.of("user_id", "failure_domain", "asn", "stat_date", "samples",
                     "alive_count", "no_sample_count", "failovers", "created_at")) {
                 assertThat(columnComment(conn, "link_report_daily", column))
                         .as("link_report_daily.%s 应带中文注释", column)
@@ -605,7 +609,7 @@ class SchemaMigrationTest extends MysqlTestBase {
             }
         }
 
-        // link_report.failure_domain 与 link_report_daily.isp 都刻意用空串而非 NULL 编码「未解析/反查失败」，
+        // link_report.failure_domain 与 link_report_daily.asn 都刻意用空串而非 NULL 编码「未解析/反查失败」，
         // 注释必须说清这个编码规则，否则后来者会把它们当成普通的可空业务字段随手改回 NULL
         String failureDomainComment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
@@ -613,11 +617,11 @@ class SchemaMigrationTest extends MysqlTestBase {
                 """, String.class);
         assertThat(failureDomainComment).contains("空串");
 
-        String dailyIspComment = jdbc.queryForObject("""
+        String dailyAsnComment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
-                WHERE table_schema = DATABASE() AND table_name = 'link_report_daily' AND column_name = 'isp'
+                WHERE table_schema = DATABASE() AND table_name = 'link_report_daily' AND column_name = 'asn'
                 """, String.class);
-        assertThat(dailyIspComment).contains("空串");
+        assertThat(dailyAsnComment).contains("空串");
     }
 
     @Test
@@ -633,7 +637,7 @@ class SchemaMigrationTest extends MysqlTestBase {
     @Test
     @DisplayName("link_report_daily 的唯一键列全部非空，同样是为了让唯一键真正去重")
     void linkReportDailyUniqueKeyColumnsAreNotNullable() throws Exception {
-        for (String column : List.of("user_id", "failure_domain", "isp", "stat_date")) {
+        for (String column : List.of("user_id", "failure_domain", "asn", "stat_date")) {
             assertThat(isNullable("link_report_daily", column))
                     .as("link_report_daily.%s 进了唯一键，必须 NOT NULL", column)
                     .isFalse();
@@ -646,7 +650,7 @@ class SchemaMigrationTest extends MysqlTestBase {
         try (Connection conn = dataSource.getConnection()) {
             assertThat(tableExists(conn, "link_alert_state")).isTrue();
 
-            for (String column : List.of("user_id", "failure_domain", "isp", "alerted", "alerted_at", "updated_at")) {
+            for (String column : List.of("user_id", "failure_domain", "asn", "alerted", "alerted_at", "updated_at")) {
                 assertThat(columnComment(conn, "link_alert_state", column))
                         .as("link_alert_state.%s 应带中文注释", column)
                         .isNotBlank();
@@ -655,12 +659,23 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("link_alert_state 的唯一键列全部非空，否则同一故障域×运营商的去重状态会分裂成多行")
+    @DisplayName("link_alert_state 的唯一键列全部非空，否则同一故障域×ASN 的去重状态会分裂成多行")
     void linkAlertStateUniqueKeyColumnsAreNotNullable() throws Exception {
-        for (String column : List.of("user_id", "failure_domain", "isp")) {
+        for (String column : List.of("user_id", "failure_domain", "asn")) {
             assertThat(isNullable("link_alert_state", column))
                     .as("link_alert_state.%s 进了唯一键，必须 NOT NULL", column)
                     .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("V24 建出 asn_org 表，asn 为主键、org_name 与 first_seen_at 非空且带中文注释")
+    void migrationCreatesAsnOrgTable() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(tableExists(conn, "asn_org")).isTrue();
+            assertThat(columnComment(conn, "asn_org", "org_name")).contains("展示");
+            assertThat(isNullable("asn_org", "org_name")).isFalse();
+            assertThat(isNullable("asn_org", "first_seen_at")).isFalse();
         }
     }
 

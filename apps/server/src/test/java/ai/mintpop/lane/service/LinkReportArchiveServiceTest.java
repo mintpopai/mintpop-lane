@@ -40,7 +40,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
 
     private static final Instant NOW = Instant.parse("2026-09-20T00:00:00Z");
     private static final String DOMAIN = "jp.tsdns.top";
-    private static final String ISP = "CTC";
+    private static final String ASN = "AS4134";
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -72,11 +72,11 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
                 Clock.fixed(now, ZoneOffset.UTC));
     }
 
-    private void insertWindow(String domain, String isp, Instant windowStart, int samples, int alive) {
-        insertWindow(userId, domain, isp, windowStart, samples, alive);
+    private void insertWindow(String domain, String asn, Instant windowStart, int samples, int alive) {
+        insertWindow(userId, domain, asn, windowStart, samples, alive);
     }
 
-    private void insertWindow(Long userId, String domain, String isp, Instant windowStart, int samples, int alive) {
+    private void insertWindow(Long userId, String domain, String asn, Instant windowStart, int samples, int alive) {
         LinkReport report = new LinkReport();
         report.setUserId(userId);
         report.setFailureDomain(domain);
@@ -85,7 +85,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
         report.setAliveCount(alive);
         report.setNoSampleCount(0);
         report.setFailovers(0);
-        report.setIsp(isp);
+        report.setSourceAsn(asn);
         linkReportRepository.upsertWindow(report);
     }
 
@@ -94,11 +94,11 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
         return count == null ? 0 : count;
     }
 
-    private LinkReportDaily newDailyRow(String domain, String isp, LocalDate statDate, long samples, long alive) {
+    private LinkReportDaily newDailyRow(String domain, String asn, LocalDate statDate, long samples, long alive) {
         LinkReportDaily row = new LinkReportDaily();
         row.setUserId(userId);
         row.setFailureDomain(domain);
-        row.setIsp(isp);
+        row.setAsn(asn);
         row.setStatDate(statDate);
         row.setSamples(samples);
         row.setAliveCount(alive);
@@ -111,14 +111,14 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
     @DisplayName("超过保留期的原始窗口被压成按天聚合，计数逐项相加")
     void oldWindowsAreFoldedIntoDailyRows() {
         Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
-        insertWindow(DOMAIN, ISP, eightDaysAgo, 10, 9);
-        insertWindow(DOMAIN, ISP, eightDaysAgo.plusSeconds(300), 10, 8);
-        insertWindow(DOMAIN, ISP, eightDaysAgo.plusSeconds(600), 10, 10);
+        insertWindow(DOMAIN, ASN, eightDaysAgo, 10, 9);
+        insertWindow(DOMAIN, ASN, eightDaysAgo.plusSeconds(300), 10, 8);
+        insertWindow(DOMAIN, ASN, eightDaysAgo.plusSeconds(600), 10, 10);
 
         newService(NOW).archive();
 
         LinkReportDaily row = dailyRepository
-                .find(userId, DOMAIN, ISP, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
+                .find(userId, DOMAIN, ASN, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
                 .orElseThrow();
         assertThat(row.getSamples()).isEqualTo(30L);
         assertThat(row.getAliveCount()).isEqualTo(27L);
@@ -139,13 +139,13 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
 
         // 行为性断言：窗口带着悬殊的 p50 值混进同一天，不影响其它数值列的正确求和
         Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
-        insertWindow(DOMAIN, ISP, eightDaysAgo, 10, 10);
-        insertWindow(DOMAIN, ISP, eightDaysAgo.plusSeconds(300), 10, 5);
+        insertWindow(DOMAIN, ASN, eightDaysAgo, 10, 10);
+        insertWindow(DOMAIN, ASN, eightDaysAgo.plusSeconds(300), 10, 5);
 
         newService(NOW).archive();
 
         LinkReportDaily row = dailyRepository
-                .find(userId, DOMAIN, ISP, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
+                .find(userId, DOMAIN, ASN, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
                 .orElseThrow();
         assertThat(row.getSamples()).isEqualTo(20L);
         assertThat(row.getAliveCount()).isEqualTo(15L);
@@ -155,12 +155,12 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
     @DisplayName("保留期内的窗口一行都不动")
     void windowsWithinRetentionAreUntouched() {
         Instant withinRetention = NOW.minus(Duration.ofDays(3)); // < rawRetentionDays(7)
-        insertWindow(DOMAIN, ISP, withinRetention, 10, 9);
+        insertWindow(DOMAIN, ASN, withinRetention, 10, 9);
 
         newService(NOW).archive();
 
         assertThat(countRawWindows()).isEqualTo(1);
-        assertThat(dailyRepository.find(userId, DOMAIN, ISP, LocalDate.ofInstant(withinRetention, ZoneOffset.UTC)))
+        assertThat(dailyRepository.find(userId, DOMAIN, ASN, LocalDate.ofInstant(withinRetention, ZoneOffset.UTC)))
                 .isEmpty();
     }
 
@@ -168,14 +168,14 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
     @DisplayName("归档可重复执行，跑两遍结果与跑一遍相同")
     void archiveIsIdempotent() {
         Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
-        insertWindow(DOMAIN, ISP, eightDaysAgo, 10, 9);
-        insertWindow(DOMAIN, ISP, eightDaysAgo.plusSeconds(300), 10, 8);
+        insertWindow(DOMAIN, ASN, eightDaysAgo, 10, 9);
+        insertWindow(DOMAIN, ASN, eightDaysAgo.plusSeconds(300), 10, 8);
 
         LinkReportArchiveService service = newService(NOW);
         service.archive();
 
         LinkReportDaily afterFirstRun = dailyRepository
-                .find(userId, DOMAIN, ISP, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
+                .find(userId, DOMAIN, ASN, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
                 .orElseThrow();
         assertThat(afterFirstRun.getSamples()).isEqualTo(20L);
         assertThat(afterFirstRun.getAliveCount()).isEqualTo(17L);
@@ -183,7 +183,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
         service.archive(); // 第二遍：原始窗口已在第一遍删除，不该被重新计入
 
         LinkReportDaily afterSecondRun = dailyRepository
-                .find(userId, DOMAIN, ISP, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
+                .find(userId, DOMAIN, ASN, LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
                 .orElseThrow();
         assertThat(afterSecondRun.getSamples()).isEqualTo(20L);
         assertThat(afterSecondRun.getAliveCount()).isEqualTo(17L);
@@ -201,14 +201,14 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
         Instant earlyWindow = day.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant lateWindow = earlyWindow.plus(Duration.ofHours(18));
 
-        insertWindow(DOMAIN, ISP, earlyWindow, 10, 9);
-        insertWindow(DOMAIN, ISP, lateWindow, 10, 7);
+        insertWindow(DOMAIN, ASN, earlyWindow, 10, 9);
+        insertWindow(DOMAIN, ASN, lateWindow, 10, 7);
 
         // t1 的 cutoff 落在 earlyWindow 与 lateWindow 之间：只有 earlyWindow 越线
         Instant t1 = earlyWindow.plus(Duration.ofDays(7)).plus(Duration.ofHours(6));
         newService(t1).archive();
 
-        LinkReportDaily afterFirstRun = dailyRepository.find(userId, DOMAIN, ISP, day).orElseThrow();
+        LinkReportDaily afterFirstRun = dailyRepository.find(userId, DOMAIN, ASN, day).orElseThrow();
         assertThat(afterFirstRun.getSamples()).isEqualTo(10L);
         assertThat(afterFirstRun.getAliveCount()).isEqualTo(9L);
         assertThat(countRawWindows()).isEqualTo(1); // lateWindow 还在保留期内，未被动
@@ -217,7 +217,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
         Instant t2 = lateWindow.plus(Duration.ofDays(7)).plus(Duration.ofHours(1));
         newService(t2).archive();
 
-        LinkReportDaily afterSecondRun = dailyRepository.find(userId, DOMAIN, ISP, day).orElseThrow();
+        LinkReportDaily afterSecondRun = dailyRepository.find(userId, DOMAIN, ASN, day).orElseThrow();
         assertThat(afterSecondRun.getSamples()).isEqualTo(20L); // 10 + 10，不是只剩 lateWindow 的 10
         assertThat(afterSecondRun.getAliveCount()).isEqualTo(16L); // 9 + 7
         assertThat(countRawWindows()).isZero();
@@ -229,18 +229,18 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
         LocalDate expiredDate = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(200); // 远超 90 天保留期
         LocalDate recentDate = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(1);
 
-        dailyRepository.upsertDay(newDailyRow(DOMAIN, ISP, expiredDate, 10, 9));
-        dailyRepository.upsertDay(newDailyRow(DOMAIN, ISP, recentDate, 20, 18));
+        dailyRepository.upsertDay(newDailyRow(DOMAIN, ASN, expiredDate, 10, 9));
+        dailyRepository.upsertDay(newDailyRow(DOMAIN, ASN, recentDate, 20, 18));
 
         newService(NOW).archive();
 
-        assertThat(dailyRepository.find(userId, DOMAIN, ISP, expiredDate)).isEmpty();
-        assertThat(dailyRepository.find(userId, DOMAIN, ISP, recentDate)).isPresent();
+        assertThat(dailyRepository.find(userId, DOMAIN, ASN, expiredDate)).isEmpty();
+        assertThat(dailyRepository.find(userId, DOMAIN, ASN, recentDate)).isPresent();
     }
 
     @Test
-    @DisplayName("原始窗口 isp 为 null（ASN 反查失败）时，归档转成空串写入按天聚合，不违反非空约束")
-    void nullIspIsConvertedToEmptyStringWhenArchived() {
+    @DisplayName("原始窗口 source_asn 为 null（反查失败）时，归档转成空串写入按天聚合，不违反非空约束")
+    void nullAsnIsConvertedToEmptyStringWhenArchived() {
         Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
         insertWindow(DOMAIN, null, eightDaysAgo, 10, 9);
 
@@ -250,33 +250,33 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
                 .find(userId, DOMAIN, "", LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC))
                 .orElseThrow();
         assertThat(row.getSamples()).isEqualTo(10L);
-        assertThat(row.getIsp()).isEqualTo("");
+        assertThat(row.getAsn()).isEqualTo("");
     }
 
     @Test
-    @DisplayName("不同用户/故障域/运营商各自独立归档，不会互相合并")
+    @DisplayName("不同用户/故障域/ASN 各自独立归档，不会互相合并")
     void differentDimensionsAreArchivedSeparately() {
         Long otherUserId = fixtures.createUser("u2", null, null);
         Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
 
-        insertWindow(userId, DOMAIN, ISP, eightDaysAgo, 10, 9);
-        insertWindow(otherUserId, DOMAIN, ISP, eightDaysAgo, 20, 18);
-        insertWindow(userId, "us.tsdns.top", ISP, eightDaysAgo, 5, 5);
-        // link_report 的真实唯一键是 (user_id, failure_domain, window_start)，不含 isp——
-        // 一个窗口只对应一次探测、一个已解析的 ISP。这一行要与第一行同 user/domain 但不同 isp，
+        insertWindow(userId, DOMAIN, ASN, eightDaysAgo, 10, 9);
+        insertWindow(otherUserId, DOMAIN, ASN, eightDaysAgo, 20, 18);
+        insertWindow(userId, "us.tsdns.top", ASN, eightDaysAgo, 5, 5);
+        // link_report 的真实唯一键是 (user_id, failure_domain, window_start)，不含 source_asn——
+        // 一个窗口只对应一次探测、一个已解析的 ASN。这一行要与第一行同 user/domain 但不同 ASN，
         // 必须换一个不同的 windowStart，否则会撞上第一行的唯一键，被 upsertWindow 整行覆盖掉
         // （这是 upsertWindow 的正确行为，覆盖同一窗口的重复上报；踩坑记录见 task-4-report.md）
-        insertWindow(userId, DOMAIN, "CUCC", eightDaysAgo.plusSeconds(900), 7, 6);
+        insertWindow(userId, DOMAIN, "AS4837", eightDaysAgo.plusSeconds(900), 7, 6);
 
         newService(NOW).archive();
 
         LocalDate statDate = LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC);
-        assertThat(dailyRepository.find(userId, DOMAIN, ISP, statDate).orElseThrow().getSamples()).isEqualTo(10L);
-        assertThat(dailyRepository.find(otherUserId, DOMAIN, ISP, statDate).orElseThrow().getSamples())
+        assertThat(dailyRepository.find(userId, DOMAIN, ASN, statDate).orElseThrow().getSamples()).isEqualTo(10L);
+        assertThat(dailyRepository.find(otherUserId, DOMAIN, ASN, statDate).orElseThrow().getSamples())
                 .isEqualTo(20L);
-        assertThat(dailyRepository.find(userId, "us.tsdns.top", ISP, statDate).orElseThrow().getSamples())
+        assertThat(dailyRepository.find(userId, "us.tsdns.top", ASN, statDate).orElseThrow().getSamples())
                 .isEqualTo(5L);
-        assertThat(dailyRepository.find(userId, DOMAIN, "CUCC", statDate).orElseThrow().getSamples())
+        assertThat(dailyRepository.find(userId, DOMAIN, "AS4837", statDate).orElseThrow().getSamples())
                 .isEqualTo(7L);
     }
 }

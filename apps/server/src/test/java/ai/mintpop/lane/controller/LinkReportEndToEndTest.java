@@ -48,8 +48,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 管理端矩阵出现该运营商列。
  * <p>
  * 这条测试是刻意跨任务的。三期各任务的测试各自自洽——告警、归档、矩阵的测试全都直接
- * {@code report.setIsp("CTC")} 往库里塞值，ingest 的测试反过来把「isp 恒 null」钉成正确行为——
- * 于是「isp 在生产里根本没有写入来源」这个断点落在任务与任务之间，**每一段单看都是绿的**。
+ * {@code report.setSourceAsn("AS4134")} 往库里塞值，ingest 的测试反过来把「运营商维度恒 null」
+ * 钉成正确行为——于是「运营商维度在生产里根本没有写入来源」这个断点落在任务与任务之间，
+ * **每一段单看都是绿的**。
  * 只有从真实入口（POST /api/link/heartbeat）喂进去、从真实出口（GET /api/admin/link-health）
  * 读出来，才能证明运营商维度是通的。改任何一段时这条不许绕过。
  */
@@ -60,7 +61,9 @@ class LinkReportEndToEndTest extends MysqlTestBase {
     private static final Instant NOW = Instant.parse("2026-09-20T00:00:00Z");
     private static final String DOMAIN = "jp.tsdns.top";
     private static final String SOURCE_IP = "203.0.113.9";
-    private static final String ISP = "China Telecom";
+    private static final String ASN = "AS4134";
+    /** 上游给的展示名：只喂给反查桩，运营商维度的键是 ASN，名字不参与分组与去重 */
+    private static final String ORG_NAME = "China Telecom";
 
     @Autowired
     private MockMvc mockMvc;
@@ -139,9 +142,9 @@ class LinkReportEndToEndTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("上报 → 反查运营商落库 → 运营商级告警 → 管理端矩阵出现该运营商列，整条链路是通的")
-    void reportFlowsFromHeartbeatThroughIspAlertToAdminMatrix() throws Exception {
-        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", ISP)));
+    @DisplayName("上报 → 反查 ASN 落库 → 运营商级告警 → 管理端矩阵出现该运营商列，整条链路是通的")
+    void reportFlowsFromHeartbeatThroughAsnAlertToAdminMatrix() throws Exception {
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo(ASN, ORG_NAME)));
 
         // —— 入口：客户端心跳带上报块，来源 IP 由反代经 X-Forwarded-For 传进来 ——
         mockMvc.perform(post("/api/link/heartbeat")
@@ -153,16 +156,15 @@ class LinkReportEndToEndTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"));
 
-        // 运营商真的进了库——这一列是后面两步唯一的数据来源
+        // 运营商维度真的进了库——这一列是后面两步唯一的数据来源
         Map<String, Object> row = jdbc.queryForMap(
-                "SELECT source_asn, isp, samples, alive_count FROM link_report WHERE user_id = ?", userId);
-        assertThat(row.get("source_asn")).isEqualTo("AS4134");
-        assertThat(row.get("isp")).isEqualTo(ISP);
+                "SELECT source_asn, samples, alive_count FROM link_report WHERE user_id = ?", userId);
+        assertThat(row.get("source_asn")).isEqualTo(ASN);
 
-        // —— 中段：全库告警扫描按「故障域 × 运营商」判定，推出运营商级告警 ——
-        // isp 若是 null，checkAndNotify 会跳过运营商级判定，这一条 verify 立刻变红
+        // —— 中段：全库告警扫描按「故障域 × ASN」判定，推出运营商级告警 ——
+        // ASN 若是 null，checkAndNotify 会跳过运营商级判定，这一条 verify 立刻变红
         linkReportAlertService.checkAll();
-        verify(notifyService).notifyIspDegraded(userId, "u1@test.example", DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userId, "u1@test.example", DOMAIN, ASN, 0.5, 100L);
 
         // —— 出口：管理端矩阵里这个故障域下出现该运营商的列，而不是只有一行「未知运营商」 ——
         MvcResult result = mockMvc.perform(get("/api/admin/link-health")
@@ -174,7 +176,7 @@ class LinkReportEndToEndTest extends MysqlTestBase {
         JsonNode isps = findDomain(domains, DOMAIN).get("isps");
         assertThat(isps).hasSize(1);
         JsonNode cell = isps.get(0);
-        assertThat(cell.get("isp").asText()).isEqualTo(ISP);
+        assertThat(cell.get("isp").asText()).isEqualTo(ASN);
         assertThat(cell.get("samples").asLong()).isEqualTo(100);
         assertThat(cell.get("aliveCount").asLong()).isEqualTo(50);
         assertThat(cell.get("successRate").asDouble()).isEqualTo(0.5);
@@ -182,7 +184,7 @@ class LinkReportEndToEndTest extends MysqlTestBase {
 
     @Test
     @DisplayName("反查整体失败时全链路降级成「未知运营商」：矩阵仍有这个故障域，但运营商级告警不推")
-    void unresolvedIspDegradesToUnknownColumnWithoutIspLevelAlert() throws Exception {
+    void unresolvedAsnDegradesToUnknownColumnWithoutIspLevelAlert() throws Exception {
         when(ipAsnClient.lookup(anyString())).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/link/heartbeat")
@@ -194,9 +196,8 @@ class LinkReportEndToEndTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"));
 
         Map<String, Object> row = jdbc.queryForMap(
-                "SELECT source_asn, isp FROM link_report WHERE user_id = ?", userId);
+                "SELECT source_asn FROM link_report WHERE user_id = ?", userId);
         assertThat(row.get("source_asn")).isNull();
-        assertThat(row.get("isp")).isNull();
 
         linkReportAlertService.checkAll();
         // 故障域级照推，运营商级跳过——未知运营商不可行动，且它的去重键会与故障域级的 (domain, "") 撞车
@@ -210,7 +211,7 @@ class LinkReportEndToEndTest extends MysqlTestBase {
                 .andReturn();
         JsonNode domains = objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/domains");
 
-        // link_report 的 null 编码在服务层归一成空串再出到接口：空串＝「有样本但运营商未知」
+        // link_report.source_asn 的 null 编码在服务层归一成空串再出到接口：空串＝「有样本但运营商未知」
         assertThat(findDomain(domains, DOMAIN).get("isps").get(0).get("isp").asText()).isEmpty();
     }
 }

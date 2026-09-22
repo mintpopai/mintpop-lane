@@ -47,7 +47,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     private static final Instant NOW = Instant.parse("2026-09-20T00:00:00Z");
     private static final String DOMAIN = "jp.tsdns.top";
-    private static final String ISP = "CTC";
+    private static final String ASN = "AS4134";
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -86,7 +86,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     }
 
     /** 真实落一条 link_report 窗口，供 checkAll 相关测试驱动全库聚合查询 */
-    private void insertWindow(Long userId, String domain, String isp, Instant windowStart, int samples, int alive) {
+    private void insertWindow(Long userId, String domain, String asn, Instant windowStart, int samples, int alive) {
         LinkReport report = new LinkReport();
         report.setUserId(userId);
         report.setFailureDomain(domain);
@@ -95,18 +95,18 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         report.setAliveCount(alive);
         report.setNoSampleCount(0);
         report.setFailovers(0);
-        report.setIsp(isp);
+        report.setSourceAsn(asn);
         linkReportRepository.upsertWindow(report);
     }
 
     /** 100 个样本、50 个存活 → 成功率 50%，跌破默认阈值 0.80 */
     private DomainIspAggregate degraded() {
-        return new DomainIspAggregate(DOMAIN, ISP, 100, 50, 0);
+        return new DomainIspAggregate(DOMAIN, ASN, 100, 50, 0);
     }
 
     /** 100 个样本、95 个存活 → 成功率 95%，高于默认阈值 0.80 */
     private DomainIspAggregate healthy() {
-        return new DomainIspAggregate(DOMAIN, ISP, 100, 95, 0);
+        return new DomainIspAggregate(DOMAIN, ASN, 100, 95, 0);
     }
 
     @Test
@@ -115,7 +115,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         newService().checkAndNotify(userId, List.of(degraded()));
 
         verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
     }
 
     @Test
@@ -123,7 +123,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void staysSilentWhenSamplesBelowMinimum() {
         // samples=5 alive=0：成功率 0%，比阈值低得多，但样本量（5）低于 alertMinSamples（20）。
         // 若实现漏掉「先看样本量」这道门槛，0/5=0 < 0.80 一样会触发告警，这条测试就会变红
-        newService().checkAndNotify(userId, List.of(new DomainIspAggregate(DOMAIN, ISP, 5, 0, 0)));
+        newService().checkAndNotify(userId, List.of(new DomainIspAggregate(DOMAIN, ASN, 5, 0, 0)));
 
         verifyNoInteractions(notifyService);
     }
@@ -138,7 +138,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         // 这条测试单独守的是"不抛 ArithmeticException"：万一将来有人把除法改成 long/long 的
         // 整数除法，除数为 0 时会真的抛出，这条测试会因此变红
         assertThatCode(() -> newService().checkAndNotify(userId,
-                List.of(new DomainIspAggregate(DOMAIN, ISP, 0, 0, 0))))
+                List.of(new DomainIspAggregate(DOMAIN, ASN, 0, 0, 0))))
                 .doesNotThrowAnyException();
 
         verifyNoInteractions(notifyService);
@@ -153,13 +153,13 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         service.checkAndNotify(userId, List.of(degraded()));
         service.checkAndNotify(userId, List.of(degraded()));
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
 
         service.checkAndNotify(userId, List.of(healthy())); // 恢复正常：清掉已告警状态，不推
         service.checkAndNotify(userId, List.of(degraded())); // 再次劣化：应重新推一次
 
         verify(notifyService, times(2)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(2)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(2)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
     }
 
     @Test
@@ -168,14 +168,14 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         LinkReportAlertService first = newService();
         first.checkAndNotify(userId, List.of(degraded()));
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
 
         // 模拟重启：全新实例，不复用 first 的任何字段，只共享同一个落库的 alertStateRepository
         LinkReportAlertService restarted = newService();
         restarted.checkAndNotify(userId, List.of(degraded()));
 
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
     }
 
     @Test
@@ -213,16 +213,16 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @Test
     @DisplayName("故障域级判定跨运营商求和：单个运营商各自不达标，但域内合计成功率仍可能不同于其中任意一个运营商")
     void domainLevelAggregatesAcrossIsps() {
-        // CTC 100 中 40 存活（40%），CUCC 100 中 90 存活（90%）：域内合计 200 中 130 存活 = 65%，
-        // 跌破阈值 0.80，但两个运营商级判定各自独立：CTC 应推，CUCC 不该推
-        DomainIspAggregate ctc = new DomainIspAggregate(DOMAIN, "CTC", 100, 40, 0);
-        DomainIspAggregate cucc = new DomainIspAggregate(DOMAIN, "CUCC", 100, 90, 0);
+        // AS4134 100 中 40 存活（40%），AS4837 100 中 90 存活（90%）：域内合计 200 中 130 存活 = 65%，
+        // 跌破阈值 0.80，但两个运营商级判定各自独立：AS4134 应推，AS4837 不该推
+        DomainIspAggregate ctc = new DomainIspAggregate(DOMAIN, "AS4134", 100, 40, 0);
+        DomainIspAggregate cucc = new DomainIspAggregate(DOMAIN, "AS4837", 100, 90, 0);
 
         newService().checkAndNotify(userId, List.of(ctc, cucc));
 
         verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.65, 200L);
-        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, "CTC", 0.4, 100L);
-        verify(notifyService, times(0)).notifyIspDegraded(userId, email, DOMAIN, "CUCC", 0.9, 100L);
+        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, "AS4134", 0.4, 100L);
+        verify(notifyService, times(0)).notifyIspDegraded(userId, email, DOMAIN, "AS4837", 0.9, 100L);
     }
 
     @Test
@@ -233,15 +233,15 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5)); // 落在默认 15 分钟回看窗口内
 
-        insertWindow(userA, "a.tsdns.top", ISP, windowStart, 100, 50); // 50%，跌破阈值
-        insertWindow(userB, "b.tsdns.top", ISP, windowStart, 100, 40); // 40%，跌破阈值
+        insertWindow(userA, "a.tsdns.top", ASN, windowStart, 100, 50); // 50%，跌破阈值
+        insertWindow(userB, "b.tsdns.top", ASN, windowStart, 100, 40); // 40%，跌破阈值
 
         newService().checkAll();
 
         verify(notifyService).notifyFailureDomainDegraded(userA, email, "a.tsdns.top", 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(userA, email, "a.tsdns.top", ISP, 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userA, email, "a.tsdns.top", ASN, 0.5, 100L);
         verify(notifyService).notifyFailureDomainDegraded(userB, emailB, "b.tsdns.top", 0.4, 100L);
-        verify(notifyService).notifyIspDegraded(userB, emailB, "b.tsdns.top", ISP, 0.4, 100L);
+        verify(notifyService).notifyIspDegraded(userB, emailB, "b.tsdns.top", ASN, 0.4, 100L);
     }
 
     @Test
@@ -253,25 +253,25 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5));
 
-        insertWindow(userA, DOMAIN, ISP, windowStart, 100, 50); // 50%
-        insertWindow(userB, DOMAIN, ISP, windowStart, 100, 30); // 30%
+        insertWindow(userA, DOMAIN, ASN, windowStart, 100, 50); // 50%
+        insertWindow(userB, DOMAIN, ASN, windowStart, 100, 30); // 30%
 
         newService().checkAll();
 
         verify(notifyService).notifyFailureDomainDegraded(userA, email, DOMAIN, 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(userA, email, DOMAIN, ISP, 0.5, 100L);
+        verify(notifyService).notifyIspDegraded(userA, email, DOMAIN, ASN, 0.5, 100L);
         verify(notifyService).notifyFailureDomainDegraded(userB, emailB, DOMAIN, 0.3, 100L);
-        verify(notifyService).notifyIspDegraded(userB, emailB, DOMAIN, ISP, 0.3, 100L);
+        verify(notifyService).notifyIspDegraded(userB, emailB, DOMAIN, ASN, 0.3, 100L);
         // 两个用户各自独立推了一次，不是同一条被算了两遍，也不是漏推了其中一个
         verify(notifyService, times(2)).notifyFailureDomainDegraded(any(), any(), eq(DOMAIN), anyDouble(), anyLong());
-        verify(notifyService, times(2)).notifyIspDegraded(any(), any(), eq(DOMAIN), eq(ISP), anyDouble(), anyLong());
+        verify(notifyService, times(2)).notifyIspDegraded(any(), any(), eq(DOMAIN), eq(ASN), anyDouble(), anyLong());
     }
 
     @Test
     @DisplayName("checkAll 只看回看窗口内的数据，窗口外的旧数据不参与本轮判定")
     void checkAllIgnoresWindowsOutsideLookback() {
         Instant tooOld = NOW.minus(properties.getAlertLookback()).minusSeconds(1);
-        insertWindow(userId, DOMAIN, ISP, tooOld, 100, 50);
+        insertWindow(userId, DOMAIN, ASN, tooOld, 100, 50);
 
         newService().checkAll();
 

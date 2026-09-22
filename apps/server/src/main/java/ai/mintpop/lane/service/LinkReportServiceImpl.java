@@ -65,22 +65,14 @@ public class LinkReportServiceImpl implements LinkReportService {
             // 桌面端心跳的客户端超时是 15s，单次反查超时仍在其内，但这是本路径最接近红线的地方——
             // 哪天要再往心跳里加外部调用，先回来看这段。
             //
-            // 一次反查同时得到 asn 与运营商名：asn 落 source_asn，isp 优先用可读的运营商名，
-            // 上游没给（AsnInfo.isp() 为 null）时退回 ASN 串（如 "AS4134"）。退回而不是留 null
-            // 是要害——isp 为 null 的样本会被 LinkReportAlertService 跳过运营商级判定、并在
-            // 管理端矩阵里归进「未知运营商」那一行，spec §8.3 的「单运营商成功率异常」就永远不触发。
+            // 运营商维度以 ASN 做键，本表只落 source_asn：展示名是上游给的自由文本、随时漂移，
+            // 拿它做键会把同一家运营商裂成两列，故名字不进这张窗口表（另按 ASN 存一份映射）。
             //
-            // 反查整体失败（Optional.empty）时 source_asn 与 isp 都保持 null：null 是本表
-            // 这两列既定的「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
-            // DomainIspAggregate.isp() 文档同一语义），不能改存空串——空串是 link_report_daily
-            // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空运营商」
-            // 这里再截一次 isp（IpAsnClient.truncateIsp，与 RestClientIpAsnClient 共用同一份实现）
-            // 是因为 IpAsnClient 是接口：测试与将来可能出现的其它实现不保证都在装配处截断，
-            // 这里是运营商名真正落库前的最后一道关卡，不能只指望上游某一个实现自觉
-            ipAsnClient.lookup(sourceIp).ifPresent(info -> {
-                report.setSourceAsn(info.asn());
-                report.setIsp(info.isp() == null ? info.asn() : IpAsnClient.truncateIsp(info.isp()));
-            });
+            // 反查整体失败（Optional.empty）时 source_asn 保持 null：null 是本列既定的
+            // 「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
+            // DomainIspAggregate 文档同一语义），不能改存空串——空串是 link_report_daily
+            // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空 ASN」
+            ipAsnClient.lookup(sourceIp).ifPresent(info -> report.setSourceAsn(info.asn()));
             linkReportRepository.upsertWindow(report);
         } catch (Exception e) {
             log.warn("链路上报处理失败，本窗口丢弃，userId={}", userId, e);

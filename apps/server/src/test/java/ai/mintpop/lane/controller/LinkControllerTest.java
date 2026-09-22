@@ -276,8 +276,8 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN 与运营商")
-    void heartbeatWithReportPersistsRowWithAsnAndIsp() throws Exception {
+    @DisplayName("带上报块的心跳落库一行，并把来源 IP 反查成 ASN")
+    void heartbeatWithReportPersistsRowWithSourceAsn() throws Exception {
         when(clock.instant()).thenReturn(FIXED_NOW);
         when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
 
@@ -307,7 +307,7 @@ class LinkControllerTest extends MysqlTestBase {
         assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
         Map<String, Object> row = jdbc.queryForMap(
                 "SELECT failure_domain, samples, alive_count, no_sample_count, p50_latency_ms, failovers, "
-                        + "resolved_entry_ip, source_asn, isp FROM link_report WHERE user_id = ?", user1Id);
+                        + "resolved_entry_ip, source_asn FROM link_report WHERE user_id = ?", user1Id);
         assertThat(row.get("failure_domain")).isEqualTo("jp.tsdns.top");
         assertThat(row.get("samples")).isEqualTo(12);
         assertThat(row.get("alive_count")).isEqualTo(11);
@@ -315,19 +315,18 @@ class LinkControllerTest extends MysqlTestBase {
         assertThat(row.get("p50_latency_ms")).isEqualTo(180);
         assertThat(row.get("failovers")).isEqualTo(1);
         assertThat(row.get("resolved_entry_ip")).isEqualTo("10.0.0.9");
+        // ASN 由 ingest 按来源 IP 反查填上：这是「故障域 × 运营商」矩阵与运营商级告警
+        // 唯一的数据来源，留 null 整个运营商维度就是空的（展示名另按 ASN 存，不进本表）
         assertThat(row.get("source_asn")).isEqualTo("AS4134");
-        // isp 由 ingest 用同一次反查结果填上：这是「故障域 × 运营商」矩阵与运营商级告警
-        // 唯一的数据来源，留 null 整个运营商维度就是空的
-        assertThat(row.get("isp")).isEqualTo("China Telecom");
     }
 
     @Test
-    @DisplayName("运营商名反查回来超过 64 字符时截断落库，不再因超长而让整块上报静默丢弃——"
-            + "link_report.isp 是 VARCHAR(64)，MySQL 严格模式下超长直接抛 Data too long")
-    void heartbeatWithOverlongIspIsTruncatedBeforePersisting() throws Exception {
+    @DisplayName("上游给的运营商名超过 64 字符也不影响这块上报落库——名字不进 link_report，"
+            + "本表只存 ASN（VARCHAR(32)），长度风险随展示名一起挪走了")
+    void heartbeatWithOverlongOrgNameStillPersistsWindow() throws Exception {
         when(clock.instant()).thenReturn(FIXED_NOW);
-        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
-        when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", longIsp)));
+        String longOrgName = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        when(ipAsnClient.lookup("203.0.113.9")).thenReturn(Optional.of(new AsnInfo("AS4134", longOrgName)));
 
         String reportJson = """
                 {
@@ -347,11 +346,12 @@ class LinkControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"));
 
-        // 超长运营商名截断后仍然只有一行落库：截断之前这里会是 0（Data too long 被 ingest 的
-        // try/catch 吞掉，整块上报窗口静默丢弃）
+        // 超长运营商名之下仍然落库一行：名字若还留在本表，超长会触发 Data too long，
+        // 被 ingest 的 try/catch 吞掉，整块上报窗口静默丢弃，这里就会是 0
         assertThat(countLinkReportRows(user1Id)).isEqualTo(1);
-        String isp = jdbc.queryForObject("SELECT isp FROM link_report WHERE user_id = ?", String.class, user1Id);
-        assertThat(isp).hasSize(64).isEqualTo(longIsp.substring(0, 64));
+        String sourceAsn = jdbc.queryForObject(
+                "SELECT source_asn FROM link_report WHERE user_id = ?", String.class, user1Id);
+        assertThat(sourceAsn).isEqualTo("AS4134");
     }
 
     @Test

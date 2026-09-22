@@ -31,7 +31,7 @@ public record LinkHealthResponse(
      * 一个"故障域 × 运营商"格子。
      * <p>
      * {@code isp} 为空串表示"这一组样本的 ASN 反查全部失败，运营商未知"。两张底表对"反查失败"
-     * 的编码并不相同——{@code link_report.isp} 是 null 编码，{@code link_report_daily.isp} 是
+     * 的编码并不相同——{@code link_report.source_asn} 是 null 编码，{@code link_report_daily.asn} 是
      * {@code NOT NULL DEFAULT ''} 编码——查询时已经在服务层把两者统一归一成空串再合并求和，
      * 所以同一个"未知运营商"只会在矩阵上出现一行，这里不会再看到 null。
      * <p>
