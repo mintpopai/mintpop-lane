@@ -26,6 +26,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -93,6 +94,12 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     private LinkReportAlertService newService(AsnOrgRepository asnOrgRepository) {
         return new LinkReportAlertService(linkReportRepository, alertStateRepository, userRepository,
                 asnOrgRepository, notifyService, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /** 换一个固定时钟来构造：模拟「过了多久之后重启」，验证去重有效期相关判定 */
+    private LinkReportAlertService newService(Clock clock) {
+        return new LinkReportAlertService(linkReportRepository, alertStateRepository, userRepository,
+                asnOrgRepository, notifyService, properties, clock);
     }
 
     /** 一个查全表必炸的 asn_org 仓储：模拟迁移没跑到、表权限不对这类持续性故障 */
@@ -357,5 +364,30 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         newService().checkAll();
 
         verifyNoInteractions(notifyService);
+    }
+
+    @Test
+    @DisplayName("已告警状态超过 alert-dedup-ttl 仍在劣化：视同未告警，重推一次并刷新 alerted_at")
+    void staleAlertIsRepushedAfterTtl() {
+        newService().checkAndNotify(userId, orgNames(), List.of(degraded()));
+        verify(notifyService, times(1))
+                .notifyFailureDomainDegraded(any(), any(), any(), anyDouble(), anyLong());
+
+        Clock later = Clock.fixed(NOW.plus(Duration.ofHours(24)).plusSeconds(1), ZoneOffset.UTC);
+        newService(later).checkAndNotify(userId, orgNames(), List.of(degraded()));
+        verify(notifyService, times(2))
+                .notifyFailureDomainDegraded(any(), any(), any(), anyDouble(), anyLong());
+        assertThat(alertStateRepository.find(userId, DOMAIN, "").orElseThrow().getAlertedAt())
+                .isEqualTo(later.instant());
+    }
+
+    @Test
+    @DisplayName("已告警状态未过期仍在劣化：不重推")
+    void freshAlertIsNotRepushedWithinTtl() {
+        newService().checkAndNotify(userId, orgNames(), List.of(degraded()));
+        Clock later = Clock.fixed(NOW.plus(Duration.ofHours(23)), ZoneOffset.UTC);
+        newService(later).checkAndNotify(userId, orgNames(), List.of(degraded()));
+        verify(notifyService, times(1))
+                .notifyFailureDomainDegraded(any(), any(), any(), anyDouble(), anyLong());
     }
 }

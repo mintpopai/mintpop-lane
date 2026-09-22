@@ -204,14 +204,19 @@ public class LinkReportAlertService {
             fresh.setAlerted(false);
             return fresh;
         });
-        boolean previouslyAlerted = Boolean.TRUE.equals(state.getAlerted());
+        // 已告警状态是否仍在去重有效期内：超过 alertDedupTtl 仍处于劣化，视同未告警重新推一次——
+        // 用户在劣化中离线（最常见：链路差到断开）后再回来仍劣化，没有这条永远收不到第二次告警
+        Instant now = clock.instant();
+        boolean previouslyAlerted = Boolean.TRUE.equals(state.getAlerted())
+                && state.getAlertedAt() != null
+                && state.getAlertedAt().plus(properties.getAlertDedupTtl()).isAfter(now);
 
         if (degraded) {
             if (previouslyAlerted) {
                 return; // 已经推过且尚未恢复，去重，不重复推送
             }
             state.setAlerted(true);
-            state.setAlertedAt(clock.instant());
+            state.setAlertedAt(now);
             // 先落库再通知：通知失败不该让去重状态丢失，否则下一轮会重复推
             alertStateRepository.upsert(state);
             try {
