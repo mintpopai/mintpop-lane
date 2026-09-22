@@ -13,9 +13,10 @@ public interface IpAsnClient {
     /**
      * 反查结果。
      *
-     * @param asn 形如 {@code "AS4134"} 的 ASN，非空
-     * @param isp 可读的运营商名（如 {@code "China Telecom"}）；上游没给或给了空白时为 {@code null}，
-     *            由调用方决定退回什么（链路上报退回 ASN 串）
+     * @param asn 形如 {@code "AS4134"} 的 ASN，非空——运营商维度的键只认它
+     * @param isp 可读的运营商名（如 {@code "China Telecom"}），只做展示；上游没给或给了空白时为
+     *            {@code null}，此时调用方不记名字（链路上报据此跳过 {@code asn_org} 写入），
+     *            展示的时候退回 ASN 串
      */
     record AsnInfo(String asn, String isp) {
     }
@@ -37,8 +38,9 @@ public interface IpAsnClient {
      * 的 UTF-16 code unit 计数——{@code VARCHAR(64)} 是按字符计宽度，增补平面字符（代理对）
      * 用 {@code length()} 数会多算一倍，稳妥起见用 {@code codePoints()} 重组。
      * trim 放在截断之前，避免截断点卡在首尾空白上白占一个字符名额。
-     * 装配 isp 的地方共用这一份实现（{@link ai.mintpop.lane.client.RestClientIpAsnClient} 等），
-     * 不许各写一份截断逻辑各写各的。
+     * 会把运营商名往 {@code asn_org.org_name} 送的地方共用这一份实现（反查客户端
+     * {@link ai.mintpop.lane.client.RestClientIpAsnClient} 在装配 {@link AsnInfo} 时截一次，
+     * {@code AsnOrgRepository} 的实现在落库前再兜一次），不许各写一份截断逻辑各写各的。
      *
      * @return {@code isp} 为 {@code null} 时原样返回 {@code null}；否则返回 trim 且截断后的运营商名
      */

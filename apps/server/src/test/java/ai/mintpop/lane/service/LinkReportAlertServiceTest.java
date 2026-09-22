@@ -2,9 +2,10 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
+import ai.mintpop.lane.repository.AsnOrgRepository;
 import ai.mintpop.lane.repository.LinkAlertStateRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
-import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
+import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
@@ -22,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,6 +58,8 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @Autowired
     private LinkAlertStateRepository alertStateRepository;
     @Autowired
+    private AsnOrgRepository asnOrgRepository;
+    @Autowired
     private ProxyNodeRepository nodeRepository;
     @Autowired
     private UserRepository userRepository;
@@ -81,8 +85,17 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     /** 每次都 new 一个新实例，模拟「重启」不共享任何内存态；去重状态全部靠 alertStateRepository 落库读回 */
     private LinkReportAlertService newService() {
-        return new LinkReportAlertService(linkReportRepository, alertStateRepository, userRepository, notifyService,
-                properties, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new LinkReportAlertService(linkReportRepository, alertStateRepository, userRepository,
+                asnOrgRepository, notifyService, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /**
+     * 展示名表在每轮扫描开始时读一次、整轮复用（checkAll 就是这么做的），单测里直接读真库当前内容。
+     * 默认没插过任何映射，于是 orgName 一律为 null，推送文案退回 ASN——要断言带展示名的用例
+     * 自己先 insertIfAbsent。
+     */
+    private Map<String, String> orgNames() {
+        return asnOrgRepository.findAllNames();
     }
 
     /** 真实落一条 link_report 窗口，供 checkAll 相关测试驱动全库聚合查询 */
@@ -100,22 +113,54 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     }
 
     /** 100 个样本、50 个存活 → 成功率 50%，跌破默认阈值 0.80 */
-    private DomainIspAggregate degraded() {
-        return new DomainIspAggregate(DOMAIN, ASN, 100, 50, 0);
+    private DomainAsnAggregate degraded() {
+        return new DomainAsnAggregate(DOMAIN, ASN, 100, 50, 0);
     }
 
     /** 100 个样本、95 个存活 → 成功率 95%，高于默认阈值 0.80 */
-    private DomainIspAggregate healthy() {
-        return new DomainIspAggregate(DOMAIN, ASN, 100, 95, 0);
+    private DomainAsnAggregate healthy() {
+        return new DomainAsnAggregate(DOMAIN, ASN, 100, 95, 0);
     }
 
     @Test
     @DisplayName("成功率跌破阈值且样本足够时告警，故障域级与运营商级各推一次，且带上用户信息")
     void alertsWhenRateBelowThresholdWithEnoughSamples() {
-        newService().checkAndNotify(userId, List.of(degraded()));
+        newService().checkAndNotify(userId, orgNames(), List.of(degraded()));
 
         verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
+    }
+
+    @Test
+    @DisplayName("运营商级告警带上 asn_org 里的展示名——判定用 ASN，给人看的文案用名字")
+    void asnLevelAlertCarriesOrgNameFromAsnOrg() {
+        asnOrgRepository.insertIfAbsent(ASN, "China Telecom", NOW);
+
+        newService().checkAndNotify(userId, orgNames(), List.of(degraded()));
+
+        // ASN 与展示名同时给过去：ASN 是键（去重、分组都认它），名字只让人一眼认出是哪家
+        verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, ASN, "China Telecom", 0.5, 100L);
+    }
+
+    @Test
+    @DisplayName("asn_org 里没有这个 ASN 时展示名传 null，告警照推——名字缺失不是不告警的理由")
+    void asnLevelAlertPassesNullOrgNameWhenAsnMissingFromAsnOrg() {
+        asnOrgRepository.insertIfAbsent("AS4837", "China Unicom", NOW); // 别家的映射，不该被张冠李戴
+
+        newService().checkAndNotify(userId, orgNames(), List.of(degraded()));
+
+        verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
+    }
+
+    @Test
+    @DisplayName("checkAll 定时扫描同样带上展示名——展示名每轮查一次全表，不是每个用户各查一次")
+    void checkAllCarriesOrgNameFromAsnOrg() {
+        asnOrgRepository.insertIfAbsent(ASN, "China Telecom", NOW);
+        insertWindow(userId, DOMAIN, ASN, NOW.minus(Duration.ofMinutes(5)), 100, 50);
+
+        newService().checkAll();
+
+        verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, ASN, "China Telecom", 0.5, 100L);
     }
 
     @Test
@@ -123,7 +168,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void staysSilentWhenSamplesBelowMinimum() {
         // samples=5 alive=0：成功率 0%，比阈值低得多，但样本量（5）低于 alertMinSamples（20）。
         // 若实现漏掉「先看样本量」这道门槛，0/5=0 < 0.80 一样会触发告警，这条测试就会变红
-        newService().checkAndNotify(userId, List.of(new DomainIspAggregate(DOMAIN, ASN, 5, 0, 0)));
+        newService().checkAndNotify(userId, orgNames(), List.of(new DomainAsnAggregate(DOMAIN, ASN, 5, 0, 0)));
 
         verifyNoInteractions(notifyService);
     }
@@ -137,8 +182,8 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         // 自查验证过它的判别力，去掉门槛会让它变红，而这条不会）。
         // 这条测试单独守的是"不抛 ArithmeticException"：万一将来有人把除法改成 long/long 的
         // 整数除法，除数为 0 时会真的抛出，这条测试会因此变红
-        assertThatCode(() -> newService().checkAndNotify(userId,
-                List.of(new DomainIspAggregate(DOMAIN, ASN, 0, 0, 0))))
+        assertThatCode(() -> newService().checkAndNotify(userId, orgNames(),
+                List.of(new DomainAsnAggregate(DOMAIN, ASN, 0, 0, 0))))
                 .doesNotThrowAnyException();
 
         verifyNoInteractions(notifyService);
@@ -149,50 +194,51 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void alertIsDedupedUntilRecovered() {
         LinkReportAlertService service = newService();
 
-        service.checkAndNotify(userId, List.of(degraded()));
-        service.checkAndNotify(userId, List.of(degraded()));
-        service.checkAndNotify(userId, List.of(degraded()));
+        service.checkAndNotify(userId, orgNames(), List.of(degraded()));
+        service.checkAndNotify(userId, orgNames(), List.of(degraded()));
+        service.checkAndNotify(userId, orgNames(), List.of(degraded()));
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService, times(1)).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
 
-        service.checkAndNotify(userId, List.of(healthy())); // 恢复正常：清掉已告警状态，不推
-        service.checkAndNotify(userId, List.of(degraded())); // 再次劣化：应重新推一次
+        service.checkAndNotify(userId, orgNames(), List.of(healthy())); // 恢复正常：清掉已告警状态，不推
+        service.checkAndNotify(userId, orgNames(), List.of(degraded())); // 再次劣化：应重新推一次
 
         verify(notifyService, times(2)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(2)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService, times(2)).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
     }
 
     @Test
     @DisplayName("重启（重新构造 Service）后同一劣化故障域不重推——去重状态落库而非内存")
     void alertStateSurvivesRestart() {
         LinkReportAlertService first = newService();
-        first.checkAndNotify(userId, List.of(degraded()));
+        first.checkAndNotify(userId, orgNames(), List.of(degraded()));
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService, times(1)).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
 
         // 模拟重启：全新实例，不复用 first 的任何字段，只共享同一个落库的 alertStateRepository
         LinkReportAlertService restarted = newService();
-        restarted.checkAndNotify(userId, List.of(degraded()));
+        restarted.checkAndNotify(userId, orgNames(), List.of(degraded()));
 
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, times(1)).notifyIspDegraded(userId, email, DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService, times(1)).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
     }
 
     @Test
-    @DisplayName("ASN 反查失败（isp 为 null）跳过运营商级判定，只推故障域级，不会与故障域级共用的空串键位冲突")
-    void unresolvedIspAggregateSkipsIspLevelToAvoidKeyCollisionWithDomainLevel() {
+    @DisplayName("ASN 反查失败（asn 为 null）跳过运营商级判定，只推故障域级，不会与故障域级共用的空串键位冲突")
+    void unresolvedAsnAggregateSkipsAsnLevelToAvoidKeyCollisionWithDomainLevel() {
         // 陷阱：故障域级判定的去重键固定是 (domain, "")；若反查失败的运营商级判定也落到
         // 同一个 ""，两者会共用同一行去重状态——先跑的一个把 alerted 置 1，后跑的看到已告警
         // 直接判去重，导致其中一种通知被永久吞掉。这条用例最初就是这样红的：
-        // notifyIspDegraded(DOMAIN, null, ...) 被断言但从未被调用，因为它与故障域级共用了同一行
+        // notifyAsnDegraded(DOMAIN, null, ...) 被断言但从未被调用，因为它与故障域级共用了同一行
         LinkReportAlertService service = newService();
-        DomainIspAggregate unresolved = new DomainIspAggregate(DOMAIN, null, 100, 50, 0);
+        DomainAsnAggregate unresolved = new DomainAsnAggregate(DOMAIN, null, 100, 50, 0);
 
-        assertThatCode(() -> service.checkAndNotify(userId, List.of(unresolved))).doesNotThrowAnyException();
-        service.checkAndNotify(userId, List.of(unresolved)); // 第二轮应被去重，不重推
+        assertThatCode(() -> service.checkAndNotify(userId, orgNames(), List.of(unresolved))).doesNotThrowAnyException();
+        service.checkAndNotify(userId, orgNames(), List.of(unresolved)); // 第二轮应被去重，不重推
 
         verify(notifyService, times(1)).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
-        verify(notifyService, never()).notifyIspDegraded(any(), any(), anyString(), any(), anyDouble(), anyLong());
+        verify(notifyService, never())
+                .notifyAsnDegraded(any(), any(), anyString(), any(), any(), anyDouble(), anyLong());
     }
 
     @Test
@@ -202,27 +248,27 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
                 .when(notifyService).notifyFailureDomainDegraded(any(), any(), anyString(), anyDouble(), anyLong());
 
         LinkReportAlertService service = newService();
-        assertThatCode(() -> service.checkAndNotify(userId, List.of(degraded()))).doesNotThrowAnyException();
+        assertThatCode(() -> service.checkAndNotify(userId, orgNames(), List.of(degraded()))).doesNotThrowAnyException();
 
         // 去重状态先落库再通知，通知失败不该让状态丢失——第二轮不会因为“没记住已经推过”而重新调用
-        service.checkAndNotify(userId, List.of(degraded()));
+        service.checkAndNotify(userId, orgNames(), List.of(degraded()));
         verify(notifyService, times(1))
                 .notifyFailureDomainDegraded(any(), any(), anyString(), anyDouble(), anyLong());
     }
 
     @Test
     @DisplayName("故障域级判定跨运营商求和：单个运营商各自不达标，但域内合计成功率仍可能不同于其中任意一个运营商")
-    void domainLevelAggregatesAcrossIsps() {
+    void domainLevelAggregatesAcrossAsns() {
         // AS4134 100 中 40 存活（40%），AS4837 100 中 90 存活（90%）：域内合计 200 中 130 存活 = 65%，
         // 跌破阈值 0.80，但两个运营商级判定各自独立：AS4134 应推，AS4837 不该推
-        DomainIspAggregate ctc = new DomainIspAggregate(DOMAIN, "AS4134", 100, 40, 0);
-        DomainIspAggregate cucc = new DomainIspAggregate(DOMAIN, "AS4837", 100, 90, 0);
+        DomainAsnAggregate ctc = new DomainAsnAggregate(DOMAIN, "AS4134", 100, 40, 0);
+        DomainAsnAggregate cucc = new DomainAsnAggregate(DOMAIN, "AS4837", 100, 90, 0);
 
-        newService().checkAndNotify(userId, List.of(ctc, cucc));
+        newService().checkAndNotify(userId, orgNames(), List.of(ctc, cucc));
 
         verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.65, 200L);
-        verify(notifyService).notifyIspDegraded(userId, email, DOMAIN, "AS4134", 0.4, 100L);
-        verify(notifyService, times(0)).notifyIspDegraded(userId, email, DOMAIN, "AS4837", 0.9, 100L);
+        verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, "AS4134", null, 0.4, 100L);
+        verify(notifyService, times(0)).notifyAsnDegraded(userId, email, DOMAIN, "AS4837", null, 0.9, 100L);
     }
 
     @Test
@@ -239,9 +285,9 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         newService().checkAll();
 
         verify(notifyService).notifyFailureDomainDegraded(userA, email, "a.tsdns.top", 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(userA, email, "a.tsdns.top", ASN, 0.5, 100L);
+        verify(notifyService).notifyAsnDegraded(userA, email, "a.tsdns.top", ASN, null, 0.5, 100L);
         verify(notifyService).notifyFailureDomainDegraded(userB, emailB, "b.tsdns.top", 0.4, 100L);
-        verify(notifyService).notifyIspDegraded(userB, emailB, "b.tsdns.top", ASN, 0.4, 100L);
+        verify(notifyService).notifyAsnDegraded(userB, emailB, "b.tsdns.top", ASN, null, 0.4, 100L);
     }
 
     @Test
@@ -259,12 +305,13 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         newService().checkAll();
 
         verify(notifyService).notifyFailureDomainDegraded(userA, email, DOMAIN, 0.5, 100L);
-        verify(notifyService).notifyIspDegraded(userA, email, DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService).notifyAsnDegraded(userA, email, DOMAIN, ASN, null, 0.5, 100L);
         verify(notifyService).notifyFailureDomainDegraded(userB, emailB, DOMAIN, 0.3, 100L);
-        verify(notifyService).notifyIspDegraded(userB, emailB, DOMAIN, ASN, 0.3, 100L);
+        verify(notifyService).notifyAsnDegraded(userB, emailB, DOMAIN, ASN, null, 0.3, 100L);
         // 两个用户各自独立推了一次，不是同一条被算了两遍，也不是漏推了其中一个
         verify(notifyService, times(2)).notifyFailureDomainDegraded(any(), any(), eq(DOMAIN), anyDouble(), anyLong());
-        verify(notifyService, times(2)).notifyIspDegraded(any(), any(), eq(DOMAIN), eq(ASN), anyDouble(), anyLong());
+        verify(notifyService, times(2))
+                .notifyAsnDegraded(any(), any(), eq(DOMAIN), eq(ASN), any(), anyDouble(), anyLong());
     }
 
     @Test

@@ -352,6 +352,53 @@ class LinkControllerTest extends MysqlTestBase {
         String sourceAsn = jdbc.queryForObject(
                 "SELECT source_asn FROM link_report WHERE user_id = ?", String.class, user1Id);
         assertThat(sourceAsn).isEqualTo("AS4134");
+
+        // 长度风险挪到了 asn_org.org_name（VARCHAR(64)）：截断后照常入库，而不是整块窗口陪葬。
+        // 这条断言走的是真 MySQL，钉的是「超长名字进得了 asn_org」这条链路真的通
+        // （截断本身由 AsnOrgRepositoryTest#overlongOrgNameIsTruncatedBeforeInsert 守）
+        String orgName = jdbc.queryForObject(
+                "SELECT org_name FROM asn_org WHERE asn = ?", String.class, "AS4134");
+        assertThat(orgName).hasSize(64).isEqualTo(longOrgName.substring(0, 64));
+    }
+
+    @Test
+    @DisplayName("同一 ASN 第二次心跳换了运营商文案，asn_org 仍是首次见到的那个名字")
+    void heartbeatKeepsFirstSeenOrgNameForSameAsn() throws Exception {
+        when(clock.instant()).thenReturn(FIXED_NOW);
+        when(ipAsnClient.lookup("203.0.113.9"))
+                .thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")))
+                .thenReturn(Optional.of(new AsnInfo("AS4134", "CHINANET-BACKBONE")));
+
+        // 两个不同窗口，避免第二块把第一块整行覆盖掉；关心的是 asn_org 这一侧
+        heartbeatWithWindow("2026-09-19T00:00:00Z");
+        heartbeatWithWindow("2026-09-19T00:01:00Z");
+
+        // 展示名的用处是让人认得出是哪家运营商，稳定比新鲜重要：上游改口径（同一家今天叫
+        // China Telecom、明天叫 CHINANET-BACKBONE）不该把历史里的名字一起改掉
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT asn, org_name FROM asn_org");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("asn")).isEqualTo("AS4134");
+        assertThat(rows.get(0).get("org_name")).isEqualTo("China Telecom");
+    }
+
+    /** 发一块最小可用的上报心跳，窗口起点由调用方给（同一用户同一故障域下，它就是唯一键的第三段） */
+    private void heartbeatWithWindow(String windowStart) throws Exception {
+        String reportJson = """
+                {
+                  "failureDomain": "jp.tsdns.top",
+                  "windowStart": "%s",
+                  "window": {"samples": 12, "alive": 11, "noSample": 0},
+                  "failovers": 0
+                }
+                """.formatted(windowStart);
+
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(user1Id))
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reportJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test

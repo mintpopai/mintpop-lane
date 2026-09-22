@@ -6,7 +6,7 @@ import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.repository.EntryIpHistoryRepository;
 import ai.mintpop.lane.repository.LinkReportDailyRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
-import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
+import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 import ai.mintpop.lane.response.LinkHealthResponse;
 import ai.mintpop.lane.response.LinkHealthResponse.DomainRow;
 import ai.mintpop.lane.response.LinkHealthResponse.EntryIpChange;
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * 纯 Mockito 单测，不碰数据库，专注业务逻辑本身：
- * 是否按 days 决定读哪张表、超出范围时是否收敛、两张底表的 isp 编码合并、
+ * 是否按 days 决定读哪张表、超出范围时是否收敛、两张底表的 asn 编码合并、
  * successRate 的 null 语义、入口 IP 变更时间线的边界处理。
  * 端到端的路由接线与鉴权由 {@link ai.mintpop.lane.controller.admin.AdminLinkHealthControllerTest} 覆盖。
  */
@@ -53,8 +53,8 @@ class AdminLinkHealthServiceImplTest {
         entryIpHistoryRepository = mock(EntryIpHistoryRepository.class);
         properties = new LinkReportProperties(); // 默认 rawRetentionDays=7、dailyRetentionDays=90
 
-        when(linkReportRepository.aggregateGlobalByDomainAndIsp(any(), any())).thenReturn(List.of());
-        when(linkReportDailyRepository.aggregateGlobalByDomainAndIsp(any(), any())).thenReturn(List.of());
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of());
+        when(linkReportDailyRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of());
         when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of());
 
         service = new AdminLinkHealthServiceImpl(linkReportRepository, linkReportDailyRepository,
@@ -75,8 +75,8 @@ class AdminLinkHealthServiceImplTest {
     void daysWithinRawRetentionSkipsDailyTable() {
         service.getLinkHealth(5); // < rawRetentionDays(7)
 
-        verify(linkReportRepository).aggregateGlobalByDomainAndIsp(NOW.minus(Duration.ofDays(5)), NOW);
-        verify(linkReportDailyRepository, never()).aggregateGlobalByDomainAndIsp(any(), any());
+        verify(linkReportRepository).aggregateGlobalByDomainAndAsn(NOW.minus(Duration.ofDays(5)), NOW);
+        verify(linkReportDailyRepository, never()).aggregateGlobalByDomainAndAsn(any(), any());
     }
 
     @Test
@@ -89,8 +89,8 @@ class AdminLinkHealthServiceImplTest {
         // 前后两条测试只覆盖了 5 和 10，这个边界原本是空的
         service.getLinkHealth(7); // == rawRetentionDays(7)
 
-        verify(linkReportRepository).aggregateGlobalByDomainAndIsp(NOW.minus(Duration.ofDays(7)), NOW);
-        verify(linkReportDailyRepository, never()).aggregateGlobalByDomainAndIsp(any(), any());
+        verify(linkReportRepository).aggregateGlobalByDomainAndAsn(NOW.minus(Duration.ofDays(7)), NOW);
+        verify(linkReportDailyRepository, never()).aggregateGlobalByDomainAndAsn(any(), any());
     }
 
     @Test
@@ -99,8 +99,8 @@ class AdminLinkHealthServiceImplTest {
         service.getLinkHealth(10); // > rawRetentionDays(7)
 
         Instant from = NOW.minus(Duration.ofDays(10));
-        verify(linkReportRepository).aggregateGlobalByDomainAndIsp(from, NOW);
-        verify(linkReportDailyRepository).aggregateGlobalByDomainAndIsp(
+        verify(linkReportRepository).aggregateGlobalByDomainAndAsn(from, NOW);
+        verify(linkReportDailyRepository).aggregateGlobalByDomainAndAsn(
                 LocalDate.ofInstant(from, ZoneOffset.UTC), LocalDate.ofInstant(NOW, ZoneOffset.UTC));
     }
 
@@ -110,7 +110,7 @@ class AdminLinkHealthServiceImplTest {
         service.getLinkHealth(999_999);
 
         Instant clampedFrom = NOW.minus(Duration.ofDays(properties.getDailyRetentionDays()));
-        verify(linkReportRepository).aggregateGlobalByDomainAndIsp(clampedFrom, NOW);
+        verify(linkReportRepository).aggregateGlobalByDomainAndAsn(clampedFrom, NOW);
     }
 
     @Test
@@ -118,17 +118,17 @@ class AdminLinkHealthServiceImplTest {
     void requestedDaysAtOrBelowZeroIsClampedToOne() {
         service.getLinkHealth(0);
 
-        verify(linkReportRepository).aggregateGlobalByDomainAndIsp(NOW.minus(Duration.ofDays(1)), NOW);
+        verify(linkReportRepository).aggregateGlobalByDomainAndAsn(NOW.minus(Duration.ofDays(1)), NOW);
     }
 
     @Test
-    @DisplayName("原始表 isp=null 与按天聚合表 isp=空串（已归一）合并成同一个格子")
-    void mergesUnresolvedIspFromBothTablesIntoOneCell() {
-        when(linkReportRepository.aggregateGlobalByDomainAndIsp(any(), any()))
-                .thenReturn(List.of(new DomainIspAggregate(DOMAIN, null, 10, 9, 1)));
+    @DisplayName("原始表 asn=null 与按天聚合表 asn=空串（已归一）合并成同一个格子")
+    void mergesUnresolvedAsnFromBothTablesIntoOneCell() {
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any()))
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, null, 10, 9, 1)));
         // LinkReportDailyRepository 契约已在 repository 层把空串归一成 null，这里直接按该约定构造
-        when(linkReportDailyRepository.aggregateGlobalByDomainAndIsp(any(), any()))
-                .thenReturn(List.of(new DomainIspAggregate(DOMAIN, null, 5, 4, 0)));
+        when(linkReportDailyRepository.aggregateGlobalByDomainAndAsn(any(), any()))
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, null, 5, 4, 0)));
 
         LinkHealthResponse response = service.getLinkHealth(30); // 触发两张表都查
 
@@ -147,8 +147,8 @@ class AdminLinkHealthServiceImplTest {
     @Test
     @DisplayName("samples 为 0 时 successRate 必须是 null，不是 0.0")
     void successRateIsNullNotZeroWhenNoSamples() {
-        when(linkReportRepository.aggregateGlobalByDomainAndIsp(any(), any()))
-                .thenReturn(List.of(new DomainIspAggregate(DOMAIN, "CTC", 0, 0, 0)));
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any()))
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "CTC", 0, 0, 0)));
 
         LinkHealthResponse response = service.getLinkHealth(5);
 
@@ -159,8 +159,8 @@ class AdminLinkHealthServiceImplTest {
     @Test
     @DisplayName("有样本时 successRate 正常算出比值")
     void successRateComputedWhenSamplesPositive() {
-        when(linkReportRepository.aggregateGlobalByDomainAndIsp(any(), any()))
-                .thenReturn(List.of(new DomainIspAggregate(DOMAIN, "CTC", 10, 7, 0)));
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any()))
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "CTC", 10, 7, 0)));
 
         LinkHealthResponse response = service.getLinkHealth(5);
 
@@ -170,10 +170,10 @@ class AdminLinkHealthServiceImplTest {
 
     @Test
     @DisplayName("故障域行的 samples/aliveCount/failovers 是该域下全部运营商之和")
-    void domainRowSumsAcrossIsps() {
-        when(linkReportRepository.aggregateGlobalByDomainAndIsp(any(), any())).thenReturn(List.of(
-                new DomainIspAggregate(DOMAIN, "CTC", 10, 9, 1),
-                new DomainIspAggregate(DOMAIN, "CUCC", 20, 15, 2)));
+    void domainRowSumsAcrossAsns() {
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of(
+                new DomainAsnAggregate(DOMAIN, "CTC", 10, 9, 1),
+                new DomainAsnAggregate(DOMAIN, "CUCC", 20, 15, 2)));
 
         LinkHealthResponse response = service.getLinkHealth(5);
 

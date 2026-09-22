@@ -48,6 +48,6 @@ public interface LinkReportDailyMapper extends BaseMapper<LinkReportDaily> {
             WHERE stat_date >= #{from} AND stat_date <= #{to}
             GROUP BY failure_domain, asn
             """)
-    List<LinkReportDomainIspAggregateRow> selectGlobalGroupedByDomainAndIsp(@Param("from") LocalDate from,
+    List<LinkReportDomainAggregateRow> selectGlobalGroupedByDomainAndAsn(@Param("from") LocalDate from,
                                                                              @Param("to") LocalDate to);
 }

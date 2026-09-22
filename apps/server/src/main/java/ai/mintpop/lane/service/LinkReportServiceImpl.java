@@ -3,6 +3,7 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
+import ai.mintpop.lane.repository.AsnOrgRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.request.LinkHeartbeatRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -18,14 +19,17 @@ public class LinkReportServiceImpl implements LinkReportService {
 
     private final LinkReportRepository linkReportRepository;
     private final IpAsnClient ipAsnClient;
+    private final AsnOrgRepository asnOrgRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final LinkReportProperties properties;
 
     public LinkReportServiceImpl(LinkReportRepository linkReportRepository, IpAsnClient ipAsnClient,
-                                  ObjectMapper objectMapper, Clock clock, LinkReportProperties properties) {
+                                  AsnOrgRepository asnOrgRepository, ObjectMapper objectMapper, Clock clock,
+                                  LinkReportProperties properties) {
         this.linkReportRepository = linkReportRepository;
         this.ipAsnClient = ipAsnClient;
+        this.asnOrgRepository = asnOrgRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.properties = properties;
@@ -69,10 +73,22 @@ public class LinkReportServiceImpl implements LinkReportService {
             // 拿它做键会把同一家运营商裂成两列，故名字不进这张窗口表（另按 ASN 存一份映射）。
             //
             // 反查整体失败（Optional.empty）时 source_asn 保持 null：null 是本列既定的
-            // 「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
-            // DomainIspAggregate 文档同一语义），不能改存空串——空串是 link_report_daily
+            // 「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndAsn 的
+            // DomainAsnAggregate 文档同一语义），不能改存空串——空串是 link_report_daily
             // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空 ASN」
-            ipAsnClient.lookup(sourceIp).ifPresent(info -> report.setSourceAsn(info.asn()));
+            ipAsnClient.lookup(sourceIp).ifPresent(info -> {
+                report.setSourceAsn(info.asn());
+                // 展示名不进窗口表，另按 ASN 记进 asn_org——这里是这张映射表在生产里唯一的写入来源，
+                // 不记则告警文案与管理端矩阵只能显示一串 AS 号，没人看得出是哪家运营商。
+                // 上游没给名字（null）就不写：org_name 是 NOT NULL，写空串等于把这个 ASN 的
+                // 展示名永久钉成空（asn_org 是「有则不动」，写下去就改不掉了）。
+                if (info.isp() != null) {
+                    // 展示名只记首次见到的那个：它的用处是让人认得出，稳定比新鲜重要——
+                    // 上游同一家运营商今天叫 China Telecom、明天叫 CHINANET-BACKBONE，
+                    // 跟着漂会让同一个 ASN 的历史裂成两段（不覆盖由 insertIfAbsent 自己保证）
+                    asnOrgRepository.insertIfAbsent(info.asn(), IpAsnClient.truncateIsp(info.isp()), clock.instant());
+                }
+            });
             linkReportRepository.upsertWindow(report);
         } catch (Exception e) {
             log.warn("链路上报处理失败，本窗口丢弃，userId={}", userId, e);

@@ -70,6 +70,38 @@ class AsnOrgRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("展示名为 null 或空白时整条不写——org_name 是 NOT NULL，且写错了就再也盖不掉")
+    void blankOrgNameIsNotWrittenAtAll() {
+        // INSERT IGNORE 在严格模式下会把 null 悄悄写成空串：一旦落下去，「有则不动」意味着
+        // 这个 ASN 的展示名被空串永久钉死，此后哪怕反查到了真名字也写不进来
+        repository.insertIfAbsent("AS4134", null, NOW);
+        repository.insertIfAbsent("AS4837", "   ", NOW);
+
+        assertThat(repository.findAllNames()).isEmpty();
+
+        // 挡掉之后，真名字来了还能正常记上
+        repository.insertIfAbsent("AS4134", "China Telecom", NOW);
+        assertThat(repository.findAllNames()).containsExactly(entry("AS4134", "China Telecom"));
+    }
+
+    @Test
+    @DisplayName("展示名落库前由本层截到 64 字符并 trim，不把这件事留给 MySQL 去猜")
+    void overlongOrgNameIsTruncatedBeforeInsert() {
+        String longOrgName = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        assertThat(longOrgName.length()).isGreaterThan(64); // 这条样本确实超长
+
+        repository.insertIfAbsent("AS4134", longOrgName, NOW);
+        // 首尾空白这条才真正区分「我们截」与「MySQL 截」：INSERT IGNORE 下超长会被 MySQL
+        // 静默砍到列宽（结果碰巧一样），但它不会替你 trim——空白原样留在表里，
+        // 同一家运营商于是可能以「China Unicom」和「  China Unicom  」两个样子出现
+        repository.insertIfAbsent("AS4837", "   China Unicom   ", NOW);
+
+        assertThat(repository.findAllNames()).containsOnly(
+                entry("AS4134", longOrgName.substring(0, 64)),
+                entry("AS4837", "China Unicom"));
+    }
+
+    @Test
     @DisplayName("首次见到的时间由调用方传入并原样落库——仓储不自己取「现在」")
     void firstSeenAtComesFromCaller() {
         repository.insertIfAbsent("AS4134", "China Telecom", NOW);

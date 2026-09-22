@@ -39,7 +39,7 @@ public class MybatisLinkReportRepository implements LinkReportRepository {
     }
 
     @Override
-    public List<DomainIspAggregate> aggregateByDomainAndIsp(Long userId, Instant from, Instant to) {
+    public List<DomainAsnAggregate> aggregateByDomainAndAsn(Long userId, Instant from, Instant to) {
         // 表规模是「用户数 × 故障域数 × ASN 数 × 窗口数」量级，按单用户取出在 Java 侧 GROUP BY 足够快，
         // 与 MybatisUserFrontNodeRepository#countUsersByNodeId 同一种做法，避免 selectMaps 的列名坑
         List<LinkReport> rows = mapper.selectList(Wrappers.<LinkReport>lambdaQuery()
@@ -60,26 +60,26 @@ public class MybatisLinkReportRepository implements LinkReportRepository {
                     long samples = group.stream().mapToLong(LinkReport::getSamples).sum();
                     long aliveCount = group.stream().mapToLong(LinkReport::getAliveCount).sum();
                     long failovers = group.stream().mapToLong(LinkReport::getFailovers).sum();
-                    return new DomainIspAggregate(first.getFailureDomain(), first.getSourceAsn(),
+                    return new DomainAsnAggregate(first.getFailureDomain(), first.getSourceAsn(),
                             samples, aliveCount, failovers);
                 })
-                .sorted(Comparator.comparing(DomainIspAggregate::failureDomain, Comparator.nullsFirst(Comparator.naturalOrder()))
-                        .thenComparing(DomainIspAggregate::isp, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .sorted(Comparator.comparing(DomainAsnAggregate::failureDomain, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(DomainAsnAggregate::asn, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .toList();
     }
 
     @Override
-    public List<UserDomainIspAggregate> aggregateAllUsersByDomainAndIsp(Instant from, Instant to) {
-        return mapper.selectAllUsersGroupedByDomainAndIsp(from, to).stream()
-                .map(row -> new UserDomainIspAggregate(row.getUserId(), row.getFailureDomain(), row.getAsn(),
+    public List<UserDomainAsnAggregate> aggregateAllUsersByDomainAndAsn(Instant from, Instant to) {
+        return mapper.selectAllUsersGroupedByDomainAndAsn(from, to).stream()
+                .map(row -> new UserDomainAsnAggregate(row.getUserId(), row.getFailureDomain(), row.getAsn(),
                         row.getSamples(), row.getAliveCount(), row.getFailovers()))
                 .toList();
     }
 
     @Override
-    public List<DomainIspAggregate> aggregateGlobalByDomainAndIsp(Instant from, Instant to) {
-        return mapper.selectGlobalGroupedByDomainAndIsp(from, to).stream()
-                .map(row -> new DomainIspAggregate(row.getFailureDomain(), row.getAsn(),
+    public List<DomainAsnAggregate> aggregateGlobalByDomainAndAsn(Instant from, Instant to) {
+        return mapper.selectGlobalGroupedByDomainAndAsn(from, to).stream()
+                .map(row -> new DomainAsnAggregate(row.getFailureDomain(), row.getAsn(),
                         row.getSamples(), row.getAliveCount(), row.getFailovers()))
                 .toList();
     }

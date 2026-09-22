@@ -50,7 +50,7 @@ public interface LinkReportMapper extends BaseMapper<LinkReport> {
             WHERE window_start >= #{from} AND window_start < #{to}
             GROUP BY user_id, failure_domain, source_asn
             """)
-    List<LinkReportUserAggregateRow> selectAllUsersGroupedByDomainAndIsp(@Param("from") Instant from,
+    List<LinkReportUserAggregateRow> selectAllUsersGroupedByDomainAndAsn(@Param("from") Instant from,
                                                                           @Param("to") Instant to);
 
     /**
@@ -65,6 +65,6 @@ public interface LinkReportMapper extends BaseMapper<LinkReport> {
             WHERE window_start >= #{from} AND window_start < #{to}
             GROUP BY failure_domain, source_asn
             """)
-    List<LinkReportDomainIspAggregateRow> selectGlobalGroupedByDomainAndIsp(@Param("from") Instant from,
+    List<LinkReportDomainAggregateRow> selectGlobalGroupedByDomainAndAsn(@Param("from") Instant from,
                                                                              @Param("to") Instant to);
 }

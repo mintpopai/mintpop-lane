@@ -32,6 +32,7 @@ import java.util.Optional;
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -62,7 +63,7 @@ class LinkReportEndToEndTest extends MysqlTestBase {
     private static final String DOMAIN = "jp.tsdns.top";
     private static final String SOURCE_IP = "203.0.113.9";
     private static final String ASN = "AS4134";
-    /** 上游给的展示名：只喂给反查桩，运营商维度的键是 ASN，名字不参与分组与去重 */
+    /** 上游给的展示名：运营商维度的键仍是 ASN，名字只进 asn_org、只在告警文案上露面 */
     private static final String ORG_NAME = "China Telecom";
 
     @Autowired
@@ -161,10 +162,15 @@ class LinkReportEndToEndTest extends MysqlTestBase {
                 "SELECT source_asn, samples, alive_count FROM link_report WHERE user_id = ?", userId);
         assertThat(row.get("source_asn")).isEqualTo(ASN);
 
-        // —— 中段：全库告警扫描按「故障域 × ASN」判定，推出运营商级告警 ——
+        // 展示名也真的被 ingest 记进了 asn_org：这是「运营商叫什么」在生产里唯一的写入来源，
+        // 少了它告警文案只能显示一串 AS 号
+        assertThat(jdbc.queryForObject("SELECT org_name FROM asn_org WHERE asn = ?", String.class, ASN))
+                .isEqualTo(ORG_NAME);
+
+        // —— 中段：全库告警扫描按「故障域 × ASN」判定，推出运营商级告警，文案带上展示名 ——
         // ASN 若是 null，checkAndNotify 会跳过运营商级判定，这一条 verify 立刻变红
         linkReportAlertService.checkAll();
-        verify(notifyService).notifyIspDegraded(userId, "u1@test.example", DOMAIN, ASN, 0.5, 100L);
+        verify(notifyService).notifyAsnDegraded(userId, "u1@test.example", DOMAIN, ASN, ORG_NAME, 0.5, 100L);
 
         // —— 出口：管理端矩阵里这个故障域下出现该运营商的列，而不是只有一行「未知运营商」 ——
         MvcResult result = mockMvc.perform(get("/api/admin/link-health")
@@ -184,7 +190,7 @@ class LinkReportEndToEndTest extends MysqlTestBase {
 
     @Test
     @DisplayName("反查整体失败时全链路降级成「未知运营商」：矩阵仍有这个故障域，但运营商级告警不推")
-    void unresolvedAsnDegradesToUnknownColumnWithoutIspLevelAlert() throws Exception {
+    void unresolvedAsnDegradesToUnknownColumnWithoutAsnLevelAlert() throws Exception {
         when(ipAsnClient.lookup(anyString())).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/link/heartbeat")
@@ -203,7 +209,7 @@ class LinkReportEndToEndTest extends MysqlTestBase {
         // 故障域级照推，运营商级跳过——未知运营商不可行动，且它的去重键会与故障域级的 (domain, "") 撞车
         verify(notifyService).notifyFailureDomainDegraded(userId, "u1@test.example", DOMAIN, 0.5, 100L);
         verify(notifyService, never())
-                .notifyIspDegraded(anyLong(), anyString(), anyString(), anyString(), anyDouble(), anyLong());
+                .notifyAsnDegraded(anyLong(), anyString(), anyString(), anyString(), any(), anyDouble(), anyLong());
 
         MvcResult result = mockMvc.perform(get("/api/admin/link-health")
                         .header("Authorization", bearer(adminId)))

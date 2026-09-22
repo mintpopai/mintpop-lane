@@ -75,8 +75,8 @@ class LinkReportRepositoryTest extends MysqlTestBase {
 
         assertThat(countRowsForUser(userId)).isEqualTo(1);
 
-        List<LinkReportRepository.DomainIspAggregate> aggregates =
-                repository.aggregateByDomainAndIsp(userId, WINDOW_START, WINDOW_START.plusSeconds(1));
+        List<LinkReportRepository.DomainAsnAggregate> aggregates =
+                repository.aggregateByDomainAndAsn(userId, WINDOW_START, WINDOW_START.plusSeconds(1));
         assertThat(aggregates).hasSize(1);
         assertThat(aggregates.get(0).aliveCount()).isEqualTo(3);
         assertThat(aggregates.get(0).samples()).isEqualTo(10);
@@ -93,10 +93,10 @@ class LinkReportRepositoryTest extends MysqlTestBase {
 
         assertThat(countRowsForUser(userId)).isEqualTo(2);
 
-        List<LinkReportRepository.DomainIspAggregate> aggregates =
-                repository.aggregateByDomainAndIsp(userId, WINDOW_START, WINDOW_START.plusSeconds(1));
+        List<LinkReportRepository.DomainAsnAggregate> aggregates =
+                repository.aggregateByDomainAndAsn(userId, WINDOW_START, WINDOW_START.plusSeconds(1));
         assertThat(aggregates).hasSize(2);
-        assertThat(aggregates.stream().map(LinkReportRepository.DomainIspAggregate::failureDomain))
+        assertThat(aggregates.stream().map(LinkReportRepository.DomainAsnAggregate::failureDomain))
                 .containsExactlyInAnyOrder("", "jp.tsdns.top");
     }
 
@@ -157,8 +157,8 @@ class LinkReportRepositoryTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("aggregateByDomainAndIsp 按故障域×ASN 分组求和，且只统计给定区间与该用户")
-    void aggregateByDomainAndIspSumsWithinRangePerUser() {
+    @DisplayName("aggregateByDomainAndAsn 按故障域×ASN 分组求和，且只统计给定区间与该用户")
+    void aggregateByDomainAndAsnSumsWithinRangePerUser() {
         Long otherUserId = fixtures.createUser("u2", null, null);
 
         LinkReport a1 = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 9);
@@ -179,21 +179,21 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         otherUserReport.setSourceAsn("AS4134");
         repository.upsertWindow(otherUserReport);
 
-        List<LinkReportRepository.DomainIspAggregate> aggregates = repository.aggregateByDomainAndIsp(
+        List<LinkReportRepository.DomainAsnAggregate> aggregates = repository.aggregateByDomainAndAsn(
                 userId, WINDOW_START, WINDOW_START.plusSeconds(301));
 
         assertThat(aggregates).hasSize(1);
-        LinkReportRepository.DomainIspAggregate row = aggregates.get(0);
+        LinkReportRepository.DomainAsnAggregate row = aggregates.get(0);
         assertThat(row.failureDomain()).isEqualTo("jp.tsdns.top");
-        assertThat(row.isp()).isEqualTo("AS4134");
+        assertThat(row.asn()).isEqualTo("AS4134");
         assertThat(row.samples()).isEqualTo(20);
         assertThat(row.aliveCount()).isEqualTo(14);
     }
 
     @Test
-    @DisplayName("aggregateAllUsersByDomainAndIsp 在 SQL 层按用户×故障域×ASN 分组求和，一次查出全部用户："
+    @DisplayName("aggregateAllUsersByDomainAndAsn 在 SQL 层按用户×故障域×ASN 分组求和，一次查出全部用户："
             + "3 条原始窗口只应合并成 2 行——行数是分组数，不是原始窗口数")
-    void aggregateAllUsersByDomainAndIspGroupsAcrossUsersInSql() {
+    void aggregateAllUsersByDomainAndAsnGroupsAcrossUsersInSql() {
         Long userA = userId;
         Long userB = fixtures.createUser("u2", null, null);
 
@@ -210,32 +210,32 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         b1.setSourceAsn("AS4837");
         repository.upsertWindow(b1);
 
-        List<LinkReportRepository.UserDomainIspAggregate> aggregates = repository
-                .aggregateAllUsersByDomainAndIsp(WINDOW_START, WINDOW_START.plusSeconds(301));
+        List<LinkReportRepository.UserDomainAsnAggregate> aggregates = repository
+                .aggregateAllUsersByDomainAndAsn(WINDOW_START, WINDOW_START.plusSeconds(301));
 
         // 3 条原始窗口，但只有 2 个「用户×故障域×ASN」分组：若实现退化成把原始行原样搬回来
         // （而不是真的在 SQL 层 GROUP BY），这里会看到 3 行而不是 2 行
         assertThat(aggregates).hasSize(2);
 
-        LinkReportRepository.UserDomainIspAggregate userARow = aggregates.stream()
+        LinkReportRepository.UserDomainAsnAggregate userARow = aggregates.stream()
                 .filter(row -> row.userId().equals(userA)).findFirst().orElseThrow();
         assertThat(userARow.failureDomain()).isEqualTo("jp.tsdns.top");
-        assertThat(userARow.isp()).isEqualTo("AS4134");
+        assertThat(userARow.asn()).isEqualTo("AS4134");
         assertThat(userARow.samples()).isEqualTo(20);
         assertThat(userARow.aliveCount()).isEqualTo(14);
 
-        LinkReportRepository.UserDomainIspAggregate userBRow = aggregates.stream()
+        LinkReportRepository.UserDomainAsnAggregate userBRow = aggregates.stream()
                 .filter(row -> row.userId().equals(userB)).findFirst().orElseThrow();
         assertThat(userBRow.failureDomain()).isEqualTo("us.tsdns.top");
-        assertThat(userBRow.isp()).isEqualTo("AS4837");
+        assertThat(userBRow.asn()).isEqualTo("AS4837");
         assertThat(userBRow.samples()).isEqualTo(20);
         assertThat(userBRow.aliveCount()).isEqualTo(18);
     }
 
     @Test
-    @DisplayName("aggregateGlobalByDomainAndIsp 连用户维度也在 SQL 层求和掉：不同用户同一故障域×ASN"
+    @DisplayName("aggregateGlobalByDomainAndAsn 连用户维度也在 SQL 层求和掉：不同用户同一故障域×ASN"
             + "合并成 1 行，行数是分组数，不是原始窗口数，也不是「用户×分组」数")
-    void aggregateGlobalByDomainAndIspGroupsAcrossUsersWithoutUserDimension() {
+    void aggregateGlobalByDomainAndAsnGroupsAcrossUsersWithoutUserDimension() {
         Long userA = userId;
         Long userB = fixtures.createUser("u2", null, null);
 
@@ -252,22 +252,22 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         b2.setSourceAsn("AS4837");
         repository.upsertWindow(b2);
 
-        List<LinkReportRepository.DomainIspAggregate> aggregates = repository
-                .aggregateGlobalByDomainAndIsp(WINDOW_START, WINDOW_START.plusSeconds(301));
+        List<LinkReportRepository.DomainAsnAggregate> aggregates = repository
+                .aggregateGlobalByDomainAndAsn(WINDOW_START, WINDOW_START.plusSeconds(301));
 
         // 3 条原始窗口、跨 2 个用户，但只有 2 个「故障域×ASN」分组：若退化成先按用户查
         // 再拼起来，或者漏了某个用户，行数或数值就会不对
         assertThat(aggregates).hasSize(2);
 
-        LinkReportRepository.DomainIspAggregate jpRow = aggregates.stream()
+        LinkReportRepository.DomainAsnAggregate jpRow = aggregates.stream()
                 .filter(row -> row.failureDomain().equals("jp.tsdns.top")).findFirst().orElseThrow();
-        assertThat(jpRow.isp()).isEqualTo("AS4134");
+        assertThat(jpRow.asn()).isEqualTo("AS4134");
         assertThat(jpRow.samples()).isEqualTo(30);
         assertThat(jpRow.aliveCount()).isEqualTo(24);
 
-        LinkReportRepository.DomainIspAggregate usRow = aggregates.stream()
+        LinkReportRepository.DomainAsnAggregate usRow = aggregates.stream()
                 .filter(row -> row.failureDomain().equals("us.tsdns.top")).findFirst().orElseThrow();
-        assertThat(usRow.isp()).isEqualTo("AS4837");
+        assertThat(usRow.asn()).isEqualTo("AS4837");
         assertThat(usRow.samples()).isEqualTo(5);
         assertThat(usRow.aliveCount()).isEqualTo(5);
     }

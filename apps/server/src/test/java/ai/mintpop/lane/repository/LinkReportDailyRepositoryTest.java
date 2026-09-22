@@ -58,8 +58,8 @@ class LinkReportDailyRepositoryTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("aggregateGlobalByDomainAndIsp 连用户维度也在 SQL 层求和掉，行数是分组数")
-    void aggregateGlobalByDomainAndIspGroupsAcrossUsers() {
+    @DisplayName("aggregateGlobalByDomainAndAsn 连用户维度也在 SQL 层求和掉，行数是分组数")
+    void aggregateGlobalByDomainAndAsnGroupsAcrossUsers() {
         Long userA = userId;
         Long userB = fixtures.createUser("u2", null, null);
 
@@ -69,13 +69,13 @@ class LinkReportDailyRepositoryTest extends MysqlTestBase {
         // 区间外，不该被计入
         repository.upsertDay(newRow(userA, "jp.tsdns.top", "AS4134", DAY.minusDays(30), 999, 999));
 
-        List<LinkReportRepository.DomainIspAggregate> aggregates =
-                repository.aggregateGlobalByDomainAndIsp(DAY, DAY);
+        List<LinkReportRepository.DomainAsnAggregate> aggregates =
+                repository.aggregateGlobalByDomainAndAsn(DAY, DAY);
 
         assertThat(aggregates).hasSize(2);
         var jpRow = aggregates.stream().filter(a -> a.failureDomain().equals("jp.tsdns.top")).findFirst()
                 .orElseThrow();
-        assertThat(jpRow.isp()).isEqualTo("AS4134");
+        assertThat(jpRow.asn()).isEqualTo("AS4134");
         assertThat(jpRow.samples()).isEqualTo(150);
         assertThat(jpRow.aliveCount()).isEqualTo(130);
     }
@@ -85,10 +85,10 @@ class LinkReportDailyRepositoryTest extends MysqlTestBase {
     void unresolvedAsnIsNormalizedToNull() {
         repository.upsertDay(newRow(userId, "jp.tsdns.top", "", DAY, 20, 15));
 
-        List<LinkReportRepository.DomainIspAggregate> aggregates =
-                repository.aggregateGlobalByDomainAndIsp(DAY, DAY);
+        List<LinkReportRepository.DomainAsnAggregate> aggregates =
+                repository.aggregateGlobalByDomainAndAsn(DAY, DAY);
 
         assertThat(aggregates).hasSize(1);
-        assertThat(aggregates.get(0).isp()).isNull();
+        assertThat(aggregates.get(0).asn()).isNull();
     }
 }

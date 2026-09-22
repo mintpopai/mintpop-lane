@@ -1,7 +1,7 @@
 package ai.mintpop.lane.repository;
 
 import ai.mintpop.lane.entity.LinkReportDaily;
-import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
+import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -27,10 +27,10 @@ public interface LinkReportDailyRepository {
      * 全库范围「故障域 × ASN」聚合（统计日闭区间 [{@code from}, {@code to}]），SQL 层 GROUP BY，
      * 供管理端链路健康矩阵覆盖超过原始保留期（{@code link_report} 只保留 7 天）的历史。
      * <p>
-     * 返回形状复用 {@link LinkReportRepository.DomainIspAggregate}，但 {@code asn} 的空串已经在
+     * 返回形状复用 {@link LinkReportRepository.DomainAsnAggregate}，但 {@code asn} 的空串已经在
      * 这里被归一化成 {@code null}——本表 {@code asn} 是 {@code NOT NULL DEFAULT ''} 编码（空串表示
      * 反查失败），与 {@code link_report.source_asn} 的 null 编码不同；归一化到 null 让调用方合并
      * 两张表的结果时不用记两套"未知运营商"的判断条件。
      */
-    List<DomainIspAggregate> aggregateGlobalByDomainAndIsp(LocalDate from, LocalDate to);
+    List<DomainAsnAggregate> aggregateGlobalByDomainAndAsn(LocalDate from, LocalDate to);
 }

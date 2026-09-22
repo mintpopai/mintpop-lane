@@ -254,6 +254,33 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("同一天里反查成功与反查失败的窗口各归各的：按天表两行，asn 分别是 AS4134 与空串")
+    void resolvedAndUnresolvedAsnOfSameDayGoToSeparateDailyRows() {
+        // 两种编码在同一天相遇是最容易被写错的地方：若归档把 null 和 "AS4134" 当成同一个键
+        // （比如分组时统一转成空串再分组，或干脆拿 null 当通配），两段样本会被合成一行，
+        // 「哪家运营商在劣化」的信号当场糊掉
+        Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
+        insertWindow(DOMAIN, ASN, eightDaysAgo, 10, 9);
+        insertWindow(DOMAIN, null, eightDaysAgo.plusSeconds(300), 20, 12);
+
+        newService(NOW).archive();
+
+        LocalDate statDate = LocalDate.ofInstant(eightDaysAgo, ZoneOffset.UTC);
+        LinkReportDaily resolved = dailyRepository.find(userId, DOMAIN, ASN, statDate).orElseThrow();
+        assertThat(resolved.getSamples()).isEqualTo(10L);
+        assertThat(resolved.getAliveCount()).isEqualTo(9L);
+
+        LinkReportDaily unresolved = dailyRepository.find(userId, DOMAIN, "", statDate).orElseThrow();
+        assertThat(unresolved.getAsn()).isEqualTo(""); // link_report 的 null 编码 → 本表的空串编码
+        assertThat(unresolved.getSamples()).isEqualTo(20L);
+        assertThat(unresolved.getAliveCount()).isEqualTo(12L);
+
+        Long dailyRows = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM link_report_daily WHERE user_id = ?", Long.class, userId);
+        assertThat(dailyRows).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("不同用户/故障域/ASN 各自独立归档，不会互相合并")
     void differentDimensionsAreArchivedSeparately() {
         Long otherUserId = fixtures.createUser("u2", null, null);

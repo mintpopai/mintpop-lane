@@ -6,7 +6,7 @@ import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.repository.EntryIpHistoryRepository;
 import ai.mintpop.lane.repository.LinkReportDailyRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
-import ai.mintpop.lane.repository.LinkReportRepository.DomainIspAggregate;
+import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 import ai.mintpop.lane.response.LinkHealthResponse;
 import ai.mintpop.lane.response.LinkHealthResponse.DomainRow;
 import ai.mintpop.lane.response.LinkHealthResponse.EntryIpChange;
@@ -62,14 +62,14 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
         Instant now = clock.instant();
         Instant from = now.minus(Duration.ofDays(days));
 
-        List<DomainIspAggregate> aggregates = new ArrayList<>(
-                linkReportRepository.aggregateGlobalByDomainAndIsp(from, now));
+        List<DomainAsnAggregate> aggregates = new ArrayList<>(
+                linkReportRepository.aggregateGlobalByDomainAndAsn(from, now));
         // days 超过原始保留期时，from 之前那段只可能存在于按天聚合表——原始表早就被归档任务
         // 搬空了；days 落在保留期内时跳过这次查询，不多打一次库
         if (days > properties.getRawRetentionDays()) {
             LocalDate dailyFrom = LocalDate.ofInstant(from, ZoneOffset.UTC);
             LocalDate dailyTo = LocalDate.ofInstant(now, ZoneOffset.UTC);
-            aggregates.addAll(linkReportDailyRepository.aggregateGlobalByDomainAndIsp(dailyFrom, dailyTo));
+            aggregates.addAll(linkReportDailyRepository.aggregateGlobalByDomainAndAsn(dailyFrom, dailyTo));
         }
 
         return new LinkHealthResponse(buildDomainRows(aggregates), buildEntryIpTimeline(from));
@@ -82,25 +82,25 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
     }
 
     /**
-     * 按 (failureDomain, isp) 把两张表来的聚合行求和，再按 failureDomain 分组成 {@link DomainRow}。
-     * isp 的两种"未知"编码在这一步统一成空串——{@link LinkReportRepository.DomainIspAggregate#isp()}
+     * 按 (failureDomain, asn) 把两张表来的聚合行求和，再按 failureDomain 分组成 {@link DomainRow}。
+     * 运营商维度的两种"未知"编码在这一步统一成空串——{@link LinkReportRepository.DomainAsnAggregate#asn()}
      * 的约定是 null 表示反查失败（{@link LinkReportDailyRepository} 已经把它自己表里的空串编码
      * 归一到这个约定），这里最后落到响应契约时再转成空串（响应契约的约定见
      * {@link LinkHealthResponse.IspCell} 的类注释）。
      */
-    private List<DomainRow> buildDomainRows(List<DomainIspAggregate> aggregates) {
+    private List<DomainRow> buildDomainRows(List<DomainAsnAggregate> aggregates) {
         record DomainIspKey(String failureDomain, String isp) {
         }
 
-        Map<DomainIspKey, List<DomainIspAggregate>> grouped = aggregates.stream()
+        Map<DomainIspKey, List<DomainAsnAggregate>> grouped = aggregates.stream()
                 .collect(Collectors.groupingBy(agg ->
-                        new DomainIspKey(agg.failureDomain(), agg.isp() == null ? "" : agg.isp())));
+                        new DomainIspKey(agg.failureDomain(), agg.asn() == null ? "" : agg.asn())));
 
         // TreeMap 只是为了让同一次请求内两次调用给出一致的顺序，方便测试断言，不是业务要求
         Map<String, List<IspCell>> cellsByDomain = new TreeMap<>();
-        for (Map.Entry<DomainIspKey, List<DomainIspAggregate>> entry : grouped.entrySet()) {
-            long samples = entry.getValue().stream().mapToLong(DomainIspAggregate::samples).sum();
-            long aliveCount = entry.getValue().stream().mapToLong(DomainIspAggregate::aliveCount).sum();
+        for (Map.Entry<DomainIspKey, List<DomainAsnAggregate>> entry : grouped.entrySet()) {
+            long samples = entry.getValue().stream().mapToLong(DomainAsnAggregate::samples).sum();
+            long aliveCount = entry.getValue().stream().mapToLong(DomainAsnAggregate::aliveCount).sum();
             Double successRate = samples == 0 ? null : (double) aliveCount / samples;
             IspCell cell = new IspCell(entry.getKey().isp(), samples, aliveCount, successRate);
             cellsByDomain.computeIfAbsent(entry.getKey().failureDomain(), d -> new ArrayList<>()).add(cell);
@@ -116,7 +116,7 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
             long domainFailovers = grouped.entrySet().stream()
                     .filter(g -> g.getKey().failureDomain().equals(entry.getKey()))
                     .flatMap(g -> g.getValue().stream())
-                    .mapToLong(DomainIspAggregate::failovers)
+                    .mapToLong(DomainAsnAggregate::failovers)
                     .sum();
             rows.add(new DomainRow(entry.getKey(), domainSamples, domainAlive, domainFailovers, cells));
         }
