@@ -16,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.task.TaskRejectedException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Clock;
@@ -85,8 +86,28 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     /** 每次都 new 一个新实例，模拟「重启」不共享任何内存态；去重状态全部靠 alertStateRepository 落库读回 */
     private LinkReportAlertService newService() {
+        return newService(asnOrgRepository);
+    }
+
+    /** 换一个 asn_org 仓储来构造：给「展示名查不出来」这类降级用例替换掉真仓储，不动容器里的 bean */
+    private LinkReportAlertService newService(AsnOrgRepository asnOrgRepository) {
         return new LinkReportAlertService(linkReportRepository, alertStateRepository, userRepository,
                 asnOrgRepository, notifyService, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /** 一个查全表必炸的 asn_org 仓储：模拟迁移没跑到、表权限不对这类持续性故障 */
+    private AsnOrgRepository failingAsnOrgRepository() {
+        return new AsnOrgRepository() {
+            @Override
+            public void insertIfAbsent(String asn, String orgName, Instant firstSeenAt) {
+                throw new UnsupportedOperationException("本用例不走写入");
+            }
+
+            @Override
+            public Map<String, String> findAllNames() {
+                throw new DataAccessResourceFailureException("asn_org 查询失败");
+            }
+        };
     }
 
     /**
@@ -161,6 +182,19 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
         newService().checkAll();
 
         verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, ASN, "China Telecom", 0.5, 100L);
+    }
+
+    @Test
+    @DisplayName("展示名查不出来时告警照推、orgName 传 null——文案是附属品，不能把整轮判定拖下水")
+    void checkAllStillAlertsWhenOrgNameLookupFails() {
+        // findAllNames 在 per-user 的 try 之外：它若不 fail-soft，一次异常会让这一轮**全部用户**
+        // 的告警判定被整个跳过，而丢的只是文案里那行名字。同 resolveEmail 的取舍
+        insertWindow(userId, DOMAIN, ASN, NOW.minus(Duration.ofMinutes(5)), 100, 50);
+
+        newService(failingAsnOrgRepository()).checkAll();
+
+        verify(notifyService).notifyFailureDomainDegraded(userId, email, DOMAIN, 0.5, 100L);
+        verify(notifyService).notifyAsnDegraded(userId, email, DOMAIN, ASN, null, 0.5, 100L);
     }
 
     @Test

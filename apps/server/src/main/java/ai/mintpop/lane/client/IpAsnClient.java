@@ -28,7 +28,9 @@ public interface IpAsnClient {
      * 运营商名允许的最大字符数：与 {@code asn_org.org_name} 的 {@code VARCHAR(64)} 列宽逐字对应
      * （{@code V24__asn_org.sql}）。运营商维度的键是 ASN，名字只进这一张映射表。
      * ipwho.is 的 {@code connection.isp} 是自由文本的组织名，实测能超过 64 字符
-     * （如中国电信完整的英文注册名），严格模式下超长会直接抛 {@code Data too long}。
+     * （如中国电信完整的英文注册名）。这张表用 {@code INSERT IGNORE} 写入，超长不会报错、
+     * 而是被 MySQL <b>静默截断</b>（配上「有则不动」，截错了就再也改不掉），所以长度要由
+     * 我们自己收口；哪天改成普通 {@code INSERT}，严格模式下则是直接抛 {@code Data too long}。
      * 改这张表的列宽时必须同步改这里，两处失配这条防线就形同虚设。
      */
     int ISP_MAX_LENGTH = 64;
@@ -40,7 +42,8 @@ public interface IpAsnClient {
      * trim 放在截断之前，避免截断点卡在首尾空白上白占一个字符名额。
      * 会把运营商名往 {@code asn_org.org_name} 送的地方共用这一份实现（反查客户端
      * {@link ai.mintpop.lane.client.RestClientIpAsnClient} 在装配 {@link AsnInfo} 时截一次，
-     * {@code AsnOrgRepository} 的实现在落库前再兜一次），不许各写一份截断逻辑各写各的。
+     * {@code LinkReportServiceImpl} 记展示名前截一次，{@code AsnOrgRepository} 的实现在落库前
+     * 再兜一次），不许各写一份截断逻辑各写各的。
      *
      * @return {@code isp} 为 {@code null} 时原样返回 {@code null}；否则返回 trim 且截断后的运营商名
      */

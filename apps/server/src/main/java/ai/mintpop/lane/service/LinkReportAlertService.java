@@ -78,7 +78,7 @@ public class LinkReportAlertService {
 
         // 展示名整轮只读一次全表（几十行）：它只用于拼推送文案，不参与任何判定，
         // 放进循环里逐个用户查就是把一次查询乘上用户数，白打一堆库
-        Map<String, String> orgNames = asnOrgRepository.findAllNames();
+        Map<String, String> orgNames = resolveOrgNames();
 
         for (Map.Entry<Long, List<UserDomainAsnAggregate>> entry : byUser.entrySet()) {
             Long userId = entry.getKey();
@@ -135,6 +135,22 @@ public class LinkReportAlertService {
                             row.samples(), row.aliveCount());
                 }
             }
+        }
+    }
+
+    /**
+     * 查本轮的 ASN → 展示名快照；查询异常一律 fail-soft 返回空 Map，文案随之退回展示 ASN。
+     * <p>
+     * 这一句在 per-user 的 try <b>之外</b>（整轮只查一次），所以它自己必须兜住异常：否则一次
+     * 查询失败会让这一轮<b>全部用户</b>的告警判定被整个跳过，而代价仅仅是消息里少了一行名字。
+     * 取舍与 {@link #resolveEmail} 完全一致——告警本身比消息里那行展示文字重要得多。
+     */
+    private Map<String, String> resolveOrgNames() {
+        try {
+            return asnOrgRepository.findAllNames();
+        } catch (Exception e) {
+            log.warn("查询 ASN 展示名失败，本轮告警文案退回展示 ASN", e);
+            return Map.of();
         }
     }
 

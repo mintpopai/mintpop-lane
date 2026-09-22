@@ -203,6 +203,25 @@ class LinkReportServiceTest {
     }
 
     @Test
+    @DisplayName("记展示名失败不影响窗口落库——asn_org 是旁路，link_report 才是这一期的全部价值")
+    void asnOrgWriteFailureDoesNotDropTheWindow() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
+        // 迁移没跑到、表权限不对、死锁……这类故障是持续性的：若两次写入共用一个 try、
+        // 而且展示名还排在窗口之前，所有反查成功的上报都会长期静默停摆（心跳照样 200）
+        doThrow(new RuntimeException("asn_org 写入失败"))
+                .when(asnOrgRepository).insertIfAbsent(anyString(), anyString(), any());
+
+        assertThatCode(() -> service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP))
+                .doesNotThrowAnyException();
+
+        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
+        verify(linkReportRepository).upsertWindow(captor.capture());
+        // 窗口照落，ASN 也照填——丢掉的只是「这个 ASN 叫什么」，文案退回 AS 号即可
+        assertThat(captor.getValue().getSourceAsn()).isEqualTo("AS4134");
+    }
+
+    @Test
     @DisplayName("反查到 ASN 但没有展示名时只落 ASN，asn_org 不写空名字")
     void lookupWithoutOrgNameSkipsAsnOrg() {
         when(clock.instant()).thenReturn(NOW);
