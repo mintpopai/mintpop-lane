@@ -119,18 +119,40 @@ class LinkReportEndToEndTest extends MysqlTestBase {
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
     }
 
+    /**
+     * 默认窗口起点：比 NOW 早 3 分钟，既过得了上报的窗口容忍（windowMaxPast 默认 1 小时），
+     * 也落在告警回看区间（alertLookback 默认 15 分钟）内
+     */
+    private static final String WINDOW_START = "2026-09-19T23:57:00Z";
+
     /** 成功率 50%（100 个样本、50 个存活），跌破默认阈值 0.80 且过得了最小样本量 20 */
     private String degradedReportJson() {
+        return degradedReportJson(WINDOW_START);
+    }
+
+    /** 同上，但窗口起点由调用方指定——要造「同一 ASN 的多个窗口」只能靠它区分 */
+    private String degradedReportJson(String windowStart) {
         return """
                 {
                   "failureDomain": "%s",
-                  "windowStart": "2026-09-19T23:57:00Z",
+                  "windowStart": "%s",
                   "window": {"samples": 100, "alive": 50, "noSample": 0},
                   "p50LatencyMs": 180,
                   "failovers": 2,
                   "resolvedEntryIp": "10.0.0.9"
                 }
-                """.formatted(DOMAIN);
+                """.formatted(DOMAIN, windowStart);
+    }
+
+    /** 走真实入口投一个上报窗口：来源 IP 由反代经 X-Forwarded-For 传进来 */
+    private void postHeartbeat(String windowStart) throws Exception {
+        mockMvc.perform(post("/api/link/heartbeat")
+                        .header("Authorization", bearer(userId))
+                        .header("X-Forwarded-For", SOURCE_IP + ", 10.0.0.1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(degradedReportJson(windowStart)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
     }
 
     private JsonNode findDomain(JsonNode domains, String failureDomain) {
@@ -179,10 +201,13 @@ class LinkReportEndToEndTest extends MysqlTestBase {
                 .andReturn();
         JsonNode domains = objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/domains");
 
-        JsonNode isps = findDomain(domains, DOMAIN).get("isps");
-        assertThat(isps).hasSize(1);
-        JsonNode cell = isps.get(0);
-        assertThat(cell.get("isp").asText()).isEqualTo(ASN);
+        JsonNode asns = findDomain(domains, DOMAIN).get("asns");
+        assertThat(asns).hasSize(1);
+        JsonNode cell = asns.get(0);
+        assertThat(cell.get("asn").asText()).isEqualTo(ASN);
+        // 展示名也要端到端透出来：矩阵的列键是 ASN，但页面上给人看的是「China Telecom」，
+        // 这个名字必须由服务端从 asn_org 反查后带出，不能让前端去猜 AS 号对应哪家
+        assertThat(cell.get("orgName").asText()).isEqualTo(ORG_NAME);
         assertThat(cell.get("samples").asLong()).isEqualTo(100);
         assertThat(cell.get("aliveCount").asLong()).isEqualTo(50);
         assertThat(cell.get("successRate").asDouble()).isEqualTo(0.5);
@@ -218,6 +243,45 @@ class LinkReportEndToEndTest extends MysqlTestBase {
         JsonNode domains = objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/domains");
 
         // link_report.source_asn 的 null 编码在服务层归一成空串再出到接口：空串＝「有样本但运营商未知」
-        assertThat(findDomain(domains, DOMAIN).get("isps").get(0).get("isp").asText()).isEmpty();
+        assertThat(findDomain(domains, DOMAIN).get("asns").get(0).get("asn").asText()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("同一 ASN 两次反查文案不同：矩阵只有一列、名字是首次那个、ASN 级告警只推一次")
+    void driftingOrgNamesCollapseIntoOneColumnAndOneAlert() throws Exception {
+        // 上游对同一个 ASN 的展示名会漂（今天 China Telecom、明天 CHINANET-BACKBONE）。
+        // 这条盯的是「ASN 才是键、名字只是标签」这件事在整条链路上都成立：
+        // 名字若参与分组，矩阵会把同一家运营商裂成两列、告警会照两个键各推一次，
+        // 而两者都只在「先后看到两个不同文案」时才暴露——单窗口的测试永远发现不了。
+        when(ipAsnClient.lookup(SOURCE_IP))
+                .thenReturn(Optional.of(new AsnInfo(ASN, ORG_NAME)))
+                .thenReturn(Optional.of(new AsnInfo(ASN, "CHINANET-BACKBONE")));
+
+        // 两个相邻窗口，都落在告警回看区间（默认 15 分钟）内，合并后样本 200、存活 100
+        postHeartbeat("2026-09-19T23:52:00Z");
+        postHeartbeat("2026-09-19T23:57:00Z");
+
+        // asn_org 是「有则不动」：第二次那个漂过的文案不许盖掉首次记下的名字
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM asn_org WHERE asn = ?", Long.class, ASN))
+                .isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT org_name FROM asn_org WHERE asn = ?", String.class, ASN))
+                .isEqualTo(ORG_NAME);
+
+        // 两个窗口是同一个 (domain, ASN) 分组，只判定一次、只推一条——
+        // 若按名字分组，这里会变成两条不同 asn 的告警
+        linkReportAlertService.checkAll();
+        verify(notifyService).notifyAsnDegraded(userId, "u1@test.example", DOMAIN, ASN, ORG_NAME, 0.5, 200L);
+
+        MvcResult result = mockMvc.perform(get("/api/admin/link-health")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode domains = objectMapper.readTree(result.getResponse().getContentAsString()).at("/data/domains");
+
+        JsonNode asns = findDomain(domains, DOMAIN).get("asns");
+        assertThat(asns).hasSize(1);
+        assertThat(asns.get(0).get("asn").asText()).isEqualTo(ASN);
+        assertThat(asns.get(0).get("orgName").asText()).isEqualTo(ORG_NAME);
+        assertThat(asns.get(0).get("samples").asLong()).isEqualTo(200);
     }
 }

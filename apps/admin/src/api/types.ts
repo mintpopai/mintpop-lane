@@ -618,17 +618,24 @@ export interface LinkHealthDomainRow {
   samples: number;
   aliveCount: number;
   failovers: number;
-  isps: LinkHealthIspCell[];
+  asns: LinkHealthAsnCell[];
 }
 
 /**
- * 一个"故障域 × 运营商"格子。isp 为空串表示这一组样本的 ASN 反查全部失败，运营商未知。
+ * 一个"故障域 × 运营商"格子。运营商维度的**键是 ASN**（形如 AS4134），orgName 只是标签——
+ * 上游对同一个 ASN 的文案会漂（今天 China Telecom、明天 CHINANET-BACKBONE），服务端因此只按
+ * ASN 分列，名字另从 asn_org 取。
  *
- * successRate 在 samples 为 0 时是 null，不是 0——"没有数据"与"全挂"是两回事：把没有样本的
- * 格子画成 0% 会让人以为某个运营商彻底不通，实际只是这段时间没人从那个运营商上来。
+ * 这里有**三种含义完全不同的"空"**，页面上必须分得开，不能笼统当成"没值"：
+ * - asn 为空串：这一组样本的 ASN 反查全部失败，连是谁都不知道 → 显示「未知运营商」；
+ * - orgName 为 null：ASN 知道，但 asn_org 里还没记过展示名（旁路写入允许缺）→ 退回显示 ASN 串。
+ *   **绝不能因为没名字就把整列藏掉**——少一列等于凭空丢掉一批真实流量，比显示一串 AS 号糟得多；
+ * - successRate 为 null：samples 为 0，不是 0——"没有数据"与"全挂"是两回事：把没有样本的
+ *   格子画成 0% 会让人以为某个运营商彻底不通，实际只是这段时间没人从那个运营商上来。
  */
-export interface LinkHealthIspCell {
-  isp: string;
+export interface LinkHealthAsnCell {
+  asn: string;
+  orgName: string | null;
   samples: number;
   aliveCount: number;
   successRate: number | null;

@@ -3,6 +3,7 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.EntryIpHistory;
 import ai.mintpop.lane.enumeration.DnsVantage;
+import ai.mintpop.lane.repository.AsnOrgRepository;
 import ai.mintpop.lane.repository.EntryIpHistoryRepository;
 import ai.mintpop.lane.repository.LinkReportDailyRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
@@ -10,7 +11,7 @@ import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 import ai.mintpop.lane.response.LinkHealthResponse;
 import ai.mintpop.lane.response.LinkHealthResponse.DomainRow;
 import ai.mintpop.lane.response.LinkHealthResponse.EntryIpChange;
-import ai.mintpop.lane.response.LinkHealthResponse.IspCell;
+import ai.mintpop.lane.response.LinkHealthResponse.AsnCell;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,8 +22,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -43,6 +46,7 @@ class AdminLinkHealthServiceImplTest {
     private LinkReportRepository linkReportRepository;
     private LinkReportDailyRepository linkReportDailyRepository;
     private EntryIpHistoryRepository entryIpHistoryRepository;
+    private AsnOrgRepository asnOrgRepository;
     private LinkReportProperties properties;
     private AdminLinkHealthServiceImpl service;
 
@@ -51,14 +55,17 @@ class AdminLinkHealthServiceImplTest {
         linkReportRepository = mock(LinkReportRepository.class);
         linkReportDailyRepository = mock(LinkReportDailyRepository.class);
         entryIpHistoryRepository = mock(EntryIpHistoryRepository.class);
+        asnOrgRepository = mock(AsnOrgRepository.class);
         properties = new LinkReportProperties(); // 默认 rawRetentionDays=7、dailyRetentionDays=90
 
         when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of());
         when(linkReportDailyRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of());
         when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of());
+        // 默认「一个展示名都没记过」：展示名是可选的旁路数据，绝大多数用例不关心它
+        when(asnOrgRepository.findAllNames()).thenReturn(Map.of());
 
         service = new AdminLinkHealthServiceImpl(linkReportRepository, linkReportDailyRepository,
-                entryIpHistoryRepository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+                entryIpHistoryRepository, asnOrgRepository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private EntryIpHistory history(String domain, DnsVantage vantage, String ips, Instant observedAt) {
@@ -134,9 +141,9 @@ class AdminLinkHealthServiceImplTest {
 
         assertThat(response.domains()).hasSize(1);
         DomainRow row = response.domains().get(0);
-        assertThat(row.isps()).hasSize(1);
-        IspCell cell = row.isps().get(0);
-        assertThat(cell.isp()).isEqualTo("");
+        assertThat(row.asns()).hasSize(1);
+        AsnCell cell = row.asns().get(0);
+        assertThat(cell.asn()).isEqualTo("");
         assertThat(cell.samples()).isEqualTo(15);
         assertThat(cell.aliveCount()).isEqualTo(13);
         assertThat(row.samples()).isEqualTo(15);
@@ -148,11 +155,11 @@ class AdminLinkHealthServiceImplTest {
     @DisplayName("samples 为 0 时 successRate 必须是 null，不是 0.0")
     void successRateIsNullNotZeroWhenNoSamples() {
         when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any()))
-                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "CTC", 0, 0, 0)));
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "AS4134", 0, 0, 0)));
 
         LinkHealthResponse response = service.getLinkHealth(5);
 
-        IspCell cell = response.domains().get(0).isps().get(0);
+        AsnCell cell = response.domains().get(0).asns().get(0);
         assertThat(cell.successRate()).isNull();
     }
 
@@ -160,11 +167,11 @@ class AdminLinkHealthServiceImplTest {
     @DisplayName("有样本时 successRate 正常算出比值")
     void successRateComputedWhenSamplesPositive() {
         when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any()))
-                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "CTC", 10, 7, 0)));
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "AS4134", 10, 7, 0)));
 
         LinkHealthResponse response = service.getLinkHealth(5);
 
-        IspCell cell = response.domains().get(0).isps().get(0);
+        AsnCell cell = response.domains().get(0).asns().get(0);
         assertThat(cell.successRate()).isEqualTo(0.7);
     }
 
@@ -172,16 +179,50 @@ class AdminLinkHealthServiceImplTest {
     @DisplayName("故障域行的 samples/aliveCount/failovers 是该域下全部运营商之和")
     void domainRowSumsAcrossAsns() {
         when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of(
-                new DomainAsnAggregate(DOMAIN, "CTC", 10, 9, 1),
-                new DomainAsnAggregate(DOMAIN, "CUCC", 20, 15, 2)));
+                new DomainAsnAggregate(DOMAIN, "AS4134", 10, 9, 1),
+                new DomainAsnAggregate(DOMAIN, "AS4837", 20, 15, 2)));
 
         LinkHealthResponse response = service.getLinkHealth(5);
 
         DomainRow row = response.domains().get(0);
-        assertThat(row.isps()).hasSize(2);
+        assertThat(row.asns()).hasSize(2);
         assertThat(row.samples()).isEqualTo(30);
         assertThat(row.aliveCount()).isEqualTo(24);
         assertThat(row.failovers()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("矩阵按 ASN 分列并带上展示名；asn_org 没记过的 ASN 也照常出列、orgName 为 null")
+    void cellsAreKeyedByAsnWithOptionalOrgName() {
+        // 展示名是「锦上添花」而不是出列的前提：asn_org 里没记过名字的 ASN（上游当时没给名字、
+        // 或那次旁路写入失败）若因此被漏掉，矩阵会凭空少掉整整一列真实流量，比显示一串 AS 号糟得多。
+        // 反查失败的那组（asn=null → 空串）同样是一列，且它永远取不到展示名
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of(
+                new DomainAsnAggregate(DOMAIN, "AS4134", 100, 90, 0),
+                new DomainAsnAggregate(DOMAIN, "AS9808", 50, 40, 0),
+                new DomainAsnAggregate(DOMAIN, null, 10, 10, 0)));
+        when(asnOrgRepository.findAllNames()).thenReturn(Map.of("AS4134", "China Telecom"));
+
+        List<AsnCell> cells = service.getLinkHealth(7).domains().get(0).asns();
+
+        assertThat(cells).extracting(AsnCell::asn, AsnCell::orgName)
+                .containsExactly(tuple("", null), tuple("AS4134", "China Telecom"), tuple("AS9808", null));
+    }
+
+    @Test
+    @DisplayName("asn_org 查询失败时矩阵照常返回、只是没有展示名，不把整个链路健康页打成 500")
+    void orgNameLookupFailureDegradesToAsnOnlyInsteadOfFailingWholeQuery() {
+        // asn_org 是装饰用的旁路表（迁移没跑到、表权限不对都可能让它查不出来），而样本与成功率
+        // 才是这个页面的全部价值。让这张表的故障把页面打成 500，等于在最需要看链路状况的时候
+        // 什么都看不到。取舍与 LinkReportAlertService.resolveOrgNames 完全一致
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any()))
+                .thenReturn(List.of(new DomainAsnAggregate(DOMAIN, "AS4134", 100, 90, 0)));
+        when(asnOrgRepository.findAllNames()).thenThrow(new RuntimeException("asn_org 表不存在"));
+
+        List<AsnCell> cells = service.getLinkHealth(7).domains().get(0).asns();
+
+        assertThat(cells).extracting(AsnCell::asn, AsnCell::orgName, AsnCell::samples)
+                .containsExactly(tuple("AS4134", null, 100L));
     }
 
     @Test

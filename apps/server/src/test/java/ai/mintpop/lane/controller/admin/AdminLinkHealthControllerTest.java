@@ -167,7 +167,7 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("矩阵按故障域分组，每组下按运营商展开")
-    void matrixIsGroupedByDomainThenIsp() throws Exception {
+    void matrixIsGroupedByDomainThenAsn() throws Exception {
         insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(60), 10, 9);
         insertRawWindow(userB, "jp.tsdns.top", "AS4837", NOW.minusSeconds(60), 20, 18);
         insertRawWindow(userA, "us.tsdns.top", "AS4134", NOW.minusSeconds(60), 5, 5);
@@ -177,12 +177,12 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         assertThat(domains).hasSize(2);
 
         JsonNode jpDomain = findDomain(domains, "jp.tsdns.top");
-        List<String> jpIsps = new ArrayList<>();
-        jpDomain.get("isps").forEach(cell -> jpIsps.add(cell.get("isp").asText()));
-        assertThat(jpIsps).containsExactlyInAnyOrder("AS4134", "AS4837");
+        List<String> jpAsns = new ArrayList<>();
+        jpDomain.get("asns").forEach(cell -> jpAsns.add(cell.get("asn").asText()));
+        assertThat(jpAsns).containsExactlyInAnyOrder("AS4134", "AS4837");
 
         JsonNode usDomain = findDomain(domains, "us.tsdns.top");
-        assertThat(usDomain.get("isps")).hasSize(1);
+        assertThat(usDomain.get("asns")).hasSize(1);
     }
 
     @Test
@@ -191,7 +191,7 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(60), 0, 0);
 
         JsonNode body = getLinkHealth(adminId, null);
-        JsonNode cell = findDomain(body.at("/data/domains"), "jp.tsdns.top").get("isps").get(0);
+        JsonNode cell = findDomain(body.at("/data/domains"), "jp.tsdns.top").get("asns").get(0);
 
         assertThat(cell.get("samples").asLong()).isZero();
         assertThat(cell.get("successRate").isNull())
@@ -236,7 +236,7 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         insertDailyRow(userA, "jp.tsdns.top", "AS4134", olderDate, 100, 80);
 
         JsonNode cell = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
-                "jp.tsdns.top").get("isps").get(0);
+                "jp.tsdns.top").get("asns").get(0);
 
         assertThat(cell.get("samples").asLong()).isEqualTo(110);
         assertThat(cell.get("aliveCount").asLong()).isEqualTo(89);
@@ -252,12 +252,12 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         LocalDate olderDate = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(rawRetentionDays + 1L);
         insertDailyRow(userA, "jp.tsdns.top", "", olderDate, 5, 4);
 
-        JsonNode isps = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
-                "jp.tsdns.top").get("isps");
+        JsonNode asns = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
+                "jp.tsdns.top").get("asns");
 
-        assertThat(isps).hasSize(1);
-        JsonNode cell = isps.get(0);
-        assertThat(cell.get("isp").asText()).isEqualTo("");
+        assertThat(asns).hasSize(1);
+        JsonNode cell = asns.get(0);
+        assertThat(cell.get("asn").asText()).isEqualTo("");
         assertThat(cell.get("samples").asLong()).isEqualTo(15);
         assertThat(cell.get("aliveCount").asLong()).isEqualTo(13);
     }
@@ -274,7 +274,7 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         JsonNode domains = getLinkHealth(adminId, null).at("/data/domains");
         assertThat(domains).hasSize(2);
 
-        JsonNode jpCell = findDomain(domains, "jp.tsdns.top").get("isps").get(0);
+        JsonNode jpCell = findDomain(domains, "jp.tsdns.top").get("asns").get(0);
         assertThat(jpCell.get("samples").asLong()).isEqualTo(30);
         assertThat(jpCell.get("aliveCount").asLong()).isEqualTo(27);
     }
