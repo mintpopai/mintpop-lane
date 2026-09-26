@@ -39,8 +39,8 @@ import java.util.stream.Collectors;
  * 让数据库自己做累加，那样如果归档任务因异常重跑、又恰好没能删掉上一次已处理的原始窗口，
  * 会把同一批数据再加一遍；这里的加法只发生在 Java 侧、只加"当前查到的原始窗口"这一份。
  * <p>
- * {@code failureDomain} 两表同为空串编码，不需要转换；{@code isp} 编码不同——
- * {@link LinkReport#getIsp()} 是 null 编码，{@link LinkReportDaily#getIsp()} 是
+ * {@code failureDomain} 两表同为空串编码，不需要转换；运营商维度那一列编码不同——
+ * {@link LinkReport#getSourceAsn()} 是 null 编码，{@link LinkReportDaily#getAsn()} 是
  * {@code NOT NULL DEFAULT ''} 且进了唯一键，归档时必须把 null 转成空串。
  * <p>
  * 按天聚合刻意不带 p50 延迟——中位数不可跨窗口相加，见 {@link LinkReportDaily} 类注释。
@@ -101,11 +101,11 @@ public class LinkReportArchiveService {
         long failovers = windows.stream().mapToLong(LinkReport::getFailovers).sum();
 
         LinkReportDaily row = dailyRepository
-                .find(key.userId(), key.failureDomain(), key.isp(), key.statDate())
+                .find(key.userId(), key.failureDomain(), key.asn(), key.statDate())
                 .orElseGet(LinkReportDaily::new);
         row.setUserId(key.userId());
         row.setFailureDomain(key.failureDomain());
-        row.setIsp(key.isp());
+        row.setAsn(key.asn());
         row.setStatDate(key.statDate());
         row.setSamples(orZero(row.getSamples()) + samples);
         row.setAliveCount(orZero(row.getAliveCount()) + aliveCount);
@@ -115,21 +115,21 @@ public class LinkReportArchiveService {
     }
 
     /**
-     * 按天聚合的分组键。{@code isp} 在这里已经转换成空串编码——
-     * {@code link_report.isp} 是 null 编码，{@code link_report_daily.isp} 是
+     * 按天聚合的分组键。{@code asn} 在这里已经转换成空串编码——
+     * {@code link_report.source_asn} 是 null 编码，{@code link_report_daily.asn} 是
      * {@code NOT NULL DEFAULT ''} 且进唯一键，漏转会在非空约束上炸。
      */
     private DailyKey keyOf(LinkReport report) {
         LocalDate statDate = LocalDate.ofInstant(report.getWindowStart(), ZoneOffset.UTC);
-        String isp = report.getIsp() == null ? "" : report.getIsp();
-        return new DailyKey(report.getUserId(), report.getFailureDomain(), isp, statDate);
+        String asn = report.getSourceAsn() == null ? "" : report.getSourceAsn();
+        return new DailyKey(report.getUserId(), report.getFailureDomain(), asn, statDate);
     }
 
     private static long orZero(Long value) {
         return value == null ? 0L : value;
     }
 
-    /** 归档分组用的复合键：用 record 而不是拼字符串，天然正确处理 isp 已转换后不再为 null 的等值比较 */
-    private record DailyKey(Long userId, String failureDomain, String isp, LocalDate statDate) {
+    /** 归档分组用的复合键：用 record 而不是拼字符串，天然正确处理 asn 已转换后不再为 null 的等值比较 */
+    private record DailyKey(Long userId, String failureDomain, String asn, LocalDate statDate) {
     }
 }

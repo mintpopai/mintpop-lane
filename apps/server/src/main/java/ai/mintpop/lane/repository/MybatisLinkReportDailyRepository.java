@@ -20,11 +20,11 @@ public class MybatisLinkReportDailyRepository implements LinkReportDailyReposito
     }
 
     @Override
-    public Optional<LinkReportDaily> find(Long userId, String failureDomain, String isp, LocalDate statDate) {
+    public Optional<LinkReportDaily> find(Long userId, String failureDomain, String asn, LocalDate statDate) {
         return Optional.ofNullable(mapper.selectOne(Wrappers.<LinkReportDaily>lambdaQuery()
                 .eq(LinkReportDaily::getUserId, userId)
                 .eq(LinkReportDaily::getFailureDomain, failureDomain)
-                .eq(LinkReportDaily::getIsp, isp)
+                .eq(LinkReportDaily::getAsn, asn)
                 .eq(LinkReportDaily::getStatDate, statDate)));
     }
 
@@ -40,12 +40,12 @@ public class MybatisLinkReportDailyRepository implements LinkReportDailyReposito
     }
 
     @Override
-    public List<LinkReportRepository.DomainIspAggregate> aggregateGlobalByDomainAndIsp(LocalDate from, LocalDate to) {
-        return mapper.selectGlobalGroupedByDomainAndIsp(from, to).stream()
-                // 本表 isp 是 NOT NULL DEFAULT ''，空串表示反查失败；归一化成 null，
-                // 与 link_report.isp 的 null 编码对齐，调用方合并两表结果时不用记两套判断条件
-                .map(row -> new LinkReportRepository.DomainIspAggregate(row.getFailureDomain(),
-                        row.getIsp() == null || row.getIsp().isEmpty() ? null : row.getIsp(),
+    public List<LinkReportRepository.DomainAsnAggregate> aggregateGlobalByDomainAndAsn(LocalDate from, LocalDate to) {
+        return mapper.selectGlobalGroupedByDomainAndAsn(from, to).stream()
+                // 本表 asn 是 NOT NULL DEFAULT ''，空串表示反查失败；归一化成 null，
+                // 与 link_report.source_asn 的 null 编码对齐，调用方合并两表结果时不用记两套判断条件
+                .map(row -> new LinkReportRepository.DomainAsnAggregate(row.getFailureDomain(),
+                        row.getAsn() == null || row.getAsn().isEmpty() ? null : row.getAsn(),
                         row.getSamples(), row.getAliveCount(), row.getFailovers()))
                 .toList();
     }

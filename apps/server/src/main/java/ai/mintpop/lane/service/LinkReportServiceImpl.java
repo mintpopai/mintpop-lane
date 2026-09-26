@@ -1,8 +1,10 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.IpAsnClient;
+import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
+import ai.mintpop.lane.repository.AsnOrgRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.request.LinkHeartbeatRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +13,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -18,14 +21,17 @@ public class LinkReportServiceImpl implements LinkReportService {
 
     private final LinkReportRepository linkReportRepository;
     private final IpAsnClient ipAsnClient;
+    private final AsnOrgRepository asnOrgRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final LinkReportProperties properties;
 
     public LinkReportServiceImpl(LinkReportRepository linkReportRepository, IpAsnClient ipAsnClient,
-                                  ObjectMapper objectMapper, Clock clock, LinkReportProperties properties) {
+                                  AsnOrgRepository asnOrgRepository, ObjectMapper objectMapper, Clock clock,
+                                  LinkReportProperties properties) {
         this.linkReportRepository = linkReportRepository;
         this.ipAsnClient = ipAsnClient;
+        this.asnOrgRepository = asnOrgRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.properties = properties;
@@ -65,25 +71,51 @@ public class LinkReportServiceImpl implements LinkReportService {
             // 桌面端心跳的客户端超时是 15s，单次反查超时仍在其内，但这是本路径最接近红线的地方——
             // 哪天要再往心跳里加外部调用，先回来看这段。
             //
-            // 一次反查同时得到 asn 与运营商名：asn 落 source_asn，isp 优先用可读的运营商名，
-            // 上游没给（AsnInfo.isp() 为 null）时退回 ASN 串（如 "AS4134"）。退回而不是留 null
-            // 是要害——isp 为 null 的样本会被 LinkReportAlertService 跳过运营商级判定、并在
-            // 管理端矩阵里归进「未知运营商」那一行，spec §8.3 的「单运营商成功率异常」就永远不触发。
+            // 运营商维度以 ASN 做键，本表只落 source_asn：展示名是上游给的自由文本、随时漂移，
+            // 拿它做键会把同一家运营商裂成两列，故名字不进这张窗口表——它另按 ASN 存进 asn_org，
+            // 由下面的 recordOrgName 在窗口落库之后单独写（旁路，失败不牵连本次上报）。
             //
-            // 反查整体失败（Optional.empty）时 source_asn 与 isp 都保持 null：null 是本表
-            // 这两列既定的「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndIsp 的
-            // DomainIspAggregate.isp() 文档同一语义），不能改存空串——空串是 link_report_daily
-            // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空运营商」
-            // 这里再截一次 isp（IpAsnClient.truncateIsp，与 RestClientIpAsnClient 共用同一份实现）
-            // 是因为 IpAsnClient 是接口：测试与将来可能出现的其它实现不保证都在装配处截断，
-            // 这里是运营商名真正落库前的最后一道关卡，不能只指望上游某一个实现自觉
-            ipAsnClient.lookup(sourceIp).ifPresent(info -> {
-                report.setSourceAsn(info.asn());
-                report.setIsp(info.isp() == null ? info.asn() : IpAsnClient.truncateIsp(info.isp()));
-            });
+            // 反查整体失败（Optional.empty）时 source_asn 保持 null：null 是本列既定的
+            // 「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndAsn 的
+            // DomainAsnAggregate 文档同一语义），不能改存空串——空串是 link_report_daily
+            // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空 ASN」
+            Optional<AsnInfo> asnInfo = ipAsnClient.lookup(sourceIp);
+            asnInfo.ifPresent(info -> report.setSourceAsn(info.asn()));
+
+            // 主写入在前：本方法的全部价值就是这一行进库
             linkReportRepository.upsertWindow(report);
+            // 展示名是旁路，排在主写入之后、并且自己兜住异常，见 recordOrgName
+            asnInfo.ifPresent(this::recordOrgName);
         } catch (Exception e) {
             log.warn("链路上报处理失败，本窗口丢弃，userId={}", userId, e);
+        }
+    }
+
+    /**
+     * 把这个 ASN 的展示名记进 {@code asn_org}（首次见到时记一次，此后不覆盖）——这里是这张映射表
+     * 在生产里唯一的写入来源，不记则告警文案与管理端矩阵只能显示一串 AS 号，没人看得出是哪家运营商。
+     * <p>
+     * 刻意排在 {@code upsertWindow} <b>之后</b>、且<b>自己吞掉全部异常</b>，不与上报窗口共用外层
+     * 那个 try：{@code asn_org} 存的是纯展示数据（丢了只是文案退回 AS 号），{@code link_report}
+     * 才是这一期的全部价值，两者的失败不该被绑在一起。若让它排在前面又共用同一个 catch，
+     * {@code insertIfAbsent} 一抛异常就会让 {@code upsertWindow} 根本执行不到——而迁移没跑到、
+     * 表权限不对、死锁这类故障是<b>持续性</b>的，于是所有反查成功的上报都会长期静默停摆，
+     * 心跳却照样返回 200，没有任何地方看得出来。
+     * <p>
+     * 上游没给名字（null）就不写：{@code org_name} 是 NOT NULL，写空串等于把这个 ASN 的展示名
+     * 永久钉成空（{@code asn_org} 是「有则不动」，写下去就改不掉了）。
+     */
+    private void recordOrgName(AsnInfo info) {
+        if (info.isp() == null) {
+            return;
+        }
+        try {
+            // 展示名只记首次见到的那个：它的用处是让人认得出，稳定比新鲜重要——
+            // 上游同一家运营商今天叫 China Telecom、明天叫 CHINANET-BACKBONE，
+            // 跟着漂会让同一个 ASN 的历史裂成两段（不覆盖由 insertIfAbsent 自己保证）
+            asnOrgRepository.insertIfAbsent(info.asn(), IpAsnClient.truncateIsp(info.isp()), clock.instant());
+        } catch (Exception e) {
+            log.warn("记录 ASN 展示名失败，本次上报窗口已落库、不受影响，asn={}", info.asn(), e);
         }
     }
 

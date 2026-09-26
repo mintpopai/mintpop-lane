@@ -4,6 +4,7 @@ import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
+import ai.mintpop.lane.repository.AsnOrgRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.request.LinkHeartbeatRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,10 +24,13 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -47,6 +51,9 @@ class LinkReportServiceTest {
     private IpAsnClient ipAsnClient;
 
     @Mock
+    private AsnOrgRepository asnOrgRepository;
+
+    @Mock
     private Clock clock;
 
     private LinkReportService service;
@@ -61,7 +68,8 @@ class LinkReportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new LinkReportServiceImpl(linkReportRepository, ipAsnClient, objectMapper, clock, properties);
+        service = new LinkReportServiceImpl(linkReportRepository, ipAsnClient, asnOrgRepository, objectMapper,
+                clock, properties);
     }
 
     private LinkHeartbeatRequest newRequest(String failureDomain, Instant windowStart) {
@@ -117,23 +125,8 @@ class LinkReportServiceTest {
     // —— ASN 反查 ——
 
     @Test
-    @DisplayName("ASN 反查失败不影响上报落库，只是 asn 与 isp 为 null")
-    void asnLookupFailureStillPersistsReport() {
-        when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
-
-        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
-
-        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
-        verify(linkReportRepository).upsertWindow(captor.capture());
-        LinkReport persisted = captor.getValue();
-        assertThat(persisted.getSourceAsn()).isNull();
-        assertThat(persisted.getIsp()).isNull();
-    }
-
-    @Test
-    @DisplayName("反查成功且带运营商名时，asn 与 isp 一起落库——isp 是整个运营商维度唯一的数据来源")
-    void lookupSuccessStoresAsnAndIspName() {
+    @DisplayName("反查成功时 ASN 落 source_asn——运营商维度以它做键，展示名不进这张窗口表")
+    void lookupSuccessStoresSourceAsn() {
         when(clock.instant()).thenReturn(NOW);
         when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
 
@@ -143,15 +136,14 @@ class LinkReportServiceTest {
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
         assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
-        assertThat(persisted.getIsp()).isEqualTo("China Telecom");
     }
 
     @Test
-    @DisplayName("反查成功但上游没给运营商名时，isp 退回 ASN 串——宁可显示 AS4134 也不能留 null，"
-            + "留 null 会让这段样本掉进「未知运营商」、运营商级告警永远跳过它")
-    void lookupWithoutIspNameFallsBackToAsnString() {
+    @DisplayName("上游给的运营商名超长时截到 64 字符再写 asn_org，本窗口照常落库——名字不进 link_report")
+    void overlongOrgNameDoesNotAffectWindowPersisting() {
         when(clock.instant()).thenReturn(NOW);
-        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", null)));
+        String longOrgName = "China Networks Inter-Exchange, China Telecommunications Corporation";
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", longOrgName)));
 
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
@@ -159,23 +151,92 @@ class LinkReportServiceTest {
         verify(linkReportRepository).upsertWindow(captor.capture());
         LinkReport persisted = captor.getValue();
         assertThat(persisted.getSourceAsn()).isEqualTo("AS4134");
-        assertThat(persisted.getIsp()).isEqualTo("AS4134");
+
+        // 超长的风险随展示名一起挪到了 asn_org.org_name（VARCHAR(64)）：写进去之前就截断，
+        // 落库的值由我们决定，而不是交给 MySQL 静默砍（asn_org 是「有则不动」，砍错了改不掉）
+        ArgumentCaptor<String> orgNameCaptor = ArgumentCaptor.forClass(String.class);
+        verify(asnOrgRepository).insertIfAbsent(eq("AS4134"), orgNameCaptor.capture(), eq(NOW));
+        assertThat(longOrgName.length()).isGreaterThan(IpAsnClient.ISP_MAX_LENGTH); // 这条样本确实超长
+        assertThat(orgNameCaptor.getValue())
+                .hasSize(IpAsnClient.ISP_MAX_LENGTH)
+                .isEqualTo(longOrgName.substring(0, IpAsnClient.ISP_MAX_LENGTH));
     }
 
     @Test
-    @DisplayName("反查成功但运营商名超过 64 字符时截断后落库——列宽是 VARCHAR(64)，"
-            + "不截会在真实数据库里抛 Data too long，把整块上报窗口连累静默丢弃")
-    void lookupWithOverlongIspNameTruncatesTo64Chars() {
+    @DisplayName("反查成功时 source_asn 落库，展示名首次写入 asn_org；同一 ASN 换了文案不覆盖")
+    void ingestRecordsAsnAndKeepsFirstSeenOrgName() {
         when(clock.instant()).thenReturn(NOW);
-        String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
-        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", longIsp)));
+        when(ipAsnClient.lookup(SOURCE_IP))
+                .thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")))
+                .thenReturn(Optional.of(new AsnInfo("AS4134", "CHINANET-BACKBONE")));
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(120))), SOURCE_IP);
+
+        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
+        verify(linkReportRepository, times(2)).upsertWindow(captor.capture());
+        assertThat(captor.getAllValues()).extracting(LinkReport::getSourceAsn)
+                .containsExactly("AS4134", "AS4134");
+
+        // 服务层每次都走「有则不动」的 insertIfAbsent，自己不判断要不要覆盖：
+        // 「第二次的文案盖不掉第一次」是 asn_org 的 INSERT IGNORE 语义，由
+        // AsnOrgRepositoryTest#secondInsertKeepsFirstSeenName 与走真库真入口的
+        // LinkControllerTest#heartbeatKeepsFirstSeenOrgNameForSameAsn 守住
+        verify(asnOrgRepository).insertIfAbsent("AS4134", "China Telecom", NOW);
+        verify(asnOrgRepository).insertIfAbsent("AS4134", "CHINANET-BACKBONE", NOW);
+        verify(asnOrgRepository, times(2)).insertIfAbsent(anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("反查失败时 source_asn 为 NULL，且不往 asn_org 写任何东西")
+    void lookupFailureLeavesAsnNullAndAsnOrgUntouched() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.empty());
 
         service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
 
         ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
         verify(linkReportRepository).upsertWindow(captor.capture());
-        LinkReport persisted = captor.getValue();
-        assertThat(persisted.getIsp()).hasSize(64).isEqualTo(longIsp.substring(0, 64));
+        assertThat(captor.getValue().getSourceAsn()).isNull();
+        // 反查整体失败时连 ASN 都没有，也就没有键可以挂展示名——这张映射表一个字都不该动
+        verifyNoInteractions(asnOrgRepository);
+    }
+
+    @Test
+    @DisplayName("记展示名失败不影响窗口落库——asn_org 是旁路，link_report 才是这一期的全部价值")
+    void asnOrgWriteFailureDoesNotDropTheWindow() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", "China Telecom")));
+        // 迁移没跑到、表权限不对、死锁……这类故障是持续性的：若两次写入共用一个 try、
+        // 而且展示名还排在窗口之前，所有反查成功的上报都会长期静默停摆（心跳照样 200）
+        doThrow(new RuntimeException("asn_org 写入失败"))
+                .when(asnOrgRepository).insertIfAbsent(anyString(), anyString(), any());
+
+        assertThatCode(() -> service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP))
+                .doesNotThrowAnyException();
+
+        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
+        verify(linkReportRepository).upsertWindow(captor.capture());
+        // 窗口照落，ASN 也照填——丢掉的只是「这个 ASN 叫什么」，文案退回 AS 号即可
+        assertThat(captor.getValue().getSourceAsn()).isEqualTo("AS4134");
+    }
+
+    @Test
+    @DisplayName("反查到 ASN 但没有展示名时只落 ASN，asn_org 不写空名字")
+    void lookupWithoutOrgNameSkipsAsnOrg() {
+        when(clock.instant()).thenReturn(NOW);
+        when(ipAsnClient.lookup(SOURCE_IP)).thenReturn(Optional.of(new AsnInfo("AS4134", null)));
+
+        service.ingest(USER_ID, json(newRequest("jp.tsdns.top", NOW.minusSeconds(180))), SOURCE_IP);
+
+        ArgumentCaptor<LinkReport> captor = ArgumentCaptor.forClass(LinkReport.class);
+        verify(linkReportRepository).upsertWindow(captor.capture());
+        // 名字缺失不挡 ASN 落库：运营商维度以 ASN 做键，没有展示名只是文案上退回 ASN，
+        // 这段样本照样进得了运营商级判定
+        assertThat(captor.getValue().getSourceAsn()).isEqualTo("AS4134");
+        // org_name 是 NOT NULL：写 null 在严格模式下会被拒收，退而写空串则等于给这个 ASN
+        // 钉死一个空展示名（INSERT IGNORE 之后再也改不掉），不如干脆不写、让文案退回 ASN
+        verifyNoInteractions(asnOrgRepository);
     }
 
     // —— 异常兜底：下游异常、格式残缺 ——

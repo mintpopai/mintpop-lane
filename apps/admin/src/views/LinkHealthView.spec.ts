@@ -17,7 +17,9 @@ function domain(overrides: Partial<LinkHealthResponse["domains"][number]> = {}) 
     samples: 100,
     aliveCount: 90,
     failovers: 2,
-    isps: [{ isp: "中国电信", samples: 100, aliveCount: 90, successRate: 0.9 }],
+    asns: [
+      { asn: "AS4134", orgName: "China Telecom", samples: 100, aliveCount: 90, successRate: 0.9 },
+    ],
     ...overrides,
   };
 }
@@ -70,7 +72,15 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
       health({
         domains: [
           domain({
-            isps: [{ isp: "中国联通", samples: 0, aliveCount: 0, successRate: null }],
+            asns: [
+              {
+                asn: "AS4837",
+                orgName: "China Unicom",
+                samples: 0,
+                aliveCount: 0,
+                successRate: null,
+              },
+            ],
           }),
         ],
       }),
@@ -93,9 +103,21 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
       health({
         domains: [
           domain({
-            isps: [
-              { isp: "中国移动", samples: 100, aliveCount: 40, successRate: 0.4 },
-              { isp: "中国电信", samples: 100, aliveCount: 96, successRate: 0.96 },
+            asns: [
+              {
+                asn: "AS9808",
+                orgName: "China Mobile",
+                samples: 100,
+                aliveCount: 40,
+                successRate: 0.4,
+              },
+              {
+                asn: "AS4134",
+                orgName: "China Telecom",
+                samples: 100,
+                aliveCount: 96,
+                successRate: 0.96,
+              },
             ],
           }),
         ],
@@ -117,7 +139,15 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
       health({
         domains: [
           domain({
-            isps: [{ isp: "中国联通", samples: 0, aliveCount: 0, successRate: null }],
+            asns: [
+              {
+                asn: "AS4837",
+                orgName: "China Unicom",
+                samples: 0,
+                aliveCount: 0,
+                successRate: null,
+              },
+            ],
           }),
         ],
       }),
@@ -149,7 +179,7 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
       health({
         domains: [
           domain({
-            isps: [{ isp: "", samples: 5, aliveCount: 4, successRate: 0.8 }],
+            asns: [{ asn: "", orgName: null, samples: 5, aliveCount: 4, successRate: 0.8 }],
           }),
         ],
       }),
@@ -159,12 +189,59 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
     expect(wrapper.text()).toContain("未知运营商");
   });
 
+  it("运营商列：有 orgName 显示名字并附 ASN 串，无 orgName 显示 ASN 串，asn 空串显示「未知运营商」", async () => {
+    // 三种「空」的语义完全不同，页面上必须分得开：
+    // - asn 空串 = 这组样本的 ASN 反查全失败，连是谁都不知道；
+    // - orgName 为 null = ASN 知道，但 asn_org 里还没记过展示名（旁路写入允许缺）。
+    //   这时退回显示 AS 号——人认不出是哪家，但绝不能因此把整列藏起来：少一列
+    //   等于凭空丢掉一批真实流量，比显示一串 AS 号糟得多；
+    // - 有 orgName = 名字在前（人一眼认得出），ASN 串弱化附在后面备查——
+    //   名字是上游自由文本、会漂，真要查证还得看 AS 号
+    getLinkHealth.mockResolvedValue(
+      health({
+        domains: [
+          domain({
+            asns: [
+              { asn: "", orgName: null, samples: 5, aliveCount: 4, successRate: 0.8 },
+              {
+                asn: "AS4134",
+                orgName: "China Telecom",
+                samples: 10,
+                aliveCount: 9,
+                successRate: 0.9,
+              },
+              { asn: "AS9808", orgName: null, samples: 10, aliveCount: 9, successRate: 0.9 },
+            ],
+          }),
+        ],
+      }),
+    );
+    const wrapper = await render();
+
+    const labels = wrapper.findAll("tbody tr td:first-child");
+    expect(labels).toHaveLength(3);
+    expect(labels[0].text()).toBe("未知运营商");
+    expect(labels[1].text()).toContain("China Telecom");
+    expect(labels[1].get(".asn-code").text()).toBe("AS4134");
+    // 没有展示名时直接显示 AS 号本身，且不留一个空的附注位
+    expect(labels[2].text()).toBe("AS9808");
+    expect(labels[2].find(".asn-code").exists()).toBe(false);
+  });
+
   it("有数据的格子显示百分比成功率", async () => {
     getLinkHealth.mockResolvedValue(
       health({
         domains: [
           domain({
-            isps: [{ isp: "中国移动", samples: 40, aliveCount: 38, successRate: 0.95 }],
+            asns: [
+              {
+                asn: "AS9808",
+                orgName: "China Mobile",
+                samples: 40,
+                aliveCount: 38,
+                successRate: 0.95,
+              },
+            ],
           }),
         ],
       }),
@@ -215,13 +292,33 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
         domains: [
           domain({
             failureDomain: "front-a.example.com",
-            isps: [{ isp: "中国电信", samples: 10, aliveCount: 9, successRate: 0.9 }],
+            asns: [
+              {
+                asn: "AS4134",
+                orgName: "China Telecom",
+                samples: 10,
+                aliveCount: 9,
+                successRate: 0.9,
+              },
+            ],
           }),
           domain({
             failureDomain: "front-b.example.com",
-            isps: [
-              { isp: "中国电信", samples: 10, aliveCount: 8, successRate: 0.8 },
-              { isp: "中国联通", samples: 10, aliveCount: 10, successRate: 1 },
+            asns: [
+              {
+                asn: "AS4134",
+                orgName: "China Telecom",
+                samples: 10,
+                aliveCount: 8,
+                successRate: 0.8,
+              },
+              {
+                asn: "AS4837",
+                orgName: "China Unicom",
+                samples: 10,
+                aliveCount: 10,
+                successRate: 1,
+              },
             ],
           }),
         ],

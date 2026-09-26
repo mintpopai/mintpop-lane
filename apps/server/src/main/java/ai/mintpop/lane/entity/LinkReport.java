@@ -65,13 +65,12 @@ public class LinkReport {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String resolvedEntryIp;
 
-    /** 按上报请求的来源 IP 反查到的 ASN；反查失败为 null */
+    /**
+     * 按上报请求的来源 IP 反查到的 ASN（形如 AS4134）；反查失败为 null。
+     * 运营商维度以它做键——展示名是上游给的自由文本、随时漂移，只能做展示，另存 {@link AsnOrg}。
+     */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String sourceAsn;
-
-    /** ASN 对应的运营商名；反查失败为 null */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
-    private String isp;
 
     /** 由数据库默认值维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)

@@ -19,9 +19,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
  * ipwho.is 的 ASN / 运营商反查。
  * <p>
  * 这个类此前没有直接单测，而三期把它从「低频尽调」提到了「每条上报都要用」的位置：
- * {@code link_report.isp}（故障域 × 运营商矩阵与运营商级告警的唯一数据来源）就靠这里
- * 从同一次响应里多取一个 {@code connection.isp} 字段。取不到运营商名时必须能退回 ASN 串，
- * 否则整个运营商维度会退化成「未知运营商」一行。
+ * {@code link_report.source_asn}（故障域 × 运营商矩阵与运营商级告警的唯一数据来源）就靠这里，
+ * 运营商的展示名（{@code asn_org.org_name}）也从同一次响应里多取一个 {@code connection.isp} 字段。
+ * 反查整体失败时整个运营商维度会退化成「未知运营商」一行。
  */
 class RestClientIpAsnClientTest {
 
@@ -91,7 +91,7 @@ class RestClientIpAsnClientTest {
 
     @Test
     @DisplayName("运营商名超过 64 字符时被截到 64 字符——ipwho.is 的 isp 是自由文本组织名，"
-            + "超长会撑爆 link_report.isp 等三张表的 VARCHAR(64) 列，MySQL 严格模式下抛 Data too long")
+            + "超长会撑爆 asn_org.org_name 的 VARCHAR(64) 列，MySQL 严格模式下抛 Data too long")
     void ispLongerThan64CharsIsTruncatedTo64() {
         String longIsp = "China Networks Inter-Exchange, China Telecommunications Corporation";
         server.expect(requestTo(URL))

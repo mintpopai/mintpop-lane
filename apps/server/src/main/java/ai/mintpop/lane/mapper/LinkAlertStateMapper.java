@@ -10,12 +10,12 @@ import org.apache.ibatis.annotations.Mapper;
 public interface LinkAlertStateMapper extends BaseMapper<LinkAlertState> {
 
     /**
-     * 按唯一键 (user_id, failure_domain, isp) 幂等写入：命中则覆盖 alerted 与 alerted_at。
+     * 按唯一键 (user_id, failure_domain, asn) 幂等写入：命中则覆盖 alerted 与 alerted_at。
      * 从已告警变回未告警（恢复）同样走这条，落到同一行，不新增行。
      */
     @Insert("""
-            INSERT INTO link_alert_state (user_id, failure_domain, isp, alerted, alerted_at)
-            VALUES (#{userId}, #{failureDomain}, #{isp}, #{alerted}, #{alertedAt})
+            INSERT INTO link_alert_state (user_id, failure_domain, asn, alerted, alerted_at)
+            VALUES (#{userId}, #{failureDomain}, #{asn}, #{alerted}, #{alertedAt})
             ON DUPLICATE KEY UPDATE
                 alerted = VALUES(alerted),
                 alerted_at = VALUES(alerted_at)

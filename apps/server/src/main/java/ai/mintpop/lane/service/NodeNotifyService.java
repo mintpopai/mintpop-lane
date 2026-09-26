@@ -226,12 +226,17 @@ public class NodeNotifyService {
 
     /**
      * 运营商级成功率告警（异步）：同一故障域下某个运营商的成功率单独跌破阈值，与故障域级
-     * 共用阈值与最小样本量，但各自独立去重。{@code isp} 为 null 表示 ASN 反查失败。
-     * {@code userId}/{@code email} 语义同 {@link #notifyFailureDomainDegraded}。
+     * 共用阈值与最小样本量，但各自独立去重。{@code userId}/{@code email} 语义同
+     * {@link #notifyFailureDomainDegraded}。
+     * <p>
+     * ASN 与展示名两个都要：{@code asn}（形如 AS4134）是判定、分组、去重真正认的那个键，
+     * {@code orgName} 是 {@code asn_org} 里记下的名字、只为让人一眼认出是哪家运营商，
+     * 由调用方（{@link LinkReportAlertService}）查好传入——该 ASN 还没记过名字时传 null，
+     * 此时「运营商」这一行退回展示 ASN，绝不能因为没名字就不推告警。
      */
     @Async
-    public void notifyIspDegraded(Long userId, String email, String failureDomain, String isp, double successRate,
-                                   long samples) {
+    public void notifyAsnDegraded(Long userId, String email, String failureDomain, String asn, String orgName,
+                                   double successRate, long samples) {
         if (!notifyProperties.isConfigured()) {
             return;
         }
@@ -239,13 +244,27 @@ public class NodeNotifyService {
             LinkedHashMap<String, String> fields = new LinkedHashMap<>();
             fields.put("用户", displayUser(userId, email));
             fields.put("故障域", failureDomain);
-            fields.put("运营商", isp == null || isp.isBlank() ? "未知" : isp);
+            fields.put("运营商", displayOrg(asn, orgName));
+            fields.put("ASN", orUnknown(asn));
             fields.put("成功率", formatRate(successRate));
             fields.put("样本量", String.valueOf(samples));
             feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警", fields);
         } catch (Exception e) {
-            log.warn("运营商成功率告警飞书通知失败 userId={} domain={} isp={}", userId, failureDomain, isp, e);
+            log.warn("运营商成功率告警飞书通知失败 userId={} domain={} asn={}", userId, failureDomain, asn, e);
         }
+    }
+
+    /**
+     * 运营商展示文案：有展示名就用它（人能认出来），没有就退回 ASN（至少能查）；
+     * 两个都没有才「未知」——运营商级判定只在 ASN 非空时发起，这一档纯属兜底，
+     * 守的是「卡片上绝不出现字面量 null」。
+     */
+    private static String displayOrg(String asn, String orgName) {
+        return orgName == null || orgName.isBlank() ? orUnknown(asn) : orgName;
+    }
+
+    private static String orUnknown(String value) {
+        return value == null || value.isBlank() ? "未知" : value;
     }
 
     /** 用户展示文案：有邮箱就显示邮箱，查不到（理论上不该发生）就退化成「用户 #id」，不影响告警本身推出去 */

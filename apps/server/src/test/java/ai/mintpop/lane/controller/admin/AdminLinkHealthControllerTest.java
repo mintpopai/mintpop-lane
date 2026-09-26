@@ -110,12 +110,12 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         userB = fixtures.createUser("u2", null, null);
     }
 
-    private void insertRawWindow(Long userId, String domain, String isp, Instant windowStart, int samples,
+    private void insertRawWindow(Long userId, String domain, String asn, Instant windowStart, int samples,
                                  int aliveCount) {
         LinkReport report = new LinkReport();
         report.setUserId(userId);
         report.setFailureDomain(domain);
-        report.setIsp(isp);
+        report.setSourceAsn(asn);
         report.setWindowStart(windowStart);
         report.setSamples(samples);
         report.setAliveCount(aliveCount);
@@ -124,13 +124,13 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         linkReportRepository.upsertWindow(report);
     }
 
-    /** isp 传空串表示未知——本表 isp 是 NOT NULL DEFAULT ''，与 link_report 的 null 编码不同 */
-    private void insertDailyRow(Long userId, String domain, String isp, LocalDate statDate, long samples,
+    /** asn 传空串表示未知——本表 asn 是 NOT NULL DEFAULT ''，与 link_report.source_asn 的 null 编码不同 */
+    private void insertDailyRow(Long userId, String domain, String asn, LocalDate statDate, long samples,
                                 long aliveCount) {
         LinkReportDaily row = new LinkReportDaily();
         row.setUserId(userId);
         row.setFailureDomain(domain);
-        row.setIsp(isp);
+        row.setAsn(asn);
         row.setStatDate(statDate);
         row.setSamples(samples);
         row.setAliveCount(aliveCount);
@@ -167,31 +167,31 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("矩阵按故障域分组，每组下按运营商展开")
-    void matrixIsGroupedByDomainThenIsp() throws Exception {
-        insertRawWindow(userA, "jp.tsdns.top", "CTC", NOW.minusSeconds(60), 10, 9);
-        insertRawWindow(userB, "jp.tsdns.top", "CUCC", NOW.minusSeconds(60), 20, 18);
-        insertRawWindow(userA, "us.tsdns.top", "CTC", NOW.minusSeconds(60), 5, 5);
+    void matrixIsGroupedByDomainThenAsn() throws Exception {
+        insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(60), 10, 9);
+        insertRawWindow(userB, "jp.tsdns.top", "AS4837", NOW.minusSeconds(60), 20, 18);
+        insertRawWindow(userA, "us.tsdns.top", "AS4134", NOW.minusSeconds(60), 5, 5);
 
         JsonNode body = getLinkHealth(adminId, null);
         JsonNode domains = body.at("/data/domains");
         assertThat(domains).hasSize(2);
 
         JsonNode jpDomain = findDomain(domains, "jp.tsdns.top");
-        List<String> jpIsps = new ArrayList<>();
-        jpDomain.get("isps").forEach(cell -> jpIsps.add(cell.get("isp").asText()));
-        assertThat(jpIsps).containsExactlyInAnyOrder("CTC", "CUCC");
+        List<String> jpAsns = new ArrayList<>();
+        jpDomain.get("asns").forEach(cell -> jpAsns.add(cell.get("asn").asText()));
+        assertThat(jpAsns).containsExactlyInAnyOrder("AS4134", "AS4837");
 
         JsonNode usDomain = findDomain(domains, "us.tsdns.top");
-        assertThat(usDomain.get("isps")).hasSize(1);
+        assertThat(usDomain.get("asns")).hasSize(1);
     }
 
     @Test
     @DisplayName("没有样本的格子 successRate 是 null 而不是 0")
     void cellWithoutSamplesHasNullRateNotZero() throws Exception {
-        insertRawWindow(userA, "jp.tsdns.top", "CTC", NOW.minusSeconds(60), 0, 0);
+        insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(60), 0, 0);
 
         JsonNode body = getLinkHealth(adminId, null);
-        JsonNode cell = findDomain(body.at("/data/domains"), "jp.tsdns.top").get("isps").get(0);
+        JsonNode cell = findDomain(body.at("/data/domains"), "jp.tsdns.top").get("asns").get(0);
 
         assertThat(cell.get("samples").asLong()).isZero();
         assertThat(cell.get("successRate").isNull())
@@ -217,7 +217,7 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
 
         // 落在收敛上限之内的正常数据，应该照常查得到
         LocalDate withinLimit = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(maxDays - 1L);
-        insertDailyRow(userA, "recent.tsdns.top", "CTC", withinLimit, 50, 40);
+        insertDailyRow(userA, "recent.tsdns.top", "AS4134", withinLimit, 50, 40);
 
         JsonNode domains = getLinkHealth(adminId, 999_999).at("/data/domains");
 
@@ -231,12 +231,12 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
     @DisplayName("原始表与按天聚合表里同一故障域×运营商的数据会合并求和")
     void matrixCombinesRawAndDailyTables() throws Exception {
         int rawRetentionDays = linkReportProperties.getRawRetentionDays();
-        insertRawWindow(userA, "jp.tsdns.top", "CTC", NOW.minusSeconds(60), 10, 9);
+        insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(60), 10, 9);
         LocalDate olderDate = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(rawRetentionDays + 1L);
-        insertDailyRow(userA, "jp.tsdns.top", "CTC", olderDate, 100, 80);
+        insertDailyRow(userA, "jp.tsdns.top", "AS4134", olderDate, 100, 80);
 
         JsonNode cell = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
-                "jp.tsdns.top").get("isps").get(0);
+                "jp.tsdns.top").get("asns").get(0);
 
         assertThat(cell.get("samples").asLong()).isEqualTo(110);
         assertThat(cell.get("aliveCount").asLong()).isEqualTo(89);
@@ -244,37 +244,37 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
 
     @Test
     @DisplayName("两张表对「运营商未知」的不同编码（null / 空串）端到端合并成同一个格子，不会裂成两行")
-    void unresolvedIspFromBothTablesEndToEndMergesIntoOneCell() throws Exception {
+    void unresolvedAsnFromBothTablesEndToEndMergesIntoOneCell() throws Exception {
         int rawRetentionDays = linkReportProperties.getRawRetentionDays();
-        // link_report.isp 传 null——ASN 反查失败的真实编码
+        // link_report.source_asn 传 null——反查失败的真实编码
         insertRawWindow(userA, "jp.tsdns.top", null, NOW.minusSeconds(60), 10, 9);
-        // link_report_daily.isp 传空串——同样是反查失败，但本表的真实编码是 NOT NULL DEFAULT ''
+        // link_report_daily.asn 传空串——同样是反查失败，但本表的真实编码是 NOT NULL DEFAULT ''
         LocalDate olderDate = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(rawRetentionDays + 1L);
         insertDailyRow(userA, "jp.tsdns.top", "", olderDate, 5, 4);
 
-        JsonNode isps = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
-                "jp.tsdns.top").get("isps");
+        JsonNode asns = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
+                "jp.tsdns.top").get("asns");
 
-        assertThat(isps).hasSize(1);
-        JsonNode cell = isps.get(0);
-        assertThat(cell.get("isp").asText()).isEqualTo("");
+        assertThat(asns).hasSize(1);
+        JsonNode cell = asns.get(0);
+        assertThat(cell.get("asn").asText()).isEqualTo("");
         assertThat(cell.get("samples").asLong()).isEqualTo(15);
         assertThat(cell.get("aliveCount").asLong()).isEqualTo(13);
     }
 
     @Test
-    @DisplayName("行数是「故障域×运营商」分组数，不是原始窗口行数——聚合真的落在 SQL 层")
+    @DisplayName("行数是「故障域×ASN」分组数，不是原始窗口行数——聚合真的落在 SQL 层")
     void aggregationCountReflectsGroupsNotRawRows() throws Exception {
-        // 3 条原始窗口（2 个用户），但只有 2 个「故障域×运营商」分组：
+        // 3 条原始窗口（2 个用户），但只有 2 个「故障域×ASN」分组：
         // 若实现退化成把某个用户的原始行拉回内存再分组、漏了别的用户，行数会不对
-        insertRawWindow(userA, "jp.tsdns.top", "CTC", NOW.minusSeconds(60), 10, 9);
-        insertRawWindow(userB, "jp.tsdns.top", "CTC", NOW.minusSeconds(120), 20, 18);
-        insertRawWindow(userB, "us.tsdns.top", "CUCC", NOW.minusSeconds(60), 5, 5);
+        insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(60), 10, 9);
+        insertRawWindow(userB, "jp.tsdns.top", "AS4134", NOW.minusSeconds(120), 20, 18);
+        insertRawWindow(userB, "us.tsdns.top", "AS4837", NOW.minusSeconds(60), 5, 5);
 
         JsonNode domains = getLinkHealth(adminId, null).at("/data/domains");
         assertThat(domains).hasSize(2);
 
-        JsonNode jpCell = findDomain(domains, "jp.tsdns.top").get("isps").get(0);
+        JsonNode jpCell = findDomain(domains, "jp.tsdns.top").get("asns").get(0);
         assertThat(jpCell.get("samples").asLong()).isEqualTo(30);
         assertThat(jpCell.get("aliveCount").asLong()).isEqualTo(27);
     }
@@ -282,7 +282,7 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("故障域为空串（尚未解析）时原样透出，不被吞掉")
     void unresolvedFailureDomainIsPreservedAsEmptyString() throws Exception {
-        insertRawWindow(userA, "", "CTC", NOW.minusSeconds(60), 5, 5);
+        insertRawWindow(userA, "", "AS4134", NOW.minusSeconds(60), 5, 5);
 
         JsonNode domains = getLinkHealth(adminId, null).at("/data/domains");
         assertThat(findDomain(domains, "")).isNotNull();

@@ -9,6 +9,16 @@ lane:
   auth:
     # 测试专用固定密钥，32 字节，不是任何环境的真实密钥
     session-secret: "lane-test-session-secret-0123456789ab"
+# 特意与 IpAsnCacheProperties 的默认值（24h / 5000）不同，同上「配置真的生效」的道理——
+# 见 DnsConfigIpAsnClientWiringTest
+ip-asn-cache:
+  ttl: 2h
+  max-entries: 123
+link-report:
+  # 特意与 LinkReportProperties.alertDedupTtl 的默认值（24h）不同——见 LinkReportPropertiesTest。
+  # 本仓 LinkReportAlertServiceTest 等用例一律 `new LinkReportProperties()` 手工构造、不走
+  # Spring 绑定，改这个值不会影响它们
+  alert-dedup-ttl: 36h
 spring:
   security:
     oauth2:

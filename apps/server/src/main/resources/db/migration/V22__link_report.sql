@@ -11,7 +11,6 @@ CREATE TABLE link_report
     failovers         INT          NOT NULL DEFAULT 0 COMMENT '窗口内该故障域对应的 fallback 组 now 字段发生变化的次数，即故障转移次数',
     resolved_entry_ip VARCHAR(45)  NULL COMMENT '客户端实际解析到的中转入口 IP（IPv6 最长 45 字符）；客户端解析失败时为 NULL。服务端算不出这个值，机场按运营商分线路解析',
     source_asn        VARCHAR(32)  NULL COMMENT '按上报请求的来源 IP 反查到的 ASN；反查失败为 NULL。刻意由服务端反查而不让客户端自报——自报不可信，客户端也不知道',
-    isp               VARCHAR(64)  NULL COMMENT 'ASN 对应的运营商名；反查失败为 NULL',
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间（UTC）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_link_report_window (user_id, failure_domain, window_start),
@@ -25,7 +24,7 @@ CREATE TABLE link_report_daily
     id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
     user_id         BIGINT       NOT NULL COMMENT '用户 id，引用 app_user',
     failure_domain  VARCHAR(255) NOT NULL DEFAULT '' COMMENT '故障域；空串表示尚未解析（与 link_report 同一编码）',
-    isp             VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '运营商名；空串表示 ASN 反查失败。注意与 link_report.isp 编码不同——那一列是可空的、NULL 表示反查失败；本列进了唯一键，而 MySQL 的 UNIQUE 对 NULL 不做唯一性判断，可空列进唯一键会让去重失效，故必须 NOT NULL DEFAULT。归档时要把 link_report.isp 的 NULL 转成空串',
+    asn             VARCHAR(32)  NOT NULL DEFAULT '' COMMENT 'ASN（形如 AS4134）；空串表示反查失败。进唯一键故 NOT NULL DEFAULT——MySQL 的 UNIQUE 对 NULL 不做唯一性判断。归档时把 link_report.source_asn 的 NULL 转成空串。展示名不在本表，见 asn_org',
     stat_date       DATE         NOT NULL COMMENT '统计日（UTC 日历日）',
     samples         BIGINT       NOT NULL COMMENT '当日有效采样总数',
     alive_count     BIGINT       NOT NULL COMMENT '当日 alive 总数',
@@ -33,7 +32,7 @@ CREATE TABLE link_report_daily
     failovers       BIGINT       NOT NULL DEFAULT 0 COMMENT '当日故障转移总次数',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间（UTC）',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_link_report_daily (user_id, failure_domain, isp, stat_date),
+    UNIQUE KEY uk_link_report_daily (user_id, failure_domain, asn, stat_date),
     KEY idx_link_report_daily_date (stat_date),
     CONSTRAINT fk_link_report_daily_user FOREIGN KEY (user_id) REFERENCES app_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB

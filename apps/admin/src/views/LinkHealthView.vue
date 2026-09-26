@@ -12,7 +12,7 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { DNS_VANTAGE_LABELS } from "../api/types";
-import type { LinkHealthDomainRow, LinkHealthResponse } from "../api/types";
+import type { LinkHealthAsnCell, LinkHealthDomainRow, LinkHealthResponse } from "../api/types";
 import AdminSelect from "../components/AdminSelect.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
@@ -62,8 +62,16 @@ function isDegraded(rate: number | null): boolean {
   return rate !== null && rate < ALERT_THRESHOLD;
 }
 
-function ispLabel(isp: string): string {
-  return isp === "" ? "未知运营商" : isp;
+/**
+ * 运营商列的主标签。三种情况按语义分开，别合并成一个 `??` 链：
+ * - asn 为空串 = 反查全失败，连是谁都不知道 → 「未知运营商」；
+ * - 有 orgName = 显示名字，人一眼认得出（ASN 串由模板弱化附在后面备查）；
+ * - 没有 orgName = asn_org 里还没记过这个 ASN 的名字 → 退回显示 AS 号。
+ *   认不出是哪家，但这一列必须照常出——少一列等于凭空丢掉一批真实流量。
+ */
+function asnLabel(cell: LinkHealthAsnCell): string {
+  if (cell.asn === "") return "未知运营商";
+  return cell.orgName ?? cell.asn;
 }
 
 function vantageLabel(vantage: string): string {
@@ -148,15 +156,21 @@ onMounted(load);
         <table class="admin-table">
           <thead>
             <tr>
-              <th>运营商</th>
+              <th>运营商（ASN）</th>
               <th>样本数</th>
               <th>存活数</th>
               <th>成功率</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="cell in domain.isps" :key="cell.isp">
-              <td>{{ ispLabel(cell.isp) }}</td>
+            <!-- key 用 asn 而不是展示名：ASN 才是这一列的身份，名字只是标签（会漂、也可能缺） -->
+            <tr v-for="cell in domain.asns" :key="cell.asn">
+              <td>
+                {{ asnLabel(cell) }}
+                <!-- 有名字时把 AS 号弱化附在后面：名字是上游自由文本、会漂，
+                     真要查证（对工单、查路由）还得看 AS 号 -->
+                <span v-if="cell.orgName" class="asn-code muted">{{ cell.asn }}</span>
+              </td>
               <td class="fact">{{ cell.samples }}</td>
               <td class="fact">{{ cell.aliveCount }}</td>
               <td
@@ -266,6 +280,16 @@ onMounted(load);
   font-size: 13px;
   line-height: 1.6;
   color: var(--color-ink);
+}
+
+/* 展示名后面弱化的 AS 号：名字是主标签（人一眼认得出），AS 号只在要查证时才读，
+   故小一号 + 次要色（灰度由全局 .admin-table .muted 给）。AS 号本身不换行，
+   但允许整格在名字与 AS 号之间折行——运营商名字能长到几十个字符，
+   不折行会把这一列撑开、把右边的成功率挤出视野 */
+.asn-code {
+  margin-left: 6px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /*

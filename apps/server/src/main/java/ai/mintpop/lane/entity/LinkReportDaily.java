@@ -17,13 +17,16 @@ import java.time.LocalDate;
  * 刻意不带 p50 延迟——中位数不可跨窗口相加，硬算会得到一个没有意义的数。
  * <p>
  * {@code failureDomain} 与 {@link LinkReport} 同一套空串编码（空串表示尚未解析），
- * 两表一致。但 {@code isp} 两表编码<b>不同</b>，不要类比错了：{@link LinkReport#getIsp()}
+ * 两表一致。但运营商维度那一列两表编码<b>不同</b>，不要类比错了：{@link LinkReport#getSourceAsn()}
  * 是 null 编码（ASN 反查失败为 null）——它不进 link_report 的唯一键，允许为空；
- * 本表的 isp 却必须是 {@code NOT NULL DEFAULT ''}，因为它和 failureDomain 一起进了
+ * 本表的 {@code asn} 却必须是 {@code NOT NULL DEFAULT ''}，因为它和 failureDomain 一起进了
  * {@code uk_link_report_daily} 唯一键，而 MySQL 的 UNIQUE 约束<b>对 NULL 值不做唯一性
- * 判断</b>（多行 isp 都是 NULL 会被当成互不相同，去重形同虚设）。归档任务把
- * link_report.isp 的 null 压进本表时必须显式转换成空串，否则同一个运营商会在这张表里
+ * 判断</b>（多行 asn 都是 NULL 会被当成互不相同，去重形同虚设）。归档任务把
+ * link_report.source_asn 的 null 压进本表时必须显式转换成空串，否则同一个 ASN 会在这张表里
  * 分裂成 null 和 '' 两行。
+ * <p>
+ * 本表只存 ASN、不存运营商展示名：名字是上游给的自由文本，随时可能改口径，
+ * 拿它做键会把同一家运营商裂成两列。展示名统一在 {@link AsnOrg} 里按 ASN 存一份。
  */
 @Data
 @TableName("link_report_daily")
@@ -38,8 +41,8 @@ public class LinkReportDaily {
     /** 故障域；空串表示尚未解析 */
     private String failureDomain;
 
-    /** 运营商名；空串表示 ASN 反查失败 */
-    private String isp;
+    /** ASN（形如 AS4134）；空串表示反查失败。展示名不在本表，见 {@link AsnOrg} */
+    private String asn;
 
     /** 统计日（UTC 日历日） */
     private LocalDate statDate;

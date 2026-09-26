@@ -342,31 +342,47 @@ class NodeNotifyServiceTest {
     }
 
     @Test
-    @DisplayName("运营商成功率告警：橙色卡片，用户/故障域/运营商/成功率/样本量依次展示")
-    void ispDegradedSendsOrangeCard() {
-        service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", "CTC", 0.4, 100L);
+    @DisplayName("运营商成功率告警：橙色卡片，用户/故障域/运营商/ASN/成功率/样本量依次展示")
+    void asnDegradedSendsOrangeCard() {
+        service.notifyAsnDegraded(1L, "u1@test.example", "jp.tsdns.top", "AS4134", "China Telecom", 0.4, 100L);
 
+        // 展示名与 ASN 两行都在：名字让人一眼认出是哪家，ASN 是判定与去重真正用的那个键，
+        // 只给名字则同一家改了文案后对不上号，只给 ASN 则没人看得出 AS4134 是谁
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警")).containsExactly(
                 entry("用户", "u1@test.example"),
                 entry("故障域", "jp.tsdns.top"),
-                entry("运营商", "CTC"),
+                entry("运营商", "China Telecom"),
+                entry("ASN", "AS4134"),
                 entry("成功率", "40.0%"),
                 entry("样本量", "100"));
     }
 
     @Test
-    @DisplayName("运营商成功率告警：isp 为 null（ASN 反查失败）显示「未知」而不是 null")
-    void ispDegradedShowsUnknownWhenIspIsNull() {
-        service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", null, 0.4, 100L);
+    @DisplayName("运营商成功率告警：asn_org 里没有展示名时「运营商」退回 ASN，不显示 null")
+    void asnDegradedFallsBackToAsnWhenOrgNameIsNull() {
+        service.notifyAsnDegraded(1L, "u1@test.example", "jp.tsdns.top", "AS4134", null, 0.4, 100L);
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警"))
-                .containsEntry("运营商", "未知");
+                .containsEntry("运营商", "AS4134")
+                .containsEntry("ASN", "AS4134");
+    }
+
+    @Test
+    @DisplayName("运营商成功率告警：ASN 与展示名都没有（调用方本不该这么调）显示「未知」而不是 null")
+    void asnDegradedShowsUnknownWhenBothAsnAndOrgNameAreNull() {
+        // 运营商级判定只在 asn 非空时才发起（反查失败的行会被跳过），这里守的是兜底：
+        // 万一哪天调用点改错，卡片上出现的是「未知」，不是字面量 null
+        service.notifyAsnDegraded(1L, "u1@test.example", "jp.tsdns.top", null, null, 0.4, 100L);
+
+        assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警"))
+                .containsEntry("运营商", "未知")
+                .containsEntry("ASN", "未知");
     }
 
     @Test
     @DisplayName("运营商成功率告警：email 为 null（查不到用户）显示「用户 #id」而不是 null，且照常推送")
-    void ispDegradedShowsUserIdWhenEmailIsNull() {
-        service.notifyIspDegraded(7L, null, "jp.tsdns.top", "CTC", 0.4, 100L);
+    void asnDegradedShowsUserIdWhenEmailIsNull() {
+        service.notifyAsnDegraded(7L, null, "jp.tsdns.top", "AS4134", "China Telecom", 0.4, 100L);
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 运营商成功率告警"))
                 .containsEntry("用户", "用户 #7");
@@ -374,22 +390,22 @@ class NodeNotifyServiceTest {
 
     @Test
     @DisplayName("运营商成功率告警：未配置 webhook 整体静默")
-    void ispDegradedSilentWhenNotConfigured() {
+    void asnDegradedSilentWhenNotConfigured() {
         properties.setWebhookUrl(null);
 
-        service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", "CTC", 0.4, 100L);
+        service.notifyAsnDegraded(1L, "u1@test.example", "jp.tsdns.top", "AS4134", "China Telecom", 0.4, 100L);
 
         verifyNoInteractions(feishuBotClient);
     }
 
     @Test
     @DisplayName("运营商成功率告警：客户端抛异常只记日志，不向调用方冒泡")
-    void ispDegradedSwallowsClientFailure() {
+    void asnDegradedSwallowsClientFailure() {
         doThrow(new IllegalStateException("飞书机器人返回异常"))
                 .when(feishuBotClient).sendCard(any(), anyString(), any());
 
-        assertThatCode(() -> service.notifyIspDegraded(1L, "u1@test.example", "jp.tsdns.top", "CTC", 0.4, 100L))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> service.notifyAsnDegraded(1L, "u1@test.example", "jp.tsdns.top", "AS4134",
+                "China Telecom", 0.4, 100L)).doesNotThrowAnyException();
     }
 
     @Test

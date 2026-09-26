@@ -61,4 +61,10 @@ public class LinkReportProperties {
      * 会让告警永远不触发。⚠️ 未经生产实测，可回退
      */
     private Duration alertLookback = Duration.ofMinutes(15);
+
+    /**
+     * 去重状态的有效期：已推过的告警超过这么久仍在劣化就再推一次。用户在劣化中离线
+     * （最常见：链路差到断开）后再回来，没有它就永远不会再收到告警。⚠️ 未经生产实测，可回退
+     */
+    private Duration alertDedupTtl = Duration.ofHours(24);
 }
