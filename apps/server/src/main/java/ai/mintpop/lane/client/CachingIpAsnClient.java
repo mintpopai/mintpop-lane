@@ -93,6 +93,16 @@ public class CachingIpAsnClient implements IpAsnClient {
         }
     }
 
+    /** 仅供同包测试确认装配线（{@link ai.mintpop.lane.config.DnsConfig}）真的用了配置值，不对外暴露 */
+    Duration getTtl() {
+        return ttl;
+    }
+
+    /** 仅供同包测试确认装配线（{@link ai.mintpop.lane.config.DnsConfig}）真的用了配置值，不对外暴露 */
+    int getMaxEntries() {
+        return maxEntries;
+    }
+
     /** @return 是否真的逐出了一条 */
     private boolean evictOldest() {
         return cache.entrySet().stream()

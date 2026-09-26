@@ -382,6 +382,20 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("已告警状态超过 alert-dedup-ttl 后恢复正常：alerted 仍应被清为 false，恢复清档不受有效期影响")
+    void alertedFlagIsClearedOnRecoveryEvenAfterTtlExpires() {
+        newService().checkAndNotify(userId, orgNames(), List.of(degraded()));
+        assertThat(alertStateRepository.find(userId, DOMAIN, "").orElseThrow().getAlerted()).isTrue();
+
+        // previouslyAlerted 在这一刻已经因为超过 alertDedupTtl（默认 24h）而判定为 false，
+        // 但这不该影响"恢复就清档"这条语义——清档看的是原始 alerted 字段，与有效期无关
+        Clock later = Clock.fixed(NOW.plus(Duration.ofHours(24)).plusSeconds(1), ZoneOffset.UTC);
+        newService(later).checkAndNotify(userId, orgNames(), List.of(healthy()));
+
+        assertThat(alertStateRepository.find(userId, DOMAIN, "").orElseThrow().getAlerted()).isFalse();
+    }
+
+    @Test
     @DisplayName("已告警状态未过期仍在劣化：不重推")
     void freshAlertIsNotRepushedWithinTtl() {
         newService().checkAndNotify(userId, orgNames(), List.of(degraded()));

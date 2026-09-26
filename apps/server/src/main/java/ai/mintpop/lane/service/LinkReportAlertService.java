@@ -229,8 +229,11 @@ public class LinkReportAlertService {
                 log.warn("链路成功率告警推送失败（去重状态已落库）userId={} domain={} asn={}",
                         userId, domain, asnKey, e);
             }
-        } else if (previouslyAlerted) {
-            // 恢复正常：清档，下次再劣化能重新推
+        } else if (Boolean.TRUE.equals(state.getAlerted())) {
+            // 恢复正常：清档，下次再劣化能重新推。刻意看原始 alerted 字段而不是 previouslyAlerted——
+            // 后者叠加了 TTL 判定，若告警超过 alertDedupTtl 后才恢复，previouslyAlerted 已经是
+            // false，用它来判断会让这一行的 alerted=1 永久留着脏值，直到下次再劣化才被刷新。
+            // 恢复清档这件事本身与「是否还在去重有效期内」无关，理应只看它当前是不是已告警
             state.setAlerted(false);
             alertStateRepository.upsert(state);
         }

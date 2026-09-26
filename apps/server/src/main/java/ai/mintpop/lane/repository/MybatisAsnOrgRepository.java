@@ -31,6 +31,13 @@ public class MybatisAsnOrgRepository implements AsnOrgRepository {
         if (orgName == null || orgName.isBlank()) {
             return;
         }
+        // asn 是本表 NOT NULL 主键，若哪个 IpAsnClient 实现给了 null/空白，INSERT IGNORE 会把它
+        // 悄悄写成空串——于是出现 ("", 某名字) 一行，AdminLinkHealthServiceImpl 的 orgNames.get("")
+        // 会给「未知运营商」那格贴上一个名字，打破 AsnCell 注释里「空串 asn 的 orgName 恒为 null」
+        // 这条不变量。与 orgName 守卫对称：没有合法键位就别占，且一旦占了就再也改不掉
+        if (asn == null || asn.isBlank()) {
+            return;
+        }
         AsnOrg row = new AsnOrg();
         row.setAsn(asn);
         // 超长在 Java 侧截，不留给 MySQL：截出来的值才是确定的（trim 掉首尾空白再按码点切），

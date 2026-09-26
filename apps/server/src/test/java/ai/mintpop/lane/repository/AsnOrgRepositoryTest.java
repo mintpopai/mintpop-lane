@@ -85,6 +85,20 @@ class AsnOrgRepositoryTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("asn 为 null 或空白时整条不写——INSERT IGNORE 会把 NOT NULL 主键悄悄写成空串，" +
+            "让「未知运营商」那格被贴上名字，打破空串 asn 的 orgName 恒为 null 这条不变量")
+    void blankAsnIsNotWrittenAtAll() {
+        repository.insertIfAbsent(null, "China Telecom", NOW);
+        repository.insertIfAbsent("   ", "China Unicom", NOW);
+
+        assertThat(repository.findAllNames()).isEmpty();
+
+        // 挡掉之后，正常的 asn + 展示名还能照常记上
+        repository.insertIfAbsent("AS4134", "China Telecom", NOW);
+        assertThat(repository.findAllNames()).containsExactly(entry("AS4134", "China Telecom"));
+    }
+
+    @Test
     @DisplayName("展示名落库前由本层截到 64 字符并 trim，不把这件事留给 MySQL 去猜")
     void overlongOrgNameIsTruncatedBeforeInsert() {
         String longOrgName = "China Networks Inter-Exchange, China Telecommunications Corporation";
