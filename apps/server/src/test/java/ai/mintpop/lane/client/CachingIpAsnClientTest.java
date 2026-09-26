@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -124,6 +125,19 @@ class CachingIpAsnClientTest {
         verify(delegate, times(1)).lookup(IP);
         // 默认方法委托 lookup，装饰器不必也不该再重写一遍 lookupAsn
         verify(delegate, never()).lookupAsn(IP);
+    }
+
+    @Test
+    @DisplayName("TTL 可配：1 分钟 TTL 下第 61 秒再查会重新打下游")
+    void ttlIsConfigurable() {
+        CachingIpAsnClient shortLived = new CachingIpAsnClient(delegate, clock, Duration.ofMinutes(1), 10);
+        when(clock.instant()).thenReturn(NOW, NOW.plusSeconds(61));
+        when(delegate.lookup(IP)).thenReturn(Optional.of(INFO));
+
+        shortLived.lookup(IP);
+        shortLived.lookup(IP);
+
+        verify(delegate, times(2)).lookup(IP);
     }
 
     @Test

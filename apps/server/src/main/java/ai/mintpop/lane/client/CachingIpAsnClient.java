@@ -33,8 +33,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class CachingIpAsnClient implements IpAsnClient {
 
-    /** IP 的 ASN 归属一天之内基本不变；再久就该重查了（机房搬迁、IP 段转让） */
-    private static final Duration TTL = Duration.ofHours(24);
+    /**
+     * 默认 TTL：IP 的 ASN 归属一天之内基本不变；再久就该重查了（机房搬迁、IP 段转让）。
+     * 生产环境的实际取值由 {@link IpAsnCacheProperties#getTtl()} 装配（见 {@link ai.mintpop.lane.config.DnsConfig}），
+     * 这里只是双参构造器（老调用方/无需自定义 TTL 的测试）的兜底默认值。
+     */
+    private static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
     /** 容量上限。按「活跃用户数量级」取，几千条的 record 内存占用可忽略 */
     private static final int DEFAULT_MAX_ENTRIES = 5_000;
@@ -45,6 +49,7 @@ public class CachingIpAsnClient implements IpAsnClient {
 
     private final IpAsnClient delegate;
     private final Clock clock;
+    private final Duration ttl;
     private final int maxEntries;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
@@ -54,8 +59,17 @@ public class CachingIpAsnClient implements IpAsnClient {
 
     /** 容量可注入的构造器，供测试用小容量验证逐出，不必真塞满几千条 */
     CachingIpAsnClient(IpAsnClient delegate, Clock clock, int maxEntries) {
+        this(delegate, clock, DEFAULT_TTL, maxEntries);
+    }
+
+    /**
+     * TTL 与容量都可配置的构造器，四期起是唯一实现，其余构造器都委托到这里。
+     * 生产环境由 {@link IpAsnCacheProperties} 装配 TTL 与容量；测试用短 TTL 免得真的等 24 小时。
+     */
+    public CachingIpAsnClient(IpAsnClient delegate, Clock clock, Duration ttl, int maxEntries) {
         this.delegate = delegate;
         this.clock = clock;
+        this.ttl = ttl;
         this.maxEntries = maxEntries;
     }
 
@@ -72,7 +86,7 @@ public class CachingIpAsnClient implements IpAsnClient {
     }
 
     private void store(String ip, AsnInfo info, Instant now) {
-        cache.put(ip, new CacheEntry(info, now.plus(TTL)));
+        cache.put(ip, new CacheEntry(info, now.plus(ttl)));
         // 逐出到上限之内；evictOldest 返回 false（已空/被别的线程抢先删掉）时收手，不死循环
         while (cache.size() > maxEntries && evictOldest()) {
             // 空循环体：条件里已经完成逐出
