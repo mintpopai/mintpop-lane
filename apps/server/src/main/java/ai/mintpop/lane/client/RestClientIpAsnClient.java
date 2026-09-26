@@ -44,7 +44,10 @@ public class RestClientIpAsnClient implements IpAsnClient {
             // 这里先截断，避免超长值一路带到落库那一步才被 MySQL 拒收
             String isp = connection.get("isp") instanceof String raw && !raw.isBlank()
                     ? IpAsnClient.truncateIsp(raw) : null;
-            return Optional.of(new AsnInfo("AS" + asn.intValue(), isp));
+            // longValue() 而不是 intValue()：ASN 自 RFC 6793 起是 32 位无符号数，上限 4294967295
+            // 超出了 Java int 的 2147483647。按 int 取值会让 4 字节 ASN（如私有段 4200000000）
+            // 溢出成负数，拼出「AS-94967296」这种不存在的键，在矩阵上多出一列鬼运营商
+            return Optional.of(new AsnInfo("AS" + asn.longValue(), isp));
         } catch (Exception e) {
             log.warn("ASN 查询失败 ip={}", ip, e);
             return Optional.empty();
