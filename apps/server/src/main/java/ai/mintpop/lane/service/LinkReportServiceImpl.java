@@ -76,8 +76,8 @@ public class LinkReportServiceImpl implements LinkReportService {
             // 由下面的 recordOrgName 在窗口落库之后单独写（旁路，失败不牵连本次上报）。
             //
             // 反查整体失败（Optional.empty）时 source_asn 保持 null：null 是本列既定的
-            // 「暂无数据」编码（与 LinkReportRepository#aggregateByDomainAndAsn 的
-            // DomainAsnAggregate 文档同一语义），不能改存空串——空串是 link_report_daily
+            // 「暂无数据」编码（与 LinkReportRepository.DomainAsnAggregate 的
+            // 文档同一语义），不能改存空串——空串是 link_report_daily
             // 那张表（NOT NULL DEFAULT ''）的编码，混用会把「没查到」误判成「查到了空 ASN」
             Optional<AsnInfo> asnInfo = ipAsnClient.lookup(sourceIp);
             asnInfo.ifPresent(info -> report.setSourceAsn(info.asn()));

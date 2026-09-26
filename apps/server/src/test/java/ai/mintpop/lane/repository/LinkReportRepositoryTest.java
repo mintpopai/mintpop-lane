@@ -75,11 +75,11 @@ class LinkReportRepositoryTest extends MysqlTestBase {
 
         assertThat(countRowsForUser(userId)).isEqualTo(1);
 
-        List<LinkReportRepository.DomainAsnAggregate> aggregates =
-                repository.aggregateByDomainAndAsn(userId, WINDOW_START, WINDOW_START.plusSeconds(1));
-        assertThat(aggregates).hasSize(1);
-        assertThat(aggregates.get(0).aliveCount()).isEqualTo(3);
-        assertThat(aggregates.get(0).samples()).isEqualTo(10);
+        // 读回那唯一一行看它的值：覆盖则 aliveCount 是第二次的 3，累加则会是 9+3=12
+        List<LinkReport> windows = repository.findWindowsBefore(WINDOW_START.plusSeconds(1));
+        assertThat(windows).hasSize(1);
+        assertThat(windows.get(0).getAliveCount()).isEqualTo(3);
+        assertThat(windows.get(0).getSamples()).isEqualTo(10);
     }
 
     @Test
@@ -93,10 +93,8 @@ class LinkReportRepositoryTest extends MysqlTestBase {
 
         assertThat(countRowsForUser(userId)).isEqualTo(2);
 
-        List<LinkReportRepository.DomainAsnAggregate> aggregates =
-                repository.aggregateByDomainAndAsn(userId, WINDOW_START, WINDOW_START.plusSeconds(1));
-        assertThat(aggregates).hasSize(2);
-        assertThat(aggregates.stream().map(LinkReportRepository.DomainAsnAggregate::failureDomain))
+        assertThat(repository.findWindowsBefore(WINDOW_START.plusSeconds(1)))
+                .extracting(LinkReport::getFailureDomain)
                 .containsExactlyInAnyOrder("", "jp.tsdns.top");
     }
 
@@ -154,40 +152,6 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         LocalDateTime remaining = jdbc.queryForObject(
                 "SELECT window_start FROM link_report WHERE user_id = ?", LocalDateTime.class, userId);
         assertThat(remaining.toInstant(ZoneOffset.UTC)).isEqualTo(WINDOW_START.plusSeconds(300));
-    }
-
-    @Test
-    @DisplayName("aggregateByDomainAndAsn 按故障域×ASN 分组求和，且只统计给定区间与该用户")
-    void aggregateByDomainAndAsnSumsWithinRangePerUser() {
-        Long otherUserId = fixtures.createUser("u2", null, null);
-
-        LinkReport a1 = newReport(userId, "jp.tsdns.top", WINDOW_START, 10, 9);
-        a1.setSourceAsn("AS4134");
-        repository.upsertWindow(a1);
-
-        LinkReport a2 = newReport(userId, "jp.tsdns.top", WINDOW_START.plusSeconds(300), 10, 5);
-        a2.setSourceAsn("AS4134");
-        repository.upsertWindow(a2);
-
-        // 区间外，不该被计入
-        LinkReport outOfRange = newReport(userId, "jp.tsdns.top", WINDOW_START.minusSeconds(300), 100, 100);
-        outOfRange.setSourceAsn("AS4134");
-        repository.upsertWindow(outOfRange);
-
-        // 别的用户，不该被计入
-        LinkReport otherUserReport = newReport(otherUserId, "jp.tsdns.top", WINDOW_START, 100, 100);
-        otherUserReport.setSourceAsn("AS4134");
-        repository.upsertWindow(otherUserReport);
-
-        List<LinkReportRepository.DomainAsnAggregate> aggregates = repository.aggregateByDomainAndAsn(
-                userId, WINDOW_START, WINDOW_START.plusSeconds(301));
-
-        assertThat(aggregates).hasSize(1);
-        LinkReportRepository.DomainAsnAggregate row = aggregates.get(0);
-        assertThat(row.failureDomain()).isEqualTo("jp.tsdns.top");
-        assertThat(row.asn()).isEqualTo("AS4134");
-        assertThat(row.samples()).isEqualTo(20);
-        assertThat(row.aliveCount()).isEqualTo(14);
     }
 
     @Test

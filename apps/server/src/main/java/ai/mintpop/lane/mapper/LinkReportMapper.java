@@ -39,9 +39,8 @@ public interface LinkReportMapper extends BaseMapper<LinkReport> {
     int upsertWindow(LinkReport report);
 
     /**
-     * 全库范围「用户 × 故障域 × ASN」聚合：定时告警要扫全部用户，若照单用户查询那样
-     * （取原始行、Java 侧分组求和）逐用户跑一遍，会是 N+1 加全表进内存，因此这里直接在 SQL 层
-     * GROUP BY，一次查出全部用户的分组结果。
+     * 全库范围「用户 × 故障域 × ASN」聚合：定时告警要扫全部用户，若逐用户取原始行再在 Java 侧
+     * 分组求和，会是 N+1 加全表进内存，因此这里直接在 SQL 层 GROUP BY，一次查出全部用户的分组结果。
      */
     @Select("""
             SELECT user_id, failure_domain, source_asn AS asn,
@@ -56,7 +55,7 @@ public interface LinkReportMapper extends BaseMapper<LinkReport> {
     /**
      * 全库范围「故障域 × ASN」聚合，连用户维度也在 SQL 层求和掉：管理端链路健康矩阵
      * 没有用户维度（spec §8.3：按「故障域 × 运营商」展示，不按节点也不按用户），
-     * 照单用户查询那样取原始行再在 Java 侧分组求和会把全库全部用户的原始窗口行拉进内存。
+     * 取原始行再在 Java 侧分组求和会把全库全部用户的原始窗口行拉进内存。
      */
     @Select("""
             SELECT failure_domain, source_asn AS asn,

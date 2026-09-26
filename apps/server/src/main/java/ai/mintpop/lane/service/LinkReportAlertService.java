@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
  * 运营商维度的键是 <b>ASN</b>：分组、去重键、判定全认 ASN，展示名只在推送文案上露面——
  * 每轮 {@link #checkAll()} 从 {@code asn_org} 读一次全表（几十行），整轮复用，不逐个用户查库。
  * <p>
- * 判定顺序固定为「先看样本量、再算比值」：{@code aggregateByDomainAndAsn} 传入的样本可能是 0
+ * 判定顺序固定为「先看样本量、再算比值」：{@code aggregateAllUsersByDomainAndAsn} 给回的样本可能是 0
  * （整段窗口离线的用户），先除后判会在这里抛 {@link ArithmeticException} 或算出 NaN；
  * 样本低于 {@link LinkReportProperties#getAlertMinSamples()} 时比值本身没有意义，
  * 按 0/0 当成 0% 报出去会在最不该吵的时候吵。

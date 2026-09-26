@@ -6,10 +6,7 @@ import ai.mintpop.lane.mapper.LinkReportMapper;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /** 链路上报窗口聚合的 MySQL 实现。 */
 @Repository
@@ -39,36 +36,6 @@ public class MybatisLinkReportRepository implements LinkReportRepository {
     }
 
     @Override
-    public List<DomainAsnAggregate> aggregateByDomainAndAsn(Long userId, Instant from, Instant to) {
-        // 表规模是「用户数 × 故障域数 × ASN 数 × 窗口数」量级，按单用户取出在 Java 侧 GROUP BY 足够快，
-        // 与 MybatisUserFrontNodeRepository#countUsersByNodeId 同一种做法，避免 selectMaps 的列名坑
-        List<LinkReport> rows = mapper.selectList(Wrappers.<LinkReport>lambdaQuery()
-                .eq(LinkReport::getUserId, userId)
-                .ge(LinkReport::getWindowStart, from)
-                .lt(LinkReport::getWindowStart, to));
-
-        // 分组 key 用 record 而不是拼字符串：拼接要挑一个「绝不出现在任一字段里」的分隔符，
-        // 挑错了两个不同的 (域名, ASN) 会撞成同一组；而 ASN 可以是 null，拼进字符串会变成
-        // 字面量 "null"，与一个真叫 null 的 ASN 无从分辨。record 的 equals/hashCode 天然
-        // 逐字段比较、正确处理 null，不需要任何分隔符
-        Map<DomainAsnKey, List<LinkReport>> grouped = rows.stream()
-                .collect(Collectors.groupingBy(r -> new DomainAsnKey(r.getFailureDomain(), r.getSourceAsn())));
-
-        return grouped.values().stream()
-                .map(group -> {
-                    LinkReport first = group.get(0);
-                    long samples = group.stream().mapToLong(LinkReport::getSamples).sum();
-                    long aliveCount = group.stream().mapToLong(LinkReport::getAliveCount).sum();
-                    long failovers = group.stream().mapToLong(LinkReport::getFailovers).sum();
-                    return new DomainAsnAggregate(first.getFailureDomain(), first.getSourceAsn(),
-                            samples, aliveCount, failovers);
-                })
-                .sorted(Comparator.comparing(DomainAsnAggregate::failureDomain, Comparator.nullsFirst(Comparator.naturalOrder()))
-                        .thenComparing(DomainAsnAggregate::asn, Comparator.nullsFirst(Comparator.naturalOrder())))
-                .toList();
-    }
-
-    @Override
     public List<UserDomainAsnAggregate> aggregateAllUsersByDomainAndAsn(Instant from, Instant to) {
         return mapper.selectAllUsersGroupedByDomainAndAsn(from, to).stream()
                 .map(row -> new UserDomainAsnAggregate(row.getUserId(), row.getFailureDomain(), row.getAsn(),
@@ -82,9 +49,5 @@ public class MybatisLinkReportRepository implements LinkReportRepository {
                 .map(row -> new DomainAsnAggregate(row.getFailureDomain(), row.getAsn(),
                         row.getSamples(), row.getAliveCount(), row.getFailovers()))
                 .toList();
-    }
-
-    /** Java 侧分组用的复合键：故障域 + ASN，两者都可能为 null */
-    private record DomainAsnKey(String failureDomain, String asn) {
     }
 }

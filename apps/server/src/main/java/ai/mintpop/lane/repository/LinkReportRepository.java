@@ -23,16 +23,11 @@ public interface LinkReportRepository {
     void deleteWindowsBefore(Instant before);
 
     /**
-     * 该用户在 [{@code from}, {@code to}) 区间内，按「故障域 × 运营商」分组聚合的成功率原始数据
-     * （samples/aliveCount/failovers 逐组求和）。三期分析维度只到故障域与运营商，不按节点——
-     * 同一故障域下的节点共用一台中转入口机，不是独立样本。
-     */
-    List<DomainAsnAggregate> aggregateByDomainAndAsn(Long userId, Instant from, Instant to);
-
-    /**
      * 全库范围「用户 × 故障域 × 运营商」聚合，SQL 层 GROUP BY——供定时告警扫描全部用户使用。
-     * 与 {@link #aggregateByDomainAndAsn} 的区别：那个方法是单用户、取出原始行后 Java 侧分组求和；
-     * 定时任务要扫全库，照那样写会是 N+1 加全表进内存，因此单独开一个方法把分组求和收进 SQL。
+     * 分析维度只到故障域与运营商，不按节点——同一故障域下的节点共用一台中转入口机，不是独立样本。
+     * <p>
+     * 分组求和收在 SQL 里而不是取出原始行后在 Java 侧分组：定时任务要扫全库，逐用户取原始行
+     * 会是 N+1 加全表进内存。
      */
     List<UserDomainAsnAggregate> aggregateAllUsersByDomainAndAsn(Instant from, Instant to);
 
