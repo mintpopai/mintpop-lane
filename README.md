@@ -180,6 +180,20 @@ UPDATE app_user SET role = 'MEMBER' WHERE email = '<用户邮箱>';  -- 撤销
 
 改完立即生效（每次请求都会重新查库取角色，无缓存）。
 
+## 运营商展示名
+
+管理端「链路健康」矩阵与飞书告警文案里的运营商名字取自 `asn_org` 表。这张表只在**首次**见到某个 ASN 时记一行——服务端处理心跳上报时反查 ASN，顺手把上游（ipwho.is）当时给的组织名写进去，**之后再也不覆盖**：上游对同一个 ASN 的文案会漂（今天 `China Telecom`、明天 `CHINANET-BACKBONE`），让它每次都盖一遍会让同一家运营商的名字在页面上跳来跳去。
+
+因此 `asn_org` 只是展示用的旁路数据，**管理端不提供编辑入口**（与「授予或撤销管理员」同一个理由：这类低频动作不值得一个页面，也没有操作日志可追溯）。改名或补名一律改库：
+
+```sql
+UPDATE asn_org SET org_name = 'China Telecom' WHERE asn = 'AS4134';
+-- 首次见到某 ASN 时若上游没给名字，矩阵与告警会显示 AS 号；补一行即可
+INSERT IGNORE INTO asn_org (asn, org_name, first_seen_at) VALUES ('AS4134', 'China Telecom', UTC_TIMESTAMP());
+```
+
+> 运营商维度的**键始终是 ASN**，名字只是贴上去的标签——改名不影响矩阵分组、也不影响告警去重，页面刷新即生效（每次查询都重读这张表，无缓存）。名字缺失时矩阵退回显示 AS 号本身，**这一列不会被藏掉**；`asn` 显示成「未知运营商」是另一回事——那是这批样本的 ASN 反查全失败，补 `asn_org` 也补不出来。`org_name` 列宽 64 字符，超长会被服务端截断。
+
 ## 日常操作
 
 | 操作 | 命令 |
