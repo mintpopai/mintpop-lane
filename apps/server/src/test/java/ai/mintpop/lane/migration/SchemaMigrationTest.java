@@ -669,13 +669,33 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("V24 建出 asn_org 表，asn 为主键、org_name 与 first_seen_at 非空且带中文注释")
+    @DisplayName("V24 建出 asn_org 表：asn 是唯一的主键列，org_name 与 first_seen_at 非空，"
+            + "asn / org_name / first_seen_at 三列都带中文注释")
     void migrationCreatesAsnOrgTable() throws Exception {
         try (Connection conn = dataSource.getConnection()) {
             assertThat(tableExists(conn, "asn_org")).isTrue();
             assertThat(columnComment(conn, "asn_org", "org_name")).contains("展示");
             assertThat(isNullable("asn_org", "org_name")).isFalse();
             assertThat(isNullable("asn_org", "first_seen_at")).isFalse();
+
+            // 主键只能是 asn 这一列。多带一列（例如把 org_name 也放进去）会让同一个 ASN 因上游
+            // 文案漂移落成多行，「只记首见展示名、之后不覆盖」的语义随之失效——ingest 侧靠
+            // INSERT IGNORE 撞唯一键来实现「有则不动」，键一宽就再也撞不上了
+            List<String> primaryKeyColumns = jdbc.queryForList("""
+                    SELECT column_name FROM information_schema.statistics
+                    WHERE table_schema = DATABASE() AND table_name = 'asn_org'
+                      AND index_name = 'PRIMARY'
+                    ORDER BY seq_in_index
+                    """, String.class);
+            assertThat(primaryKeyColumns).containsExactly("asn");
+
+            // 三列都要有中文注释：注释要落在数据库元数据上，不是只写在代码里
+            for (String column : List.of("asn", "org_name", "first_seen_at")) {
+                assertThat(columnComment(conn, "asn_org", column))
+                        .as("asn_org.%s 缺中文注释", column)
+                        .isNotBlank()
+                        .containsPattern("[一-龥]");
+            }
         }
     }
 
