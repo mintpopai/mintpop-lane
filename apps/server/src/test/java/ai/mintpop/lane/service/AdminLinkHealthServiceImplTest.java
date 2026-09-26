@@ -205,8 +205,30 @@ class AdminLinkHealthServiceImplTest {
 
         List<AsnCell> cells = service.getLinkHealth(7).domains().get(0).asns();
 
+        // 顺序按样本量倒序（100 / 50 / 10），见 cellsAreSortedBySamplesDescThenAsnAsc
         assertThat(cells).extracting(AsnCell::asn, AsnCell::orgName)
-                .containsExactly(tuple("", null), tuple("AS4134", "China Telecom"), tuple("AS9808", null));
+                .containsExactly(tuple("AS4134", "China Telecom"), tuple("AS9808", null), tuple("", null));
+    }
+
+    @Test
+    @DisplayName("格子按样本量倒序排，样本多的运营商排在前面；样本相同时按 ASN 串升序，空串 asn（未知运营商）"
+            + "因此排在同数那几格的最前")
+    void cellsAreSortedBySamplesDescThenAsnAsc() {
+        // 按 ASN 串字典序排会把「AS1 打头的小运营商」顶到第一列，而这张矩阵是用来看「哪家出问题」的：
+        // 目光该先落在流量最大的那几家上——占了大头的运营商成功率掉下去才是事故，
+        // 一天只有几个样本的运营商成功率 0% 多半只是噪声。故主序是样本量倒序。
+        // 样本相同再按 ASN 串升序，只是为了让同一次请求两次调用给出稳定顺序，不是业务要求。
+        when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of(
+                new DomainAsnAggregate(DOMAIN, "AS9808", 10, 9, 0),
+                new DomainAsnAggregate(DOMAIN, "AS4837", 100, 90, 0),
+                new DomainAsnAggregate(DOMAIN, "AS4134", 10, 10, 0),
+                new DomainAsnAggregate(DOMAIN, null, 10, 10, 0)));
+
+        List<AsnCell> cells = service.getLinkHealth(7).domains().get(0).asns();
+
+        assertThat(cells).extracting(AsnCell::asn, AsnCell::samples)
+                .containsExactly(tuple("AS4837", 100L),
+                        tuple("", 10L), tuple("AS4134", 10L), tuple("AS9808", 10L));
     }
 
     @Test

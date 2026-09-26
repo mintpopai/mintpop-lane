@@ -94,8 +94,9 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
      * 归一到这个约定），这里最后落到响应契约时再转成空串（响应契约的约定见
      * {@link LinkHealthResponse.AsnCell} 的类注释）。
      * <p>
-     * 分组与排序都只认 <b>ASN</b>，展示名是事后贴上去的标签：上游对同一个 ASN 的文案会漂
+     * 分组只认 <b>ASN</b>，展示名是事后贴上去的标签：上游对同一个 ASN 的文案会漂
      * （今天 China Telecom、明天 CHINANET-BACKBONE），让名字参与分组会把同一家运营商裂成两列。
+     * 格子的排序则按<b>样本量倒序</b>（同数再按 ASN 串升序兜稳定），理由见下方 cells 那段注释。
      * 名字从 {@code asn_org} <b>一次读全表</b>（几十行量级）后在内存里按 ASN 取，不在循环里逐个查库；
      * 查不到就留 null（前端退回显示 ASN 串），<b>不以"有没有名字"决定这一列出不出</b>——
      * 少一列等于凭空丢掉一批真实流量。
@@ -125,8 +126,13 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
 
         List<DomainRow> rows = new ArrayList<>();
         for (Map.Entry<String, List<AsnCell>> entry : cellsByDomain.entrySet()) {
+            // 主序是样本量倒序：这张矩阵是用来看「哪家运营商出问题」的，目光该先落在流量最大的
+            // 几家上——占大头的运营商成功率掉下去才是事故，一天只有几个样本的运营商 0% 多半是噪声。
+            // 按 ASN 串字典序排会把 AS1 打头的小运营商顶到第一列。样本相同再按 ASN 串升序，
+            // 只为让同一次请求两次调用给出稳定顺序（空串 asn 因此排在同数那几格最前），不是业务要求
             List<AsnCell> cells = entry.getValue().stream()
-                    .sorted(Comparator.comparing(AsnCell::asn))
+                    .sorted(Comparator.comparingLong(AsnCell::samples).reversed()
+                            .thenComparing(AsnCell::asn))
                     .toList();
             long domainSamples = cells.stream().mapToLong(AsnCell::samples).sum();
             long domainAlive = cells.stream().mapToLong(AsnCell::aliveCount).sum();
