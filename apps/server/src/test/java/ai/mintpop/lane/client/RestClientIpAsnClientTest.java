@@ -116,6 +116,23 @@ class RestClientIpAsnClientTest {
     }
 
     @Test
+    @DisplayName("4 字节 ASN（≥ 2^31）原样拼出，不因按 int 取值而溢出成负数")
+    void fourByteAsnIsNotTruncatedToNegativeInt() {
+        // ASN 自 RFC 6793 起是 32 位无符号数，上限 4294967295 已超出 Java int 的 2147483647。
+        // 按 intValue() 取值会让 4200000000 溢出成 -94967296，拼出「AS-94967296」这种
+        // 根本不存在的键：矩阵上多出一列鬼运营商，asn_org 里也按这个假键落一行展示名，
+        // 且同一个真实 ASN 在不同上报间不会稳定地溢出成同一个值时还会把它裂成几列。
+        // 4200000000 落在 RFC 6996 的私有 ASN 段（4200000000-4294967294），中转链路确实见得到
+        server.expect(requestTo(URL))
+                .andRespond(withSuccess(
+                        "{\"success\":true,\"connection\":{\"asn\":4200000000,\"isp\":\"Private ASN\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(client.lookup("203.0.113.9"))
+                .contains(new AsnInfo("AS4200000000", "Private ASN"));
+    }
+
+    @Test
     @DisplayName("既有的 lookupAsn 调用方零改动：默认实现委托 lookup 只取 ASN 段")
     void lookupAsnDelegatesToLookup() {
         server.expect(requestTo(URL))
