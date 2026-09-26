@@ -12,8 +12,9 @@ export default defineConfig({
     dirStyle: "nested",
   },
   server: {
-    // 5173 留给管理端，官网固定 5174，两个前端可同时起
-    port: 5174,
+    // 本地端口固定 6202（本项目占 6200 段：server 6200、admin 6201、website 6202、console 6203），
+    // strictPort 保证被占用时直接报错退出、绝不自己漂到别的端口
+    port: 6202,
     strictPort: true,
     proxy: {
       // dev 下把同源端点 /api/dist/downloads 转发到 R2 上的分发清单，
@@ -24,6 +25,11 @@ export default defineConfig({
         rewrite: () => "/lane/downloads.json",
       },
     },
+  },
+  // 本地预览构建产物（mise run preview-website）同样钉死端口，与 dev 错开可同时起
+  preview: {
+    port: 6205,
+    strictPort: true,
   },
   test: {
     // 组件测试要挂 DOM，与管理端统一用 jsdom（纯逻辑那几个 spec 在 jsdom 下照样跑）

@@ -62,7 +62,9 @@
 
    把 App ID 和 App Secret 记下来，都填进第 4 步的 `application.yml`：App ID 填 `spring.security.oauth2.client.registration.logto.client-id`，App Secret 填同级的 `client-secret`。
 
-   > 本地开发管理端时（`mise run run-admin`，Vite 默认端口 5173），需要在这个 Traditional Web 应用**额外追加**回调地址 `http://localhost:5173/auth/callback` 与登出回跳 `http://localhost:5173/auth/logout/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`），登录整段流程与线上一致，只是回调域名换成本机。本地开发控制台时（`mise run run-console`，端口 5175）同理，追加 `http://localhost:5175/auth/callback` 与 `http://localhost:5175/auth/logout/callback`。
+   > 本地开发管理端时（`mise run run-admin`，端口 6201），需要在这个 Traditional Web 应用**额外追加**回调地址 `http://localhost:6201/auth/callback` 与登出回跳 `http://localhost:6201/auth/logout/callback`——本地起的 Vite dev server 会把 `/api`、`/auth`、`/oauth2` 代理转发给本机服务端（`mise run run-server`，端口 6200），登录整段流程与线上一致，只是回调域名换成本机。本地开发控制台时（`mise run run-console`，端口 6203）同理，追加 `http://localhost:6203/auth/callback` 与 `http://localhost:6203/auth/logout/callback`。
+   >
+   > **本地端口固定、不许漂移**：本项目本地开发占用 6200 段——server `6200`、admin `6201`、website `6202`、console `6203`、官网预览 `6205`、桌面端（mintpop-lane-desktop）`6204`。前端全部用 strictPort，服务端端口写在本地 `apps/server/config/application.yml` 的 `server.port`（照示例配置里的注释解开），端口被占用时直接报错退出，**不会也不允许自己换端口**；遇到冲突先找出占用进程（`lsof -nP -iTCP:<端口> -sTCP:LISTEN`）处理掉，而不是改端口——Logto 里登记的本地回调、前端代理目标、桌面端默认服务端地址都依赖这几个固定值。
 
    > ⚠️ **部署约束**：管理端、控制台与 API 必须**各自同源**（同协议 + 同域名 + 同端口）分路径部署。这件事由**管理端与控制台容器各自内置的 nginx** 完成：都把 `/api`、`/auth`、`/oauth2` 反代到 server 容器（compose 内网），其余路径服务各自的静态站——宿主入口只需按 Host 把对应域名转给对应容器即可，见下文「对外暴露」。管理端与控制台的请求都是同源相对路径（`fetch("/api/...")`、登录入口 `/oauth2/authorization/logto`），换成 `admin.x.com`/`console.x.com` 与 `api.x.com` 这种跨子域形态，接口地址与登录入口都不再同源，会话 Cookie 也带不过去。接口前缀 `/api` 由服务端路由固定，已直接写在管理端与控制台代码里，部署侧无需、也没有地方配置它。
 

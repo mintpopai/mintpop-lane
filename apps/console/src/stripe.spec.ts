@@ -17,7 +17,7 @@ function fakeStripe(overrides: Partial<Stripe>): Stripe {
   return overrides as Stripe;
 }
 
-const RETURN_URL = "http://localhost:5175/payment/result?order_no=LN1";
+const RETURN_URL = "http://localhost:6203/payment/result?order_no=LN1";
 
 afterEach(() => vi.restoreAllMocks());
 

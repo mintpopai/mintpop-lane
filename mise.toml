@@ -40,33 +40,33 @@ run = "mvn -q dependency:go-offline"
 
 # —— 运行 ——
 [tasks.run-admin]
-description = "以开发模式启动管理端"
+description = "以开发模式启动管理端（端口 6201，被占用即报错退出）"
 dir = "apps/admin"
 run = "pnpm vite"
 
 [tasks.run-console]
-description = "以开发模式启动控制台（端口 5175）"
+description = "以开发模式启动控制台（端口 6203，被占用即报错退出）"
 dir = "apps/console"
 run = "pnpm vite"
 
 [tasks.run-website]
-description = "以开发模式启动官网"
+description = "以开发模式启动官网（端口 6202，被占用即报错退出）"
 dir = "apps/website"
 run = "pnpm vite"
 
 [tasks.preview-website]
-description = "本地预览官网构建产物（先跑 build-website）"
+description = "本地预览官网构建产物（先跑 build-website；端口 6205，被占用即报错退出）"
 dir = "apps/website"
 run = "pnpm vite preview"
 
 [tasks.run-server]
-description = "以开发模式启动服务端（配置读 apps/server/config/application.yml）"
+description = "以开发模式启动服务端（配置读 apps/server/config/application.yml，本地端口 6200 写在其中）"
 dir = "apps/server"
 run = "mvn spring-boot:run"
 
 [tasks.webhook-listen]
 description = "本地联调：用 Stripe CLI 把测试事件转发到本机服务端（需自行安装 stripe CLI 并 stripe login）"
-run = "stripe listen --forward-to localhost:8080/api/v1/payment/webhook/stripe --events payment_intent.succeeded,payment_intent.payment_failed"
+run = "stripe listen --forward-to localhost:6200/api/v1/payment/webhook/stripe --events payment_intent.succeeded,payment_intent.payment_failed"
 
 # —— 构建 ——
 [tasks.build-admin]

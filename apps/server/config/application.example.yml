@@ -5,10 +5,13 @@
 # 本地开发：mise run run-server 的工作目录是 apps/server，Spring Boot 启动时自动读取 ./config/application.yml。
 # 线上部署：复制到部署机的仓库根（docker-compose.yml 旁）改名 application.yml，由 compose 以只读卷挂到容器 /app/config/，见根 README.md。
 
-# 本地开发建议解开下面两行只绑回环；线上（容器内）必须保持注释——容器要绑 0.0.0.0，
+# 本地开发解开下面三行：只绑回环，并把端口固定为 6200（本项目本地占 6200 段：server 6200、admin 6201、
+# website 6202、console 6203，被占用即启动失败、不会自己换端口，前端代理与桌面端默认地址都指向它）。
+# 线上（容器内）必须保持注释——容器要绑 0.0.0.0、监听默认的 8080（各前端 nginx 反代的是 server:8080），
 # 不对外由 compose 的宿主端口只绑 127.0.0.1 保证。
 # server:
 #   address: 127.0.0.1
+#   port: 6200
 
 spring:
   datasource:

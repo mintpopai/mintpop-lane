@@ -24,7 +24,7 @@ class CookieOAuth2AuthorizationRequestRepositoryTest {
         return OAuth2AuthorizationRequest.authorizationCode()
                 .authorizationUri("http://127.0.0.1:9/oidc/auth")
                 .clientId("test-client-id")
-                .redirectUri("http://localhost:8080/auth/callback")
+                .redirectUri("http://localhost:6200/auth/callback")
                 .scopes(Set.of("openid", "profile", "email"))
                 .state("state-0123456789")
                 .additionalParameters(Map.of("code_challenge", "abc-challenge",
