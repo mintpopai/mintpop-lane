@@ -228,6 +228,29 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("格子端到端按样本量倒序、同数按 ASN 升序：合并两表后的总量决定顺序，而不是任一表内的量或 ASN 字典序")
+    void matrixCellsAreOrderedBySamplesDescEndToEnd() throws Exception {
+        int rawRetentionDays = linkReportProperties.getRawRetentionDays();
+        LocalDate olderDate = LocalDate.ofInstant(NOW, ZoneOffset.UTC).minusDays(rawRetentionDays + 1L);
+        // AS9808 原始表里最少（2），靠按天表的 50 合计 52 登顶——只看原始表会把它排到最后
+        insertRawWindow(userA, "jp.tsdns.top", "AS9808", NOW.minusSeconds(60), 2, 2);
+        insertDailyRow(userA, "jp.tsdns.top", "AS9808", olderDate, 50, 40);
+        // AS4837 与 AS4134 同为 20：并列时按 ASN 串升序，AS4134 在前
+        insertRawWindow(userB, "jp.tsdns.top", "AS4837", NOW.minusSeconds(60), 20, 18);
+        insertRawWindow(userA, "jp.tsdns.top", "AS4134", NOW.minusSeconds(120), 20, 19);
+        // AS1 字典序最小但样本最少，必须排在最后。窗口错开：upsertWindow 按「用户×窗口」去重，
+        // 同一用户同一窗口再写一条会覆盖上面 AS4837 那条
+        insertRawWindow(userB, "jp.tsdns.top", "AS1", NOW.minusSeconds(180), 3, 3);
+
+        JsonNode cells = findDomain(getLinkHealth(adminId, rawRetentionDays + 5).at("/data/domains"),
+                "jp.tsdns.top").get("asns");
+        List<String> order = new ArrayList<>();
+        cells.forEach(cell -> order.add(cell.get("asn").asText()));
+
+        assertThat(order).containsExactly("AS9808", "AS4134", "AS4837", "AS1");
+    }
+
+    @Test
     @DisplayName("原始表与按天聚合表里同一故障域×运营商的数据会合并求和")
     void matrixCombinesRawAndDailyTables() throws Exception {
         int rawRetentionDays = linkReportProperties.getRawRetentionDays();
