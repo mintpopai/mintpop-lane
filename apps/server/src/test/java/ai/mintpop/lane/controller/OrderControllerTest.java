@@ -175,6 +175,40 @@ class OrderControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("未支付订单达到上限（默认 5）后再下单报 510011；取消一张即腾出名额")
+    void payableOrderLimit() throws Exception {
+        String first = createOrder(buyerId, monthlyPlanId);
+        for (int i = 1; i < 5; i++) {
+            createOrder(buyerId, monthlyPlanId);
+        }
+
+        mockMvc.perform(post("/api/orders").header("Authorization", bearer(buyerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"planId\":" + monthlyPlanId + "}"))
+                .andExpect(jsonPath("$.code").value(510011));
+        assertThat(orderRepository.countPayable(buyerId)).isEqualTo(5);
+        // 上限按人计，别人不受影响
+        createOrder(otherId, monthlyPlanId);
+
+        mockMvc.perform(post("/api/orders/" + first + "/cancel").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.code").value(0));
+        createOrder(buyerId, monthlyPlanId);
+    }
+
+    @Test
+    @DisplayName("超时的未支付订单不占下单名额：下单前先懒惰过期再计数")
+    void timedOutOrdersDoNotCountTowardLimit() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            createOrder(buyerId, monthlyPlanId);
+        }
+        jdbc.update("UPDATE plan_order SET created_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 31 MINUTE) WHERE user_id = ?",
+                buyerId);
+
+        createOrder(buyerId, monthlyPlanId);
+        assertThat(orderRepository.countPayable(buyerId)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("已履约订单的列表与单笔都带订阅分配号；未履约为 null")
     void paidOrderCarriesAssignmentNo() throws Exception {
         String paid = createOrder(buyerId, monthlyPlanId);

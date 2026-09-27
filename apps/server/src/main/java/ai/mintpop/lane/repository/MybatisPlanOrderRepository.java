@@ -54,6 +54,13 @@ public class MybatisPlanOrderRepository implements PlanOrderRepository {
     }
 
     @Override
+    public long countPayable(Long userId) {
+        return mapper.selectCount(Wrappers.<PlanOrder>lambdaQuery()
+                .eq(PlanOrder::getUserId, userId)
+                .in(PlanOrder::getStatus, OrderStatus.PENDING, OrderStatus.FAILED));
+    }
+
+    @Override
     public boolean attachPaymentIntent(Long id, String provider, String intentId) {
         return mapper.update(null, Wrappers.<PlanOrder>lambdaUpdate()
                 .eq(PlanOrder::getId, id)

@@ -1,5 +1,6 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.config.OrderProperties;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.entity.Plan;
@@ -38,18 +39,20 @@ public class OrderService {
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final OrderExpiryService expiryService;
+    private final OrderProperties properties;
     private final PaymentIntentCanceller intentCanceller;
     private final Clock clock;
 
     public OrderService(PlanOrderRepository orderRepository, PlanRepository planRepository,
                         UserRepository userRepository, SubscriptionRepository subscriptionRepository,
-                        OrderExpiryService expiryService,
+                        OrderExpiryService expiryService, OrderProperties properties,
                         PaymentIntentCanceller intentCanceller, Clock clock) {
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.expiryService = expiryService;
+        this.properties = properties;
         this.intentCanceller = intentCanceller;
         this.clock = clock;
     }
@@ -63,6 +66,12 @@ public class OrderService {
         Plan plan = planRepository.findById(planId)
                 .filter(p -> Boolean.TRUE.equals(p.getEnabled()))
                 .orElseThrow(() -> new BizException(BizCodeEnum.PLAN_NOT_AVAILABLE));
+        // 先懒惰过期再计数：超时的单已经付不了，不该继续占名额。
+        // 查-判-写不加锁，并发下单可能多出一两张——这是防刷的软上限，不是需要严格守住的库存
+        expiryService.expireTimedOut(userId);
+        if (orderRepository.countPayable(userId) >= properties.getMaxPayablePerUser()) {
+            throw new BizException(BizCodeEnum.ORDER_PAYABLE_LIMIT);
+        }
 
         PlanOrder order = new PlanOrder();
         order.setUserId(userId);
