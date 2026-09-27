@@ -7,7 +7,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("美国落地判定：启发式，宁可漏判不可误判")
+@DisplayName("美国落地判定：只认美国国旗或 [US]，宁可漏判不可误判")
 class UsLandingNodesTest {
 
     @ParameterizedTest
@@ -15,8 +15,7 @@ class UsLandingNodesTest {
     @ValueSource(strings = {
             "🇺🇸[US]Santa Clara 01-GPT优化",
             "[US]San Jose07",
-            "United States 03",
-            "美国-洛杉矶 01",
+            "【US】San Jose08",
             "🇺🇸LosAngeles",
     })
     void matchesUsNodeNames(String name) {
@@ -33,6 +32,9 @@ class UsLandingNodesTest {
             "Bonus 节点",                  // 同上
             "完美线路",                     // 裸「美」会命中
             "南美-圣保罗",                  // 同上
+            "United States 03",             // 只认国旗与方括号国别码，全称不认
+            "美国-洛杉矶 01",                // 同上，中文国名也不认
+            "[境外用户专用]GPT01",           // 现役机场里名字不带国别的节点
     })
     void doesNotMatchNonUsNames(String name) {
         assertThat(UsLandingNodes.isUsLanding(name)).isFalse();

@@ -443,22 +443,6 @@ export interface NodeGroupResponse {
   updatedAt: string;
 }
 
-/** 订阅预览里的一个条目，只有展示字段 */
-export interface SubPreviewNode {
-  sourceName: string;
-  sourceType: string;
-  serverAddr: string;
-  port: number;
-  /** 名称像「剩余流量/到期时间」的信息假条目，默认不勾选 */
-  suspectedInfo: boolean;
-  /** 该分组内是否已入池；新链接预览恒为 false */
-  existed: boolean;
-}
-
-export interface SubPreviewRequest {
-  subUrl: string;
-}
-
 /** 订阅尽调入参：候选机场的试用订阅链接 */
 export interface SubAuditRequest {
   subUrl: string;
@@ -509,10 +493,10 @@ export interface SubAuditResponse {
   expiresAt: string | null;
 }
 
+/** 建分组入参：只给分组名与链接，订阅里的美国节点由服务端自动导入 */
 export interface NodeGroupCreateRequest {
   name: string;
   subUrl: string;
-  selectedNames: string[];
   remark: string;
 }
 
@@ -520,10 +504,6 @@ export interface NodeGroupCreateRequest {
 export interface NodeGroupRenameRequest {
   name: string;
   remark: string;
-}
-
-export interface NodeGroupImportRequest {
-  selectedNames: string[];
 }
 
 /** 管理端的套餐视图 */

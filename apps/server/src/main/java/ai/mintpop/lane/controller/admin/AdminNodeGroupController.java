@@ -1,14 +1,11 @@
 package ai.mintpop.lane.controller.admin;
 
 import ai.mintpop.lane.request.NodeGroupCreateRequest;
-import ai.mintpop.lane.request.NodeGroupImportRequest;
 import ai.mintpop.lane.request.NodeGroupRenameRequest;
 import ai.mintpop.lane.request.SubAuditRequest;
-import ai.mintpop.lane.request.SubPreviewRequest;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.response.NodeGroupResponse;
 import ai.mintpop.lane.response.SubAuditResponse;
-import ai.mintpop.lane.response.SubPreviewNodeResponse;
 import ai.mintpop.lane.service.AdminNodeGroupService;
 import ai.mintpop.lane.service.SubAuditService;
 import jakarta.validation.Valid;
@@ -36,11 +33,6 @@ public class AdminNodeGroupController {
         this.subAuditService = subAuditService;
     }
 
-    @PostMapping("/preview")
-    public ApiResponse<List<SubPreviewNodeResponse>> preview(@Valid @RequestBody SubPreviewRequest request) {
-        return ApiResponse.success(adminNodeGroupService.preview(request.getSubUrl()));
-    }
-
     /** 采购尽调：候选机场的试用订阅是否与库里已有节点撞故障域。只读，不落库 */
     @PostMapping("/audit")
     public ApiResponse<SubAuditResponse> audit(@Valid @RequestBody SubAuditRequest request) {
@@ -63,14 +55,10 @@ public class AdminNodeGroupController {
         return ApiResponse.success();
     }
 
-    @PostMapping("/{id}/refresh-preview")
-    public ApiResponse<List<SubPreviewNodeResponse>> refreshPreview(@PathVariable Long id) {
-        return ApiResponse.success(adminNodeGroupService.refreshPreview(id));
-    }
-
+    /** 用保存的链接重新拉取，自动导入其中的美国节点 */
     @PostMapping("/{id}/import")
-    public ApiResponse<Void> importNodes(@PathVariable Long id, @Valid @RequestBody NodeGroupImportRequest request) {
-        adminNodeGroupService.importNodes(id, request);
+    public ApiResponse<Void> importNodes(@PathVariable Long id) {
+        adminNodeGroupService.importNodes(id);
         return ApiResponse.success();
     }
 

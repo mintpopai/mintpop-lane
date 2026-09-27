@@ -49,7 +49,7 @@ class SubAuditServiceImplTest {
             proxies:
               - { name: '🇺🇸[US]San Jose07', type: anytls, server: us07a.example.com, port: 35668, password: p }
               - { name: '🇭🇰[HK]HongKong01', type: anytls, server: hk01a.example.com, port: 35355, password: p }
-              - { name: 'United States 03', type: anytls, server: us03a.example.com, port: 35663, password: p }
+              - { name: '【US】San Jose03', type: anytls, server: us03a.example.com, port: 35663, password: p }
             """;
 
     @Mock private SubFetchClient subFetchClient;
@@ -112,7 +112,7 @@ class SubAuditServiceImplTest {
     @DisplayName("按节点名启发式识别美国落地节点，并把判定结果原样列出供人核对")
     void identifiesUsNodesByName() {
         SubAuditResponse report = service.audit(SUB_URL);
-        assertThat(report.usNodeNames()).containsExactly("🇺🇸[US]San Jose07", "United States 03");
+        assertThat(report.usNodeNames()).containsExactly("🇺🇸[US]San Jose07", "【US】San Jose03");
         assertThat(report.usNodeCount()).isEqualTo(2);
         assertThat(report.totalNodes()).isEqualTo(3);
     }

@@ -43,7 +43,7 @@ public enum BizCodeEnum {
     SUB_FETCH_FAILED(410011, "订阅拉取失败：链接无法访问或返回错误"),
     SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点"),
     NODE_GROUP_IN_USE(410013, "分组内有节点被用户引用，无法删除"),
-    SELECTED_NODE_MISSING(410014, "勾选的节点在订阅中已不存在，请重新预览"),
+    // 410014 曾是 SELECTED_NODE_MISSING（导入要逐个勾选的时代），改为自动导入美国节点后废弃。号位不复用
     NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名"),
     LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配"),
     PLAN_NOT_FOUND(410017, "套餐不存在"),
@@ -80,6 +80,8 @@ public enum BizCodeEnum {
     // 自动分配落空必须报错而不是清空：管理员显式要了「按故障域分配一组」，
     // 静默清空等于把人下线、界面还不提示（二期上线定时刷新未跑首轮时全库 failure_domain 可能都是 null）
     FRONT_NODE_UNALLOCATABLE(410048, "没有可分配的美国前置节点，无法自动分配"),
+    // 导入不再逐个勾选、自动取美国节点：一个都没有时必须报错，不建一个空分组冒充导入成功
+    SUB_NO_US_NODES(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

@@ -11,7 +11,6 @@ import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeGroupCreateRequest;
-import ai.mintpop.lane.request.NodeGroupImportRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +25,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -59,7 +57,7 @@ class AdminNodeGroupServiceImplTest {
 
     private static final String SUB_YAML = """
             proxies:
-              - { name: 'US-01', type: anytls, server: hk01a.t11-a.app, port: 35660, password: p }
+              - { name: '🇺🇸[US]01', type: anytls, server: hk01a.t11-a.app, port: 35660, password: p }
             """;
 
     @BeforeEach
@@ -95,12 +93,10 @@ class AdminNodeGroupServiceImplTest {
     @DisplayName("新建节点时写入解析到的故障域与解析时间")
     void writesFailureDomainOnCreate() {
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(1L, "US-01")).thenReturn(Optional.empty());
+        when(nodeRepository.findByGroupIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve("hk01a.t11-a.app")).thenReturn("hk.tsdns.top");
 
-        NodeGroupImportRequest request = new NodeGroupImportRequest();
-        request.setSelectedNames(List.of("US-01"));
-        service.importNodes(1L, request);
+        service.importNodes(1L);
 
         ArgumentCaptor<ProxyNodeDto> captor = ArgumentCaptor.forClass(ProxyNodeDto.class);
         verify(nodeRepository).create(captor.capture());
@@ -113,17 +109,15 @@ class AdminNodeGroupServiceImplTest {
     void keepsPreviousFailureDomainWhenResolveFails() {
         ProxyNodeDto existing = new ProxyNodeDto();
         existing.setId(7L);
-        existing.setSourceName("US-01");
+        existing.setSourceName("🇺🇸[US]01");
         existing.setFailureDomain("jp.tsdns.top");
         existing.setFailureDomainCheckedAt(Instant.parse("2026-09-01T00:00:00Z"));
 
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(1L, "US-01")).thenReturn(Optional.of(existing));
+        when(nodeRepository.findByGroupIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.of(existing));
         when(failureDomainResolver.resolve(anyString())).thenReturn(null);
 
-        NodeGroupImportRequest request = new NodeGroupImportRequest();
-        request.setSelectedNames(List.of("US-01"));
-        assertThatCode(() -> service.importNodes(1L, request)).doesNotThrowAnyException();
+        assertThatCode(() -> service.importNodes(1L)).doesNotThrowAnyException();
 
         ArgumentCaptor<ProxyNodeDto> captor = ArgumentCaptor.forClass(ProxyNodeDto.class);
         verify(nodeRepository).update(captor.capture());
@@ -140,13 +134,11 @@ class AdminNodeGroupServiceImplTest {
         when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
-                  - { name: 'US-01', type: anytls, server: hk01a.t11-a.app, port: 35660, password: p }
-                  - { name: 'US-02', type: anytls, server: hk01a.t11-a.app, port: 35661, password: p }
+                  - { name: '🇺🇸[US]01', type: anytls, server: hk01a.t11-a.app, port: 35660, password: p }
+                  - { name: '🇺🇸[US]02', type: anytls, server: hk01a.t11-a.app, port: 35661, password: p }
                 """, null, null, null, null));
 
-        NodeGroupImportRequest request = new NodeGroupImportRequest();
-        request.setSelectedNames(List.of("US-01", "US-02"));
-        service.importNodes(1L, request);
+        service.importNodes(1L);
 
         verify(failureDomainResolver, times(1)).resolve("hk01a.t11-a.app");
     }
@@ -161,7 +153,6 @@ class AdminNodeGroupServiceImplTest {
         NodeGroupCreateRequest request = new NodeGroupCreateRequest();
         request.setName("新机场");
         request.setSubUrl("https://example.com/sub?token=y");
-        request.setSelectedNames(List.of("US-01"));
 
         Long groupId = service.create(request);
 
@@ -175,27 +166,26 @@ class AdminNodeGroupServiceImplTest {
     }
 
     @Test
-    @DisplayName("只为勾选的节点解析故障域：订阅里几十个节点、只导入其中几个时，不为没勾的白查一次 DNS")
-    void resolvesOnlySelectedNodes() {
+    @DisplayName("只导入美国节点，也只为它们解析故障域：订阅里几十个节点、只导入其中几个时，不为其余的白查一次 DNS")
+    void resolvesOnlyUsNodes() {
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
         when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
-                  - { name: 'US-01', type: anytls, server: us01a.t11-a.app, port: 35660, password: p }
-                  - { name: 'HK-99', type: anytls, server: hk99a.t11-a.app, port: 35355, password: p }
+                  - { name: '🇺🇸[US]01', type: anytls, server: us01a.t11-a.app, port: 35660, password: p }
+                  - { name: '🇭🇰[HK]99', type: anytls, server: hk99a.t11-a.app, port: 35355, password: p }
                 """, null, null, null, null));
 
-        NodeGroupImportRequest request = new NodeGroupImportRequest();
-        request.setSelectedNames(List.of("US-01"));
-        service.importNodes(1L, request);
+        service.importNodes(1L);
 
         verify(failureDomainResolver).resolve("us01a.t11-a.app");
         verify(failureDomainResolver, never()).resolve("hk99a.t11-a.app");
+        verify(nodeRepository, times(1)).create(any());
     }
 
     @Test
-    @DisplayName("机场塞的伪条目即便被勾中也不查 DNS：它不是节点，server 字段也不是真实中转入口")
+    @DisplayName("机场塞的伪条目不导入也不查 DNS：它不是节点，server 字段也不是真实中转入口")
     void skipsSuspectedInfoEntries() {
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
         when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
@@ -203,14 +193,13 @@ class AdminNodeGroupServiceImplTest {
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
                   - { name: '剩余流量：18.2 GB', type: anytls, server: info.t11-a.app, port: 1, password: p }
-                  - { name: 'US-01', type: anytls, server: us01a.t11-a.app, port: 35660, password: p }
+                  - { name: '🇺🇸[US]01', type: anytls, server: us01a.t11-a.app, port: 35660, password: p }
                 """, null, null, null, null));
 
-        NodeGroupImportRequest request = new NodeGroupImportRequest();
-        request.setSelectedNames(List.of("剩余流量：18.2 GB", "US-01"));
-        service.importNodes(1L, request);
+        service.importNodes(1L);
 
         verify(failureDomainResolver, never()).resolve("info.t11-a.app");
         verify(failureDomainResolver).resolve("us01a.t11-a.app");
+        verify(nodeRepository, times(1)).create(any());
     }
 }
