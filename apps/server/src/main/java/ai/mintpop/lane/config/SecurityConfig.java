@@ -1,6 +1,7 @@
 package ai.mintpop.lane.config;
 
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.security.CachingOidcIdTokenDecoderFactory;
 import ai.mintpop.lane.security.CookieOAuth2AuthorizationRequestRepository;
 import ai.mintpop.lane.security.DesktopAwareAuthorizationRequestResolver;
 import ai.mintpop.lane.security.DesktopFlowCookie;
@@ -17,7 +18,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.client.oidc.authentication.OidcIdTokenDecoderFactory;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
@@ -104,11 +104,12 @@ public class SecurityConfig {
      * ID Token 验签算法对齐 Logto：其 JWKS 与发现文档的
      * id_token_signing_alg_values_supported 均只有 ES384，而 Spring Security 默认只认 RS256，
      * 不显式指定会在回调时报 "Another algorithm expected"。Logto 轮换签名算法时需同步调整。
+     * <p>
+     * 不用框架默认的 OidcIdTokenDecoderFactory：它每次登录新建解码器、拉 JWKS 只给 500ms，
+     * 冷连接首拉常超时，登录落到「登录未能完成」（详见 CachingOidcIdTokenDecoderFactory）。
      */
     @Bean
     public JwtDecoderFactory<ClientRegistration> idTokenDecoderFactory() {
-        OidcIdTokenDecoderFactory factory = new OidcIdTokenDecoderFactory();
-        factory.setJwsAlgorithmResolver(registration -> SignatureAlgorithm.ES384);
-        return factory;
+        return new CachingOidcIdTokenDecoderFactory(SignatureAlgorithm.ES384);
     }
 }
