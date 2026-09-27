@@ -164,12 +164,12 @@ public class AdminUserServiceImpl implements AdminUserService {
     /**
      * 把入参里<b>显式声明</b>的意图（{@link FrontAction}）翻译成对 user_front_node 的动作。
      * <p>
-     * 这里<b>不做任何取值比较</b>——尤其不比较 {@code request.getFrontNodeId()} 与库里现值。
+     * 这里<b>不做任何取值比较</b>——不拿入参与库里现值比对去反推意图。
      * 这个接口是整体保存，调用方带回来的取值只是它打开页面那一刻的快照：
      * <ul>
      *   <li>快照可能过期（另一个标签页、另一个管理员、后台重分配改过这个用户的第一跳），
-     *       「与现值不同」就会被误读成「管理员这次显式指定了单个节点」，把整组静默砍成一个；</li>
-     *   <li>「把这个用户钉死到他当前的主节点这一个」与「这次根本没动第一跳」取值完全相同，
+     *       比值就会判错；</li>
+     *   <li>「按当前节点池重新分配一组」与「这次根本没动第一跳」回填取值相同，
      *       靠比值永远分不开，前者于是成了表达不出来的盲区。</li>
      * </ul>
      * 两条都是「从取值反推意图」的必然产物，所以意图一律由调用方显式说出来，服务端只做翻译。
@@ -178,14 +178,6 @@ public class AdminUserServiceImpl implements AdminUserService {
         return switch (request.getFrontAction()) {
             case KEEP -> FrontAssignment.keep(user.getFrontNodeId());
             case CLEAR -> FrontAssignment.clear();
-            case PIN -> {
-                if (request.getFrontNodeId() == null) {
-                    // 意图是「钉死到某一个节点」却没说是哪个：直接报错，不猜、也不退化成别的处置
-                    throw new BizException(BizCodeEnum.PARAM_INVALID);
-                }
-                validateNode(request.getFrontNodeId(), NodeRole.FRONT);
-                yield FrontAssignment.replace(request.getFrontNodeId(), List.of(request.getFrontNodeId()));
-            }
             case AUTO -> {
                 FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
                 if (allocation.nodeIds().isEmpty()) {
@@ -209,18 +201,6 @@ public class AdminUserServiceImpl implements AdminUserService {
         // user_front_node 对 app_user 的外键带 ON DELETE CASCADE，关联行由数据库自动清掉，
         // 与 subscription/user_device 等表一致，不需要应用层重复处理
         userRepository.deleteById(id);
-    }
-
-    private void validateNode(Long nodeId, NodeRole expectedRole) {
-        ProxyNodeDto node = nodeRepository.findById(nodeId)
-                .orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
-        if (node.getRole() != expectedRole) {
-            throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
-        }
-        // 只有 PIN 走到这里，是管理员显式指定的节点：禁用的节点不许新分配出去
-        if (node.getStatus() != NodeStatus.ENABLED) {
-            throw new BizException(BizCodeEnum.NODE_DISABLED);
-        }
     }
 
     /**

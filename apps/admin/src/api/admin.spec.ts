@@ -176,42 +176,33 @@ describe("createAdminApi", () => {
     const { http, request } = fakeClient();
     const api = createAdminApi(http);
 
-    await api.previewSub({ subUrl: "https://sub.example.com/c?token=t" });
     await api.createNodeGroup({
       name: "机场A",
       subUrl: "https://sub.example.com/c?token=t",
-      selectedNames: ["香港-01"],
       remark: "",
     });
     await api.listNodeGroups();
     await api.renameNodeGroup(3, { name: "机场A-新名", remark: "" });
-    await api.refreshPreviewNodeGroup(3);
-    await api.importNodeGroup(3, { selectedNames: ["新加坡-01"] });
+    await api.importNodeGroup(3);
     await api.deleteNodeGroup(3);
 
-    expect(request).toHaveBeenNthCalledWith(1, "/admin/node-groups/preview", {
+    expect(request).toHaveBeenNthCalledWith(1, "/admin/node-groups", {
       method: "POST",
-      body: JSON.stringify({ subUrl: "https://sub.example.com/c?token=t" }),
+      body: JSON.stringify({
+        name: "机场A",
+        subUrl: "https://sub.example.com/c?token=t",
+        remark: "",
+      }),
     });
+    expect(request).toHaveBeenNthCalledWith(2, "/admin/node-groups");
     expect(request).toHaveBeenNthCalledWith(
-      2,
-      "/admin/node-groups",
-      expect.objectContaining({ method: "POST" }),
-    );
-    expect(request).toHaveBeenNthCalledWith(3, "/admin/node-groups");
-    expect(request).toHaveBeenNthCalledWith(
-      4,
+      3,
       "/admin/node-groups/3",
       expect.objectContaining({ method: "PUT" }),
     );
-    expect(request).toHaveBeenNthCalledWith(5, "/admin/node-groups/3/refresh-preview", {
-      method: "POST",
-    });
-    expect(request).toHaveBeenNthCalledWith(6, "/admin/node-groups/3/import", {
-      method: "POST",
-      body: JSON.stringify({ selectedNames: ["新加坡-01"] }),
-    });
-    expect(request).toHaveBeenNthCalledWith(7, "/admin/node-groups/3", { method: "DELETE" });
+    // 重新拉取不带请求体：导入哪些节点由服务端按美国判定自动决定
+    expect(request).toHaveBeenNthCalledWith(4, "/admin/node-groups/3/import", { method: "POST" });
+    expect(request).toHaveBeenNthCalledWith(5, "/admin/node-groups/3", { method: "DELETE" });
   });
 
   it("尽调接口打到 /admin/node-groups/audit，报告原样透传给调用方", async () => {

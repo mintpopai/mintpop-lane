@@ -8,15 +8,15 @@ import type {
 } from "../api/types";
 
 /**
- * 第一跳下拉里那个「自动分配」档位。它不是节点 id，而是一个动作，
- * 与具体节点 id、以及表示「不分配」的 null 并列成三态。
+ * 第一跳下拉里那个「自动分配」档位。它是一个动作，与表示「不分配」的 null 并列成两态。
+ * 第一跳不开放手工指定节点：节点随订阅刷新会增减，手工钉死的用户跟不上变化。
  */
 export const FRONT_SELECTION = {
   AUTO_ALLOCATE: "AUTO_ALLOCATE",
 } as const;
 
-/** 第一跳下拉的取值：节点 id / null＝不分配 / AUTO_ALLOCATE＝按故障域自动分配一组 */
-export type FrontSelection = number | null | (typeof FRONT_SELECTION)[keyof typeof FRONT_SELECTION];
+/** 第一跳下拉的取值：null＝不分配 / AUTO_ALLOCATE＝按故障域自动分配一组 */
+export type FrontSelection = null | (typeof FRONT_SELECTION)[keyof typeof FRONT_SELECTION];
 
 export interface UserFormModel {
   id: number;
@@ -26,8 +26,6 @@ export interface UserFormModel {
    * 绝不该顺手动别人的前置组；只有链路卡上真的操作了第一跳下拉才会变成别的值。
    */
   frontAction: FrontAction;
-  /** 第一跳主节点 id，只在 frontAction 为 PIN 时有意义，其余三态一律 null */
-  frontNodeId: number | null;
   landNodeId: number | null;
   /**
    * 管理员自用说明。刻意设成必填而不是可选：更新接口是整体保存，
@@ -43,9 +41,6 @@ export function userToForm(user: AdminUserResponse): UserFormModel {
     status: user.status,
     // 第一跳的处置是一次性意图、不是用户身上的状态，回填永远是「这次没动它」
     frontAction: FRONT_ACTION.KEEP,
-    // KEEP 下服务端忽略 frontNodeId，这里就回填 null，让「这个字段此刻无意义」在数据上也成立：
-    // 回填用户当前的主节点只会让下一个人以为它被用到了，而那个值还可能是过期快照
-    frontNodeId: null,
     landNodeId: user.landNodeId,
     // 服务端没写备注时回 null，输入框要的是空串
     remark: user.remark ?? "",
@@ -53,20 +48,12 @@ export function userToForm(user: AdminUserResponse): UserFormModel {
 }
 
 /**
- * 把第一跳下拉的三态取值翻译成接口上的两个字段。
- * 下拉的三个档位与服务端四态里的三个一一对应；第四态 KEEP 不在下拉里——
+ * 把第一跳下拉的两态取值翻译成接口上的处置。
+ * 下拉的两个档位与服务端三态里的两个一一对应；第三态 KEEP 不在下拉里——
  * 它表示「这次压根没碰这个下拉」，由调用方（详情页的 frontTouched）决定，见 UserDetailView。
  */
-export function frontSelectionToPayload(
-  selection: FrontSelection,
-): Pick<UserFormModel, "frontAction" | "frontNodeId"> {
-  if (selection === FRONT_SELECTION.AUTO_ALLOCATE) {
-    return { frontAction: FRONT_ACTION.AUTO, frontNodeId: null };
-  }
-  if (selection === null) {
-    return { frontAction: FRONT_ACTION.CLEAR, frontNodeId: null };
-  }
-  return { frontAction: FRONT_ACTION.PIN, frontNodeId: selection };
+export function frontSelectionToAction(selection: FrontSelection): FrontAction {
+  return selection === FRONT_SELECTION.AUTO_ALLOCATE ? FRONT_ACTION.AUTO : FRONT_ACTION.CLEAR;
 }
 
 export function buildUserPayload(form: UserFormModel): UserSaveRequest {
@@ -75,15 +62,9 @@ export function buildUserPayload(form: UserFormModel): UserSaveRequest {
     frontAction: form.frontAction,
     // 下拉清空时可能产出 undefined 而非 null，这里统一收成 null，
     // 让「未分配」在接口上只有一种表示，类型契约才与实际下发的 JSON 一致
-    frontNodeId: form.frontNodeId ?? null,
     landNodeId: form.landNodeId ?? null,
     remark: form.remark.trim(),
   };
-}
-
-/** 可分配的第一跳节点：角色对、且启用 */
-export function selectableFrontNodes(nodes: AdminNodeResponse[]): AdminNodeResponse[] {
-  return nodes.filter((node) => node.role === "FRONT" && node.status === "ENABLED");
 }
 
 /**

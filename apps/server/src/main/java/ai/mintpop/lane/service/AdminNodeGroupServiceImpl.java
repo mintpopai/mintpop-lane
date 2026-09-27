@@ -15,10 +15,9 @@ import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeGroupCreateRequest;
-import ai.mintpop.lane.request.NodeGroupImportRequest;
 import ai.mintpop.lane.request.NodeGroupRenameRequest;
 import ai.mintpop.lane.response.NodeGroupResponse;
-import ai.mintpop.lane.response.SubPreviewNodeResponse;
+import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +26,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.net.URI;
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 @Service
@@ -68,13 +65,6 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     }
 
     @Override
-    public List<SubPreviewNodeResponse> preview(String subUrl) {
-        return fetchAndParse(subUrl).nodes().stream()
-                .map(node -> toPreview(node, false))
-                .toList();
-    }
-
-    @Override
     public Long create(NodeGroupCreateRequest request) {
         if (groupRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.NODE_GROUP_NAME_DUPLICATED);
@@ -83,8 +73,8 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建分组 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
         FetchResult fetched = fetchAndParse(request.getSubUrl());
-        Map<String, String> failureDomains =
-                failureDomainSyncer.resolve(selectedNodes(fetched.nodes(), request.getSelectedNames()));
+        List<SubNode> usNodes = usLandingNodes(fetched.nodes());
+        Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
 
         NodeGroupDto group = new NodeGroupDto();
         group.setName(request.getName());
@@ -94,7 +84,7 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
 
         Long groupId = transactionTemplate.execute(status -> {
             Long id = wrapUniqueViolation(() -> groupRepository.create(group));
-            importNodes(id, fetched.nodes(), request.getSelectedNames(), failureDomains);
+            importNodes(id, usNodes, failureDomains);
             return id;
         });
         // groupRepository.create 不会把自增主键回写到传入的 group 上，这里补上，
@@ -140,26 +130,17 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
     }
 
     @Override
-    public List<SubPreviewNodeResponse> refreshPreview(Long id) {
-        NodeGroupDto group = getGroup(id);
-        return fetchAndParse(group.getSubUrl()).nodes().stream()
-                .map(node -> toPreview(node,
-                        nodeRepository.findByGroupIdAndSourceName(id, node.sourceName()).isPresent()))
-                .toList();
-    }
-
-    @Override
-    public void importNodes(Long id, NodeGroupImportRequest request) {
+    public void importNodes(Long id) {
         // 取分组、拉取解析都是只读操作，同样挪到事务外，避免外呼期间占用数据库连接；
         // 只有真正落库的「更新分组额度信息 + 导入节点」交给 transactionTemplate 包事务
         NodeGroupDto group = getGroup(id);
         FetchResult fetched = fetchAndParse(group.getSubUrl());
-        Map<String, String> failureDomains =
-                failureDomainSyncer.resolve(selectedNodes(fetched.nodes(), request.getSelectedNames()));
+        List<SubNode> usNodes = usLandingNodes(fetched.nodes());
+        Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
         applyTrafficInfo(group, fetched.subFetchResult());
         transactionTemplate.executeWithoutResult(status -> {
             groupRepository.update(group);
-            importNodes(id, fetched.nodes(), request.getSelectedNames(), failureDomains);
+            importNodes(id, usNodes, failureDomains);
         });
         // 放在事务外：它自己会视情况 update 落档位，且含飞书通知提交，不应牵连节点导入的事务
         trafficAlertService.checkAndNotify(group, fetched.subFetchResult());
@@ -222,25 +203,29 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
         group.setFetchedAt(Instant.now());
     }
 
-    private SubPreviewNodeResponse toPreview(SubNode node, boolean existed) {
-        return new SubPreviewNodeResponse(node.sourceName(), node.sourceType(),
-                node.serverAddr(), node.port(), node.suspectedInfo(), existed);
+    /**
+     * 从订阅里挑出要导入的节点：判定为美国落地（见 {@link UsLandingNodes}）的真节点，按原始节点名去重。
+     * 不再让管理员逐个勾选——LAND 只接受美国来源，非美国节点入池也分配不出去；机场可枚举、
+     * 命名规则写死，判定结果就是导入结果。一个都没有时报错，不建空分组。
+     */
+    private List<SubNode> usLandingNodes(List<SubNode> nodes) {
+        Map<String, SubNode> byName = new LinkedHashMap<>();
+        nodes.stream()
+                .filter(node -> !node.suspectedInfo() && UsLandingNodes.isUsLanding(node.sourceName()))
+                .forEach(node -> byName.putIfAbsent(node.sourceName(), node));
+        if (byName.isEmpty()) {
+            throw new BizException(BizCodeEnum.SUB_NO_US_NODES);
+        }
+        return List.copyOf(byName.values());
     }
 
     /**
-     * 按勾选把订阅节点写进分组：同组内 sourceName 已存在的原地更新参数
+     * 把订阅节点写进分组：同组内 sourceName 已存在的原地更新参数
      * （名称/状态/备注是管理员的手工痕迹，不动），不存在的新建入库。
      */
-    private void importNodes(Long groupId, List<SubNode> nodes, List<String> selectedNames,
-                              Map<String, String> failureDomains) {
-        Map<String, SubNode> nodesByName = new LinkedHashMap<>();
-        nodes.forEach(node -> nodesByName.putIfAbsent(node.sourceName(), node));
-
-        for (String selected : selectedNames) {
-            SubNode sub = nodesByName.get(selected);
-            if (sub == null) {
-                throw new BizException(BizCodeEnum.SELECTED_NODE_MISSING);
-            }
+    private void importNodes(Long groupId, List<SubNode> nodes, Map<String, String> failureDomains) {
+        for (SubNode sub : nodes) {
+            String selected = sub.sourceName();
             Optional<ProxyNodeDto> existing = nodeRepository.findByGroupIdAndSourceName(groupId, selected);
             if (existing.isPresent()) {
                 ProxyNodeDto node = existing.get();
@@ -268,16 +253,6 @@ public class AdminNodeGroupServiceImpl implements AdminNodeGroupService {
                 nodeRepository.create(node);
             }
         }
-    }
-
-    /**
-     * 只留本次勾选的节点，交给 {@link FailureDomainSyncer} 解析故障域。
-     * 订阅里有 81 个节点、真正要导入的可能只有 12 个，为没勾选的节点各查一次 DNS 纯属白跑；
-     * 伪条目的剔除由 syncer 统一负责，这里只管「勾了哪些」。
-     */
-    private List<SubNode> selectedNodes(List<SubNode> nodes, List<String> selectedNames) {
-        Set<String> selected = new LinkedHashSet<>(selectedNames);
-        return nodes.stream().filter(node -> selected.contains(node.sourceName())).toList();
     }
 
     /** 撞全局唯一名时加「 (2)」「 (3)」后缀；按码点截断，不把 emoji 劈成半个代理对 */

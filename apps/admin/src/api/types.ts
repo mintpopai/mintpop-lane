@@ -25,8 +25,6 @@ export const FRONT_ACTION = {
   KEEP: "KEEP",
   /** 按故障域重新分配一组；一个候选都算不出来时服务端报 410048，而不是把人清空 */
   AUTO: "AUTO",
-  /** 钉死到 frontNodeId 这一个（运维逃生口），此时 frontNodeId 必填 */
-  PIN: "PIN",
   /** 真的不分配：整组清空、主节点置 null */
   CLEAR: "CLEAR",
 } as const;
@@ -234,14 +232,9 @@ export interface UserSaveRequest {
    * 这次保存要对第一跳做什么。服务端必填（漏传直接 400），不给缺省值：
    * 整体保存接口的每个调用点都要显式表态，「忘了传」必须当场暴露，
    * 而不是悄悄落到某一种处置上——二期出事正是那个形态。
+   * 第一跳不能手工指定节点，只能自动分配或清空，所以入参里没有节点 id。
    */
   frontAction: FrontAction;
-  /**
-   * 第一跳主节点 id，**只在 frontAction 为 PIN 时有意义**（此时必填）。
-   * 其余三态服务端一律忽略它，前端也一律发 null：这个字段此刻无意义，
-   * 带着一个可能过期的值只会让人以为它被用到了。
-   */
-  frontNodeId: number | null;
   landNodeId: number | null;
   /** 管理员自用说明，空串表示没写。整体保存接口，不带就等于清空 */
   remark: string;
@@ -443,22 +436,6 @@ export interface NodeGroupResponse {
   updatedAt: string;
 }
 
-/** 订阅预览里的一个条目，只有展示字段 */
-export interface SubPreviewNode {
-  sourceName: string;
-  sourceType: string;
-  serverAddr: string;
-  port: number;
-  /** 名称像「剩余流量/到期时间」的信息假条目，默认不勾选 */
-  suspectedInfo: boolean;
-  /** 该分组内是否已入池；新链接预览恒为 false */
-  existed: boolean;
-}
-
-export interface SubPreviewRequest {
-  subUrl: string;
-}
-
 /** 订阅尽调入参：候选机场的试用订阅链接 */
 export interface SubAuditRequest {
   subUrl: string;
@@ -509,10 +486,10 @@ export interface SubAuditResponse {
   expiresAt: string | null;
 }
 
+/** 建分组入参：只给分组名与链接，订阅里的美国节点由服务端自动导入 */
 export interface NodeGroupCreateRequest {
   name: string;
   subUrl: string;
-  selectedNames: string[];
   remark: string;
 }
 
@@ -520,10 +497,6 @@ export interface NodeGroupCreateRequest {
 export interface NodeGroupRenameRequest {
   name: string;
   remark: string;
-}
-
-export interface NodeGroupImportRequest {
-  selectedNames: string[];
 }
 
 /** 管理端的套餐视图 */

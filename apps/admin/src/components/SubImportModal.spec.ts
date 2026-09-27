@@ -1,49 +1,19 @@
 import { DOMWrapper, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SubPreviewNode } from "../api/types";
+import { BizError } from "../api/http";
 import SubImportModal from "./SubImportModal.vue";
 
-const previewSub = vi.fn<(body: unknown) => Promise<SubPreviewNode[]>>();
 const createNodeGroup = vi.fn(async () => 1);
-const refreshPreviewNodeGroup = vi.fn<(id: number) => Promise<SubPreviewNode[]>>();
 const importNodeGroup = vi.fn(async () => undefined);
+const showToast = vi.fn();
 
 vi.mock("../api", () => ({
-  adminApi: () => ({ previewSub, createNodeGroup, refreshPreviewNodeGroup, importNodeGroup }),
+  adminApi: () => ({ createNodeGroup, importNodeGroup }),
 }));
-vi.mock("../toast", () => ({ showToast: vi.fn() }));
-
-const previewNodes: SubPreviewNode[] = [
-  {
-    sourceName: "剩余流量：10 GB",
-    sourceType: "anytls",
-    serverAddr: "a.example.com",
-    port: 1,
-    suspectedInfo: true,
-    existed: false,
-  },
-  {
-    sourceName: "香港-01",
-    sourceType: "anytls",
-    serverAddr: "hk.example.com",
-    port: 2,
-    suspectedInfo: false,
-    existed: false,
-  },
-  {
-    sourceName: "已入池的",
-    sourceType: "vless",
-    serverAddr: "b.example.com",
-    port: 3,
-    suspectedInfo: false,
-    existed: true,
-  },
-];
+vi.mock("../toast", () => ({ showToast: (...args: unknown[]) => showToast(...args) }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  previewSub.mockResolvedValue(previewNodes);
-  refreshPreviewNodeGroup.mockResolvedValue(previewNodes);
 });
 
 afterEach(() => {
@@ -60,74 +30,88 @@ function query(selector: string): DOMWrapper<Element> {
   return new DOMWrapper(el);
 }
 
-function queryAll(selector: string): DOMWrapper<Element>[] {
-  return Array.from(document.querySelectorAll(selector)).map((el) => new DOMWrapper(el));
+/** 底部提交按钮是 footer 里的最后一个 admin-btn */
+function submitButton(): DOMWrapper<Element> {
+  const buttons = Array.from(document.querySelectorAll("button.admin-btn"));
+  const last = buttons.at(-1);
+  if (!last) {
+    throw new Error("未找到提交按钮");
+  }
+  return new DOMWrapper(last);
 }
 
-async function openPreviewList(group: null | { id: number } = null) {
-  const wrapper = mount(SubImportModal, {
-    attachTo: document.body,
-    props: { group: group as never },
-  });
-  if (!group) {
-    await query("#sub-url").setValue("https://sub.example.com/c?token=t");
-  }
-  await query("button.admin-btn").trigger("click");
-  await vi.waitFor(() => expect(document.querySelectorAll("tbody tr")).toHaveLength(3));
-  return wrapper;
+function mountModal(group: null | { id: number; name: string }) {
+  return mount(SubImportModal, { attachTo: document.body, props: { group: group as never } });
 }
 
 describe("SubImportModal", () => {
-  it("拉取预览后展示全部条目，疑似信息条目与已入池的默认不勾", async () => {
-    await openPreviewList();
+  it("创建模式：链接、分组名、备注一屏填完，没有节点勾选列表", async () => {
+    mountModal(null);
 
-    expect(previewSub).toHaveBeenCalledWith({ subUrl: "https://sub.example.com/c?token=t" });
-    const checkboxes = queryAll("tbody input[type=checkbox]");
-    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false);
-    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true);
-    expect((checkboxes[2].element as HTMLInputElement).checked).toBe(false);
-    expect(document.body.textContent).toContain("已入池");
-    expect(document.body.textContent).toContain("疑似信息条目");
+    expect(document.querySelector("#sub-url")).not.toBeNull();
+    expect(document.querySelector("#group-name")).not.toBeNull();
+    expect(document.querySelector("#group-remark")).not.toBeNull();
+    expect(document.querySelector("table")).toBeNull();
+    expect(document.body.textContent).toContain("自动导入订阅里的美国节点");
   });
 
-  it("创建模式：填分组名提交后按勾选调用 createNodeGroup", async () => {
-    const wrapper = await openPreviewList();
-    await query("#group-name").setValue("机场A");
-    // 底部提交按钮是 footer 里的最后一个 admin-btn
-    const submitButton = queryAll("button.admin-btn").at(-1)!;
-    await submitButton.trigger("click");
+  it("创建模式：填链接与分组名后一次提交，只发名字、链接、备注", async () => {
+    const wrapper = mountModal(null);
+    await query("#sub-url").setValue("  https://sub.example.com/c?token=t  ");
+    await query("#group-name").setValue(" 机场A ");
+    await submitButton().trigger("click");
 
     await vi.waitFor(() =>
       expect(createNodeGroup).toHaveBeenCalledWith({
         name: "机场A",
         subUrl: "https://sub.example.com/c?token=t",
-        selectedNames: ["香港-01"],
         remark: "",
       }),
     );
+    expect(showToast).toHaveBeenCalledWith("success", "已创建分组并导入美国节点");
     expect(wrapper.emitted("saved")).toBeTruthy();
+    expect(wrapper.emitted("close")).toBeTruthy();
   });
 
-  it("重新拉取模式：不出现链接与分组名输入框，提交调用 importNodeGroup", async () => {
-    await openPreviewList({ id: 7 });
+  it("缺链接或缺分组名时不发请求，直接提示", async () => {
+    mountModal(null);
+    await submitButton().trigger("click");
+    expect(showToast).toHaveBeenLastCalledWith("error", "先粘贴订阅链接");
+
+    await query("#sub-url").setValue("https://sub.example.com/c?token=t");
+    await submitButton().trigger("click");
+    expect(showToast).toHaveBeenLastCalledWith("error", "给这个分组起个名字");
+
+    expect(createNodeGroup).not.toHaveBeenCalled();
+  });
+
+  it("订阅里没有美国节点时把服务端的说法原样提示，弹窗不关", async () => {
+    createNodeGroup.mockRejectedValueOnce(
+      new BizError(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
+    );
+    const wrapper = mountModal(null);
+    await query("#sub-url").setValue("https://sub.example.com/c?token=t");
+    await query("#group-name").setValue("机场A");
+    await submitButton().trigger("click");
+
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        "error",
+        "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入",
+      ),
+    );
+    expect(wrapper.emitted("close")).toBeFalsy();
+  });
+
+  it("重新拉取模式：不出现链接与分组名输入框，一键调用 importNodeGroup", async () => {
+    const wrapper = mountModal({ id: 7, name: "机场A" });
 
     expect(document.querySelector("#sub-url")).toBeNull();
     expect(document.querySelector("#group-name")).toBeNull();
-    expect(refreshPreviewNodeGroup).toHaveBeenCalledWith(7);
+    await submitButton().trigger("click");
 
-    const submitButton = queryAll("button.admin-btn").at(-1)!;
-    await submitButton.trigger("click");
-    await vi.waitFor(() =>
-      expect(importNodeGroup).toHaveBeenCalledWith(7, { selectedNames: ["香港-01"] }),
-    );
-  });
-
-  it("全选/清空切换", async () => {
-    await openPreviewList();
-    const checkAllInput = query(".node-check-all input[type=checkbox]");
-    await checkAllInput.setValue(true);
-    expect(document.body.textContent).toContain("已选 3 / 3");
-    await checkAllInput.setValue(false);
-    expect(document.body.textContent).toContain("已选 0 / 3");
+    await vi.waitFor(() => expect(importNodeGroup).toHaveBeenCalledWith(7));
+    expect(showToast).toHaveBeenCalledWith("success", "已重新拉取并导入美国节点");
+    expect(wrapper.emitted("saved")).toBeTruthy();
   });
 });

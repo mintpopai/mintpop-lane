@@ -105,16 +105,14 @@ class AdminUserControllerTest extends MysqlTestBase {
      * 「这次动没动第一跳」只能由调用方显式表态，不能由服务端拿 frontNodeId 去猜。
      * 测试里同样不给默认值，免得「忘了传」在用例里被悄悄兜住。
      */
-    private Map<String, Object> updateRequest(String status, String frontAction, Long front, Long land) {
-        return updateRequest(status, frontAction, front, land, null);
+    private Map<String, Object> updateRequest(String status, String frontAction, Long land) {
+        return updateRequest(status, frontAction, land, null);
     }
 
-    private Map<String, Object> updateRequest(String status, String frontAction, Long front, Long land,
-                                              String remark) {
+    private Map<String, Object> updateRequest(String status, String frontAction, Long land, String remark) {
         Map<String, Object> body = new HashMap<>();
         body.put("status", status);
         body.put("frontAction", frontAction);
-        body.put("frontNodeId", front);
         body.put("landNodeId", land);
         body.put("remark", remark);
         return body;
@@ -212,7 +210,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void createUserEndpointNoLongerExists() throws Exception {
         mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
                 .andExpect(status().isNotFound());
     }
 
@@ -223,7 +221,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", null, null))))
+                        .content(json(updateRequest("SUSPENDED", "KEEP", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         var user = userRepository.findById(memberNoSubId).orElseThrow();
@@ -244,7 +242,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         // 逐字模拟管理端保存备注时的载荷：frontAction=KEEP，frontNodeId 不带（KEEP 下它无意义）
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, "老客户"))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, "老客户"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
@@ -261,7 +259,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", null, null))))
+                        .content(json(updateRequest("SUSPENDED", "KEEP", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getStatus())
@@ -272,7 +270,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         // 恢复也是同一条路，一并验一次：两次处置转换下来组仍是原样
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
@@ -289,9 +287,12 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         // third 是这位管理员打开列表之后就过时了的那个 id：既不是现在的主节点，也不是他这次想改的东西。
         // 「与现值相同即没动」那套判定会把它读成「管理员显式指定了 third 这一个节点」，静默把组砍成一个
+        // 老版本管理端还会带上 frontNodeId；入参已无此字段，带了也被忽略
+        Map<String, Object> body = updateRequest("SUSPENDED", "KEEP", null);
+        body.put("frontNodeId", third);
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", third, null))))
+                        .content(json(body)))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
@@ -300,45 +301,16 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("PIN：钉死到指定的那一个节点，user_front_node 收敛成这一个（运维逃生口）")
-    void pinCollapsesGroupToTheSpecifiedNode() throws Exception {
+    @DisplayName("手工指定单个节点（PIN）已不再支持：报参数错误 110001，原有前置组不动")
+    void pinIsNoLongerAccepted() throws Exception {
         Long second = fixtures.createFrontNode("FRONT-2");
         userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
 
+        Map<String, Object> body = updateRequest("ACTIVE", "PIN", null);
+        body.put("frontNodeId", second);
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "PIN", second, null))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(second);
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(second);
-    }
-
-    @Test
-    @DisplayName("PIN 到该用户当前的主节点也是一条合法意图：把多节点组收敛成这一个。"
-            + "从取值反推意图时这件事根本表达不出来（与「没动」取值相同）")
-    void pinToCurrentPrimaryStillCollapsesGroup() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "PIN", frontId, null))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(frontId);
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(frontId);
-    }
-
-    @Test
-    @DisplayName("PIN 却没给 frontNodeId：报参数错误 110001，不猜、不退化成别的处置")
-    void pinWithoutNodeIdReportsParamError() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "PIN", null, null))))
+                        .content(json(body)))
                 .andExpect(jsonPath("$.code").value(110001));
 
         assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
@@ -356,7 +328,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "CLEAR", null, null))))
+                        .content(json(updateRequest("ACTIVE", "CLEAR", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isNull();
@@ -373,9 +345,12 @@ class AdminUserControllerTest extends MysqlTestBase {
         Long autoSecond = createAllocatableFrontNode("🇺🇸[US]Auto-02", "relay.auto.example.net");
         userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
 
+        // 老版本管理端还会带上 frontNodeId；入参已无此字段，带了也被忽略
+        Map<String, Object> body = updateRequest("ACTIVE", "AUTO", null);
+        body.put("frontNodeId", frontId);
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "AUTO", frontId, null))))
+                        .content(json(body)))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(autoFirst);
@@ -393,7 +368,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "AUTO", null, null))))
+                        .content(json(updateRequest("ACTIVE", "AUTO", null))))
                 .andExpect(jsonPath("$.code").value(410048));
 
         assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
@@ -408,7 +383,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         Long second = fixtures.createFrontNode("FRONT-2");
         userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
 
-        Map<String, Object> body = updateRequest("ACTIVE", "KEEP", null, null);
+        Map<String, Object> body = updateRequest("ACTIVE", "KEEP", null);
         body.remove("frontAction");
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
@@ -440,7 +415,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         // landId 已被 memberWithSub 绑定，容量默认 10，仍有余量
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, landId))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", landId))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.countByLandNodeId(landId)).isEqualTo(2);
@@ -454,7 +429,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, tinyLand))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", tinyLand))))
                 .andExpect(jsonPath("$.code").value(410016));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getLandNodeId()).isNull();
@@ -468,7 +443,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", null, tinyLand))))
+                        .content(json(updateRequest("SUSPENDED", "KEEP", tinyLand))))
                 .andExpect(jsonPath("$.code").value(0));
     }
 
@@ -486,7 +461,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, disabledLand))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", disabledLand))))
                 .andExpect(jsonPath("$.code").value(310004));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getLandNodeId()).isNull();
@@ -501,25 +476,10 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", null, disabledLand, "节点下线待迁移"))))
+                        .content(json(updateRequest("SUSPENDED", "KEEP", disabledLand, "节点下线待迁移"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.findById(occupant).orElseThrow().getRemark()).isEqualTo("节点下线待迁移");
-    }
-
-    @Test
-    @DisplayName("PIN 到禁用的前置节点报 310004，原有前置组不动")
-    void pinToDisabledFrontNodeIsRejected() throws Exception {
-        Long disabledFront = fixtures.createFrontNode("FRONT-已禁用");
-        disableNode(disabledFront);
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "PIN", disabledFront, null))))
-                .andExpect(jsonPath("$.code").value(310004));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(frontId);
     }
 
     @Test
@@ -530,12 +490,12 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, tinyLand))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", tinyLand))))
                 .andExpect(jsonPath("$.code").value(0));
     }
 
@@ -544,19 +504,13 @@ class AdminUserControllerTest extends MysqlTestBase {
     void nodeValidation() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "PIN", 99999L, null))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", 99999L))))
                 .andExpect(jsonPath("$.code").value(410001));
-
-        // 把落地节点当第一跳用
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "PIN", landId, null))))
-                .andExpect(jsonPath("$.code").value(410005));
 
         // 把第一跳节点当落地用
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, frontId))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", frontId))))
                 .andExpect(jsonPath("$.code").value(410005));
     }
 
@@ -565,7 +519,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void missingUserFails() throws Exception {
         mockMvc.perform(put("/api/admin/users/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
                 .andExpect(jsonPath("$.code").value(410006));
 
         mockMvc.perform(delete("/api/admin/users/99999").header("Authorization", bearer(adminId)))
@@ -620,7 +574,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void updateWritesRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, "老客户，续费谈过"))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, "老客户，续费谈过"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
@@ -635,14 +589,14 @@ class AdminUserControllerTest extends MysqlTestBase {
     void updateClearsRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, "先写一句"))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, "先写一句"))))
                 .andExpect(jsonPath("$.code").value(0));
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data.remark").value("先写一句"));
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, null))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
@@ -654,7 +608,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void tooLongRemarkReportsParamError() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, "备".repeat(51)))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, "备".repeat(51)))))
                 .andExpect(jsonPath("$.code").value(110001));
     }
 
@@ -665,7 +619,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, atLimit))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, atLimit))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
@@ -677,7 +631,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void keywordMatchesRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null, "试用期"))))
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, "试用期"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users").param("keyword", "试用")
