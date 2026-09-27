@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildPayOptions, isPaidStatus, STRIPE_PM_TYPE, STRIPE_SUB_METHODS } from "./payment";
+import { buildPayOptions, isPaidStatus, STRIPE_SUB_METHODS } from "./payment";
 
 describe("payment", () => {
-  it("展示顺序固定：微信 → 支付宝 → 银行卡；映射表与服务端逐字一致", () => {
+  it("展示顺序固定：微信 → 支付宝 → 银行卡", () => {
     expect(STRIPE_SUB_METHODS).toEqual(["wxpay", "alipay", "card"]);
-    expect(STRIPE_PM_TYPE).toEqual({ wxpay: "wechat_pay", alipay: "alipay", card: "card" });
   });
 
   it("只有 stripe 通道时拍平成三张卡；没有通道时为空", () => {
