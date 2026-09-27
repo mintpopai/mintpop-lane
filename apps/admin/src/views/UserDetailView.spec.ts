@@ -520,7 +520,10 @@ describe("UserDetailView · 链路资源", () => {
     ]);
     await mountView([]);
     // 等两个下拉都回显出当前分配，说明用户与节点都已加载完
-    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
+    await vi.waitFor(() =>
+      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
+    );
     await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
 
     expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeDefined();
@@ -548,7 +551,6 @@ describe("UserDetailView · 链路资源", () => {
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
         frontAction: "KEEP",
-        frontNodeId: null,
         landNodeId: 12,
         remark: "",
       }),
@@ -595,16 +597,16 @@ describe("UserDetailView · 链路资源", () => {
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
     ]);
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
+    await vi.waitFor(() =>
+      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
+    );
 
     await pickOption("第一跳节点", "自动分配（按故障域）");
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(
-        3,
-        expect.objectContaining({ frontAction: "AUTO", frontNodeId: null }),
-      ),
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "AUTO" })),
     );
   });
 
@@ -615,16 +617,16 @@ describe("UserDetailView · 链路资源", () => {
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
     ]);
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
+    await vi.waitFor(() =>
+      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
+    );
 
     await pickOption("第一跳节点", "不分配");
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(
-        3,
-        expect.objectContaining({ frontAction: "CLEAR", frontNodeId: null }),
-      ),
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "CLEAR" })),
     );
   });
 
@@ -642,14 +644,11 @@ describe("UserDetailView · 链路资源", () => {
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(
-        3,
-        expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
-      ),
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "KEEP" })),
     );
   });
 
-  it("选回该用户当前的主节点是合法意图：保存按钮可用，发出的是 frontAction=PIN（把多节点组收敛成这一个）", async () => {
+  it("第一跳只能选「不分配」或「自动分配」，下拉里不列具体节点", async () => {
     getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
     listNodes.mockResolvedValue([
       node({ id: 1, name: "US-01", role: "FRONT" }),
@@ -657,19 +656,39 @@ describe("UserDetailView · 链路资源", () => {
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
     ]);
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+    await vi.waitFor(() => expect(listNodes).toHaveBeenCalled());
 
-    // 下拉回显的就是 US-01，这里再点一次它——「值没变」但意图变了，按「值是否等于初始值」判断会把按钮锁死
-    await pickOption("第一跳节点", "US-01");
+    await selectTrigger("第一跳节点").trigger("click");
+    // 选中项前面带一个 ✓，按「包含」比对而不是全等
+    const labels = queryAll("li").map((li) => li.text());
+    expect(labels).toHaveLength(2);
+    expect(labels.some((text) => text.includes("不分配"))).toBe(true);
+    expect(labels.some((text) => text.includes("自动分配（按故障域）"))).toBe(true);
+    expect(labels.some((text) => text.includes("US-0"))).toBe(false);
+  });
 
+  it("已分配的用户回显「自动分配」，再选一次它即按当前节点池重新分配（发 AUTO）", async () => {
+    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+    listNodes.mockResolvedValue([
+      node({ id: 1, name: "US-01", role: "FRONT" }),
+      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+    ]);
+    await mountView([]);
+    await vi.waitFor(() =>
+      expect(document.querySelector('[aria-label="第一跳节点"]')?.textContent).toContain(
+        "自动分配（按故障域）",
+      ),
+    );
+    // 回填不算碰过：什么都没改时保存按钮不可用
+    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeDefined();
+
+    // 值没变但意图变了：按「值是否等于初始值」判断会把重新分配锁死
+    await pickOption("第一跳节点", "自动分配（按故障域）");
     expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeUndefined();
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(
-        3,
-        expect.objectContaining({ frontAction: "PIN", frontNodeId: 1 }),
-      ),
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "AUTO" })),
     );
   });
 
@@ -683,7 +702,10 @@ describe("UserDetailView · 链路资源", () => {
       new BizError(410048, "没有可分配的美国前置节点，无法自动分配"),
     );
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("US-01"));
+    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
+    await vi.waitFor(() =>
+      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
+    );
 
     await pickOption("第一跳节点", "自动分配（按故障域）");
     await buttonInCard(".link-card", "保存").trigger("click");
@@ -760,12 +782,11 @@ describe("UserDetailView · 备注", () => {
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
         frontAction: "KEEP",
-        frontNodeId: null,
         landNodeId: 11,
         remark: "试用期，月底回访",
       }),
     );
-    expect(showToast).toHaveBeenCalledWith("success", "已保存");
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith("success", "已保存"));
   });
 
   it("改备注一律发 frontAction=KEEP——它是「本项未被触碰」的显式表达，组因此不会被改掉", async () => {
@@ -777,10 +798,7 @@ describe("UserDetailView · 备注", () => {
     await buttonInCard(".remark-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(
-        3,
-        expect.objectContaining({ frontAction: "KEEP", frontNodeId: null }),
-      ),
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "KEEP" })),
     );
   });
 

@@ -46,8 +46,7 @@ import {
 import {
   buildUserPayload,
   FRONT_SELECTION,
-  frontSelectionToPayload,
-  selectableFrontNodes,
+  frontSelectionToAction,
   selectableLandNodes,
   userToForm,
   type FrontSelection,
@@ -69,25 +68,22 @@ const userError = ref("");
 /** 链路资源表单：初值取自用户当前分配，保存后随重拉的用户刷新 */
 const nodes = ref<AdminNodeResponse[]>([]);
 /**
- * 第一跳下拉的当前取值，三态：具体节点 id（手工指定）/ null（不分配）/
- * AUTO_ALLOCATE（请服务端按故障域重新分配一组）。
- * 回填只会是前两者——「自动分配」是动作不是状态，保存后页面重拉就变回算出来的主节点 id。
+ * 第一跳下拉的当前取值，两态：null（不分配）/ AUTO_ALLOCATE（按故障域分配一组）。
+ * 不开放手工指定节点。回填时已有前置组就显示「自动分配」，没有就显示「不分配」；
+ * 已分配的用户再选一次「自动分配」即按当前节点池重新分配一组（下拉选中同一项也会触发选择）。
  */
 const frontSelection = ref<FrontSelection>(null);
 /**
  * 管理员这次<b>有没有真的操作过第一跳下拉</b>。只在 onFrontSelected（下拉真的选中某一项）里置 true，
  * 页面回填（loadUser）不算，保存成功重拉之后归零。
  * <p>
- * 刻意用「碰没碰过」而不是「当前值是否等于初始值」——后者看着更简洁，但它是在<b>从取值反推意图</b>，
- * 本期要铲掉的正是这套推理，换个地方重现而已，而且两个失败形态都会跟着搬过来：
+ * 刻意用「碰没碰过」而不是「当前值是否等于初始值」——后者是在<b>从取值反推意图</b>：
  * ① 回填值只是打开页面那一刻的快照，其间别人改过这个用户的第一跳，比值就会判错；
- * ② 「把这个用户钉死到他当前的主节点这一个」与「这次没动第一跳」取值完全相同，比值永远分不开——
- *    上一版的表现就是选回当前主节点后保存按钮禁用、这个意图根本提交不出去。
+ * ② 「按当前节点池重新分配一组」与「这次没动第一跳」回填值都是「自动分配」，比值永远分不开，
+ *    重新分配这个意图就提交不出去。
  * <p>
- * 代价要一起写下来，免得被当成 bug「修」掉：因为「选中即当真」，管理员点开下拉挑了别的、
- * 又选回原来那个主节点，仍然算碰过，保存会发 PIN，把多节点组收敛成一个。这是 ② 可表达的
- * <b>必然代价</b>而不是缺陷——想让「选回来」自动退化成 KEEP，就又得比值，① 会跟着回来。
- * 管理员想放弃这次改动，刷新页面即可。<b>看到这里别顺手改回比值。</b>
+ * 代价：因为「选中即当真」，管理员点开下拉又选回原来那一项，仍然算碰过，保存会真的执行那个处置。
+ * 这是 ② 可表达的必然代价而不是缺陷，想放弃这次改动刷新页面即可。<b>看到这里别顺手改回比值。</b>
  */
 const frontTouched = ref(false);
 const landNodeId = ref<number | null>(null);
@@ -152,14 +148,13 @@ const rebind = useRebindStore();
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-// 三个档位对应服务端的三条互斥处置：「不分配」真的清空整组（取消分配、腾出节点以便删除的
-// 唯一入口），「自动分配」按故障域重算一组，选具体节点则收敛成那一个（运维逃生口）。
-// 二期上线时「不分配」反而是自动分配的暗号，标签与行为相反，这里一并纠正
-const frontOptions = computed(() => [
+// 两个档位对应服务端的两条互斥处置：「不分配」真的清空整组（取消分配、腾出节点以便删除的
+// 唯一入口），「自动分配」按故障域重算一组。不开放手工指定节点——节点随订阅刷新会增减，
+// 手工钉死的用户跟不上变化
+const frontOptions = [
   { value: null, label: "不分配" },
   { value: FRONT_SELECTION.AUTO_ALLOCATE, label: "自动分配（按故障域）" },
-  ...selectableFrontNodes(nodes.value).map((node) => ({ value: node.id, label: node.name })),
-]);
+];
 // 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
 // 原节点就会从下拉里消失、再也切不回去，只能刷新页面丢弃改动重来
 const landOptions = computed(() => [
@@ -312,7 +307,7 @@ function reportError(error: unknown, prefix: string): void {
 async function loadUser(): Promise<void> {
   try {
     user.value = await adminApi().getUser(userId);
-    frontSelection.value = user.value.frontNodeId;
+    frontSelection.value = user.value.frontNodeId === null ? null : FRONT_SELECTION.AUTO_ALLOCATE;
     // 重拉即是一次回填：这一轮的操作已经落库，下一轮从「没碰过」重新开始
     frontTouched.value = false;
     landNodeId.value = user.value.landNodeId;
@@ -344,9 +339,9 @@ async function saveNodes(): Promise<void> {
       buildUserPayload({
         ...userToForm(user.value),
         // 没碰过第一跳下拉就显式说「这次没动它」，碰过才把下拉的档位翻译成处置
-        ...(frontTouched.value
-          ? frontSelectionToPayload(frontSelection.value)
-          : { frontAction: FRONT_ACTION.KEEP, frontNodeId: null }),
+        frontAction: frontTouched.value
+          ? frontSelectionToAction(frontSelection.value)
+          : FRONT_ACTION.KEEP,
         landNodeId: landNodeId.value,
       }),
     );
