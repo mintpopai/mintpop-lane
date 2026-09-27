@@ -22,7 +22,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * 支付：后端只有单一 stripe 通道（PaymentIntent 模式）；微信 / 支付宝 / 银行卡只存在于前端展示层。
@@ -44,7 +43,7 @@ public class PaymentService {
     private final StripeGateway stripeGateway;
     private final PaymentProperties properties;
     private final TransactionTemplate transactionTemplate;
-    private final Consumer<String> orderSettledListener;
+    private final OrderSettledListener orderSettledListener;
     private final Clock clock;
 
     /**
@@ -54,7 +53,7 @@ public class PaymentService {
     public PaymentService(PlanOrderRepository orderRepository, SubscriptionRepository subscriptionRepository,
                           OrderService orderService, OrderExpiryService expiryService, StripeGateway stripeGateway,
                           PaymentProperties properties, TransactionTemplate transactionTemplate,
-                          Consumer<String> orderSettledListener, Clock clock) {
+                          OrderSettledListener orderSettledListener, Clock clock) {
         this.orderRepository = orderRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.orderService = orderService;
@@ -188,7 +187,7 @@ public class PaymentService {
         // 本方法及其调用方均不可再包一层外部 @Transactional，否则通知会在提交前发出。
         // 通知任务提交失败（如停机中执行器已关）也不能把 webhook 变 500
         try {
-            orderSettledListener.accept(orderNo);
+            orderSettledListener.onSettled(orderNo);
         } catch (Exception e) {
             log.warn("支付成功通知任务提交失败（不影响入账）orderNo={}", orderNo, e);
         }

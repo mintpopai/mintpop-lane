@@ -13,6 +13,7 @@ import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.service.OrderSettledListener;
 import ai.mintpop.lane.service.PaymentService;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -32,7 +33,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -67,8 +67,8 @@ class PaymentControllerTest extends MysqlTestBase {
     /** 不打网络：Stripe 一律替身 */
     @MockitoBean private StripeGateway stripeGateway;
 
-    /** 按 bean 名定向替身两个 Consumer<String> bean 里的通知那个，验证入账通知契约 */
-    @MockitoBean(name = "orderSettledListener") private Consumer<String> orderSettledListener;
+    /** 替身入账通知回调，验证入账通知契约 */
+    @MockitoBean private OrderSettledListener orderSettledListener;
 
     private Long buyerId;
     private Long otherId;
@@ -385,10 +385,10 @@ class PaymentControllerTest extends MysqlTestBase {
         String orderNo = createOrder(buyerId);
         paymentService.settlePaid(orderNo, "pi_1", 9999L, "usd");
         paymentService.settlePaid(orderNo, "pi_1", 9999L, "usd");
-        verify(orderSettledListener, times(1)).accept(orderNo);
+        verify(orderSettledListener, times(1)).onSettled(orderNo);
 
         String second = createOrder(buyerId);
-        doThrow(new RuntimeException("飞书不可达（模拟）")).when(orderSettledListener).accept(second);
+        doThrow(new RuntimeException("飞书不可达（模拟）")).when(orderSettledListener).onSettled(second);
         paymentService.settlePaid(second, "pi_2", 9999L, "usd");
 
         assertThat(orderRepository.findByOrderNo(second).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);

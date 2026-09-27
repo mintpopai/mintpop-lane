@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /** 用户侧订单：建单、查单、取消。支付在 PaymentService。 */
 @Service
@@ -34,12 +33,12 @@ public class OrderService {
     private final PlanRepository planRepository;
     private final UserRepository userRepository;
     private final OrderExpiryService expiryService;
-    private final Consumer<String> intentCanceller;
+    private final PaymentIntentCanceller intentCanceller;
     private final Clock clock;
 
     public OrderService(PlanOrderRepository orderRepository, PlanRepository planRepository,
                         UserRepository userRepository, OrderExpiryService expiryService,
-                        Consumer<String> intentCanceller, Clock clock) {
+                        PaymentIntentCanceller intentCanceller, Clock clock) {
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.userRepository = userRepository;
@@ -109,7 +108,7 @@ public class OrderService {
             throw new BizException(BizCodeEnum.ORDER_NOT_CANCELLABLE);
         }
         if (order.getPaymentTradeNo() != null) {
-            intentCanceller.accept(order.getPaymentTradeNo());
+            intentCanceller.cancel(order.getPaymentTradeNo());
         }
     }
 
