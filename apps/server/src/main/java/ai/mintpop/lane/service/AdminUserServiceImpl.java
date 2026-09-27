@@ -7,6 +7,7 @@ import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.NodeRole;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
@@ -114,7 +115,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         }
 
         FrontAssignment front = resolveFrontAssignment(id, user, request);
-        validateLandAvailable(request.getLandNodeId(), id);
+        validateLandAvailable(request.getLandNodeId(), user.getLandNodeId(), id);
 
         user.setStatus(request.getStatus());
         user.setFrontNodeId(front.primaryNodeId());
@@ -216,6 +217,10 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (node.getRole() != expectedRole) {
             throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
         }
+        // 只有 PIN 走到这里，是管理员显式指定的节点：禁用的节点不许新分配出去
+        if (node.getStatus() != NodeStatus.ENABLED) {
+            throw new BizException(BizCodeEnum.NODE_DISABLED);
+        }
     }
 
     /**
@@ -228,8 +233,11 @@ public class AdminUserServiceImpl implements AdminUserService {
      * 「先解绑本人、再由别人占走最后一个名额」，凭旧快照放行会把绑定人数写超容量；
      * 排除本人的计数在拿到锁之后才执行（READ_COMMITTED 下读到的是最新已提交状态），
      * 重存同一节点天然不新占名额，也顺带修掉了并发重复提交时的 410016 误报。
+     * <p>
+     * 禁用的节点不许<b>新</b>分配；但与库里现值相同（这次没换落地节点）时放行——否则节点一禁用，
+     * 绑在上面的用户连改备注、停用都保存不了。已绑用户拿不到链路由签发 / 下发侧的状态判定负责。
      */
-    private void validateLandAvailable(Long landNodeId, Long userId) {
+    private void validateLandAvailable(Long landNodeId, Long currentLandNodeId, Long userId) {
         if (landNodeId == null) {
             return;
         }
@@ -237,6 +245,9 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
         if (node.getRole() != NodeRole.LAND) {
             throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
+        }
+        if (node.getStatus() != NodeStatus.ENABLED && !landNodeId.equals(currentLandNodeId)) {
+            throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
         if (userRepository.countByLandNodeIdExcludingUser(landNodeId, userId) >= node.getCapacity()) {
             throw new BizException(BizCodeEnum.LAND_NODE_FULL);

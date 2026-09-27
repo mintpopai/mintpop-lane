@@ -21,11 +21,14 @@ public record OrderResponse(
         Instant paidAt,
         /** 履约建出的订阅 id；未支付为 null */
         Long subscriptionId,
+        /** 该订阅的分配号，用户向客服报障时引用；无订阅（或订阅已被删）为 null */
+        String assignmentNo,
         Instant createdAt
 ) {
-    public static OrderResponse from(PlanOrder o) {
+    /** @param assignmentNo 由调用方按 subscriptionId 查好传入，本方法不查库 */
+    public static OrderResponse from(PlanOrder o, String assignmentNo) {
         return new OrderResponse(o.getOrderNo(), o.getName(), o.getAgentType(), o.getPlanDurationDays(),
                 o.getPlanPrice(), o.getPlanCurrency(), o.getAmountMinor(), o.getStatus(), o.getPaidAt(),
-                o.getSubscriptionId(), o.getCreatedAt());
+                o.getSubscriptionId(), assignmentNo, o.getCreatedAt());
     }
 }

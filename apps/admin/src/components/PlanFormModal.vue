@@ -277,6 +277,13 @@ async function submit(): Promise<void> {
   align-items: center;
 }
 
+/* 输入框让出宽度给上传按钮：input 的默认最小宽度是自身约 20 字符的固有宽度，不设 min-width: 0
+   它不肯收缩，280px 的参数栏里会把「上传图片」按钮顶出栏外约 20px 被裁掉 */
+.image-row .admin-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .image-preview {
   margin-top: 8px;
   height: 120px;

@@ -8,13 +8,6 @@ export const STRIPE_SUB_METHODS = ["wxpay", "alipay", "card"] as const;
 
 export type StripeSubMethod = (typeof STRIPE_SUB_METHODS)[number];
 
-/** 子方式 → Stripe payment_method_types（与服务端 PaymentProperties 的映射表逐字一致） */
-export const STRIPE_PM_TYPE: Record<StripeSubMethod, string> = {
-  wxpay: "wechat_pay",
-  alipay: "alipay",
-  card: "card",
-};
-
 export interface PayOption {
   key: string;
   subMethod: StripeSubMethod;

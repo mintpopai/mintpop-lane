@@ -6,6 +6,7 @@ import ai.mintpop.lane.entity.DeviceRebindRequest;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.RebindRequestStatus;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
@@ -469,6 +470,56 @@ class AdminUserControllerTest extends MysqlTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(updateRequest("SUSPENDED", "KEEP", null, tinyLand))))
                 .andExpect(jsonPath("$.code").value(0));
+    }
+
+    private void disableNode(Long nodeId) {
+        ProxyNodeDto node = nodeRepository.findById(nodeId).orElseThrow();
+        node.setStatus(NodeStatus.DISABLED);
+        nodeRepository.update(node);
+    }
+
+    @Test
+    @DisplayName("禁用的落地节点不许新分配，报 310004 且库里不变")
+    void disabledLandNodeRejectsNewAssignment() throws Exception {
+        Long disabledLand = fixtures.createLandNode("LAND-已禁用", "203.0.113.30");
+        disableNode(disabledLand);
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", "KEEP", null, disabledLand))))
+                .andExpect(jsonPath("$.code").value(310004));
+
+        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getLandNodeId()).isNull();
+    }
+
+    @Test
+    @DisplayName("已绑在禁用落地节点上的用户，不换节点时仍能保存其它字段")
+    void userOnDisabledLandNodeCanStillBeSaved() throws Exception {
+        Long disabledLand = fixtures.createLandNode("LAND-已禁用", "203.0.113.30");
+        Long occupant = fixtures.createUser("logto-m4", frontId, disabledLand);
+        disableNode(disabledLand);
+
+        mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("SUSPENDED", "KEEP", null, disabledLand, "节点下线待迁移"))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userRepository.findById(occupant).orElseThrow().getRemark()).isEqualTo("节点下线待迁移");
+    }
+
+    @Test
+    @DisplayName("PIN 到禁用的前置节点报 310004，原有前置组不动")
+    void pinToDisabledFrontNodeIsRejected() throws Exception {
+        Long disabledFront = fixtures.createFrontNode("FRONT-已禁用");
+        disableNode(disabledFront);
+        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("ACTIVE", "PIN", disabledFront, null))))
+                .andExpect(jsonPath("$.code").value(310004));
+
+        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).containsExactly(frontId);
     }
 
     @Test

@@ -22,12 +22,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
+import java.time.Instant;
 
 import static ai.mintpop.lane.enumeration.UserRole.MEMBER;
 import static ai.mintpop.lane.enumeration.UserStatus.ACTIVE;
 import static ai.mintpop.lane.enumeration.UserStatus.SUSPENDED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +52,7 @@ class OrderControllerTest extends MysqlTestBase {
     private Long suspendedId;
     private Long monthlyPlanId;
     private Long disabledPlanId;
+    private DatabaseFixtures fixtures;
 
     private String bearer(Long userId) {
         return "Bearer " + sessionTokenService.issue(userId, Duration.ofMinutes(10));
@@ -66,7 +69,7 @@ class OrderControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
         fixtures.clearAll();
         buyerId = fixtures.createUser("logto-buyer", null, null);
         otherId = fixtures.createUser("logto-other", null, null);
@@ -169,5 +172,60 @@ class OrderControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.data[0].status").value("EXPIRED"));
         mockMvc.perform(post("/api/orders/" + orderNo + "/cancel").header("Authorization", bearer(buyerId)))
                 .andExpect(jsonPath("$.code").value(510004));
+    }
+
+    @Test
+    @DisplayName("未支付订单达到上限（默认 5）后再下单报 510011；取消一张即腾出名额")
+    void payableOrderLimit() throws Exception {
+        String first = createOrder(buyerId, monthlyPlanId);
+        for (int i = 1; i < 5; i++) {
+            createOrder(buyerId, monthlyPlanId);
+        }
+
+        mockMvc.perform(post("/api/orders").header("Authorization", bearer(buyerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"planId\":" + monthlyPlanId + "}"))
+                .andExpect(jsonPath("$.code").value(510011));
+        assertThat(orderRepository.countPayable(buyerId)).isEqualTo(5);
+        // 上限按人计，别人不受影响
+        createOrder(otherId, monthlyPlanId);
+
+        mockMvc.perform(post("/api/orders/" + first + "/cancel").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.code").value(0));
+        createOrder(buyerId, monthlyPlanId);
+    }
+
+    @Test
+    @DisplayName("超时的未支付订单不占下单名额：下单前先懒惰过期再计数")
+    void timedOutOrdersDoNotCountTowardLimit() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            createOrder(buyerId, monthlyPlanId);
+        }
+        jdbc.update("UPDATE plan_order SET created_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 31 MINUTE) WHERE user_id = ?",
+                buyerId);
+
+        createOrder(buyerId, monthlyPlanId);
+        assertThat(orderRepository.countPayable(buyerId)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("已履约订单的列表与单笔都带订阅分配号；未履约为 null")
+    void paidOrderCarriesAssignmentNo() throws Exception {
+        String paid = createOrder(buyerId, monthlyPlanId);
+        String pending = createOrder(buyerId, monthlyPlanId);
+        Long subscriptionId = fixtures.createSubscription(buyerId, AgentType.CLAUDE, "Claude 月付", null, null, null);
+        String assignmentNo = subscriptionRepository.findById(subscriptionId).orElseThrow().getAssignmentNo();
+        PlanOrder order = orderRepository.findByOrderNo(paid).orElseThrow();
+        orderRepository.markPaid(paid, "pi_test", Instant.now());
+        orderRepository.attachSubscription(order.getId(), subscriptionId);
+
+        mockMvc.perform(get("/api/orders").header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.data[0].orderNo").value(pending))
+                .andExpect(jsonPath("$.data[0].assignmentNo").value(nullValue()))
+                .andExpect(jsonPath("$.data[1].orderNo").value(paid))
+                .andExpect(jsonPath("$.data[1].assignmentNo").value(assignmentNo));
+        mockMvc.perform(get("/api/orders/" + paid).header("Authorization", bearer(buyerId)))
+                .andExpect(jsonPath("$.data.subscriptionId").value(subscriptionId))
+                .andExpect(jsonPath("$.data.assignmentNo").value(assignmentNo));
     }
 }

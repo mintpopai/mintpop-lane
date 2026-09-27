@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.function.Consumer;
 
 /**
  * 订单懒惰过期：无定时任务，读到超时未支付订单的入口（列表 / 单笔 / 发起支付 / verify）
@@ -21,15 +20,10 @@ public class OrderExpiryService {
     private final PlanOrderRepository orderRepository;
     private final OrderProperties properties;
     private final Clock clock;
-    private final Consumer<String> intentCanceller;
+    private final PaymentIntentCanceller intentCanceller;
 
-    /**
-     * @param intentCanceller 撤 Stripe 侧 intent 的动作，收 PaymentIntent id；由 PaymentConfig 接到
-     *                        StripeGateway.cancelPaymentIntent 上（Task 5）。做成注入点是为了本服务
-     *                        不直接依赖 Stripe SDK，测试里可换成记录器。
-     */
     public OrderExpiryService(PlanOrderRepository orderRepository, OrderProperties properties, Clock clock,
-                              Consumer<String> intentCanceller) {
+                              PaymentIntentCanceller intentCanceller) {
         this.orderRepository = orderRepository;
         this.properties = properties;
         this.clock = clock;
@@ -63,7 +57,7 @@ public class OrderExpiryService {
 
     private void expire(PlanOrder order) {
         if (orderRepository.markExpired(order.getOrderNo()) && order.getPaymentTradeNo() != null) {
-            intentCanceller.accept(order.getPaymentTradeNo());
+            intentCanceller.cancel(order.getPaymentTradeNo());
         }
     }
 

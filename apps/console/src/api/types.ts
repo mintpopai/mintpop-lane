@@ -107,6 +107,8 @@ export interface OrderResponse {
   paidAt: string | null;
   /** 履约建出的订阅 id；未支付为 null */
   subscriptionId: number | null;
+  /** 该订阅的分配号；无订阅（或订阅已被删）为 null */
+  assignmentNo: string | null;
   createdAt: string;
 }
 
