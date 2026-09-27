@@ -34,6 +34,9 @@ public interface SubscriptionRepository {
     /** 批量取多个用户的全部订阅，供管理端列表拼摘要，避免逐行查询 */
     List<SubscriptionDto> findByUserIds(Collection<Long> userIds);
 
+    /** 按 id 批量取，查无的 id 直接缺席；顺序不保证，调用方按 id 建索引使用 */
+    List<SubscriptionDto> findByIds(Collection<Long> ids);
+
     /** 新建，返回自增主键 */
     Long create(SubscriptionDto subscription);
 

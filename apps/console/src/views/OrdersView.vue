@@ -7,7 +7,7 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
 import { showToast } from "../toast";
-import { agentLabel, formatAmount, formatDateTime } from "../utils/format";
+import { agentLabel, formatAmount, formatAssignmentNo, formatDateTime } from "../utils/format";
 
 const loading = ref(true);
 const loadError = ref("");
@@ -91,7 +91,12 @@ onMounted(load);
               {{ ORDER_STATUS_LABELS[o.status] ?? o.status }}
             </span>
             <span v-if="o.status === ORDER_STATUS.PAID" class="muted order-note">
-              · {{ o.subscriptionId === null ? "订阅建立中" : "订阅已建出，待管理员开通" }}
+              ·
+              {{
+                o.subscriptionId === null
+                  ? "订阅建立中"
+                  : `订阅 ${formatAssignmentNo(o.assignmentNo)} 待开通`
+              }}
             </span>
           </td>
           <td class="fact muted">{{ formatDateTime(o.createdAt) }}</td>

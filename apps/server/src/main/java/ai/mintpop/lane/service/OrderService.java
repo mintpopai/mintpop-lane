@@ -1,5 +1,6 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.entity.Plan;
 import ai.mintpop.lane.entity.PlanOrder;
@@ -9,6 +10,7 @@ import ai.mintpop.lane.enumeration.OrderStatus;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.PlanOrderRepository;
 import ai.mintpop.lane.repository.PlanRepository;
+import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.OrderCreateResponse;
 import ai.mintpop.lane.response.OrderResponse;
@@ -18,7 +20,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /** 用户侧订单：建单、查单、取消。支付在 PaymentService。 */
 @Service
@@ -32,16 +36,19 @@ public class OrderService {
     private final PlanOrderRepository orderRepository;
     private final PlanRepository planRepository;
     private final UserRepository userRepository;
+    private final SubscriptionRepository subscriptionRepository;
     private final OrderExpiryService expiryService;
     private final PaymentIntentCanceller intentCanceller;
     private final Clock clock;
 
     public OrderService(PlanOrderRepository orderRepository, PlanRepository planRepository,
-                        UserRepository userRepository, OrderExpiryService expiryService,
+                        UserRepository userRepository, SubscriptionRepository subscriptionRepository,
+                        OrderExpiryService expiryService,
                         PaymentIntentCanceller intentCanceller, Clock clock) {
         this.orderRepository = orderRepository;
         this.planRepository = planRepository;
         this.userRepository = userRepository;
+        this.subscriptionRepository = subscriptionRepository;
         this.expiryService = expiryService;
         this.intentCanceller = intentCanceller;
         this.clock = clock;
@@ -90,7 +97,13 @@ public class OrderService {
     public List<OrderResponse> listMine(Long userId) {
         // 懒惰过期：先把该用户超时的可支付订单置 EXPIRED，列表读到的即是最新状态
         expiryService.expireTimedOut(userId);
-        return orderRepository.findByUserId(userId, LIST_LIMIT).stream().map(OrderResponse::from).toList();
+        List<PlanOrder> orders = orderRepository.findByUserId(userId, LIST_LIMIT);
+        List<Long> subscriptionIds = orders.stream().map(PlanOrder::getSubscriptionId)
+                .filter(Objects::nonNull).toList();
+        // 按订阅 id 而非用户取：订阅日后被管理员转给别人，这张单的分配号也不该跟着消失
+        Map<Long, String> assignmentNos = subscriptionRepository.findByIds(subscriptionIds).stream()
+                .collect(Collectors.toMap(SubscriptionDto::getId, SubscriptionDto::getAssignmentNo));
+        return orders.stream().map(o -> OrderResponse.from(o, assignmentNos.get(o.getSubscriptionId()))).toList();
     }
 
     public OrderResponse getMine(Long userId, String orderNo) {
@@ -98,7 +111,10 @@ public class OrderService {
         if (expiryService.expireIfTimedOut(order)) {
             order = requireOwn(userId, orderNo);
         }
-        return OrderResponse.from(order);
+        String assignmentNo = order.getSubscriptionId() == null ? null
+                : subscriptionRepository.findById(order.getSubscriptionId())
+                        .map(SubscriptionDto::getAssignmentNo).orElse(null);
+        return OrderResponse.from(order, assignmentNo);
     }
 
     /** 仅 PENDING / FAILED 可取消；条件 UPDATE 影响 0 行即状态不允许。取消生效后尽力撤 Stripe 侧 intent */

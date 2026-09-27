@@ -62,6 +62,15 @@ public class MybatisSubscriptionRepository implements SubscriptionRepository {
     }
 
     @Override
+    public List<SubscriptionDto> findByIds(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return mapper.selectList(Wrappers.<Subscription>lambdaQuery().in(Subscription::getId, ids))
+                .stream().map(converter::toDto).toList();
+    }
+
+    @Override
     public Long create(SubscriptionDto subscription) {
         Subscription entity = converter.toEntity(subscription);
         entity.setId(null);

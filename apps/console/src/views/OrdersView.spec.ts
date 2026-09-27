@@ -22,6 +22,7 @@ function order(overrides: Partial<OrderResponse> = {}): OrderResponse {
     status: "PENDING",
     paidAt: null,
     subscriptionId: null,
+    assignmentNo: null,
     createdAt: "2026-09-15T08:30:05Z",
     ...overrides,
   };
@@ -52,13 +53,18 @@ describe("OrdersView", () => {
 
   it("已支付行显示已开通 / 待开通去向，没有操作按钮", async () => {
     listOrders.mockResolvedValue([
-      order({ status: "PAID", paidAt: "2026-09-15T08:35:00Z", subscriptionId: 9 }),
+      order({
+        status: "PAID",
+        paidAt: "2026-09-15T08:35:00Z",
+        subscriptionId: 9,
+        assignmentNo: "7K3M9QX2FT",
+      }),
     ]);
     const wrapper = mount(OrdersView, { global: { stubs } });
     await flushPromises();
     const row = wrapper.get("tbody tr");
     expect(row.text()).toContain("已支付");
-    expect(row.text()).toContain("订阅已建出");
+    expect(row.text()).toContain("订阅 7K3M9-QX2FT 待开通");
     expect(row.findAll("button")).toHaveLength(0);
   });
 
