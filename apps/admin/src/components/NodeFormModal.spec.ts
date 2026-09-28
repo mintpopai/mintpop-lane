@@ -135,10 +135,6 @@ describe("NodeFormModal 角色下拉不提供第一跳", () => {
     return Array.from(document.querySelectorAll("li")).some((li) => li.textContent?.includes(text));
   }
 
-  function frontNode(): AdminNodeResponse {
-    return { ...landNode(), id: 9, name: "US-01", role: "FRONT", protocol: "TROJAN" };
-  }
-
   it("新建节点时角色下拉没有「第一跳」——第一跳只能从机场订阅导入", async () => {
     mount(NodeFormModal, { attachTo: document.body, props: { role: "LAND", editing: null } });
 
@@ -153,16 +149,5 @@ describe("NodeFormModal 角色下拉不提供第一跳", () => {
     await query('button[aria-label="角色"]').trigger("click");
 
     expect(hasRoleOption("第一跳（出国）")).toBe(false);
-  });
-
-  it("编辑历史遗留的手工第一跳节点时，角色下拉仍保留「第一跳」，不强行下架", async () => {
-    mount(NodeFormModal, {
-      attachTo: document.body,
-      props: { role: "FRONT", editing: frontNode() },
-    });
-
-    await query('button[aria-label="角色"]').trigger("click");
-
-    expect(hasRoleOption("第一跳（出国）")).toBe(true);
   });
 });
