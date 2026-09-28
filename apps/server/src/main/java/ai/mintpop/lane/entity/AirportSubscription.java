@@ -10,12 +10,12 @@ import lombok.Data;
 import java.time.Instant;
 
 /**
- * node_group 表映射。持久化形态里订阅链接是密文，
- * 业务层一律用 NodeGroupDto（明文），转换由 NodeGroupConverter 负责。
+ * airport_subscription 表映射。持久化形态里订阅链接是密文，
+ * 业务层一律用 AirportSubscriptionDto（明文），转换由 AirportSubscriptionConverter 负责。
  */
 @Data
-@TableName("node_group")
-public class NodeGroup {
+@TableName("airport_subscription")
+public class AirportSubscription {
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -40,7 +40,7 @@ public class NodeGroup {
      * 已推送过额度告警的档位（80 或 95），服务端内部去重用，不对外展示；null 表示未推过。
      * updateStrategy = ALWAYS：MyBatis-Plus 默认跳过 null 字段，没有它
      * {@code TrafficAlertService} 里「用量回落（月度重置）就清档」那一步会变成静默空操作——
-     * SQL 根本不带这一列，库里仍是旧档位，此后该分组再也推不出额度告警且不报错。
+     * SQL 根本不带这一列，库里仍是旧档位，此后该订阅再也推不出额度告警且不报错。
      * 同 {@link ProxyNode#getEgressIp()} 与 {@link Plan#getDescription()} 的处理。
      */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)

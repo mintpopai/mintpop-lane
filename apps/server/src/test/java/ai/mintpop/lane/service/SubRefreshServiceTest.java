@@ -3,12 +3,12 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubYamlParser;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,7 +35,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 订阅定时刷新：只盯「已有节点原地对齐、增删只告警不落库、端点变化单独告警、单分组失败不中断整轮」。
+ * 订阅定时刷新：只盯「已有节点原地对齐、增删只告警不落库、端点变化单独告警、单订阅失败不中断整轮」。
  * 拉取、YAML 解析、故障域解析与通知都替换成假的（除 SubYamlParser 用真实实现，纯内存计算不出网）。
  */
 @ExtendWith(MockitoExtension.class)
@@ -44,7 +44,7 @@ import static org.mockito.Mockito.when;
 class SubRefreshServiceTest {
 
     @Mock
-    private NodeGroupRepository groupRepository;
+    private AirportSubscriptionRepository airportSubscriptionRepository;
     @Mock
     private ProxyNodeRepository nodeRepository;
     @Mock
@@ -66,14 +66,14 @@ class SubRefreshServiceTest {
     @BeforeEach
     void setUp() {
         when(failureDomainResolver.resolve(anyString())).thenReturn("jp.tsdns.top");
-        service = new SubRefreshService(groupRepository, nodeRepository, subFetchClient,
-                // syncer 用真实实现、只替换最底层的 DNS 解析口（理由同 AdminNodeGroupServiceImplTest）
+        service = new SubRefreshService(airportSubscriptionRepository, nodeRepository, subFetchClient,
+                // syncer 用真实实现、只替换最底层的 DNS 解析口（理由同 AdminAirportSubscriptionServiceImplTest）
                 new SubYamlParser(), new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()),
                 nodeNotifyService, trafficAlertService);
     }
 
-    private NodeGroupDto group(long id, String name) {
-        NodeGroupDto group = new NodeGroupDto();
+    private AirportSubscriptionDto group(long id, String name) {
+        AirportSubscriptionDto group = new AirportSubscriptionDto();
         group.setId(id);
         group.setName(name);
         group.setSubUrl("https://example.com/sub?token=x");
@@ -92,9 +92,9 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("已存在的节点原地更新参数、端口与故障域")
     void updatesExistingNodes() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
 
         service.refreshAll();
 
@@ -107,9 +107,9 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("订阅里新增的节点不自动入库，只推飞书告知")
     void doesNotAutoAddNewNodes() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of());
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of());
 
         service.refreshAll();
 
@@ -120,9 +120,9 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("订阅里消失的节点不自动删除，只推飞书告知")
     void doesNotAutoDeleteMissingNodes() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L))
+        when(nodeRepository.findByAirportSubscriptionId(1L))
                 .thenReturn(List.of(node(7L, "US-01", 35660), node(8L, "US-99", 35699)));
 
         service.refreshAll();
@@ -134,9 +134,9 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("节点端口变了要推飞书——此前下发给用户的配置已经失效")
     void notifiesOnPortChange() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
 
         service.refreshAll();
 
@@ -147,9 +147,9 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("端口未变不推端点变更告警")
     void doesNotNotifyWhenEndpointUnchanged() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
 
         service.refreshAll();
 
@@ -157,13 +157,13 @@ class SubRefreshServiceTest {
     }
 
     @Test
-    @DisplayName("单个分组失败不中断整轮")
+    @DisplayName("单个订阅失败不中断整轮")
     void oneGroupFailureDoesNotStopTheRound() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "坏的"), group(2L, "好的")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "坏的"), group(2L, "好的")));
         when(subFetchClient.fetch(anyString()))
                 .thenThrow(new BizException(BizCodeEnum.SUB_FETCH_FAILED))
                 .thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
-        when(nodeRepository.findByGroupId(2L)).thenReturn(List.of(node(7L, "US-01", 35555)));
+        when(nodeRepository.findByAirportSubscriptionId(2L)).thenReturn(List.of(node(7L, "US-01", 35555)));
 
         assertThatCode(() -> service.refreshAll()).doesNotThrowAnyException();
 
@@ -174,11 +174,11 @@ class SubRefreshServiceTest {
     @DisplayName("解析故障域失败时保留节点原有故障域，不抹成 null")
     void keepsOriginalFailureDomainWhenResolutionFails() {
         when(failureDomainResolver.resolve(anyString())).thenReturn(null);
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
         ProxyNodeDto existing = node(7L, "US-01", 35555);
         existing.setFailureDomain("old.tsdns.top");
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(existing));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(existing));
 
         service.refreshAll();
 
@@ -188,17 +188,17 @@ class SubRefreshServiceTest {
     }
 
     @Test
-    @DisplayName("每轮都把本次拉取的额度信息与拉取时间写回分组")
+    @DisplayName("每轮都把本次拉取的额度信息与拉取时间写回订阅")
     void persistsFetchedTrafficInfoOnGroup() {
-        NodeGroupDto group = group(1L, "A 家");
-        when(groupRepository.findAll()).thenReturn(List.of(group));
+        AirportSubscriptionDto group = group(1L, "A 家");
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group));
         when(subFetchClient.fetch(anyString()))
                 .thenReturn(new SubFetchResult(YAML_ONE_NODE, "机场名", 100L, 1000L, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
 
         service.refreshAll();
 
-        verify(groupRepository).update(group);
+        verify(airportSubscriptionRepository).update(group);
         assertThat(group.getUsedBytes()).isEqualTo(100L);
         assertThat(group.getTotalBytes()).isEqualTo(1000L);
         assertThat(group.getFetchedAt()).isNotNull();
@@ -207,13 +207,13 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("订阅里同名节点出现两次时只对齐一次——与 added 那一侧的去重口径对称")
     void deduplicatesExistingNodesBySourceName() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
                   - { name: 'US-01', type: anytls, server: us01a.example.com, port: 35660, password: p }
                   - { name: 'US-01', type: anytls, server: us01a.example.com, port: 35661, password: p }
                 """, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(7L, "US-01", 35555)));
 
         service.refreshAll();
 
@@ -225,13 +225,13 @@ class SubRefreshServiceTest {
     @Test
     @DisplayName("伪条目不查 DNS：刷新时同样走 FailureDomainSyncer 的统一口径")
     void skipsSuspectedInfoEntriesOnRefresh() {
-        when(groupRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(group(1L, "A 家")));
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
                   - { name: '到期时间：2027-05-02', type: anytls, server: info.example.com, port: 1, password: p }
                   - { name: 'US-01', type: anytls, server: us01a.example.com, port: 35660, password: p }
                 """, null, null, null, null));
-        when(nodeRepository.findByGroupId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(7L, "US-01", 35660)));
 
         service.refreshAll();
 

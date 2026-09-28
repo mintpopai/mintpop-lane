@@ -4,9 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-/** 创建分组的入参：只给分组名与链接，订阅里的美国节点由服务端自动导入 */
+/** 创建订阅的入参：只给订阅名与链接，订阅里的美国节点由服务端自动导入 */
 @Data
-public class NodeGroupCreateRequest {
+public class AirportSubscriptionCreateRequest {
 
     @NotBlank
     @Size(max = 64)

@@ -1,14 +1,14 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.EgressIpVerifier;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
@@ -36,26 +36,26 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
     private final UserFrontNodeRepository userFrontNodeRepository;
-    private final NodeGroupRepository groupRepository;
+    private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final EgressIpVerifier.EgressProbe egressProbe;
     private final NodeNotifyService nodeNotifyService;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
                                  UserFrontNodeRepository userFrontNodeRepository,
-                                 NodeGroupRepository groupRepository, EgressIpVerifier.EgressProbe egressProbe,
+                                 AirportSubscriptionRepository airportSubscriptionRepository, EgressIpVerifier.EgressProbe egressProbe,
                                  NodeNotifyService nodeNotifyService) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.userFrontNodeRepository = userFrontNodeRepository;
-        this.groupRepository = groupRepository;
+        this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.egressProbe = egressProbe;
         this.nodeNotifyService = nodeNotifyService;
     }
 
     @Override
     public List<AdminNodeResponse> list(NodeRole role) {
-        Map<Long, String> groupNames = groupRepository.findAll().stream()
-                .collect(Collectors.toMap(NodeGroupDto::getId, NodeGroupDto::getName));
+        Map<Long, String> groupNames = airportSubscriptionRepository.findAll().stream()
+                .collect(Collectors.toMap(AirportSubscriptionDto::getId, AirportSubscriptionDto::getName));
         return nodeRepository.findAll(role).stream().map(node -> toResponse(node, groupNames)).toList();
     }
 
@@ -293,8 +293,8 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getSecret() != null && !node.getSecret().isEmpty(),
                 isLand ? node.getCapacity() : null,
                 assignedUserCount,
-                node.getGroupId(),
-                node.getGroupId() == null ? null : groupNames.get(node.getGroupId()),
+                node.getAirportSubscriptionId(),
+                node.getAirportSubscriptionId() == null ? null : groupNames.get(node.getAirportSubscriptionId()),
                 node.getSourceType(),
                 node.getFailureDomain(),
                 node.getCreatedAt(),

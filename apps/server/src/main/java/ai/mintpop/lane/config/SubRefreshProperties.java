@@ -8,7 +8,7 @@ import java.time.Duration;
 
 /**
  * 订阅定时刷新配置（sub-refresh.*）。
- * 定时对齐已有节点的参数、故障域与分组额度，见 SubRefreshService；
+ * 定时对齐已有节点的参数、故障域与订阅额度，见 SubRefreshService；
  * 订阅里增删的节点只推飞书告知，不受本配置影响（增删告警与是否配置飞书 webhook 无关，未配则整体静默）。
  */
 @Data

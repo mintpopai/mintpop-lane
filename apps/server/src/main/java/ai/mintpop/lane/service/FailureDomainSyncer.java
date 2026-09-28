@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * 故障域的解析与写入：导入建组、订阅定时刷新、采购尽调三处共用同一份口径。
  * <p>
- * 抽出来的理由很具体：这两段此前在 {@code AdminNodeGroupServiceImpl} 与 {@code SubRefreshService}
+ * 抽出来的理由很具体：这两段此前在 {@code AdminAirportSubscriptionServiceImpl} 与 {@code SubRefreshService}
  * 里各有一份逐字相同的副本，尽调里还内联重写了第四种形态。于是「按 serverAddr 去重」
  * 「跳过伪条目」这类口径改一次得改四处，漏一处就是一次多余的 DNS 外呼扇出。
  */

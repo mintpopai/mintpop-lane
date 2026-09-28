@@ -2,11 +2,11 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 订阅定时刷新：周期性对齐各分组已有节点的参数、端口、故障域，以及分组自身的额度信息。
+ * 订阅定时刷新：周期性对齐各订阅已有节点的参数、端口、故障域，以及订阅自身的额度信息。
  * 此前订阅刷新只能管理员在管理端手动点，机场随时可能改端口/域名，一改库里就是过期配置，
  * 用户下发的配置连不上也没人知道，直到有人报障——本任务补一个定时任务持续对齐。
  * <p>
@@ -35,7 +35,7 @@ import java.util.Map;
 @Service
 public class SubRefreshService {
 
-    private final NodeGroupRepository groupRepository;
+    private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
@@ -43,11 +43,11 @@ public class SubRefreshService {
     private final NodeNotifyService nodeNotifyService;
     private final TrafficAlertService trafficAlertService;
 
-    public SubRefreshService(NodeGroupRepository groupRepository, ProxyNodeRepository nodeRepository,
+    public SubRefreshService(AirportSubscriptionRepository airportSubscriptionRepository, ProxyNodeRepository nodeRepository,
                              SubFetchClient subFetchClient, SubYamlParser subYamlParser,
                              FailureDomainSyncer failureDomainSyncer, NodeNotifyService nodeNotifyService,
                              TrafficAlertService trafficAlertService) {
-        this.groupRepository = groupRepository;
+        this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.nodeRepository = nodeRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
@@ -57,30 +57,30 @@ public class SubRefreshService {
     }
 
     /**
-     * fixedDelay：上一轮跑完再计时，分组多、拉取慢也不会两轮叠在一起。
-     * initialDelay 同样取 interval：启动后先等一轮，避免每次重启都立刻对全部分组重新拉取一遍订阅。
+     * fixedDelay：上一轮跑完再计时，订阅多、拉取慢也不会两轮叠在一起。
+     * initialDelay 同样取 interval：启动后先等一轮，避免每次重启都立刻对全部订阅重新拉取一遍订阅。
      */
     @Scheduled(fixedDelayString = "#{@subRefreshProperties.interval.toMillis()}",
             initialDelayString = "#{@subRefreshProperties.interval.toMillis()}")
     public void refreshAll() {
-        for (NodeGroupDto group : groupRepository.findAll()) {
+        for (AirportSubscriptionDto group : airportSubscriptionRepository.findAll()) {
             try {
                 refreshOne(group);
             } catch (Exception e) {
-                log.warn("订阅刷新处理失败，跳过 groupId={} name={}", group.getId(), group.getName(), e);
+                log.warn("订阅刷新处理失败，跳过 airportSubscriptionId={} name={}", group.getId(), group.getName(), e);
             }
         }
     }
 
-    private void refreshOne(NodeGroupDto group) {
+    private void refreshOne(AirportSubscriptionDto group) {
         // 订阅拉取（HTTP）与故障域解析（DNS）都是外呼，必须在任何数据库写入之前完成，
-        // 不能包进事务——与 AdminNodeGroupServiceImpl 对同类操作的处理一致
+        // 不能包进事务——与 AdminAirportSubscriptionServiceImpl 对同类操作的处理一致
         SubFetchResult result = subFetchClient.fetch(group.getSubUrl());
         List<SubNode> subNodes = subYamlParser.parse(result.body());
         Map<String, String> failureDomains = failureDomainSyncer.resolve(subNodes);
 
         applyTrafficInfo(group, result);
-        groupRepository.update(group);
+        airportSubscriptionRepository.update(group);
 
         diffAndUpdateNodes(group, subNodes, failureDomains);
 
@@ -91,11 +91,11 @@ public class SubRefreshService {
      * 按订阅原始节点名（sourceName）对齐已有节点：匹配上的原地更新参数/端口/故障域；
      * 订阅里多出来的、或库里有但订阅里已经没有的，都只收集起来推一条飞书，不建也不删。
      */
-    private void diffAndUpdateNodes(NodeGroupDto group, List<SubNode> subNodes, Map<String, String> failureDomains) {
+    private void diffAndUpdateNodes(AirportSubscriptionDto group, List<SubNode> subNodes, Map<String, String> failureDomains) {
         Map<String, SubNode> subByName = new LinkedHashMap<>();
         subNodes.forEach(node -> subByName.putIfAbsent(node.sourceName(), node));
 
-        List<ProxyNodeDto> existingNodes = nodeRepository.findByGroupId(group.getId());
+        List<ProxyNodeDto> existingNodes = nodeRepository.findByAirportSubscriptionId(group.getId());
         Map<String, ProxyNodeDto> existingByName = new LinkedHashMap<>();
         existingNodes.forEach(node -> existingByName.putIfAbsent(node.getSourceName(), node));
 
@@ -141,8 +141,8 @@ public class SubRefreshService {
         return serverAddr + ":" + port;
     }
 
-    /** 把本次拉取带回的额度信息写进分组 DTO；三个额度字段可能都是 null（机场未返回额度头） */
-    private void applyTrafficInfo(NodeGroupDto group, SubFetchResult result) {
+    /** 把本次拉取带回的额度信息写进订阅 DTO；三个额度字段可能都是 null（机场未返回额度头） */
+    private void applyTrafficInfo(AirportSubscriptionDto group, SubFetchResult result) {
         group.setUsedBytes(result.usedBytes());
         group.setTotalBytes(result.totalBytes());
         group.setExpiresAt(result.expiresAt());

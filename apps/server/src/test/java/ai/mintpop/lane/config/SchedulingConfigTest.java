@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 验证 {@code spring.task.scheduling.pool.size} 配置真的生效：5 个 {@code @Scheduled}
  * 任务共享同一个调度器，池大小为 1（Spring Boot 默认）时会互相排队，跑得慢的任务
- * （如订阅刷新拉取多个分组）会顶掉其它任务的执行时机。
+ * （如订阅刷新拉取多个订阅）会顶掉其它任务的执行时机。
  */
 class SchedulingConfigTest extends MysqlTestBase {
 

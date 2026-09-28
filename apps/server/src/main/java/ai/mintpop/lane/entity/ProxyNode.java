@@ -70,8 +70,8 @@ public class ProxyNode {
 
     private String remark;
 
-    /** 所属分组 id；NULL 表示手工节点 */
-    private Long groupId;
+    /** 所属机场订阅 id；NULL 表示手工节点 */
+    private Long airportSubscriptionId;
 
     /** 订阅里的原始节点名，重新拉取时据此匹配；手工节点为 NULL */
     private String sourceName;

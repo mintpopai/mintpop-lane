@@ -6,14 +6,14 @@ import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.config.EntryIpWatchProperties;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubYamlParser;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.response.SubAuditResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,7 +57,7 @@ class SubAuditServiceImplTest {
     @Mock private EcsDnsClient ecsDnsClient;
     @Mock private IpAsnClient ipAsnClient;
     @Mock private ProxyNodeRepository nodeRepository;
-    @Mock private NodeGroupRepository groupRepository;
+    @Mock private AirportSubscriptionRepository airportSubscriptionRepository;
 
     private SubAuditServiceImpl service;
 
@@ -73,28 +73,28 @@ class SubAuditServiceImplTest {
         service = new SubAuditServiceImpl(subFetchClient, new SubYamlParser(),
                 // syncer 用真实实现、只替换最底层的 DNS 解析口：本类要守的正是「按 serverAddr 去重」
                 new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()),
-                ecsDnsClient, ipAsnClient, nodeRepository, groupRepository, new EntryIpWatchProperties());
+                ecsDnsClient, ipAsnClient, nodeRepository, airportSubscriptionRepository, new EntryIpWatchProperties());
     }
 
-    /** 造一个库里已存在、且属于指定分组的前置节点 */
-    private ProxyNodeDto existingNode(String failureDomain, Long groupId) {
+    /** 造一个库里已存在、且属于指定订阅的前置节点 */
+    private ProxyNodeDto existingNode(String failureDomain, Long airportSubscriptionId) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setId(1L);
         node.setRole(NodeRole.FRONT);
         node.setFailureDomain(failureDomain);
-        node.setGroupId(groupId);
+        node.setAirportSubscriptionId(airportSubscriptionId);
         return node;
     }
 
     @Test
-    @DisplayName("与库中已有节点撞故障域时，conflictsWith 列出分组名")
+    @DisplayName("与库中已有节点撞故障域时，conflictsWith 列出订阅名")
     void reportsConflictWithExistingGroups() {
         when(nodeRepository.findAll(NodeRole.FRONT))
                 .thenReturn(List.of(existingNode("candidate.example.net", 9L)));
-        NodeGroupDto existing = new NodeGroupDto();
+        AirportSubscriptionDto existing = new AirportSubscriptionDto();
         existing.setId(9L);
         existing.setName("TaiShan Net");
-        when(groupRepository.findAll()).thenReturn(List.of(existing));
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(existing));
 
         assertThat(service.audit(SUB_URL).conflictsWith()).containsExactly("TaiShan Net");
     }
@@ -129,7 +129,7 @@ class SubAuditServiceImplTest {
         service.audit(SUB_URL);
         verify(nodeRepository, never()).create(any());
         verify(nodeRepository, never()).update(any());
-        verify(groupRepository, never()).create(any());
+        verify(airportSubscriptionRepository, never()).create(any());
     }
 
     @Test

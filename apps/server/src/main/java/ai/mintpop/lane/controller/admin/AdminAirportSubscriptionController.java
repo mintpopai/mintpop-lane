@@ -1,12 +1,12 @@
 package ai.mintpop.lane.controller.admin;
 
-import ai.mintpop.lane.request.NodeGroupCreateRequest;
-import ai.mintpop.lane.request.NodeGroupRenameRequest;
+import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
+import ai.mintpop.lane.request.AirportSubscriptionRenameRequest;
 import ai.mintpop.lane.request.SubAuditRequest;
 import ai.mintpop.lane.response.ApiResponse;
-import ai.mintpop.lane.response.NodeGroupResponse;
+import ai.mintpop.lane.response.AirportSubscriptionResponse;
 import ai.mintpop.lane.response.SubAuditResponse;
-import ai.mintpop.lane.service.AdminNodeGroupService;
+import ai.mintpop.lane.service.AdminAirportSubscriptionService;
 import ai.mintpop.lane.service.SubAuditService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,16 +20,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 节点分组与订阅导入。整个 /api/admin/** 由 SecurityConfig 统一要求 ROLE_ADMIN。 */
+/** 机场订阅管理与订阅导入。整个 /api/admin/** 由 SecurityConfig 统一要求 ROLE_ADMIN。 */
 @RestController
-@RequestMapping("/api/admin/node-groups")
-public class AdminNodeGroupController {
+@RequestMapping("/api/admin/airport-subscriptions")
+public class AdminAirportSubscriptionController {
 
-    private final AdminNodeGroupService adminNodeGroupService;
+    private final AdminAirportSubscriptionService adminAirportSubscriptionService;
     private final SubAuditService subAuditService;
 
-    public AdminNodeGroupController(AdminNodeGroupService adminNodeGroupService, SubAuditService subAuditService) {
-        this.adminNodeGroupService = adminNodeGroupService;
+    public AdminAirportSubscriptionController(AdminAirportSubscriptionService adminAirportSubscriptionService, SubAuditService subAuditService) {
+        this.adminAirportSubscriptionService = adminAirportSubscriptionService;
         this.subAuditService = subAuditService;
     }
 
@@ -40,31 +40,31 @@ public class AdminNodeGroupController {
     }
 
     @PostMapping
-    public ApiResponse<Long> create(@Valid @RequestBody NodeGroupCreateRequest request) {
-        return ApiResponse.success(adminNodeGroupService.create(request));
+    public ApiResponse<Long> create(@Valid @RequestBody AirportSubscriptionCreateRequest request) {
+        return ApiResponse.success(adminAirportSubscriptionService.create(request));
     }
 
     @GetMapping
-    public ApiResponse<List<NodeGroupResponse>> list() {
-        return ApiResponse.success(adminNodeGroupService.list());
+    public ApiResponse<List<AirportSubscriptionResponse>> list() {
+        return ApiResponse.success(adminAirportSubscriptionService.list());
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Void> rename(@PathVariable Long id, @Valid @RequestBody NodeGroupRenameRequest request) {
-        adminNodeGroupService.rename(id, request);
+    public ApiResponse<Void> rename(@PathVariable Long id, @Valid @RequestBody AirportSubscriptionRenameRequest request) {
+        adminAirportSubscriptionService.rename(id, request);
         return ApiResponse.success();
     }
 
     /** 用保存的链接重新拉取，自动导入其中的美国节点 */
     @PostMapping("/{id}/import")
     public ApiResponse<Void> importNodes(@PathVariable Long id) {
-        adminNodeGroupService.importNodes(id);
+        adminAirportSubscriptionService.importNodes(id);
         return ApiResponse.success();
     }
 
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
-        adminNodeGroupService.delete(id);
+        adminAirportSubscriptionService.delete(id);
         return ApiResponse.success();
     }
 }

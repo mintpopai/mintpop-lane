@@ -19,7 +19,7 @@ public record SubAuditResponse(
         /** 判定出的美国节点名，原样列出供人核对——判定是启发式的，不做纯自动决策 */
         List<String> usNodeNames,
         List<FailureDomainReport> failureDomains,
-        /** 与库中已有节点撞故障域的分组名；非空即应否决这次采购 */
+        /** 与库中已有节点撞故障域的订阅名；非空即应否决这次采购 */
         List<String> conflictsWith,
         /** 订阅里出现过的 mihomo type 集合，用于确认 front-tuning 覆盖表是否已支持 */
         List<String> protocols,

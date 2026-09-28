@@ -5,9 +5,9 @@ import lombok.ToString;
 
 import java.time.Instant;
 
-/** 分组的明文领域对象。订阅链接含 token，排除出 toString 防日志外泄。 */
+/** 机场订阅的明文领域对象。订阅链接含 token，排除出 toString 防日志外泄。 */
 @Data
-public class NodeGroupDto {
+public class AirportSubscriptionDto {
 
     private Long id;
 

@@ -3,10 +3,10 @@ package ai.mintpop.lane.response;
 import java.time.Instant;
 
 /**
- * 管理端的分组视图。订阅链接只回显打码形态，token 一个字符不出库。
+ * 管理端的机场订阅视图。订阅链接只回显打码形态，token 一个字符不出库。
  * 额度信息里的 trafficAlertedPct（已推送告警档位）是服务端内部去重状态，不对外暴露。
  */
-public record NodeGroupResponse(
+public record AirportSubscriptionResponse(
         Long id,
         String name,
         /** 打码后的订阅链接，只留 scheme 与 host */

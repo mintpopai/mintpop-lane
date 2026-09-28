@@ -59,14 +59,14 @@ public interface ProxyNodeRepository {
      */
     boolean existsByNameExcludingId(String name, Long excludeId);
 
-    /** 同一分组内按订阅原始节点名取节点，重新拉取时的匹配键 */
-    Optional<ProxyNodeDto> findByGroupIdAndSourceName(Long groupId, String sourceName);
+    /** 同一订阅内按订阅原始节点名取节点，重新拉取时的匹配键 */
+    Optional<ProxyNodeDto> findByAirportSubscriptionIdAndSourceName(Long airportSubscriptionId, String sourceName);
 
-    /** 某分组下的全部节点，按 id 升序 */
-    List<ProxyNodeDto> findByGroupId(Long groupId);
+    /** 某订阅下的全部节点，按 id 升序 */
+    List<ProxyNodeDto> findByAirportSubscriptionId(Long airportSubscriptionId);
 
-    /** 某分组下的节点数，分组列表展示用 */
-    long countByGroupId(Long groupId);
+    /** 某订阅下的节点数，订阅列表展示用 */
+    long countByAirportSubscriptionId(Long airportSubscriptionId);
 
     /** 库里出现过的全部故障域，去重；未解析（NULL）的不算。入口 IP 巡检据此取要监测的域名集合 */
     List<String> findDistinctFailureDomains();

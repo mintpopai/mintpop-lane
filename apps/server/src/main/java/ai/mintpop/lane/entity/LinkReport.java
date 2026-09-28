@@ -52,7 +52,7 @@ public class LinkReport {
      * 去掉注解，{@code p50CanBeClearedBackToNull} 照样通过；只有改坏 Mapper 里那行才会变红。
      * <p>
      * 注解仍然保留，是为了将来有人改用标准 update 调用时有一层防御（那条路径上它才真正生效，
-     * 形态同 {@link NodeGroup#getTrafficAlertedPct()}——一期就栽在那里，配额告警永久失声）。
+     * 形态同 {@link AirportSubscription#getTrafficAlertedPct()}——一期就栽在那里，配额告警永久失声）。
      * <b>新增任何写路径时，不要以为可空字段的清空已经由注解保证了，去看那条 SQL。</b>
      */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)

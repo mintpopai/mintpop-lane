@@ -29,7 +29,7 @@ class SchemaMigrationTest extends MysqlTestBase {
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
-        jdbc.execute("TRUNCATE TABLE node_group");
+        jdbc.execute("TRUNCATE TABLE airport_subscription");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
@@ -140,18 +140,18 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("V2 迁移建出 node_group 表并带中文注释，proxy_node 挂上分组外键列")
-    void v2MigrationCreatesNodeGroupTable() {
+    @DisplayName("V2 迁移建出 airport_subscription 表并带中文注释，proxy_node 挂上机场订阅外键列")
+    void v2MigrationCreatesAirportSubscriptionTable() {
         String comment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
-                WHERE table_schema = DATABASE() AND table_name = 'node_group' AND column_name = 'sub_url_cipher'
+                WHERE table_schema = DATABASE() AND table_name = 'airport_subscription' AND column_name = 'sub_url_cipher'
                 """, String.class);
         assertThat(comment).contains("AES-GCM");
 
         Integer cols = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.columns
                 WHERE table_schema = DATABASE() AND table_name = 'proxy_node'
-                  AND column_name IN ('group_id', 'source_name', 'source_type')
+                  AND column_name IN ('airport_subscription_id', 'source_name', 'source_type')
                 """, Integer.class);
         assertThat(cols).isEqualTo(3);
     }
@@ -528,11 +528,11 @@ class SchemaMigrationTest extends MysqlTestBase {
         try (Connection conn = dataSource.getConnection()) {
             assertThat(columnExists(conn, "proxy_node", "failure_domain")).isTrue();
             assertThat(columnExists(conn, "proxy_node", "failure_domain_checked_at")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_used_bytes")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_total_bytes")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_expires_at")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_alerted_pct")).isTrue();
-            assertThat(columnExists(conn, "node_group", "fetched_at")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_used_bytes")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_total_bytes")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_expires_at")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_alerted_pct")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "fetched_at")).isTrue();
             assertThat(tableExists(conn, "entry_ip_history")).isTrue();
         }
     }

@@ -3,14 +3,14 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.parser.SubYamlParser;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
-import ai.mintpop.lane.request.NodeGroupCreateRequest;
+import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,9 +42,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("订阅导入：把节点的故障域一并解析入库")
-class AdminNodeGroupServiceImplTest {
+class AdminAirportSubscriptionServiceImplTest {
 
-    @Mock private NodeGroupRepository groupRepository;
+    @Mock private AirportSubscriptionRepository airportSubscriptionRepository;
     @Mock private ProxyNodeRepository nodeRepository;
     @Mock private UserRepository userRepository;
     @Mock private UserFrontNodeRepository userFrontNodeRepository;
@@ -53,7 +53,7 @@ class AdminNodeGroupServiceImplTest {
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private TrafficAlertService trafficAlertService;
 
-    private AdminNodeGroupServiceImpl service;
+    private AdminAirportSubscriptionServiceImpl service;
 
     private static final String SUB_YAML = """
             proxies:
@@ -73,7 +73,7 @@ class AdminNodeGroupServiceImplTest {
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, null, null, null));
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
-        service = new AdminNodeGroupServiceImpl(groupRepository, nodeRepository, userRepository,
+        service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, nodeRepository, userRepository,
                 userFrontNodeRepository,
                 subFetchClient, new SubYamlParser(), transactionTemplate,
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
@@ -81,8 +81,8 @@ class AdminNodeGroupServiceImplTest {
                 new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), trafficAlertService);
     }
 
-    private NodeGroupDto group(long id) {
-        NodeGroupDto group = new NodeGroupDto();
+    private AirportSubscriptionDto group(long id) {
+        AirportSubscriptionDto group = new AirportSubscriptionDto();
         group.setId(id);
         group.setName("候选机场");
         group.setSubUrl("https://example.com/sub?token=x");
@@ -92,8 +92,8 @@ class AdminNodeGroupServiceImplTest {
     @Test
     @DisplayName("新建节点时写入解析到的故障域与解析时间")
     void writesFailureDomainOnCreate() {
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.empty());
+        when(airportSubscriptionRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve("hk01a.t11-a.app")).thenReturn("hk.tsdns.top");
 
         service.importNodes(1L);
@@ -113,8 +113,8 @@ class AdminNodeGroupServiceImplTest {
         existing.setFailureDomain("jp.tsdns.top");
         existing.setFailureDomainCheckedAt(Instant.parse("2026-09-01T00:00:00Z"));
 
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.of(existing));
+        when(airportSubscriptionRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.of(existing));
         when(failureDomainResolver.resolve(anyString())).thenReturn(null);
 
         assertThatCode(() -> service.importNodes(1L)).doesNotThrowAnyException();
@@ -129,8 +129,8 @@ class AdminNodeGroupServiceImplTest {
     @Test
     @DisplayName("同一域名的多个节点只解析一次，不重复查 DNS")
     void resolvesEachServerAddrOnce() {
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(airportSubscriptionRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
@@ -144,23 +144,23 @@ class AdminNodeGroupServiceImplTest {
     }
 
     @Test
-    @DisplayName("新建分组时额度已跨档：当场推送告警，且传给告警服务的分组带着真实自增 id（不是 null）")
+    @DisplayName("新建订阅时额度已跨档：当场推送告警，且传给告警服务的订阅带着真实自增 id（不是 null）")
     void alertsOnCreateWhenQuotaAlreadyCrossed() {
-        when(groupRepository.create(any())).thenReturn(42L);
-        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(airportSubscriptionRepository.create(any())).thenReturn(42L);
+        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, 95L, 100L, null));
 
-        NodeGroupCreateRequest request = new NodeGroupCreateRequest();
+        AirportSubscriptionCreateRequest request = new AirportSubscriptionCreateRequest();
         request.setName("新机场");
         request.setSubUrl("https://example.com/sub?token=y");
 
-        Long groupId = service.create(request);
+        Long airportSubscriptionId = service.create(request);
 
-        assertThat(groupId).isEqualTo(42L);
-        ArgumentCaptor<NodeGroupDto> captor = ArgumentCaptor.forClass(NodeGroupDto.class);
+        assertThat(airportSubscriptionId).isEqualTo(42L);
+        ArgumentCaptor<AirportSubscriptionDto> captor = ArgumentCaptor.forClass(AirportSubscriptionDto.class);
         verify(trafficAlertService).checkAndNotify(captor.capture(), any());
-        // groupRepository.create 不会把自增主键回写到传入的 DTO 上；这里锁住「调用前必须手动补上 id」
-        // 这一步，漏了的话 TrafficAlertService 内部的 groupRepository.update(group) 会因 id 为 null
+        // airportSubscriptionRepository.create 不会把自增主键回写到传入的 DTO 上；这里锁住「调用前必须手动补上 id」
+        // 这一步，漏了的话 TrafficAlertService 内部的 airportSubscriptionRepository.update(group) 会因 id 为 null
         // 而更新不到任何行，档位悄悄丢失且没有任何报错
         assertThat(captor.getValue().getId()).isEqualTo(42L);
     }
@@ -168,8 +168,8 @@ class AdminNodeGroupServiceImplTest {
     @Test
     @DisplayName("只导入美国节点，也只为它们解析故障域：订阅里几十个节点、只导入其中几个时，不为其余的白查一次 DNS")
     void resolvesOnlyUsNodes() {
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(airportSubscriptionRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:
@@ -187,8 +187,8 @@ class AdminNodeGroupServiceImplTest {
     @Test
     @DisplayName("机场塞的伪条目不导入也不查 DNS：它不是节点，server 字段也不是真实中转入口")
     void skipsSuspectedInfoEntries() {
-        when(groupRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByGroupIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
+        when(airportSubscriptionRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
+        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(failureDomainResolver.resolve(anyString())).thenReturn("hk.tsdns.top");
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult("""
                 proxies:

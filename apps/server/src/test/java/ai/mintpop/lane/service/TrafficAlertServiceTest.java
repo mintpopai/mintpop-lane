@@ -1,8 +1,8 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.dto.NodeGroupDto;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,19 +35,19 @@ class TrafficAlertServiceTest {
     /** 测试基准时刻，配合各用例构造出「还剩几天到期」 */
     private static final Instant NOW = Instant.parse("2026-09-18T00:00:00Z");
 
-    @Mock private NodeGroupRepository groupRepository;
+    @Mock private AirportSubscriptionRepository airportSubscriptionRepository;
     @Mock private NodeNotifyService nodeNotifyService;
 
     private TrafficAlertService service;
 
     @BeforeEach
     void setUp() {
-        service = new TrafficAlertService(groupRepository, nodeNotifyService,
+        service = new TrafficAlertService(airportSubscriptionRepository, nodeNotifyService,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
-    private NodeGroupDto group(Integer alertedPct) {
-        NodeGroupDto group = new NodeGroupDto();
+    private AirportSubscriptionDto group(Integer alertedPct) {
+        AirportSubscriptionDto group = new AirportSubscriptionDto();
         group.setId(1L);
         group.setName("TaiShan Net");
         group.setTrafficAlertedPct(alertedPct);
@@ -67,13 +67,13 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("首次跨 80% 推一次并记下档位")
     void alertsOnFirstCrossing() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
 
         service.checkAndNotify(group, used(85));
 
         verify(nodeNotifyService).notifyTrafficThreshold(group, 85);
         assertThat(group.getTrafficAlertedPct()).isEqualTo(80);
-        verify(groupRepository).update(group);
+        verify(airportSubscriptionRepository).update(group);
     }
 
     @Test
@@ -87,7 +87,7 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("从 80% 档跨到 95% 档再推一次")
     void alertsAgainOnHigherThreshold() {
-        NodeGroupDto group = group(80);
+        AirportSubscriptionDto group = group(80);
 
         service.checkAndNotify(group, used(96));
 
@@ -98,7 +98,7 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("用量重置回落后清档，下次再跨 80% 能重新推")
     void resetsThresholdAfterUsageDrops() {
-        NodeGroupDto group = group(95);
+        AirportSubscriptionDto group = group(95);
 
         service.checkAndNotify(group, used(5));
         assertThat(group.getTrafficAlertedPct()).isNull();
@@ -111,12 +111,12 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("机场没返回额度头时整段跳过，不推也不改档")
     void skipsWhenQuotaUnknown() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
 
         service.checkAndNotify(group, new SubFetchResult("proxies: []", null, null, null, null));
 
         verifyNoInteractions(nodeNotifyService);
-        verifyNoInteractions(groupRepository);
+        verifyNoInteractions(airportSubscriptionRepository);
     }
 
     @Test
@@ -125,30 +125,30 @@ class TrafficAlertServiceTest {
         service.checkAndNotify(group(null), used(42));
 
         verifyNoInteractions(nodeNotifyService);
-        verifyNoInteractions(groupRepository); // 关键：连一次 update 都不该有——最常见的运行态不能白白落库
+        verifyNoInteractions(airportSubscriptionRepository); // 关键：连一次 update 都不该有——最常见的运行态不能白白落库
     }
 
     @Test
     @DisplayName("通知抛异常不影响已完成的改库")
     void notifyFailureDoesNotBreakPersistence() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
         doThrow(new TaskRejectedException("执行器已关闭"))
                 .when(nodeNotifyService).notifyTrafficThreshold(any(), anyInt());
 
         assertThatCode(() -> service.checkAndNotify(group, used(85))).doesNotThrowAnyException();
-        verify(groupRepository).update(group);
+        verify(airportSubscriptionRepository).update(group);
     }
 
     @Test
     @DisplayName("剩余不足三天推一条到期告警，全程不写库——不去重就没有要持久化的状态")
     void alertsWhenExpiringWithinThreeDays() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
 
         service.checkAndNotify(group, expiringIn(Duration.ofDays(2)));
 
         verify(nodeNotifyService).notifySubscriptionExpiring(group, NOW.plus(Duration.ofDays(2)),
                 Duration.ofDays(2));
-        verifyNoInteractions(groupRepository);
+        verifyNoInteractions(airportSubscriptionRepository);
     }
 
     @Test
@@ -162,7 +162,7 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("已过期同样推：那是仍在持续的故障，不是可以翻篇的历史事件")
     void alertsWhenAlreadyExpired() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
 
         service.checkAndNotify(group, expiringIn(Duration.ofDays(-1)));
 
@@ -181,12 +181,12 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("额度与到期是两条独立分支：用量没跨档也照样能推到期告警")
     void expiryAlertIsIndependentOfUsageThreshold() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
 
         service.checkAndNotify(group, new SubFetchResult("proxies: []", null, 10L, 100L,
                 NOW.plus(Duration.ofHours(5))));
 
-        verifyNoInteractions(groupRepository);
+        verifyNoInteractions(airportSubscriptionRepository);
         verify(nodeNotifyService, never()).notifyTrafficThreshold(any(), anyInt());
         verify(nodeNotifyService).notifySubscriptionExpiring(group, NOW.plus(Duration.ofHours(5)),
                 Duration.ofHours(5));
@@ -195,14 +195,14 @@ class TrafficAlertServiceTest {
     @Test
     @DisplayName("到期通知抛异常不影响额度那条分支已完成的改库")
     void expiryNotifyFailureDoesNotBreakUsagePersistence() {
-        NodeGroupDto group = group(null);
+        AirportSubscriptionDto group = group(null);
         doThrow(new TaskRejectedException("执行器已关闭"))
                 .when(nodeNotifyService).notifySubscriptionExpiring(any(), any(), any());
 
         assertThatCode(() -> service.checkAndNotify(group,
                 new SubFetchResult("proxies: []", null, 85L, 100L, NOW.plus(Duration.ofDays(1)))))
                 .doesNotThrowAnyException();
-        verify(groupRepository).update(group);
+        verify(airportSubscriptionRepository).update(group);
         assertThat(group.getTrafficAlertedPct()).isEqualTo(80);
     }
 }

@@ -50,7 +50,7 @@ public interface UserFrontNodeRepository {
 
     /**
      * 该节点是否出现在任意用户的前置节点集合里（不论是不是「主」节点）。
-     * 删除/改角色/删分组前的引用检查要用它兜住二期之后新增的场景——
+     * 删除/改角色/删订阅前的引用检查要用它兜住二期之后新增的场景——
      * 一个节点可以是某人组里的非主成员，只出现在 user_front_node，不在任何人的
      * app_user.front_node_id 上；只查 {@code existsByFrontNodeId} 会漏判这种节点，
      * 撞上 fk_user_front_node_node 外键时抛出的是原始数据库异常而非友好的业务错误码。

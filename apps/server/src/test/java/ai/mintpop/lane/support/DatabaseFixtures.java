@@ -56,7 +56,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
-        jdbc.execute("TRUNCATE TABLE node_group");
+        jdbc.execute("TRUNCATE TABLE airport_subscription");
         jdbc.execute("TRUNCATE TABLE plan");
         jdbc.execute("TRUNCATE TABLE enterprise");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
@@ -154,8 +154,8 @@ public class DatabaseFixtures {
         return userId;
     }
 
-    /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；groupId 可为 null */
-    public Long createMihomoNode(String name, Long groupId) {
+    /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；airportSubscriptionId 可为 null */
+    public Long createMihomoNode(String name, Long airportSubscriptionId) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.FRONT);
@@ -164,7 +164,7 @@ public class DatabaseFixtures {
         node.setPort(35355);
         node.setSecret(Map.of("type", "anytls", "server", "hk01.example.com",
                 "port", 35355, "password", "mihomo-密码"));
-        node.setGroupId(groupId);
+        node.setAirportSubscriptionId(airportSubscriptionId);
         node.setSourceName(name);
         node.setSourceType("anytls");
         return nodeRepository.create(node);

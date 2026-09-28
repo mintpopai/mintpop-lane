@@ -334,7 +334,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @Test
     @DisplayName("checkAll：两个不同用户共享同一故障域名时，各自按 userId 独立推送、不互相混淆")
     void checkAllDistinguishesUsersSharingSameFailureDomain() {
-        // 更贴近真实拓扑：多个用户接同一机场分组，共用同一个故障域名
+        // 更贴近真实拓扑：多个用户接同一机场订阅，共用同一个故障域名
         Long userA = userId;
         Long userB = fixtures.createUser("u2", null, null);
         String emailB = "u2@test.example";

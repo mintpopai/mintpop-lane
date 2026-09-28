@@ -42,7 +42,7 @@ public class ProxyNodeConverter {
         dto.setCapacity(entity.getCapacity());
         dto.setStatus(entity.getStatus());
         dto.setRemark(entity.getRemark());
-        dto.setGroupId(entity.getGroupId());
+        dto.setAirportSubscriptionId(entity.getAirportSubscriptionId());
         dto.setSourceName(entity.getSourceName());
         dto.setSourceType(entity.getSourceType());
         dto.setFailureDomain(entity.getFailureDomain());
@@ -67,7 +67,7 @@ public class ProxyNodeConverter {
         entity.setCapacity(dto.getCapacity());
         entity.setStatus(dto.getStatus());
         entity.setRemark(dto.getRemark());
-        entity.setGroupId(dto.getGroupId());
+        entity.setAirportSubscriptionId(dto.getAirportSubscriptionId());
         entity.setSourceName(dto.getSourceName());
         entity.setSourceType(dto.getSourceType());
         entity.setFailureDomain(dto.getFailureDomain());

@@ -7,7 +7,7 @@ import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @AutoConfigureMockMvc
-class AdminNodeGroupControllerTest extends MysqlTestBase {
+class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
 
     @Autowired
     private MockMvc mockMvc;
@@ -56,7 +56,7 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
     private ProxyNodeRepository nodeRepository;
 
     @Autowired
-    private NodeGroupRepository groupRepository;
+    private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -115,27 +115,27 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(yaml, null, null, null, null));
     }
 
-    /** 只给分组名与链接建分组，返回分组 id */
+    /** 只给订阅名与链接建订阅，返回订阅 id */
     private Long createGroup(String name) throws Exception {
         var body = Map.of("name", name, "subUrl", SUB_URL);
-        var result = mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
+        var result = mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(jsonPath("$.code").value(0))
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("data").asLong();
     }
 
-    /** 建分组「机场A」，自动导入订阅里的两个美国节点 */
+    /** 建订阅「机场A」，自动导入订阅里的两个美国节点 */
     private Long createGroupImportingTwoNodes() throws Exception {
         return createGroup("机场A");
     }
 
     @Test
-    @DisplayName("创建分组：只给名字与链接，自动导入全部美国节点为 FRONT+MIHOMO，信息条目与非美国节点一律不进")
+    @DisplayName("创建订阅：只给名字与链接，自动导入全部美国节点为 FRONT+MIHOMO，信息条目与非美国节点一律不进")
     void createGroupImportsUsNodesOnly() throws Exception {
-        Long groupId = createGroupImportingTwoNodes();
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
 
-        List<ProxyNodeDto> nodes = nodeRepository.findByGroupId(groupId);
+        List<ProxyNodeDto> nodes = nodeRepository.findByAirportSubscriptionId(airportSubscriptionId);
         assertThat(nodes).extracting(ProxyNodeDto::getSourceName)
                 .containsExactly("🇺🇸[US]Santa Clara 01", "🇺🇸[US]San Jose07");
         ProxyNodeDto us = nodes.get(0);
@@ -148,16 +148,16 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
         assertThat(us.getSecret()).containsEntry("password", "uuid-秘密-1").containsEntry("type", "anytls");
         assertThat(us.getExtraConfig()).isEmpty();
 
-        // 分组列表：数量、打码链接（token 不出现）
-        mockMvc.perform(get("/api/admin/node-groups").header("Authorization", bearer(adminId)))
+        // 订阅列表：数量、打码链接（token 不出现）
+        mockMvc.perform(get("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data[0].name").value("机场A"))
                 .andExpect(jsonPath("$.data[0].nodeCount").value(2))
                 .andExpect(jsonPath("$.data[0].subUrlMasked").value("https://sub.example.com/…"));
 
-        // 节点列表带分组信息与真实 type
+        // 节点列表带订阅信息与真实 type
         mockMvc.perform(get("/api/admin/nodes").param("role", "FRONT").header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.data[0].groupId").value(groupId))
-                .andExpect(jsonPath("$.data[0].groupName").value("机场A"))
+                .andExpect(jsonPath("$.data[0].airportSubscriptionId").value(airportSubscriptionId))
+                .andExpect(jsonPath("$.data[0].airportSubscriptionName").value("机场A"))
                 .andExpect(jsonPath("$.data[0].sourceType").value("anytls"));
     }
 
@@ -165,18 +165,18 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
     @DisplayName("导入撞上已有的全局节点名时自动加后缀")
     void nameCollisionGetsSuffix() throws Exception {
         fixtures.createFrontNode("🇺🇸[US]San Jose07");
-        Long groupId = createGroupImportingTwoNodes();
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
 
-        assertThat(nodeRepository.findByGroupId(groupId))
+        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId))
                 .extracting(ProxyNodeDto::getName)
                 .contains("🇺🇸[US]San Jose07 (2)");
     }
 
     @Test
-    @DisplayName("分组重名报 410010；订阅里一个美国节点都没有报 410049 且不建空分组")
+    @DisplayName("订阅重名报 410010；订阅里一个美国节点都没有报 410049 且不建空订阅")
     void createGroupFailureModes() throws Exception {
         createGroupImportingTwoNodes();
-        mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
+        mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "机场A", "subUrl", SUB_URL))))
                 .andExpect(jsonPath("$.code").value(410010));
@@ -187,17 +187,17 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
                   - { name: '🇭🇰[HK]HongKong01', type: anytls, server: hk01a.example.com, port: 35355, password: p }
                   - { name: 'United States 03', type: anytls, server: us03a.example.com, port: 35663, password: p }
                 """);
-        mockMvc.perform(post("/api/admin/node-groups").header("Authorization", bearer(adminId))
+        mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "机场B", "subUrl", SUB_URL))))
                 .andExpect(jsonPath("$.code").value(410049));
-        assertThat(groupRepository.existsByName("机场B")).isFalse();
+        assertThat(airportSubscriptionRepository.existsByName("机场B")).isFalse();
     }
 
     @Test
     @DisplayName("重新拉取并导入：已存在的美国节点原地更新参数，新出现的美国节点入库，非美国节点仍不进")
     void reimportUpdatesExistingAndAddsNewUsNodes() throws Exception {
-        Long groupId = createGroupImportingTwoNodes();
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
 
         // 第二次拉取订阅内容有变化：Santa Clara 01 换了端口，多了一个美国节点和一个港节点
         stubSubscription(SUBSCRIPTION.replace("port: 35660", "port: 40000") + """
@@ -205,14 +205,14 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
                     - { name: '🇭🇰[HK]HongKong02', type: anytls, server: hk02a.example.com, port: 35356, password: uuid-秘密-1 }
                 """);
 
-        mockMvc.perform(post("/api/admin/node-groups/" + groupId + "/import")
+        mockMvc.perform(post("/api/admin/airport-subscriptions/" + airportSubscriptionId + "/import")
                         .header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
 
-        assertThat(nodeRepository.findByGroupId(groupId)).extracting(ProxyNodeDto::getSourceName)
+        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).extracting(ProxyNodeDto::getSourceName)
                 .containsExactlyInAnyOrder("🇺🇸[US]Santa Clara 01", "🇺🇸[US]San Jose07", "🇺🇸[US]San Francisco09");
         // 已存在的节点原地更新端口，名字保持库里的（没有产生「… (2)」）
-        ProxyNodeDto updated = nodeRepository.findByGroupIdAndSourceName(groupId, "🇺🇸[US]Santa Clara 01")
+        ProxyNodeDto updated = nodeRepository.findByAirportSubscriptionIdAndSourceName(airportSubscriptionId, "🇺🇸[US]Santa Clara 01")
                 .orElseThrow();
         assertThat(updated.getName()).isEqualTo("🇺🇸[US]Santa Clara 01");
         assertThat(updated.getPort()).isEqualTo(40000);
@@ -220,67 +220,67 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("改名生效且重名报 410010；分组不存在报 410009")
+    @DisplayName("改名生效且重名报 410010；订阅不存在报 410009")
     void renameGroup() throws Exception {
-        Long groupId = createGroupImportingTwoNodes();
-        mockMvc.perform(put("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId))
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
+        mockMvc.perform(put("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A-新名"))))
                 .andExpect(jsonPath("$.code").value(0));
-        assertThat(groupRepository.findById(groupId).orElseThrow().getName()).isEqualTo("机场A-新名");
+        assertThat(airportSubscriptionRepository.findById(airportSubscriptionId).orElseThrow().getName()).isEqualTo("机场A-新名");
 
-        mockMvc.perform(put("/api/admin/node-groups/99999").header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/airport-subscriptions/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "X"))))
                 .andExpect(jsonPath("$.code").value(410009));
     }
 
     @Test
-    @DisplayName("只改大小写的分组改名不被表的 ci 排序规则误判为重名")
+    @DisplayName("只改大小写的订阅改名不被表的 ci 排序规则误判为重名")
     void renameGroupCaseOnlyChangeSucceeds() throws Exception {
-        Long groupId = createGroup("Airport A");
+        Long airportSubscriptionId = createGroup("Airport A");
 
-        mockMvc.perform(put("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "AIRPORT A"))))
                 .andExpect(jsonPath("$.code").value(0));
-        assertThat(groupRepository.findById(groupId).orElseThrow().getName()).isEqualTo("AIRPORT A");
+        assertThat(airportSubscriptionRepository.findById(airportSubscriptionId).orElseThrow().getName()).isEqualTo("AIRPORT A");
     }
 
     @Test
-    @DisplayName("改名撞上另一个已存在的分组名时报 410010，且该分组名字不变")
+    @DisplayName("改名撞上另一个已存在的订阅名时报 410010，且该订阅名字不变")
     void renameToExistingGroupNameFails() throws Exception {
         Long groupA = createGroupImportingTwoNodes();
         Long groupB = createGroup("机场B");
 
-        mockMvc.perform(put("/api/admin/node-groups/" + groupB).header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/airport-subscriptions/" + groupB).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A"))))
                 .andExpect(jsonPath("$.code").value(410010));
-        assertThat(groupRepository.findById(groupB).orElseThrow().getName()).isEqualTo("机场B");
-        assertThat(groupRepository.findById(groupA).orElseThrow().getName()).isEqualTo("机场A");
+        assertThat(airportSubscriptionRepository.findById(groupB).orElseThrow().getName()).isEqualTo("机场B");
+        assertThat(airportSubscriptionRepository.findById(groupA).orElseThrow().getName()).isEqualTo("机场A");
     }
 
     @Test
-    @DisplayName("删除分组连带删除组内节点；组内有节点被用户绑定时报 410013 且一个都不删")
+    @DisplayName("删除订阅连带删除订阅内节点；订阅内有节点被用户绑定时报 410013 且一个都不删")
     void deleteGroup() throws Exception {
-        Long groupId = createGroupImportingTwoNodes();
-        Long nodeId = nodeRepository.findByGroupId(groupId).get(0).getId();
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
+        Long nodeId = nodeRepository.findByAirportSubscriptionId(airportSubscriptionId).get(0).getId();
         fixtures.createUser("logto-user-1", nodeId, null);
 
-        mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
+        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410013));
-        assertThat(nodeRepository.findByGroupId(groupId)).hasSize(2);
+        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).hasSize(2);
 
         // 解绑后可整组删除
         jdbc.update("UPDATE app_user SET front_node_id = NULL WHERE front_node_id = ?", nodeId);
-        mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
+        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
-        assertThat(nodeRepository.findByGroupId(groupId)).isEmpty();
-        assertThat(groupRepository.findById(groupId)).isEmpty();
+        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).isEmpty();
+        assertThat(airportSubscriptionRepository.findById(airportSubscriptionId)).isEmpty();
     }
 
     @Test
-    @DisplayName("组内节点是某人前置集合里的非主成员（不在任何人的 front_node_id 上）时，删分组同样报 410013 而不是数据库异常")
+    @DisplayName("订阅内节点是某人前置集合里的非主成员（不在任何人的 front_node_id 上）时，删订阅同样报 410013 而不是数据库异常")
     void deleteGroupBlockedByNonPrimaryFrontMembership() throws Exception {
-        Long groupId = createGroupImportingTwoNodes();
-        List<ProxyNodeDto> nodes = nodeRepository.findByGroupId(groupId);
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
+        List<ProxyNodeDto> nodes = nodeRepository.findByAirportSubscriptionId(airportSubscriptionId);
         Long primaryNodeId = nodes.get(0).getId();
         Long secondaryNodeId = nodes.get(1).getId();
         // 该用户的「主」前置节点是 primaryNodeId，secondaryNodeId 只是它前置集合里的非主成员——
@@ -288,16 +288,16 @@ class AdminNodeGroupControllerTest extends MysqlTestBase {
         Long userId = fixtures.createUser("logto-user-1", primaryNodeId, null);
         userFrontNodeRepository.replaceForUser(userId, List.of(primaryNodeId, secondaryNodeId));
 
-        mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
+        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410013));
-        assertThat(nodeRepository.findByGroupId(groupId)).hasSize(2);
+        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).hasSize(2);
 
         // 解绑后可整组删除。断言要落到库上：只看 code=0 的话，删除若是空操作也发现不了
         userFrontNodeRepository.deleteByUserId(userId);
         jdbc.update("UPDATE app_user SET front_node_id = NULL WHERE id = ?", userId);
-        mockMvc.perform(delete("/api/admin/node-groups/" + groupId).header("Authorization", bearer(adminId)))
+        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
-        assertThat(nodeRepository.findByGroupId(groupId)).isEmpty();
-        assertThat(groupRepository.findById(groupId)).isEmpty();
+        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).isEmpty();
+        assertThat(airportSubscriptionRepository.findById(airportSubscriptionId)).isEmpty();
     }
 }
