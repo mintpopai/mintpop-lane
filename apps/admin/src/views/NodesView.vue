@@ -10,7 +10,7 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import FilterChips from "../components/FilterChips.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
-import NodeGroupAuditModal from "../components/NodeGroupAuditModal.vue";
+import AirportSubscriptionAuditModal from "../components/AirportSubscriptionAuditModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
@@ -42,7 +42,7 @@ const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
 const deletingGroup = ref(false);
 
 // —— 采购尽调：候选机场是否与库里已有节点撞故障域，只读，不落库。
-// 弹窗自身的状态与逻辑都在 NodeGroupAuditModal 组件里，这里只管开关 ——
+// 弹窗自身的状态与逻辑都在 AirportSubscriptionAuditModal 组件里，这里只管开关 ——
 const auditModalOpen = ref(false);
 
 /** 启用状态筛选，两跳共用：ALL=不筛 */
@@ -496,7 +496,7 @@ onMounted(load);
     @confirm="confirmDeleteGroup()"
     @cancel="pendingDeleteGroup = null"
   />
-  <NodeGroupAuditModal v-if="auditModalOpen" @close="auditModalOpen = false" />
+  <AirportSubscriptionAuditModal v-if="auditModalOpen" @close="auditModalOpen = false" />
 </template>
 
 <style scoped>

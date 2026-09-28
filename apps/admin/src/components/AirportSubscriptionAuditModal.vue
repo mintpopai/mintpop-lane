@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 采购尽调：给一个候选机场的试用订阅链接，判断它是否与库里已有节点撞故障域。
-// 全程只读、不落库，与「重新拉取」「导入」这类会改分组数据的弹窗不同，故不 emit saved，
+// 全程只读、不落库，与「重新拉取」「导入」这类会改订阅数据的弹窗不同，故不 emit saved，
 // 不需要父级 load() 刷新任何东西。
 import { ref } from "vue";
 import { adminApi } from "../api";
@@ -23,7 +23,7 @@ async function submit(): Promise<void> {
   }
   auditing.value = true;
   try {
-    report.value = await adminApi().auditNodeGroup({ subUrl: subUrl.value.trim() });
+    report.value = await adminApi().auditAirportSubscription({ subUrl: subUrl.value.trim() });
   } catch (error) {
     showToast(
       "error",
@@ -61,7 +61,7 @@ function vantageRows(
       <div v-if="!report" class="admin-field">
         <label for="audit-sub-url">候选机场订阅链接</label>
         <p class="admin-note">
-          只读探测，不写库：解析候选机场的节点域名，判断是否与库里已有分组撞同一个故障域（同一家中转商）。
+          只读探测，不写库：解析候选机场的节点域名，判断是否与库里已有订阅撞同一个故障域（同一家中转商）。
         </p>
         <input
           id="audit-sub-url"
@@ -87,10 +87,10 @@ function vantageRows(
 
         <!-- 全份报告最重要的结论：撞了故障域就等于花两份钱买同一个入口，采购上要一眼看到、否决 -->
         <div v-if="report.conflictsWith.length > 0" class="audit-verdict audit-verdict-danger">
-          <strong>与现有分组同故障域，建议否决这次采购</strong>
-          <p>撞车分组：{{ report.conflictsWith.join("、") }}</p>
+          <strong>与现有订阅同故障域，建议否决这次采购</strong>
+          <p>撞车订阅：{{ report.conflictsWith.join("、") }}</p>
         </div>
-        <div v-else class="audit-verdict audit-verdict-ok">未发现与现有分组撞故障域。</div>
+        <div v-else class="audit-verdict audit-verdict-ok">未发现与现有订阅撞故障域。</div>
 
         <div class="admin-field">
           <p class="admin-note">

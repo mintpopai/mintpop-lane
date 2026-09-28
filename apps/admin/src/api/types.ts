@@ -15,21 +15,6 @@ export const USER_ROLE = {
 } as const;
 export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 
-/**
- * 保存用户时对第一跳（前置节点）的处置意图，与服务端 FrontAction 枚举逐字一致。
- * 它是一个**意图**而不是状态：更新用户是整体保存接口，每个调用点都必须显式表态，
- * 服务端不拿 frontNodeId 与库里现值作比较去反推（回带的值可能是过期快照）。
- */
-export const FRONT_ACTION = {
-  /** 这次保存没动第一跳：前置组原样不碰，主节点沿用库里现值 */
-  KEEP: "KEEP",
-  /** 按故障域重新分配一组；一个候选都算不出来时服务端报 410048，而不是把人清空 */
-  AUTO: "AUTO",
-  /** 真的不分配：整组清空、主节点置 null */
-  CLEAR: "CLEAR",
-} as const;
-export type FrontAction = (typeof FRONT_ACTION)[keyof typeof FRONT_ACTION];
-
 export const NODE_ROLE = {
   FRONT: "FRONT",
   LAND: "LAND",
@@ -154,16 +139,8 @@ export interface AdminUserResponse {
   email: string;
   role: UserRole;
   status: UserStatus;
-  /** 注册即无资源，未分配时为 null */
-  frontNodeId: number | null;
-  frontNodeName: string | null;
-  /** 该用户当前分配到的一组前置节点（按故障域分桶后的完整集合，不止 frontNodeId 那个「主」节点） */
-  frontNodes: FrontNodeBrief[];
-  /**
-   * frontNodes 覆盖的故障域个数；等于 1 说明这一组节点共用同一台中转入口机，
-   * 入口一挂全部失效——需要在管理端显式警示，提醒采购第二家机场
-   */
-  failureDomainCount: number;
+  /** 该用户当前分配到的第一跳，按机场订阅顺位排列；未分配时为空数组 */
+  frontSubscriptions: FrontSubscriptionBrief[];
   landNodeId: number | null;
   landNodeName: string | null;
   /** 取自其落地节点，未分配或落地未填出口时为 null */
@@ -176,11 +153,14 @@ export interface AdminUserResponse {
   updatedAt: string;
 }
 
-/** 前置节点摘要：管理端按 failureDomain 分组展示，null 表示该节点尚未解析出故障域 */
-export interface FrontNodeBrief {
-  id: number;
-  name: string;
-  failureDomain: string | null;
+/** 用户第一跳列表的一项 */
+export interface FrontSubscriptionBrief {
+  /** 顺位：0 主用，1、2 备用 */
+  position: number;
+  airportSubscriptionId: number;
+  airportName: string;
+  subscriptionName: string;
+  account: string;
 }
 
 export interface ActiveSubscriptionBrief {
@@ -211,9 +191,9 @@ export interface AdminNodeResponse {
   capacity: number | null;
   /** 该落地节点当前绑定的用户数；非 LAND 为 null */
   assignedUserCount: number | null;
-  /** 所属分组；手工节点为 null */
-  groupId: number | null;
-  groupName: string | null;
+  /** 所属机场订阅；手工节点为 null */
+  airportSubscriptionId: number | null;
+  airportSubscriptionName: string | null;
   /** 订阅节点的真实 mihomo type（如 anytls）；手工节点为 null */
   sourceType: string | null;
   /** 故障域：节点域名 CNAME 链的终点，仅对 FRONT 节点有意义；null 表示尚未解析或解析失败 */
@@ -228,13 +208,6 @@ export interface AdminNodeResponse {
  */
 export interface UserSaveRequest {
   status: UserStatus;
-  /**
-   * 这次保存要对第一跳做什么。服务端必填（漏传直接 400），不给缺省值：
-   * 整体保存接口的每个调用点都要显式表态，「忘了传」必须当场暴露，
-   * 而不是悄悄落到某一种处置上——二期出事正是那个形态。
-   * 第一跳不能手工指定节点，只能自动分配或清空，所以入参里没有节点 id。
-   */
-  frontAction: FrontAction;
   landNodeId: number | null;
   /** 管理员自用说明，空串表示没写。整体保存接口，不带就等于清空 */
   remark: string;
@@ -417,13 +390,41 @@ export interface SubscriptionUpdateRequest {
   remark: string;
 }
 
-/** 管理端的分组视图。订阅链接只回显打码形态，token 不出现 */
-export interface NodeGroupResponse {
+/** 管理端的机场视图 */
+export interface AirportResponse {
+  id: number;
+  name: string;
+  websiteUrl: string | null;
+  remark: string | null;
+  subscriptionCount: number;
+  /** 各订阅主用人数之和 */
+  primaryUsed: number;
+  /** 各订阅 带宽/20（向下取整）之和 */
+  primaryCapacity: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AirportSaveRequest {
+  name: string;
+  websiteUrl: string;
+  remark: string;
+}
+
+/** 管理端的机场订阅视图。订阅链接只回显打码形态，token 不出现 */
+export interface AirportSubscriptionResponse {
   id: number;
   name: string;
   subUrlMasked: string;
   nodeCount: number;
   remark: string | null;
+  /** 所属机场 id */
+  airportId: number;
+  airportName: string;
+  /** 机场账号（邮箱等），用于登录机场官网续费/查流量 */
+  account: string;
+  /** 带宽（Mbps），创建后不可改；主用容量 = 本值 / 20 向下取整 */
+  bandwidthMbps: number;
   /** 已用流量字节数；机场未返回额度头则为 null */
   usedBytes: number | null;
   /** 总流量额度字节数；null 同上 */
@@ -432,6 +433,10 @@ export interface NodeGroupResponse {
   expiresAt: string | null;
   /** 最近一次成功拉取订阅的时间；从未拉取成功过则为 null */
   fetchedAt: string | null;
+  /** 本订阅当前占用的主用名额数（第一跳顺位 0 引用本订阅的用户数） */
+  primaryUsed: number;
+  /** 本订阅的主用名额总容量：bandwidthMbps / 20 向下取整 */
+  primaryCapacity: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -486,16 +491,23 @@ export interface SubAuditResponse {
   expiresAt: string | null;
 }
 
-/** 建分组入参：只给分组名与链接，订阅里的美国节点由服务端自动导入 */
-export interface NodeGroupCreateRequest {
+/** 建机场订阅入参：订阅里的美国节点由服务端自动导入 */
+export interface AirportSubscriptionCreateRequest {
   name: string;
   subUrl: string;
+  /** 所属机场 id，创建后不可改 */
+  airportId: number;
+  /** 机场账号 */
+  account: string;
+  /** 带宽（Mbps），创建后不可改 */
+  bandwidthMbps: number;
   remark: string;
 }
 
-/** 改名入参。不支持改订阅链接——换链接等于建新分组 */
-export interface NodeGroupRenameRequest {
+/** 更新入参：只能改名称、账号、备注；所属机场与带宽创建后不可改，换机场/带宽等于建新订阅 */
+export interface AirportSubscriptionUpdateRequest {
   name: string;
+  account: string;
   remark: string;
 }
 

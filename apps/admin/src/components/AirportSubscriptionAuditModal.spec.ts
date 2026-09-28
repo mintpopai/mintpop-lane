@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
 import type { SubAuditFailureDomainReport, SubAuditResponse } from "../api/types";
 import { showToast } from "../toast";
-import NodeGroupAuditModal from "./NodeGroupAuditModal.vue";
+import AirportSubscriptionAuditModal from "./AirportSubscriptionAuditModal.vue";
 
-const auditNodeGroup = vi.fn<(body: { subUrl: string }) => Promise<SubAuditResponse>>();
+const auditAirportSubscription = vi.fn<(body: { subUrl: string }) => Promise<SubAuditResponse>>();
 
 vi.mock("../api", () => ({
-  adminApi: () => ({ auditNodeGroup }),
+  adminApi: () => ({ auditAirportSubscription }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
 
@@ -85,34 +85,34 @@ function query(selector: string): DOMWrapper<Element> {
 
 /** 贴链接、点「开始尽调」，等报告回来 */
 async function submitAuditWith(overrides: Partial<SubAuditResponse>) {
-  auditNodeGroup.mockResolvedValueOnce(auditReport(overrides));
-  const wrapper = mount(NodeGroupAuditModal, { attachTo: document.body });
+  auditAirportSubscription.mockResolvedValueOnce(auditReport(overrides));
+  const wrapper = mount(AirportSubscriptionAuditModal, { attachTo: document.body });
   await query("#audit-sub-url").setValue("https://example.com/sub");
   await query("button.admin-btn").trigger("click");
-  await vi.waitFor(() => expect(auditNodeGroup).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(auditAirportSubscription).toHaveBeenCalledTimes(1));
   return wrapper;
 }
 
-describe("NodeGroupAuditModal", () => {
+describe("AirportSubscriptionAuditModal", () => {
   it("贴链接提交后，把订阅链接原样传给尽调接口", async () => {
     await submitAuditWith({});
 
-    expect(auditNodeGroup).toHaveBeenCalledWith({ subUrl: "https://example.com/sub" });
+    expect(auditAirportSubscription).toHaveBeenCalledWith({ subUrl: "https://example.com/sub" });
   });
 
   it("链接为空时不发请求，提示先粘贴链接", async () => {
-    mount(NodeGroupAuditModal, { attachTo: document.body });
+    mount(AirportSubscriptionAuditModal, { attachTo: document.body });
 
     await query("button.admin-btn").trigger("click");
 
-    expect(auditNodeGroup).not.toHaveBeenCalled();
+    expect(auditAirportSubscription).not.toHaveBeenCalled();
     expect(showToast).toHaveBeenCalledWith("error", "先粘贴候选机场的订阅链接");
   });
 
   it("conflictsWith 非空时用醒目的否决态样式标出，不是和其它文案一样平铺", async () => {
     await submitAuditWith({ conflictsWith: ["TaiShan Net"] });
 
-    expect(document.body.textContent).toContain("与现有分组同故障域");
+    expect(document.body.textContent).toContain("与现有订阅同故障域");
     const verdict = document.querySelector(".audit-verdict-danger");
     expect(verdict).not.toBeNull();
     expect(verdict!.textContent).toContain("建议否决");
@@ -141,8 +141,8 @@ describe("NodeGroupAuditModal", () => {
   });
 
   it("尽调失败时用服务端中文提示，不吞掉错误", async () => {
-    auditNodeGroup.mockRejectedValueOnce(new BizError(410099, "订阅拉取失败"));
-    mount(NodeGroupAuditModal, { attachTo: document.body });
+    auditAirportSubscription.mockRejectedValueOnce(new BizError(410099, "订阅拉取失败"));
+    mount(AirportSubscriptionAuditModal, { attachTo: document.body });
 
     await query("#audit-sub-url").setValue("https://example.com/sub");
     await query("button.admin-btn").trigger("click");
