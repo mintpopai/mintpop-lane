@@ -49,6 +49,4 @@ public interface UserRepository {
     void update(UserDto user);
 
     void deleteById(Long id);
-
-    boolean existsByFrontNodeId(Long nodeId);
 }

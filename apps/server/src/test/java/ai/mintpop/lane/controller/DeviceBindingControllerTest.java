@@ -114,8 +114,8 @@ class DeviceBindingControllerTest extends MysqlTestBase {
     void setUp() {
         DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        ownerId = fixtures.createUser("logto-owner", null, null);
-        strangerId = fixtures.createUser("logto-stranger", null, null);
+        ownerId = fixtures.createUser("logto-owner", null);
+        strangerId = fixtures.createUser("logto-stranger", null);
         subscriptionId = fixtures.createSubscription(ownerId, CLAUDE, "Claude 月付",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "sk-ant-test");
     }

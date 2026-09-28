@@ -61,7 +61,7 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
     void allocatesAndPersistsInOrder() {
         Long a = usableSubscription("A", 300);
         Long b = usableSubscription("B", 300);
-        Long user = fixtures.createUser("u1", null, null);
+        Long user = fixtures.createUser("u1", null);
 
         List<FrontSubscriptionBrief> briefs = frontSubscriptionService.allocate(user);
 
@@ -74,7 +74,7 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
     @DisplayName("重算已分配用户时排除他自己的旧列表：满额前最后一个名额能分回给他")
     void allocatesExcludingUsersOwnOldList() {
         Long a = usableSubscription("A", 20);          // 容量 1
-        Long user = fixtures.createUser("u1", null, null);
+        Long user = fixtures.createUser("u1", null);
         frontSubscriptionService.allocate(user);
 
         // 第二次重算：若把他自己算进负载，A 会被判满额而报错
@@ -86,8 +86,8 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
     @DisplayName("主用名额全满时报 410050，原列表不动")
     void capacityFullKeepsOldList() {
         usableSubscription("A", 20);                   // 容量 1
-        Long first = fixtures.createUser("u1", null, null);
-        Long second = fixtures.createUser("u2", null, null);
+        Long first = fixtures.createUser("u1", null);
+        Long second = fixtures.createUser("u2", null);
         frontSubscriptionService.allocate(first);
 
         assertThatThrownBy(() -> frontSubscriptionService.allocate(second))
@@ -106,7 +106,7 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
         Long hkOnly = fixtures.createAirportSubscription(airportB, "B-01", 300);
         fixtures.createSubscriptionNode(hkOnly, "🇭🇰[HK]B-01", NodeStatus.ENABLED);
         Long usable = usableSubscription("C", 300);
-        Long user = fixtures.createUser("u1", null, null);
+        Long user = fixtures.createUser("u1", null);
 
         frontSubscriptionService.allocate(user);
 
@@ -117,8 +117,8 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
     @DisplayName("取消分配清空列表，释放主用名额")
     void clearReleasesPrimary() {
         usableSubscription("A", 20);
-        Long first = fixtures.createUser("u1", null, null);
-        Long second = fixtures.createUser("u2", null, null);
+        Long first = fixtures.createUser("u1", null);
+        Long second = fixtures.createUser("u2", null);
         frontSubscriptionService.allocate(first);
 
         frontSubscriptionService.clear(first);
@@ -133,7 +133,7 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
         Long a = usableSubscription("A", 60);          // 容量 3
         List<Long> users = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
-            users.add(fixtures.createUser("u" + i, null, null));
+            users.add(fixtures.createUser("u" + i, null));
         }
         ExecutorService pool = Executors.newFixedThreadPool(6);
         CountDownLatch start = new CountDownLatch(1);

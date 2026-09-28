@@ -3,7 +3,6 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
-import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
@@ -54,11 +53,9 @@ class AdminUserProtectionTest extends MysqlTestBase {
         fixtures.clearAll();
     }
 
-    /** frontAction 必填、没有缺省值：每个调用点都要说清这次对第一跳做什么，测试里也一样 */
-    private UserSaveRequest saveRequest(UserStatus status, FrontAction frontAction, Long landNodeId) {
+    private UserSaveRequest saveRequest(UserStatus status, Long landNodeId) {
         UserSaveRequest request = new UserSaveRequest();
         request.setStatus(status);
-        request.setFrontAction(frontAction);
         request.setLandNodeId(landNodeId);
         return request;
     }
@@ -66,9 +63,9 @@ class AdminUserProtectionTest extends MysqlTestBase {
     @Test
     @DisplayName("管理员不允许被停用")
     void shouldRejectSuspendingAdmin() {
-        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
+        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null);
 
-        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.SUSPENDED, FrontAction.KEEP, null)))
+        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.SUSPENDED, null)))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.ADMIN_USER_PROTECTED));
         assertThat(userRepository.findById(adminId).orElseThrow().getStatus()).isEqualTo(UserStatus.ACTIVE);
@@ -77,9 +74,9 @@ class AdminUserProtectionTest extends MysqlTestBase {
     @Test
     @DisplayName("管理员不允许被吊销")
     void shouldRejectRevokingAdmin() {
-        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
+        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null);
 
-        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.REVOKED, FrontAction.KEEP, null)))
+        assertThatThrownBy(() -> adminUserService.update(adminId, saveRequest(UserStatus.REVOKED, null)))
                 .isInstanceOfSatisfying(BizException.class,
                         e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.ADMIN_USER_PROTECTED));
         assertThat(userRepository.findById(adminId).orElseThrow().getStatus()).isEqualTo(UserStatus.ACTIVE);
@@ -88,7 +85,7 @@ class AdminUserProtectionTest extends MysqlTestBase {
     @Test
     @DisplayName("管理员不允许被删除")
     void shouldRejectDeletingAdmin() {
-        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
+        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null);
 
         assertThatThrownBy(() -> adminUserService.delete(adminId))
                 .isInstanceOfSatisfying(BizException.class,
@@ -100,9 +97,9 @@ class AdminUserProtectionTest extends MysqlTestBase {
     @DisplayName("管理员保持 ACTIVE 的资源分配照常放行")
     void shouldAllowNodeAssignmentForActiveAdmin() {
         Long land = fixtures.createLandNode("land-1", "203.0.113.1");
-        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null, null);
+        Long adminId = fixtures.createUser("admin-1", UserRole.ADMIN, UserStatus.ACTIVE, null);
 
-        adminUserService.update(adminId, saveRequest(UserStatus.ACTIVE, FrontAction.KEEP, land));
+        adminUserService.update(adminId, saveRequest(UserStatus.ACTIVE, land));
 
         assertThat(userRepository.findById(adminId).orElseThrow().getLandNodeId()).isEqualTo(land);
     }
@@ -110,9 +107,9 @@ class AdminUserProtectionTest extends MysqlTestBase {
     @Test
     @DisplayName("普通成员的停用与删除不受影响")
     void shouldStillAllowDisposingMember() {
-        Long memberId = fixtures.createUser("member-1", UserRole.MEMBER, UserStatus.ACTIVE, null, null);
+        Long memberId = fixtures.createUser("member-1", UserRole.MEMBER, UserStatus.ACTIVE, null);
 
-        adminUserService.update(memberId, saveRequest(UserStatus.SUSPENDED, FrontAction.KEEP, null));
+        adminUserService.update(memberId, saveRequest(UserStatus.SUSPENDED, null));
         assertThat(userRepository.findById(memberId).orElseThrow().getStatus()).isEqualTo(UserStatus.SUSPENDED);
 
         adminUserService.delete(memberId);

@@ -15,7 +15,6 @@ public class UserConverter {
         dto.setEmail(entity.getEmail());
         dto.setRole(entity.getRole());
         dto.setStatus(entity.getStatus());
-        dto.setFrontNodeId(entity.getFrontNodeId());
         dto.setLandNodeId(entity.getLandNodeId());
         dto.setRemark(entity.getRemark());
         dto.setCreatedAt(entity.getCreatedAt());
@@ -30,7 +29,6 @@ public class UserConverter {
         entity.setEmail(dto.getEmail());
         entity.setRole(dto.getRole());
         entity.setStatus(dto.getStatus());
-        entity.setFrontNodeId(dto.getFrontNodeId());
         entity.setLandNodeId(dto.getLandNodeId());
         entity.setRemark(dto.getRemark());
         return entity;

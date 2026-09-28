@@ -65,7 +65,7 @@ class PlanControllerTest extends MysqlTestBase {
     void setUp() {
         DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        memberId = fixtures.createUser("logto-member", null, null);
+        memberId = fixtures.createUser("logto-member", null);
         plan("Codex 季付", AgentType.CODEX, 90, "199.00", true, "内部备注-codex");
         plan("Claude 年付", AgentType.CLAUDE, 365, "999.00", true, "内部备注-年");
         plan("Claude 月付", AgentType.CLAUDE, 30, "99.99", true, "内部备注-月");

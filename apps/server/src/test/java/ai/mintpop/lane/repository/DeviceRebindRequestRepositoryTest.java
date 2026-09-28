@@ -41,7 +41,7 @@ class DeviceRebindRequestRepositoryTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("logto-rebind-owner", null, null);
+        userId = fixtures.createUser("logto-rebind-owner", null);
         subscriptionId = fixtures.createSubscription(userId, AgentType.CLAUDE, "Claude 席位",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "cred");
         Instant now = Instant.parse("2026-09-01T00:00:00Z");
@@ -142,7 +142,7 @@ class DeviceRebindRequestRepositoryTest extends MysqlTestBase {
         assertThat(decided.getDecidedBy()).isEqualTo(userId);
         assertThat(decided.getDecidedAt()).isEqualTo(firstDecision);
 
-        Long otherAdminId = fixtures.createUser("logto-other-admin", null, null);
+        Long otherAdminId = fixtures.createUser("logto-other-admin", null);
         Instant secondAttempt = Instant.parse("2026-09-06T00:00:00Z");
         assertThat(requestRepository.decide(r.getId(), RebindRequestStatus.REJECTED, otherAdminId, secondAttempt))
                 .isFalse();

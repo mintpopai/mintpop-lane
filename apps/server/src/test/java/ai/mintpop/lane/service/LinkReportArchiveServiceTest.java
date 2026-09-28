@@ -67,7 +67,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("u1", null, null);
+        userId = fixtures.createUser("u1", null);
         properties = new LinkReportProperties(); // 默认 rawRetentionDays=7、dailyRetentionDays=90
     }
 
@@ -287,7 +287,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
     @Test
     @DisplayName("不同用户/故障域/ASN 各自独立归档，不会互相合并")
     void differentDimensionsAreArchivedSeparately() {
-        Long otherUserId = fixtures.createUser("u2", null, null);
+        Long otherUserId = fixtures.createUser("u2", null);
         Instant eightDaysAgo = NOW.minus(Duration.ofDays(8));
 
         insertWindow(userId, DOMAIN, ASN, eightDaysAgo, 10, 9);

@@ -34,7 +34,6 @@ class CredentialIssueGuardTest {
 
     private UserDto linkedUser() {
         UserDto user = new UserDto();
-        user.setFrontNodeId(10L);
         user.setLandNodeId(20L);
         return user;
     }
@@ -52,7 +51,7 @@ class CredentialIssueGuardTest {
     void passesWhenEverythingReady() {
         doNothing().when(verifier).verify(org.mockito.ArgumentMatchers.any());
         assertThatCode(() -> guard.check(claudeSubscription(), linkedUser(),
-                node(NodeProtocol.TROJAN, null), node(NodeProtocol.HTTP, "203.0.113.7")))
+                true, node(NodeProtocol.HTTP, "203.0.113.7")))
                 .doesNotThrowAnyException();
     }
 
@@ -60,8 +59,17 @@ class CredentialIssueGuardTest {
     @DisplayName("链路未配置完整不得签发：没有确定的出口，签出的凭证即来路不明")
     void rejectsIncompleteLink() {
         UserDto user = new UserDto();
-        user.setFrontNodeId(10L);
-        assertThatThrownBy(() -> guard.check(claudeSubscription(), user, null, null))
+        assertThatThrownBy(() -> guard.check(claudeSubscription(), user, false, null))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode())
+                .isEqualTo(BizCodeEnum.LINK_NOT_READY_FOR_ISSUE);
+    }
+
+    @Test
+    @DisplayName("未分配第一跳报 LINK_NOT_READY_FOR_ISSUE——第一跳可用性改由下发时判定，签发只看有没有分配过")
+    void rejectsWhenFrontNotAssigned() {
+        assertThatThrownBy(() -> guard.check(claudeSubscription(), linkedUser(),
+                false, node(NodeProtocol.HTTP, "203.0.113.7")))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.LINK_NOT_READY_FOR_ISSUE);
@@ -73,7 +81,7 @@ class CredentialIssueGuardTest {
         SubscriptionDto dto = claudeSubscription();
         dto.setAgentType(AgentType.CODEX);
         assertThatThrownBy(() -> guard.check(dto, linkedUser(),
-                node(NodeProtocol.TROJAN, null), node(NodeProtocol.HTTP, "203.0.113.7")))
+                true, node(NodeProtocol.HTTP, "203.0.113.7")))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.CREDENTIAL_ISSUE_NOT_SUPPORTED);
@@ -83,7 +91,7 @@ class CredentialIssueGuardTest {
     @DisplayName("落地节点未登记出口 IP 时无法校验一致性，拒绝签发")
     void rejectsMissingEgressIp() {
         assertThatThrownBy(() -> guard.check(claudeSubscription(), linkedUser(),
-                node(NodeProtocol.TROJAN, null), node(NodeProtocol.HTTP, null)))
+                true, node(NodeProtocol.HTTP, null)))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);

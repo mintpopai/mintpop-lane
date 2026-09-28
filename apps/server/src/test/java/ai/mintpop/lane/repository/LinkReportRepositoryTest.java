@@ -48,7 +48,7 @@ class LinkReportRepositoryTest extends MysqlTestBase {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
 
-        userId = fixtures.createUser("u1", null, null);
+        userId = fixtures.createUser("u1", null);
     }
 
     private LinkReport newReport(Long userId, String failureDomain, Instant windowStart,
@@ -163,7 +163,7 @@ class LinkReportRepositoryTest extends MysqlTestBase {
             + "3 条原始窗口只应合并成 2 行——行数是分组数，不是原始窗口数")
     void aggregateAllUsersByDomainAndAsnGroupsAcrossUsersInSql() {
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
 
         // userA：同一分组两条窗口，应合并成 1 行
         LinkReport a1 = newReport(userA, "jp.tsdns.top", WINDOW_START, 10, 9);
@@ -205,7 +205,7 @@ class LinkReportRepositoryTest extends MysqlTestBase {
             + "合并成 1 行，行数是分组数，不是原始窗口数，也不是「用户×分组」数")
     void aggregateGlobalByDomainAndAsnGroupsAcrossUsersWithoutUserDimension() {
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
 
         // 两个不同用户落在同一个故障域×ASN，应合并成 1 行且不含用户维度
         LinkReport a1 = newReport(userA, "jp.tsdns.top", WINDOW_START, 10, 9);

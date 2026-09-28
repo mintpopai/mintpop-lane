@@ -10,7 +10,6 @@ import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
@@ -35,18 +34,15 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
-    private final UserFrontNodeRepository userFrontNodeRepository;
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final EgressIpVerifier.EgressProbe egressProbe;
     private final NodeNotifyService nodeNotifyService;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
-                                 UserFrontNodeRepository userFrontNodeRepository,
                                  AirportSubscriptionRepository airportSubscriptionRepository, EgressIpVerifier.EgressProbe egressProbe,
                                  NodeNotifyService nodeNotifyService) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
-        this.userFrontNodeRepository = userFrontNodeRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.egressProbe = egressProbe;
         this.nodeNotifyService = nodeNotifyService;
@@ -61,6 +57,10 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     @Override
     public Long create(NodeSaveRequest request) {
+        // 第一跳只能来自机场订阅导入，不开放手工新建（spec 第二节）
+        if (request.getRole() == NodeRole.FRONT) {
+            throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
+        }
         // MIHOMO 是订阅导入专用形态：整份参数加密、不能手填。手工新建一律拒绝
         if (request.getProtocol() == NodeProtocol.MIHOMO) {
             throw new BizException(BizCodeEnum.PARAM_INVALID);
@@ -187,14 +187,11 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     }
 
     /**
-     * 该节点是否正被引用：三种引用形状都要查——某人的主前置节点、某人的落地节点、
-     * 或某人前置集合里的非主成员（二期新增，只在 user_front_node 里，不体现在
-     * app_user.front_node_id 上，漏查会在真正删除时撞上外键抛出原始数据库异常）。
+     * 该节点是否正被引用：只有落地节点会被用户直接引用；前置节点属于机场订阅，用户引用的是订阅
+     * （订阅被引用的检查在删除机场订阅时做，见 UserFrontSubscriptionRepository.existsByAirportSubscriptionId）。
      */
     private boolean isReferenced(Long nodeId) {
-        return userRepository.existsByFrontNodeId(nodeId)
-                || userRepository.countByLandNodeId(nodeId) > 0
-                || userFrontNodeRepository.existsByNodeId(nodeId);
+        return userRepository.countByLandNodeId(nodeId) > 0;
     }
 
     /** 取异常链上最内层的说明：Netty 的代理失败通常裹在 ResourceAccessException 里，外层信息不可读 */

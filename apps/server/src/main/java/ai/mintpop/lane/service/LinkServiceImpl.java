@@ -17,22 +17,23 @@ import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
+import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,7 +46,7 @@ public class LinkServiceImpl implements LinkService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserDeviceRepository userDeviceRepository;
     private final DeviceRebindRequestRepository rebindRequestRepository;
-    private final UserFrontNodeRepository userFrontNodeRepository;
+    private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     private final Clock clock;
 
     public LinkServiceImpl(LinkProperties linkProperties,
@@ -55,7 +56,7 @@ public class LinkServiceImpl implements LinkService {
                            SubscriptionRepository subscriptionRepository,
                            UserDeviceRepository userDeviceRepository,
                            DeviceRebindRequestRepository rebindRequestRepository,
-                           UserFrontNodeRepository userFrontNodeRepository,
+                           UserFrontSubscriptionRepository userFrontSubscriptionRepository,
                            Clock clock) {
         this.linkProperties = linkProperties;
         this.frontTuningProperties = frontTuningProperties;
@@ -64,7 +65,7 @@ public class LinkServiceImpl implements LinkService {
         this.subscriptionRepository = subscriptionRepository;
         this.userDeviceRepository = userDeviceRepository;
         this.rebindRequestRepository = rebindRequestRepository;
-        this.userFrontNodeRepository = userFrontNodeRepository;
+        this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
         this.clock = clock;
     }
 
@@ -79,7 +80,7 @@ public class LinkServiceImpl implements LinkService {
 
         // 链路权益只看网络配置（节点分配与状态），与套餐解耦：
         // 套餐只决定下发哪些席位凭据，没买过/全过期都不拦建链
-        if (user.getFrontNodeId() == null || user.getLandNodeId() == null) {
+        if (user.getLandNodeId() == null) {
             throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
 
@@ -97,7 +98,6 @@ public class LinkServiceImpl implements LinkService {
         }
 
         List<LinkConfigResponse.FrontGroup> frontGroups = resolveFrontGroups(user);
-        Map<String, Object> front = frontGroups.get(0).nodes().get(0);
 
         // 已知设备与待处理申请各取一次：一个人的设备是个位数、待办更少，
         // 一次取回好过在下面逐条席位去查库
@@ -126,7 +126,6 @@ public class LinkServiceImpl implements LinkService {
                 .toList();
 
         return new LinkConfigResponse(
-                front,
                 frontGroups,
                 // 落地节点不接客户端的保活诉求，原样透传，不传覆盖表
                 land.toMihomoNode(),
@@ -138,57 +137,50 @@ public class LinkServiceImpl implements LinkService {
     }
 
     /**
-     * 按故障域把用户的前置节点分组：组内滤掉非 ENABLED 的节点，空组整组丢弃——
-     * 中间任何一步都不提前抛异常，保证「组内还有别的候选」时不会因为一个节点
-     * 被禁用就整体拒绝。
-     * <p>
-     * 关联表为空（老数据、或分配还没跑）时退回 {@code front_node_id} 单节点，
-     * 包成一个只有一个节点的组，与老客户端行为逐字一致。
-     * <p>
-     * 走到本方法时调用方已经确认 {@code front_node_id} 非空（见 {@link #resolveLink}
-     * 开头的校验），也就是说用户**一定**被分配过前置节点。所以这里「全部组都空」
-     * 只可能是「分配过、但当前一个能用的都不剩」，语义上是 {@link BizCodeEnum#NODE_DISABLED}，
-     * 而不是 {@link BizCodeEnum#EGRESS_NOT_ASSIGNED}——后者专指「压根没有分配过」，
-     * 那种情况在 {@link #resolveLink} 里已经被挡在更早的地方，走不到这里。
-     * 两者绝不能混用：报「未分配」会把管理员的排查方向错误地引向「去分配一个」，
-     * 而真正要做的是「把停用的节点启用，或者换一个」。
+     * 按用户第一跳订阅的顺位，每个订阅生成一组：组内只放启用中、按订阅原始名判定为美国的节点。
+     * 某个订阅一个可用节点都没有就跳过（用户自然落到备用）；全部为空报 NODE_DISABLED——
+     * 用户分配过，只是眼下没有一个能用，要做的是启用节点或重新分配，而不是「去分配一个」。
+     * 没有分配过报 EGRESS_NOT_ASSIGNED。
      */
     private List<LinkConfigResponse.FrontGroup> resolveFrontGroups(UserDto user) {
-        List<Long> frontNodeIds = userFrontNodeRepository.findNodeIdsByUserId(user.getId());
-        if (frontNodeIds.isEmpty()) {
-            frontNodeIds = List.of(user.getFrontNodeId());
-        }
-
-        // 外键保证节点必然存在，查不到说明数据被绕过约束改坏了，按内部错误处理
-        List<ProxyNodeDto> frontNodes = frontNodeIds.stream()
-                .map(id -> nodeRepository.findById(id)
-                        .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR)))
-                .toList();
-
-        // TreeMap + nullsFirst：按 failureDomain 字典序稳定排序，同时容忍尚未解析成功（null）的节点
-        Map<String, List<ProxyNodeDto>> byDomain =
-                new TreeMap<>(Comparator.nullsFirst(Comparator.naturalOrder()));
-        for (ProxyNodeDto node : frontNodes) {
-            byDomain.computeIfAbsent(node.getFailureDomain(), k -> new ArrayList<>()).add(node);
+        List<Long> subscriptionIds = userFrontSubscriptionRepository.findSubscriptionIdsByUserId(user.getId());
+        if (subscriptionIds.isEmpty()) {
+            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
 
         List<LinkConfigResponse.FrontGroup> groups = new ArrayList<>();
-        for (Map.Entry<String, List<ProxyNodeDto>> entry : byDomain.entrySet()) {
-            List<Map<String, Object>> enabledNodes = entry.getValue().stream()
+        for (Long subscriptionId : subscriptionIds) {
+            List<ProxyNodeDto> usable = nodeRepository.findByAirportSubscriptionId(subscriptionId).stream()
                     .filter(node -> node.getStatus() == NodeStatus.ENABLED)
-                    // 保活参数覆盖对组里每个节点都要套，不能只套第一个，否则组内其余节点
-                    // fallback 切过去就退化成每请求重握手
+                    .filter(node -> UsLandingNodes.isUsLanding(node.getSourceName()))
+                    .toList();
+            if (usable.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> nodes = usable.stream()
+                    // 保活参数覆盖对组里每个节点都要套，否则组内切换过去就退化成每请求重握手
                     .map(node -> node.toMihomoNode(frontTuning(node)))
                     .toList();
-            if (!enabledNodes.isEmpty()) {
-                groups.add(new LinkConfigResponse.FrontGroup(entry.getKey(), enabledNodes));
-            }
+            groups.add(new LinkConfigResponse.FrontGroup(mostCommonFailureDomain(usable), nodes));
         }
 
         if (groups.isEmpty()) {
             throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
         return groups;
+    }
+
+    /** 出现次数最多的故障域；平手取字典序最小；全未解析返回 null。只作上报关联键 */
+    private static String mostCommonFailureDomain(List<ProxyNodeDto> nodes) {
+        return nodes.stream()
+                .map(ProxyNodeDto::getFailureDomain)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(Function.identity(), TreeMap::new, Collectors.counting()))
+                .entrySet().stream()
+                // TreeMap 按字典序遍历，max 遇到相等时保留先出现的那个，即字典序最小
+                .reduce((best, next) -> next.getValue() > best.getValue() ? next : best)
+                .map(Map.Entry::getKey)
+                .orElse(null);
     }
 
     @Override

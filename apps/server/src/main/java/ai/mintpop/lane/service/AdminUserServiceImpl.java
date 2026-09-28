@@ -5,7 +5,6 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
-import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.UserRole;
@@ -13,7 +12,6 @@ import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.UserSaveRequest;
 import ai.mintpop.lane.response.AdminUserResponse;
@@ -26,7 +24,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -36,21 +33,15 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubscriptionRepository subscriptionRepository;
-    private final UserFrontNodeRepository userFrontNodeRepository;
-    private final FrontNodeAllocator frontNodeAllocator;
     private final FrontSubscriptionService frontSubscriptionService;
     private final Clock clock;
 
     public AdminUserServiceImpl(UserRepository userRepository, ProxyNodeRepository nodeRepository,
                                  SubscriptionRepository subscriptionRepository,
-                                 UserFrontNodeRepository userFrontNodeRepository,
-                                 FrontNodeAllocator frontNodeAllocator,
                                  FrontSubscriptionService frontSubscriptionService, Clock clock) {
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
-        this.userFrontNodeRepository = userFrontNodeRepository;
-        this.frontNodeAllocator = frontNodeAllocator;
         this.frontSubscriptionService = frontSubscriptionService;
         this.clock = clock;
     }
@@ -72,15 +63,11 @@ public class AdminUserServiceImpl implements AdminUserService {
                                 Collectors.mapping(s -> new AdminUserResponse.ActiveSubscriptionBrief(
                                         s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()),
                                         Collectors.toList())));
-        // 同上，前置节点也一次取回本页所有用户的，避免逐行查询
-        // （UsersView 列表页目前虽不展示 frontNodes/failureDomainCount，但 toResponse 是
-        // page()/get() 共用的同一份组装逻辑，响应形状必须一致，不能靠「列表页不查」取巧）
-        Map<Long, List<Long>> frontNodeIdsByUser = userFrontNodeRepository.findNodeIdsByUserIds(userIds);
+        // 同上，第一跳订阅列表也一次取回本页所有用户的，避免逐行查询
         Map<Long, List<FrontSubscriptionBrief>> frontSubscriptionsByUser = frontSubscriptionService.briefsOf(userIds);
 
         List<AdminUserResponse> records = page.records().stream()
                 .map(user -> toResponse(user, nodes, briefs.getOrDefault(user.getId(), List.of()),
-                        frontNodeIdsByUser.getOrDefault(user.getId(), List.of()),
                         frontSubscriptionsByUser.getOrDefault(user.getId(), List.of())))
                 .toList();
         return new PageResult<>(records, page.total(), page.pageNo(), page.pageSize());
@@ -98,10 +85,9 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .map(s -> new AdminUserResponse.ActiveSubscriptionBrief(
                         s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()))
                 .toList();
-        List<Long> frontNodeIds = userFrontNodeRepository.findNodeIdsByUserId(id);
         List<FrontSubscriptionBrief> frontSubscriptions = frontSubscriptionService.briefsOf(List.of(id))
                 .getOrDefault(id, List.of());
-        return toResponse(user, nodes, briefs, frontNodeIds, frontSubscriptions);
+        return toResponse(user, nodes, briefs, frontSubscriptions);
     }
 
     /**
@@ -122,80 +108,15 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
         }
 
-        FrontAssignment front = resolveFrontAssignment(id, user, request);
         validateLandAvailable(request.getLandNodeId(), user.getLandNodeId(), id);
 
         user.setStatus(request.getStatus());
-        user.setFrontNodeId(front.primaryNodeId());
         user.setLandNodeId(request.getLandNodeId());
         user.setRemark(request.getRemark());
         // subject/email/role 不从入参取，沿用库里的值（邮箱是身份标识，由登录同步维护，管理端不提供改动入口）
 
         userRepository.update(user);
-        switch (front.write()) {
-            // 「不碰」与「清空」是两种截然不同的处置，分成两个枚举值而不是让空列表兼职表达
-            case KEEP -> { }
-            case CLEAR -> userFrontNodeRepository.deleteByUserId(id);
-            case REPLACE -> userFrontNodeRepository.replaceForUser(id, front.nodeIds());
-        }
-    }
-
-    /** 本次保存要对 user_front_node 做什么 */
-    private enum FrontGroupWrite {
-        /** 本次保存没有动第一跳，关联表原样不碰 */
-        KEEP,
-        /** 按算出来的节点集合整体替换 */
-        REPLACE,
-        /** 清空该用户的前置节点组 */
-        CLEAR
-    }
-
-    /**
-     * 本次保存对前置节点的处置：写回 {@code front_node_id} 的主节点 + 对 user_front_node 的动作。
-     * {@code nodeIds} 只在 {@link FrontGroupWrite#REPLACE} 下有意义。
-     */
-    private record FrontAssignment(FrontGroupWrite write, Long primaryNodeId, List<Long> nodeIds) {
-
-        static FrontAssignment keep(Long primaryNodeId) {
-            return new FrontAssignment(FrontGroupWrite.KEEP, primaryNodeId, List.of());
-        }
-
-        static FrontAssignment clear() {
-            return new FrontAssignment(FrontGroupWrite.CLEAR, null, List.of());
-        }
-
-        static FrontAssignment replace(Long primaryNodeId, List<Long> nodeIds) {
-            return new FrontAssignment(FrontGroupWrite.REPLACE, primaryNodeId, nodeIds);
-        }
-    }
-
-    /**
-     * 把入参里<b>显式声明</b>的意图（{@link FrontAction}）翻译成对 user_front_node 的动作。
-     * <p>
-     * 这里<b>不做任何取值比较</b>——不拿入参与库里现值比对去反推意图。
-     * 这个接口是整体保存，调用方带回来的取值只是它打开页面那一刻的快照：
-     * <ul>
-     *   <li>快照可能过期（另一个标签页、另一个管理员、后台重分配改过这个用户的第一跳），
-     *       比值就会判错；</li>
-     *   <li>「按当前节点池重新分配一组」与「这次根本没动第一跳」回填取值相同，
-     *       靠比值永远分不开，前者于是成了表达不出来的盲区。</li>
-     * </ul>
-     * 两条都是「从取值反推意图」的必然产物，所以意图一律由调用方显式说出来，服务端只做翻译。
-     */
-    private FrontAssignment resolveFrontAssignment(Long id, UserDto user, UserSaveRequest request) {
-        return switch (request.getFrontAction()) {
-            case KEEP -> FrontAssignment.keep(user.getFrontNodeId());
-            case CLEAR -> FrontAssignment.clear();
-            case AUTO -> {
-                FrontNodeAllocator.AllocationResult allocation = frontNodeAllocator.allocate(id);
-                if (allocation.nodeIds().isEmpty()) {
-                    // 一个候选都算不出来时必须报错：沿用旧的「按空组落库」等于把人静默下线，
-                    // 而管理员显式要的是「分配一组」。事务在此回滚，原有的组一个不少
-                    throw new BizException(BizCodeEnum.FRONT_NODE_UNALLOCATABLE);
-                }
-                yield FrontAssignment.replace(allocation.primaryNodeId(), allocation.nodeIds());
-            }
-        };
+        // 第一跳（前置节点）不在这个整体保存里：分配/取消分配走 FrontSubscriptionService 独立接口
     }
 
     @Override
@@ -206,7 +127,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (user.getRole() == UserRole.ADMIN) {
             throw new BizException(BizCodeEnum.ADMIN_USER_PROTECTED);
         }
-        // user_front_node 对 app_user 的外键带 ON DELETE CASCADE，关联行由数据库自动清掉，
+        // user_front_subscription 对 app_user 的外键带 ON DELETE CASCADE，关联行由数据库自动清掉，
         // 与 subscription/user_device 等表一致，不需要应用层重复处理
         userRepository.deleteById(id);
     }
@@ -243,29 +164,13 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     /**
-     * frontNodeIds 由调用方传入（page() 批量取、get() 单个取），本方法不再自己查库——
+     * frontSubscriptions 由调用方传入（page() 批量取、get() 单个取），本方法不再自己查库——
      * 与上面 activeSubscriptions 的组装方式保持一致，两条批量路径不能一条批量一条逐行。
      */
     private AdminUserResponse toResponse(UserDto user, Map<Long, ProxyNodeDto> nodes,
                                          List<AdminUserResponse.ActiveSubscriptionBrief> activeSubscriptions,
-                                         List<Long> frontNodeIds,
                                          List<FrontSubscriptionBrief> frontSubscriptions) {
-        ProxyNodeDto front = nodes.get(user.getFrontNodeId());
         ProxyNodeDto land = user.getLandNodeId() == null ? null : nodes.get(user.getLandNodeId());
-
-        // 完整前置组（不止 front_node_id 那个「主」节点）：管理端按故障域分组展示，
-        // 并据 failureDomainCount 判断是否「入口无冗余」（详见 AdminUserResponse 字段注释）
-        List<AdminUserResponse.FrontNodeBrief> frontNodes = frontNodeIds.stream()
-                .map(nodes::get)
-                .filter(Objects::nonNull)
-                .map(node -> new AdminUserResponse.FrontNodeBrief(
-                        node.getId(), node.getName(), node.getFailureDomain()))
-                .toList();
-        int failureDomainCount = (int) frontNodes.stream()
-                .map(AdminUserResponse.FrontNodeBrief::failureDomain)
-                .filter(Objects::nonNull)
-                .distinct()
-                .count();
 
         return new AdminUserResponse(
                 user.getId(),
@@ -273,10 +178,6 @@ public class AdminUserServiceImpl implements AdminUserService {
                 user.getEmail(),
                 user.getRole(),
                 user.getStatus(),
-                user.getFrontNodeId(),
-                front == null ? null : front.getName(),
-                frontNodes,
-                failureDomainCount,
                 frontSubscriptions,
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),

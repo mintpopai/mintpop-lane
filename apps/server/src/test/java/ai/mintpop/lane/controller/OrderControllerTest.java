@@ -75,9 +75,9 @@ class OrderControllerTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        buyerId = fixtures.createUser("logto-buyer", null, null);
-        otherId = fixtures.createUser("logto-other", null, null);
-        suspendedId = fixtures.createUser("logto-suspended", MEMBER, SUSPENDED, null, null);
+        buyerId = fixtures.createUser("logto-buyer", null);
+        otherId = fixtures.createUser("logto-other", null);
+        suspendedId = fixtures.createUser("logto-suspended", MEMBER, SUSPENDED, null);
         monthlyPlanId = DatabaseFixtures.createPlan(planRepository, "Claude 月付", AgentType.CLAUDE, 30, "99.99", true);
         disabledPlanId = DatabaseFixtures.createPlan(planRepository, "已下架", AgentType.CLAUDE, 30, "1.00", false);
     }

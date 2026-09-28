@@ -59,7 +59,6 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE device_rebind_request");
         jdbc.execute("TRUNCATE TABLE user_device");
         jdbc.execute("TRUNCATE TABLE user_front_subscription");
-        jdbc.execute("TRUNCATE TABLE user_front_node");
         jdbc.execute("TRUNCATE TABLE link_report");
         jdbc.execute("TRUNCATE TABLE link_report_daily");
         jdbc.execute("TRUNCATE TABLE link_alert_state");
@@ -122,17 +121,16 @@ public class DatabaseFixtures {
     }
 
     /** 建一个普通用户（无订阅、无凭据） */
-    public Long createUser(String subject, Long frontNodeId, Long landNodeId) {
-        return createUser(subject, UserRole.MEMBER, UserStatus.ACTIVE, frontNodeId, landNodeId);
+    public Long createUser(String subject, Long landNodeId) {
+        return createUser(subject, UserRole.MEMBER, UserStatus.ACTIVE, landNodeId);
     }
 
-    public Long createUser(String subject, UserRole role, UserStatus status, Long frontNodeId, Long landNodeId) {
+    public Long createUser(String subject, UserRole role, UserStatus status, Long landNodeId) {
         UserDto user = new UserDto();
         user.setSubject(subject);
         user.setEmail(subject + "@test.example");
         user.setRole(role);
         user.setStatus(status);
-        user.setFrontNodeId(frontNodeId);
         user.setLandNodeId(landNodeId);
         return userRepository.create(user);
     }
@@ -158,12 +156,20 @@ public class DatabaseFixtures {
         return subscriptionRepository.create(s);
     }
 
-    /** 建一个「已开通可用」的用户：有节点、有一条在期 CLAUDE 订阅 */
-    public Long createActiveUser(String subject, Long frontNodeId, Long landNodeId, String credential) {
-        Long userId = createUser(subject, frontNodeId, landNodeId);
+    /** 建一个「已开通可用」的用户：有落地节点、有一条在期 CLAUDE 订阅 */
+    public Long createActiveUser(String subject, Long landNodeId, String credential) {
+        Long userId = createUser(subject, landNodeId);
         createSubscription(userId, AgentType.CLAUDE, "Claude 席位",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), credential);
         return userId;
+    }
+
+    /** 直接写用户的第一跳订阅列表（按顺位），绕过分配算法，给下发、签发类测试造前置条件 */
+    public void assignFront(Long userId, Long... airportSubscriptionIds) {
+        for (int position = 0; position < airportSubscriptionIds.length; position++) {
+            jdbc.update("INSERT INTO user_front_subscription (user_id, position, airport_subscription_id) VALUES (?, ?, ?)",
+                    userId, position, airportSubscriptionIds[position]);
+        }
     }
 
     /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；airportSubscriptionId 可为 null */

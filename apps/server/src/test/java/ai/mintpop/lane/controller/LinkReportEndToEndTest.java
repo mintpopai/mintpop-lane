@@ -119,8 +119,8 @@ class LinkReportEndToEndTest extends MysqlTestBase {
         fixtures.clearAll();
         jdbc.execute("TRUNCATE TABLE entry_ip_history");
 
-        userId = fixtures.createUser("u1", null, null);
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        userId = fixtures.createUser("u1", null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     /**

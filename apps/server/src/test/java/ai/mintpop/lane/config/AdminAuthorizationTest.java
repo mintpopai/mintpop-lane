@@ -63,8 +63,8 @@ class AdminAuthorizationTest extends MysqlTestBase {
                 new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, front, null);
-        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, front, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null);
     }
 
     private String bearer(Long userId) {

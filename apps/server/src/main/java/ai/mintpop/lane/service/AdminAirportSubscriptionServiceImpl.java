@@ -14,7 +14,6 @@ import ai.mintpop.lane.parser.SubYamlParser;
 import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
@@ -45,7 +44,6 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private final AirportRepository airportRepository;
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
-    private final UserFrontNodeRepository userFrontNodeRepository;
     private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
@@ -55,7 +53,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
 
     public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository,
                                      AirportRepository airportRepository, ProxyNodeRepository nodeRepository,
-                                     UserRepository userRepository, UserFrontNodeRepository userFrontNodeRepository,
+                                     UserRepository userRepository,
                                      UserFrontSubscriptionRepository userFrontSubscriptionRepository,
                                      SubFetchClient subFetchClient,
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
@@ -65,7 +63,6 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         this.airportRepository = airportRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
-        this.userFrontNodeRepository = userFrontNodeRepository;
         this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
@@ -180,13 +177,11 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
             throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_IN_USE);
         }
         List<ProxyNodeDto> nodes = nodeRepository.findByAirportSubscriptionId(id);
+        // 前置节点不会被用户直接引用（用户引用的是订阅，上面已检查过）；只剩落地引用要查——
+        // 订阅导入的节点本应全是 FRONT，这里是防御性检查（节点被改成 LAND 后仍挂在订阅下的情形）。
         // 先整体校验再删：不做「删到一半发现被引用」的部分删除
         for (ProxyNodeDto node : nodes) {
-            // 三种引用形状都要查：主前置节点、落地节点，或前置集合里的非主成员（二期新增，
-            // 只在 user_front_node 里，漏查会在真正删除时撞上外键抛出原始数据库异常）
-            if (userRepository.existsByFrontNodeId(node.getId())
-                    || userRepository.countByLandNodeId(node.getId()) > 0
-                    || userFrontNodeRepository.existsByNodeId(node.getId())) {
+            if (userRepository.countByLandNodeId(node.getId()) > 0) {
                 throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_IN_USE);
             }
         }

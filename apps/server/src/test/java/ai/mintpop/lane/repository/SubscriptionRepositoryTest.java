@@ -46,8 +46,7 @@ class SubscriptionRepositoryTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        Long front = fixtures.createFrontNode("FRONT-1");
-        userId = fixtures.createUser("logto-u1", front, null);
+        userId = fixtures.createUser("logto-u1", null);
     }
 
     @Test

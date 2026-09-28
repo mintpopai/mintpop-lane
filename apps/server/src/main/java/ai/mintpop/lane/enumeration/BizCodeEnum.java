@@ -77,9 +77,7 @@ public enum BizCodeEnum {
     IMAGE_TOO_LARGE(410045, "图片不能超过 5 MB"),
     IMAGE_TYPE_UNSUPPORTED(410046, "只支持 JPEG / PNG / WebP / GIF 图片"),
     IMAGE_STORAGE_ERROR(410047, "图片存储写入失败，请稍后重试"),
-    // 自动分配落空必须报错而不是清空：管理员显式要了「按故障域分配一组」，
-    // 静默清空等于把人下线、界面还不提示（二期上线定时刷新未跑首轮时全库 failure_domain 可能都是 null）
-    FRONT_NODE_UNALLOCATABLE(410048, "没有可分配的美国前置节点，无法自动分配"),
+    // 410048 曾是 FRONT_NODE_UNALLOCATABLE（按节点自动分配失败），改为按机场订阅分配后废弃。号位不复用
     // 导入不再逐个勾选、自动取美国节点：一个都没有时必须报错，不建一个空订阅冒充导入成功
     SUB_NO_US_NODES(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
     AIRPORT_NOT_FOUND(410051, "机场不存在"),

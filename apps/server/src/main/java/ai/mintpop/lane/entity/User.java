@@ -32,8 +32,6 @@ public class User {
 
     private UserStatus status;
 
-    private Long frontNodeId;
-
     /** 落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
 

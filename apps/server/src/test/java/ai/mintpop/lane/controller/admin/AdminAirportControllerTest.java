@@ -57,7 +57,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
                 airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         // 此时夹具还是「前置节点 + 落地节点」两个参数的旧签名，Task 5 批量改掉
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     private String bearer(Long userId) {
@@ -85,7 +85,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
         Long airportId = airportRepository.findAll().get(0).getId();
         Long subId = fixtures.createAirportSubscription(airportId, "ts-01", 300);
         fixtures.createAirportSubscription(airportId, "ts-02", 110);
-        Long userId = fixtures.createUser("logto-front-user", null, null);
+        Long userId = fixtures.createUser("logto-front-user", null);
         userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId));
 
         mockMvc.perform(get("/api/admin/airports").header("Authorization", bearer(adminId)))

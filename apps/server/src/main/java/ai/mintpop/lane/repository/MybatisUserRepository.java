@@ -111,7 +111,6 @@ public class MybatisUserRepository implements UserRepository {
                 .set(User::getEmail, entity.getEmail())
                 .set(User::getRole, entity.getRole())
                 .set(User::getStatus, entity.getStatus())
-                .set(User::getFrontNodeId, entity.getFrontNodeId())
                 .set(User::getLandNodeId, entity.getLandNodeId())
                 .set(User::getRemark, entity.getRemark()));
     }
@@ -119,10 +118,5 @@ public class MybatisUserRepository implements UserRepository {
     @Override
     public void deleteById(Long id) {
         mapper.deleteById(id);
-    }
-
-    @Override
-    public boolean existsByFrontNodeId(Long nodeId) {
-        return mapper.selectCount(Wrappers.<User>lambdaQuery().eq(User::getFrontNodeId, nodeId)) > 0;
     }
 }

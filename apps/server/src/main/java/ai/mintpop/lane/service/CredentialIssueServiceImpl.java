@@ -13,6 +13,7 @@ import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.OAuthSessionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,7 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
     private final ClaudeOAuthProperties properties;
     private final PkceGenerator pkce;
     private final CredentialCipher cipher;
+    private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     private final Clock clock;
 
     public CredentialIssueServiceImpl(SubscriptionRepository subscriptionRepository,
@@ -57,6 +59,7 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
                                       ClaudeOAuthProperties properties,
                                       PkceGenerator pkce,
                                       CredentialCipher cipher,
+                                      UserFrontSubscriptionRepository userFrontSubscriptionRepository,
                                       Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
@@ -68,6 +71,7 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
         this.properties = properties;
         this.pkce = pkce;
         this.cipher = cipher;
+        this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
         this.clock = clock;
     }
 
@@ -81,12 +85,11 @@ public class CredentialIssueServiceImpl implements CredentialIssueService {
         }
         UserDto user = userRepository.findById(subscription.getUserId())
                 .orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
-        ProxyNodeDto front = user.getFrontNodeId() == null ? null
-                : nodeRepository.findById(user.getFrontNodeId()).orElse(null);
+        boolean frontAssigned = !userFrontSubscriptionRepository.findSubscriptionIdsByUserId(user.getId()).isEmpty();
         ProxyNodeDto land = user.getLandNodeId() == null ? null
                 : nodeRepository.findById(user.getLandNodeId()).orElse(null);
 
-        guard.check(subscription, user, front, land);
+        guard.check(subscription, user, frontAssigned, land);
 
         String verifier = pkce.newVerifier();
         String state = pkce.newState();

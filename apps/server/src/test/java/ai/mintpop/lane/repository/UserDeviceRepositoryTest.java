@@ -34,7 +34,7 @@ class UserDeviceRepositoryTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("logto-device-owner", null, null);
+        userId = fixtures.createUser("logto-device-owner", null);
     }
 
     @Test
@@ -79,7 +79,7 @@ class UserDeviceRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("同一机器码归属不同用户各自独立成行，互不覆盖")
     void sameDeviceIdDifferentUsersAreSeparateRows() {
-        Long otherUserId = fixtures.createUser("logto-other-owner", null, null);
+        Long otherUserId = fixtures.createUser("logto-other-owner", null);
         Instant now = Instant.parse("2026-09-01T00:00:00Z");
 
         UserDevice mine = deviceRepository.upsert(userId, "device-shared", "我的机器", "macos 26", "", now);
@@ -150,7 +150,7 @@ class UserDeviceRepositoryTest extends MysqlTestBase {
     void touchLastSeenScopedToOwner() {
         Instant firstSeen = Instant.parse("2026-09-01T00:00:00Z");
         Instant now = Instant.parse("2026-09-01T00:10:00Z");
-        Long otherUserId = fixtures.createUser("logto-other-owner", null, null);
+        Long otherUserId = fixtures.createUser("logto-other-owner", null);
         UserDevice mine = deviceRepository.upsert(userId, "device-shared", "我的机器", "macos 26", "", firstSeen);
         UserDevice theirs = deviceRepository.upsert(otherUserId, "device-shared", "他的机器", "windows 11", "", firstSeen);
 

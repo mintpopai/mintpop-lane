@@ -10,7 +10,6 @@ import ai.mintpop.lane.parser.SubYamlParser;
 import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
@@ -51,7 +50,6 @@ class AdminAirportSubscriptionServiceImplTest {
     @Mock private AirportRepository airportRepository;
     @Mock private ProxyNodeRepository nodeRepository;
     @Mock private UserRepository userRepository;
-    @Mock private UserFrontNodeRepository userFrontNodeRepository;
     @Mock private UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     @Mock private SubFetchClient subFetchClient;
     @Mock private FailureDomainResolver failureDomainResolver;
@@ -79,7 +77,7 @@ class AdminAirportSubscriptionServiceImplTest {
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
         service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, airportRepository, nodeRepository, userRepository,
-                userFrontNodeRepository, userFrontSubscriptionRepository,
+                userFrontSubscriptionRepository,
                 subFetchClient, new SubYamlParser(), transactionTemplate,
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
                 // 「按 serverAddr 去重」「跳过伪条目」这些口径正是本类要守的行为，不该被 mock 掉

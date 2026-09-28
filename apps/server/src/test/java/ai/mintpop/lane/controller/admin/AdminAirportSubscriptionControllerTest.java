@@ -12,7 +12,6 @@ import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
@@ -68,9 +67,6 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
     private UserRepository userRepository;
 
     @Autowired
-    private UserFrontNodeRepository userFrontNodeRepository;
-
-    @Autowired
     private UserFrontSubscriptionRepository userFrontSubscriptionRepository;
 
     @Autowired
@@ -118,7 +114,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository,
                 airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
         airportId = fixtures.createAirport("泰山云");
         stubSubscription(SUBSCRIPTION);
     }
@@ -272,43 +268,10 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("删除订阅连带删除订阅内节点；订阅内有节点被用户绑定时报 410013 且一个都不删")
+    @DisplayName("删除订阅连带删除订阅内节点")
     void deleteGroup() throws Exception {
         Long airportSubscriptionId = createGroupImportingTwoNodes();
-        Long nodeId = nodeRepository.findByAirportSubscriptionId(airportSubscriptionId).get(0).getId();
-        fixtures.createUser("logto-user-1", nodeId, null);
 
-        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(410013));
-        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).hasSize(2);
-
-        // 解绑后可整组删除
-        jdbc.update("UPDATE app_user SET front_node_id = NULL WHERE front_node_id = ?", nodeId);
-        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(0));
-        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).isEmpty();
-        assertThat(airportSubscriptionRepository.findById(airportSubscriptionId)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("订阅内节点是某人前置集合里的非主成员（不在任何人的 front_node_id 上）时，删订阅同样报 410013 而不是数据库异常")
-    void deleteGroupBlockedByNonPrimaryFrontMembership() throws Exception {
-        Long airportSubscriptionId = createGroupImportingTwoNodes();
-        List<ProxyNodeDto> nodes = nodeRepository.findByAirportSubscriptionId(airportSubscriptionId);
-        Long primaryNodeId = nodes.get(0).getId();
-        Long secondaryNodeId = nodes.get(1).getId();
-        // 该用户的「主」前置节点是 primaryNodeId，secondaryNodeId 只是它前置集合里的非主成员——
-        // existsByFrontNodeId 查不到 secondaryNodeId，必须靠 user_front_node 的引用检查才能挡住
-        Long userId = fixtures.createUser("logto-user-1", primaryNodeId, null);
-        userFrontNodeRepository.replaceForUser(userId, List.of(primaryNodeId, secondaryNodeId));
-
-        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(410013));
-        assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).hasSize(2);
-
-        // 解绑后可整组删除。断言要落到库上：只看 code=0 的话，删除若是空操作也发现不了
-        userFrontNodeRepository.deleteByUserId(userId);
-        jdbc.update("UPDATE app_user SET front_node_id = NULL WHERE id = ?", userId);
         mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
         assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).isEmpty();
@@ -319,7 +282,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
     @DisplayName("订阅被用户的第一跳列表引用时删除报 410013；解除引用后可删")
     void deleteBlockedByFrontSubscriptionReference() throws Exception {
         Long airportSubscriptionId = createGroupImportingTwoNodes();
-        Long userId = fixtures.createUser("logto-user-front-sub", null, null);
+        Long userId = fixtures.createUser("logto-user-front-sub", null);
         userFrontSubscriptionRepository.replaceForUser(userId, List.of(airportSubscriptionId));
 
         mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))

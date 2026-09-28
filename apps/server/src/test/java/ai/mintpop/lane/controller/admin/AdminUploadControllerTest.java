@@ -67,8 +67,8 @@ class AdminUploadControllerTest extends MysqlTestBase {
     void setUp() {
         DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
-        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null);
     }
 
     @Test

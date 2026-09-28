@@ -21,7 +21,7 @@ import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.LinkConfigResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,13 +51,15 @@ class LinkServiceImplTest {
     private static final Instant NOW = Instant.parse("2026-08-19T12:00:00Z");
     private static final String THIS_DEVICE = "a".repeat(64);
     private static final String OTHER_DEVICE = "b".repeat(64);
+    /** 默认第一跳机场订阅 id，setUp 里已分配好一个可用的美国节点 */
+    private static final Long DEFAULT_SUBSCRIPTION_ID = 11L;
 
     private UserRepository userRepository;
     private ProxyNodeRepository nodeRepository;
     private SubscriptionRepository subscriptionRepository;
     private UserDeviceRepository userDeviceRepository;
     private DeviceRebindRequestRepository rebindRequestRepository;
-    private UserFrontNodeRepository userFrontNodeRepository;
+    private UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     private FrontTuningProperties frontTuningProperties;
     private LinkServiceImpl service;
 
@@ -77,12 +79,29 @@ class LinkServiceImplTest {
         return n;
     }
 
-    /** 造一个带故障域的前置节点，供 frontGroups 分组测试专用 */
-    private static ProxyNodeDto frontNode(long id, String failureDomain, NodeStatus status) {
-        ProxyNodeDto n = node(id, NodeRole.FRONT, NodeProtocol.TROJAN, "front-" + id + ".example.com");
-        n.setFailureDomain(failureDomain);
+    /** 默认的美国前置节点：用于 setUp 里的默认订阅，多数既有用例复用这条默认路径 */
+    private static ProxyNodeDto usFrontNode(long id, NodeStatus status) {
+        ProxyNodeDto n = node(id, NodeRole.FRONT, NodeProtocol.TROJAN, "us.example.com");
+        n.setSourceName("🇺🇸[US]Default-01");
         n.setStatus(status);
         return n;
+    }
+
+    /** 造一个订阅导入的前置节点，供 frontGroups 分组测试专用（与 task-5-brief 的夹具一致） */
+    private static ProxyNodeDto subscriptionNode(Long id, String sourceName, NodeStatus status, String failureDomain) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setId(id);
+        node.setName(sourceName);
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.MIHOMO);
+        node.setServerAddr("n" + id + ".example.com");
+        node.setPort(35660);
+        node.setSecret(Map.of("type", "anytls", "server", "n" + id + ".example.com", "port", 35660, "password", "p"));
+        node.setSourceName(sourceName);
+        node.setSourceType("anytls");
+        node.setStatus(status);
+        node.setFailureDomain(failureDomain);
+        return node;
     }
 
     private static UserDto user(UserStatus status) {
@@ -91,7 +110,6 @@ class LinkServiceImplTest {
         u.setSubject("u1");
         u.setEmail("u1@test.example");
         u.setStatus(status);
-        u.setFrontNodeId(10L);
         u.setLandNodeId(20L);
         return u;
     }
@@ -140,35 +158,26 @@ class LinkServiceImplTest {
         subscriptionRepository = mock(SubscriptionRepository.class);
         userDeviceRepository = mock(UserDeviceRepository.class);
         rebindRequestRepository = mock(DeviceRebindRequestRepository.class);
-        userFrontNodeRepository = mock(UserFrontNodeRepository.class);
+        userFrontSubscriptionRepository = mock(UserFrontSubscriptionRepository.class);
 
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
         frontTuningProperties = new FrontTuningProperties();
         service = new LinkServiceImpl(props, frontTuningProperties, userRepository, nodeRepository,
-                subscriptionRepository, userDeviceRepository, rebindRequestRepository, userFrontNodeRepository,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                subscriptionRepository, userDeviceRepository, rebindRequestRepository,
+                userFrontSubscriptionRepository, Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
-        when(nodeRepository.findById(10L))
-                .thenReturn(Optional.of(node(10L, NodeRole.FRONT, NodeProtocol.TROJAN, "us.example.com")));
         when(nodeRepository.findById(20L))
                 .thenReturn(Optional.of(node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10")));
         when(subscriptionRepository.findByUserId(USER_ID)).thenReturn(List.of());
         when(userDeviceRepository.findByUserId(any())).thenReturn(List.of());
         when(rebindRequestRepository.findPendingByUserId(any())).thenReturn(List.of());
-        // 默认关联表为空：多数既有用例走「退回 front_node_id 单节点」这条路径
-        when(userFrontNodeRepository.findNodeIdsByUserId(any())).thenReturn(List.of());
-    }
-
-    /** 登记用户在关联表里的前置节点 id 集合，供 frontGroups 分组测试用 */
-    private void givenFrontNodeIds(Long... ids) {
-        when(userFrontNodeRepository.findNodeIdsByUserId(USER_ID)).thenReturn(List.of(ids));
-    }
-
-    /** 登记一个可被 nodeRepository 查到的前置节点 */
-    private void givenFrontNode(ProxyNodeDto node) {
-        when(nodeRepository.findById(node.getId())).thenReturn(Optional.of(node));
+        // 默认分配了一个第一跳订阅，订阅下有一个可用的美国节点；多数既有用例走这条默认路径
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID))
+                .thenReturn(List.of(DEFAULT_SUBSCRIPTION_ID));
+        when(nodeRepository.findByAirportSubscriptionId(DEFAULT_SUBSCRIPTION_ID))
+                .thenReturn(List.of(usFrontNode(10L, NodeStatus.ENABLED)));
     }
 
     private void givenUser(UserDto user) {
@@ -199,7 +208,9 @@ class LinkServiceImplTest {
 
         var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
-        assertThat(resp.front()).containsEntry("type", "trojan").containsEntry("server", "us.example.com");
+        assertThat(resp.frontGroups()).hasSize(1);
+        assertThat(resp.frontGroups().get(0).nodes().get(0))
+                .containsEntry("type", "trojan").containsEntry("server", "us.example.com");
         assertThat(resp.land()).containsEntry("type", "socks5").containsEntry("server", "203.0.113.10");
         assertThat(resp.expectedEgressIp()).isEqualTo("203.0.113.10");
         assertThat(resp.agentCredentials()).hasSize(1);
@@ -213,15 +224,16 @@ class LinkServiceImplTest {
     @DisplayName("前置节点按 sourceType 命中覆盖表时，保活参数被注入下发配置；落地节点不受影响")
     void frontTuningAppliedBySourceTypeButNotToLand() {
         frontTuningProperties.setProtocols(Map.of("anytls", Map.of("min-idle-session", 1)));
-        ProxyNodeDto front = node(10L, NodeRole.FRONT, NodeProtocol.MIHOMO, "us.example.com");
+        ProxyNodeDto front = usFrontNode(10L, NodeStatus.ENABLED);
+        front.setProtocol(NodeProtocol.MIHOMO);
         front.setSourceType("anytls");
         front.setSecret(Map.of("type", "anytls", "server", "us.example.com"));
-        when(nodeRepository.findById(10L)).thenReturn(Optional.of(front));
+        when(nodeRepository.findByAirportSubscriptionId(DEFAULT_SUBSCRIPTION_ID)).thenReturn(List.of(front));
         givenUser(user(UserStatus.ACTIVE));
 
         var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
-        assertThat(resp.front()).containsEntry("min-idle-session", 1);
+        assertThat(resp.frontGroups().get(0).nodes().get(0)).containsEntry("min-idle-session", 1);
         assertThat(resp.land()).doesNotContainKey("min-idle-session");
     }
 
@@ -230,17 +242,10 @@ class LinkServiceImplTest {
     void frontTuningAppliedToEveryNodeInGroup() {
         frontTuningProperties.setProtocols(Map.of("anytls", Map.of("min-idle-session", 1)));
         givenUser(user(UserStatus.ACTIVE));
-        givenFrontNodeIds(11L, 12L);
-        ProxyNodeDto first = frontNode(11L, "jp.tsdns.top", NodeStatus.ENABLED);
-        first.setProtocol(NodeProtocol.MIHOMO);
-        first.setSourceType("anytls");
-        first.setSecret(Map.of("type", "anytls", "server", "front-11.example.com"));
-        ProxyNodeDto second = frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED);
-        second.setProtocol(NodeProtocol.MIHOMO);
-        second.setSourceType("anytls");
-        second.setSecret(Map.of("type", "anytls", "server", "front-12.example.com"));
-        givenFrontNode(first);
-        givenFrontNode(second);
+        ProxyNodeDto first = subscriptionNode(11L, "🇺🇸[US]A-01", NodeStatus.ENABLED, "jp.tsdns.top");
+        ProxyNodeDto second = subscriptionNode(12L, "🇺🇸[US]A-02", NodeStatus.ENABLED, "jp.tsdns.top");
+        when(nodeRepository.findByAirportSubscriptionId(DEFAULT_SUBSCRIPTION_ID))
+                .thenReturn(List.of(first, second));
 
         var resp = service.resolveLink(USER_ID, THIS_DEVICE);
 
@@ -252,126 +257,80 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("下发按故障域分组的前置节点，front 取第一组第一个")
-    void deliversFrontGroupsAndKeepsFrontAsPrimary() {
-        // 用户分到 jp.tsdns.top 下 2 个、relay.other.net 下 1 个
+    @DisplayName("frontGroups 按用户订阅顺位排列，每个订阅一组，只含启用的美国节点")
+    void frontGroupsFollowSubscriptionOrder() {
         givenUser(user(UserStatus.ACTIVE));
-        givenFrontNodeIds(11L, 12L, 13L);
-        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.ENABLED));
-        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED));
-        givenFrontNode(frontNode(13L, "relay.other.net", NodeStatus.ENABLED));
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(21L, 11L));
+        when(nodeRepository.findByAirportSubscriptionId(21L)).thenReturn(List.of(
+                subscriptionNode(1L, "🇺🇸[US]B-01", NodeStatus.ENABLED, "relay.b.net")));
+        when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
+                subscriptionNode(2L, "🇺🇸[US]A-01", NodeStatus.ENABLED, "jp.tsdns.top"),
+                subscriptionNode(3L, "🇺🇸[US]A-02", NodeStatus.DISABLED, "jp.tsdns.top"),
+                subscriptionNode(4L, "🇭🇰[HK]A-03", NodeStatus.ENABLED, "jp.tsdns.top")));
 
-        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
+        LinkConfigResponse link = service.resolveLink(USER_ID, THIS_DEVICE);
 
-        assertThat(resp.frontGroups()).hasSize(2);
-        assertThat(resp.frontGroups().get(0).failureDomain()).isEqualTo("jp.tsdns.top");
-        assertThat(resp.frontGroups().get(0).nodes()).hasSize(2);
-        // front 必须等于第一组第一个节点——老客户端只读它
-        assertThat(resp.front()).isEqualTo(resp.frontGroups().get(0).nodes().get(0));
+        assertThat(link.frontGroups()).extracting(LinkConfigResponse.FrontGroup::failureDomain)
+                .containsExactly("relay.b.net", "jp.tsdns.top");
+        assertThat(link.frontGroups().get(1).nodes()).hasSize(1);
     }
 
     @Test
-    @DisplayName("故障域尚未解析（null）的节点照常成组下发，failureDomain 就是 null——"
-            + "契约上这个字段可空，客户端 DTO 必须按可空声明，否则整份链路配置解析失败")
-    void deliversGroupWithNullFailureDomain() {
+    @DisplayName("某个订阅没有可用节点时跳过该组，用户落到备用")
+    void skipsSubscriptionWithoutEnabledNodes() {
         givenUser(user(UserStatus.ACTIVE));
-        // 11 号尚未解析出故障域：手工新建的前置节点永远是这样（建/改节点的路径从不设 failure_domain），
-        // 而「手工指定单节点」正是本期保留的运维逃生口，这条路真实可达
-        givenFrontNodeIds(11L, 12L);
-        givenFrontNode(frontNode(11L, null, NodeStatus.ENABLED));
-        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.ENABLED));
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(21L, 11L));
+        when(nodeRepository.findByAirportSubscriptionId(21L)).thenReturn(List.of(
+                subscriptionNode(1L, "🇺🇸[US]B-01", NodeStatus.DISABLED, "relay.b.net")));
+        when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
+                subscriptionNode(2L, "🇺🇸[US]A-01", NodeStatus.ENABLED, "jp.tsdns.top")));
 
-        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
-
-        // null 组不被丢掉、也不抛异常：组内节点仍是可用的前置节点，只是暂时说不清它跨不跨入口
-        assertThat(resp.frontGroups()).hasSize(2);
-        assertThat(resp.frontGroups().get(0).failureDomain()).isNull();
-        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
-        assertThat(resp.frontGroups().get(1).failureDomain()).isEqualTo("jp.tsdns.top");
-        assertThat(resp.front()).isEqualTo(resp.frontGroups().get(0).nodes().get(0));
+        assertThat(service.resolveLink(USER_ID, THIS_DEVICE).frontGroups())
+                .extracting(LinkConfigResponse.FrontGroup::failureDomain).containsExactly("jp.tsdns.top");
     }
 
     @Test
-    @DisplayName("整组节点都没解析出故障域时同样照常下发，不退化成「没有可用前置节点」")
-    void deliversSoleGroupWhenEveryNodeHasNullFailureDomain() {
+    @DisplayName("全部订阅都没有可用节点报 NODE_DISABLED")
+    void allSubscriptionsEmptyReportsNodeDisabled() {
         givenUser(user(UserStatus.ACTIVE));
-        givenFrontNodeIds(11L, 12L);
-        givenFrontNode(frontNode(11L, null, NodeStatus.ENABLED));
-        givenFrontNode(frontNode(12L, null, NodeStatus.ENABLED));
-
-        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
-
-        assertThat(resp.frontGroups()).hasSize(1);
-        assertThat(resp.frontGroups().get(0).failureDomain()).isNull();
-        assertThat(resp.frontGroups().get(0).nodes()).hasSize(2);
-    }
-
-    @Test
-    @DisplayName("组内被禁用的节点跳过，不影响该组其余节点")
-    void skipsDisabledNodeWithinGroup() {
-        givenUser(user(UserStatus.ACTIVE));
-        givenFrontNodeIds(11L, 12L);
-        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.ENABLED));
-        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.DISABLED));
-
-        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
-
-        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
-    }
-
-    @Test
-    @DisplayName("整组都被禁用时丢掉这一组，不下发空组")
-    void dropsGroupWhenAllNodesDisabled() {
-        givenUser(user(UserStatus.ACTIVE));
-        givenFrontNodeIds(11L, 12L, 13L);
-        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.DISABLED));
-        givenFrontNode(frontNode(12L, "jp.tsdns.top", NodeStatus.DISABLED));
-        givenFrontNode(frontNode(13L, "relay.other.net", NodeStatus.ENABLED));
-
-        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
-
-        assertThat(resp.frontGroups()).hasSize(1);
-        assertThat(resp.frontGroups().get(0).failureDomain()).isEqualTo("relay.other.net");
-    }
-
-    @Test
-    @DisplayName("分配了前置节点但全部被禁用时报 NODE_DISABLED，而不是「未分配」——"
-            + "报未分配会把排查方向错误地引向「去分配一个」，真正要做的是启用/换一个节点")
-    void failsOnlyWhenEveryGroupIsEmpty() {
-        givenUser(user(UserStatus.ACTIVE));
-        givenFrontNodeIds(11L, 12L);
-        givenFrontNode(frontNode(11L, "jp.tsdns.top", NodeStatus.DISABLED));
-        givenFrontNode(frontNode(12L, "relay.other.net", NodeStatus.DISABLED));
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(11L));
+        when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
+                subscriptionNode(2L, "🇺🇸[US]A-01", NodeStatus.DISABLED, "jp.tsdns.top")));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
-                .isInstanceOf(BizException.class)
-                .hasFieldOrPropertyWithValue("bizCode", BizCodeEnum.NODE_DISABLED);
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.NODE_DISABLED));
     }
 
     @Test
-    @DisplayName("压根没有分配过前置节点时报 EGRESS_NOT_ASSIGNED，与「分配了但全禁用」的 "
-            + "NODE_DISABLED 分界开——这是两种不同的运维动作：前者要去分配，后者要去启用/换节点")
-    void neverAssignedAnyFrontNodeRejectedAsEgressNotAssigned() {
-        UserDto u = user(UserStatus.ACTIVE);
-        u.setFrontNodeId(null);
-        givenUser(u);
+    @DisplayName("没有分配过第一跳报 EGRESS_NOT_ASSIGNED")
+    void noFrontListReportsNotAssigned() {
+        givenUser(user(UserStatus.ACTIVE));
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
-                .isInstanceOf(BizException.class)
-                .hasFieldOrPropertyWithValue("bizCode", BizCodeEnum.EGRESS_NOT_ASSIGNED);
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getBizCode()).isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED));
     }
 
     @Test
-    @DisplayName("关联表为空时退回 front_node_id 单节点，老数据照常可用")
-    void fallsBackToSingleFrontNodeWhenAssociationEmpty() {
+    @DisplayName("组的 failureDomain 取出现最多的；平手取字典序最小；全未解析为 null")
+    void failureDomainIsMostCommon() {
         givenUser(user(UserStatus.ACTIVE));
-        // 关联表为空是 setUp 里的默认桩，这里不额外调用 givenFrontNodeIds
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(11L, 21L, 31L));
+        when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
+                subscriptionNode(1L, "🇺🇸[US]1", NodeStatus.ENABLED, "b.net"),
+                subscriptionNode(2L, "🇺🇸[US]2", NodeStatus.ENABLED, "a.net"),
+                subscriptionNode(3L, "🇺🇸[US]3", NodeStatus.ENABLED, "b.net")));
+        when(nodeRepository.findByAirportSubscriptionId(21L)).thenReturn(List.of(
+                subscriptionNode(4L, "🇺🇸[US]4", NodeStatus.ENABLED, "z.net"),
+                subscriptionNode(5L, "🇺🇸[US]5", NodeStatus.ENABLED, "y.net")));
+        when(nodeRepository.findByAirportSubscriptionId(31L)).thenReturn(List.of(
+                subscriptionNode(6L, "🇺🇸[US]6", NodeStatus.ENABLED, null)));
 
-        LinkConfigResponse resp = service.resolveLink(USER_ID, THIS_DEVICE);
-
-        assertThat(resp.frontGroups()).hasSize(1);
-        assertThat(resp.frontGroups().get(0).nodes()).hasSize(1);
-        assertThat(resp.front()).isNotNull();
+        assertThat(service.resolveLink(USER_ID, THIS_DEVICE).frontGroups())
+                .extracting(LinkConfigResponse.FrontGroup::failureDomain)
+                .containsExactly("b.net", "y.net", null);
     }
 
     @Test
@@ -452,10 +411,9 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("没买过服务且未分配链路资源时，按「资源未分配」拒绝——缺的是网络配置，不是套餐")
+    @DisplayName("没买过服务且未分配落地节点时，按「资源未分配」拒绝——缺的是网络配置，不是套餐")
     void neverPurchasedWithoutNodesRejectedAsEgressNotAssigned() {
         UserDto u = user(UserStatus.ACTIVE);
-        u.setFrontNodeId(null);
         u.setLandNodeId(null);
         givenUser(u);
 
@@ -466,10 +424,9 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("有在期订阅但未分配链路资源时被拒绝")
+    @DisplayName("有在期订阅但未分配落地节点时被拒绝")
     void activeSubscriptionButNoNodesRejected() {
         UserDto u = user(UserStatus.ACTIVE);
-        u.setFrontNodeId(null);
         u.setLandNodeId(null);
         givenUser(u);
         givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
@@ -478,33 +435,6 @@ class LinkServiceImplTest {
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode())
                 .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
-    }
-
-    @Test
-    @DisplayName("只分配了第一跳、没分配落地节点时同样被拒绝")
-    void frontOnlyWithoutLandRejected() {
-        UserDto u = user(UserStatus.ACTIVE);
-        u.setLandNodeId(null);
-        givenUser(u);
-        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
-
-        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
-                .isInstanceOf(BizException.class)
-                .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
-    }
-
-    @Test
-    @DisplayName("第一跳节点查不到（外键被绕过约束改坏）时按内部错误拒绝，不下发残缺链路")
-    void missingFrontNodeRejectedAsInternalError() {
-        givenUser(user(UserStatus.ACTIVE));
-        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
-        when(nodeRepository.findById(10L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
-                .isInstanceOf(BizException.class)
-                .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.INTERNAL_ERROR);
     }
 
     @Test
@@ -515,22 +445,6 @@ class LinkServiceImplTest {
         ProxyNodeDto disabled = node(20L, NodeRole.LAND, NodeProtocol.SOCKS5, "203.0.113.10");
         disabled.setStatus(NodeStatus.DISABLED);
         when(nodeRepository.findById(20L)).thenReturn(Optional.of(disabled));
-
-        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
-                .isInstanceOf(BizException.class)
-                .extracting(e -> ((BizException) e).getBizCode())
-                .isEqualTo(BizCodeEnum.NODE_DISABLED);
-    }
-
-    @Test
-    @DisplayName("第一跳节点被禁用时同样不下发链路，避免只守住半条 fail-closed 保障——"
-            + "退回单节点 fallback 组后唯一节点被滤掉、组变空，但用户明明分配过节点，报 NODE_DISABLED 而非「未分配」")
-    void disabledFrontNodeRejected() {
-        givenUser(user(UserStatus.ACTIVE));
-        givenSubscriptions(activeSubscription(100L, "sk-ant-test"));
-        ProxyNodeDto disabled = node(10L, NodeRole.FRONT, NodeProtocol.TROJAN, "us.example.com");
-        disabled.setStatus(NodeStatus.DISABLED);
-        when(nodeRepository.findById(10L)).thenReturn(Optional.of(disabled));
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOf(BizException.class)

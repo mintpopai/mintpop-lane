@@ -105,7 +105,7 @@ class AdminEnterpriseControllerTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     @Test
@@ -312,7 +312,7 @@ class AdminEnterpriseControllerTest extends MysqlTestBase {
     @DisplayName("企业仍被订阅引用时拒绝删除，报 410025")
     void deleteRejectedWhenReferencedBySubscription() throws Exception {
         Long enterpriseId = createEnterprise(validBody());
-        Long userId = fixtures.createUser("logto-member", null, null);
+        Long userId = fixtures.createUser("logto-member", null);
         Long subscriptionId = fixtures.createSubscription(userId, AgentType.CLAUDE, "Claude 席位",
                 Instant.now(), Instant.now().plus(30, ChronoUnit.DAYS), null);
         jdbc.update("UPDATE subscription SET enterprise_id = ? WHERE id = ?", enterpriseId, subscriptionId);

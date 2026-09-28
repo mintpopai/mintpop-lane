@@ -9,7 +9,6 @@ import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -25,7 +24,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
@@ -60,9 +58,6 @@ class AdminNodeControllerTest extends MysqlTestBase {
     private UserRepository userRepository;
 
     @Autowired
-    private UserFrontNodeRepository userFrontNodeRepository;
-
-    @Autowired
     private SubscriptionRepository subscriptionRepository;
 
     @Autowired
@@ -87,7 +82,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     @Test
@@ -122,6 +117,25 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 // 未传容量时走默认值 10；尚未分配给任何人
                 .andExpect(jsonPath("$.data[0].capacity").value(10))
                 .andExpect(jsonPath("$.data[0].assignedUserCount").value(0));
+    }
+
+    @Test
+    @DisplayName("新建 FRONT 节点报 410005：第一跳只能来自机场订阅导入，不开放手工新建")
+    void createFrontNodeManuallyFails() throws Exception {
+        var body = Map.of(
+                "name", "FRONT-手工新建",
+                "role", "FRONT",
+                "protocol", "TROJAN",
+                "serverAddr", "us.example.com",
+                "port", 443,
+                "secret", Map.of("password", "p1"),
+                "status", "ENABLED");
+
+        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(BizCodeEnum.NODE_ROLE_MISMATCH.getCode()));
+        assertThat(nodeRepository.findAll(null)).isEmpty();
     }
 
     @Test
@@ -264,24 +278,25 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("非落地节点提交的出口时区被忽略，落库为 null")
+    @DisplayName("非落地节点提交的出口时区被忽略，落库为 null——"
+            + "第一跳不可手工新建，改走更新已有前置节点来验证这条规则")
     void egressTimezoneIgnoredForFrontNode() throws Exception {
+        Long id = fixtures.createFrontNode("FRONT-1");
         var body = Map.of(
                 "name", "FRONT-1",
                 "role", "FRONT",
                 "protocol", "TROJAN",
                 "serverAddr", "us.example.com",
                 "port", 443,
-                "secret", Map.of("password", "p1"),
                 "egressTimezone", "Asia/Tokyo",
                 "status", "ENABLED");
 
-        mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
+        mockMvc.perform(put("/api/admin/nodes/" + id).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
-        assertThat(nodeRepository.findAll(null).get(0).getEgressTimezone()).isNull();
+        assertThat(nodeRepository.findById(id).orElseThrow().getEgressTimezone()).isNull();
     }
 
     @Test
@@ -298,10 +313,9 @@ class AdminNodeControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("落地节点已分配时列表里显示已绑人数")
     void landNodeShowsAssignedUserCount() throws Exception {
-        Long front = fixtures.createFrontNode("FRONT-1");
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.10");
-        fixtures.createUser("logto-user-1", front, land);
-        fixtures.createUser("logto-user-2", front, land);
+        fixtures.createUser("logto-user-1", land);
+        fixtures.createUser("logto-user-2", land);
 
         mockMvc.perform(get("/api/admin/nodes").param("role", "LAND").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data[0].assignedUserCount").value(2));
@@ -377,8 +391,9 @@ class AdminNodeControllerTest extends MysqlTestBase {
     @DisplayName("节点名重复时报 410007")
     void duplicateNodeNameFails() throws Exception {
         fixtures.createFrontNode("FRONT-1");
-        var body = Map.of("name", "FRONT-1", "role", "FRONT", "protocol", "TROJAN",
-                "serverAddr", "us.example.com", "port", 443, "status", "ENABLED");
+        // 第一跳不可手工新建，用 LAND 角色验证重名校验不受角色限制
+        var body = Map.of("name", "FRONT-1", "role", "LAND", "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10", "port", 50101, "status", "ENABLED");
 
         mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
@@ -423,11 +438,11 @@ class AdminNodeControllerTest extends MysqlTestBase {
     @DisplayName("敏感键混进 extraConfig 时报参数错误 110001，且不会明文落库")
     void secretKeyInExtraConfigFails() throws Exception {
         var body = Map.of(
-                "name", "FRONT-混入密码",
-                "role", "FRONT",
-                "protocol", "TROJAN",
-                "serverAddr", "us.example.com",
-                "port", 443,
+                "name", "LAND-混入密码",
+                "role", "LAND",
+                "protocol", "SOCKS5",
+                "serverAddr", "203.0.113.10",
+                "port", 50101,
                 "extraConfig", Map.of("password", "偷偷塞进来的明文密码"),
                 "status", "ENABLED");
 
@@ -440,27 +455,27 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("删除不存在的节点报 410001；仍被用户引用的节点报 410003")
+    @DisplayName("删除不存在的节点报 410001；仍被用户引用的落地节点报 410003；"
+            + "前置节点不再被用户直接引用（用户引用的是机场订阅），可以正常删除")
     void deleteNodeTwoFailureModes() throws Exception {
         mockMvc.perform(delete("/api/admin/nodes/99999").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410001));
 
         Long front = fixtures.createFrontNode("FRONT-1");
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.10");
-        fixtures.createUser("logto-user-1", front, land);
+        fixtures.createUser("logto-user-1", land);
 
         mockMvc.perform(delete("/api/admin/nodes/" + land).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410003));
         mockMvc.perform(delete("/api/admin/nodes/" + front).header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(410003));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
     @DisplayName("正被用户引用的节点改角色时报 410003，未被引用的节点可以正常改角色")
     void changingRoleOfReferencedNodeFails() throws Exception {
-        Long front = fixtures.createFrontNode("FRONT-1");
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.10");
-        fixtures.createUser("logto-user-1", front, land);
+        fixtures.createUser("logto-user-1", land);
 
         var changeToFront = Map.of(
                 "name", "LAND-1", "role", "FRONT", "protocol", "SOCKS5",
@@ -487,34 +502,6 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("是某人前置集合里的非主成员（不在 front_node_id 上）的节点也报 410003，而不是数据库异常")
-    void deleteAndChangeRoleBlockedByNonPrimaryFrontMembership() throws Exception {
-        Long primary = fixtures.createFrontNode("FRONT-主");
-        Long secondary = fixtures.createFrontNode("FRONT-非主成员");
-        // existsByFrontNodeId(secondary) 是 false——它不是任何人的主节点，只在 user_front_node 里
-        Long userId = fixtures.createUser("logto-user-1", primary, null);
-        userFrontNodeRepository.replaceForUser(userId, List.of(primary, secondary));
-
-        mockMvc.perform(delete("/api/admin/nodes/" + secondary).header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(410003));
-
-        var changeToLand = Map.of(
-                "name", "FRONT-非主成员", "role", "LAND", "protocol", "SOCKS5",
-                "serverAddr", "203.0.113.30", "port", 50101,
-                "egressIp", "203.0.113.30", "status", "ENABLED");
-        mockMvc.perform(put("/api/admin/nodes/" + secondary).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(changeToLand)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(410003));
-        assertThat(nodeRepository.findById(secondary).orElseThrow().getRole()).isEqualTo(NodeRole.FRONT);
-
-        // 解绑后可以正常删除
-        userFrontNodeRepository.replaceForUser(userId, List.of(primary));
-        mockMvc.perform(delete("/api/admin/nodes/" + secondary).header("Authorization", bearer(adminId)))
-                .andExpect(jsonPath("$.code").value(0));
-    }
-
-    @Test
     @DisplayName("空闲节点可以删除")
     void idleNodeCanBeDeleted() throws Exception {
         Long id = fixtures.createLandNode("LAND-1", "203.0.113.10");
@@ -526,9 +513,10 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("MIHOMO 协议不可手工新建，报参数错误 110001")
+    @DisplayName("MIHOMO 协议不可手工新建，报参数错误 110001——"
+            + "role 特意传 LAND：role=FRONT 会先被「第一跳不可手工新建」的 410005 拦住，测不到这条")
     void mihomoCannotBeCreatedManually() throws Exception {
-        var body = Map.of("name", "X", "role", "FRONT", "protocol", "MIHOMO",
+        var body = Map.of("name", "X", "role", "LAND", "protocol", "MIHOMO",
                 "serverAddr", "hk.example.com", "port", 443, "status", "ENABLED");
 
         mockMvc.perform(post("/api/admin/nodes").header("Authorization", bearer(adminId))

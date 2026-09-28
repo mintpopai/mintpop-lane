@@ -103,8 +103,8 @@ class PaymentControllerTest extends MysqlTestBase {
     void setUp() {
         DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        buyerId = fixtures.createUser("logto-buyer", null, null);
-        otherId = fixtures.createUser("logto-other", null, null);
+        buyerId = fixtures.createUser("logto-buyer", null);
+        otherId = fixtures.createUser("logto-other", null);
         planId = DatabaseFixtures.createPlan(planRepository, "Claude 月付", AgentType.CLAUDE, 30, "99.99", true);
         // 测试配置里没有密钥；这里临时填上，让「已配置」分支可测。@AfterEach 复原
         paymentProperties.setSecretKey("sk_unit_test_placeholder");

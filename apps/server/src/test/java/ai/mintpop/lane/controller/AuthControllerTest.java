@@ -85,7 +85,7 @@ class AuthControllerTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("logto-u1", null, null);
+        userId = fixtures.createUser("logto-u1", null);
     }
 
     @Test

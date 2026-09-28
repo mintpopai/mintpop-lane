@@ -82,7 +82,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("u1", null, null);
+        userId = fixtures.createUser("u1", null);
         email = "u1@test.example"; // DatabaseFixtures.createUser 固定拼 subject + "@test.example"
 
         notifyService = mock(NodeNotifyService.class);
@@ -320,7 +320,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @DisplayName("checkAll 定时扫描：多个不同用户的劣化各自独立推送，不是只看到第一个用户")
     void checkAllNotifiesEachDegradedUserIndependently() {
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
         String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5)); // 落在默认 15 分钟回看窗口内
 
@@ -340,7 +340,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     void checkAllDistinguishesUsersSharingSameFailureDomain() {
         // 更贴近真实拓扑：多个用户接同一机场订阅，共用同一个故障域名
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
         String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5));
 

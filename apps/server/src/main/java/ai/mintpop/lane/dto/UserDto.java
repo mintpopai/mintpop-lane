@@ -25,9 +25,6 @@ public class UserDto {
 
     private UserStatus status = UserStatus.ACTIVE;
 
-    /** 第一跳节点 id */
-    private Long frontNodeId;
-
     /** 第二跳落地节点 id，null 表示尚未分配 */
     private Long landNodeId;
 

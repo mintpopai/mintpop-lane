@@ -35,7 +35,7 @@ class PlanOrderRepositoryTest extends MysqlTestBase {
     void setUp() {
         DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("logto-buyer", null, null);
+        userId = fixtures.createUser("logto-buyer", null);
     }
 
     private PlanOrder pending(String orderNo) {

@@ -65,9 +65,8 @@ class AdminCredentialControllerTest extends MysqlTestBase {
     void setUp() {
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        Long frontId = fixtures.createFrontNode("FRONT-1");
         Long landId = fixtures.createLandNode("LAND-1", "203.0.113.10");
-        memberId = fixtures.createUser("logto-m1", frontId, landId);
+        memberId = fixtures.createUser("logto-m1", landId);
         subscriptionId = fixtures.createSubscription(memberId, AgentType.CLAUDE, "Claude 席位 1",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), null);
     }

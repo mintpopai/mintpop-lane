@@ -3,7 +3,6 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
-import ai.mintpop.lane.enumeration.FrontAction;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -59,14 +58,10 @@ class AdminUserLandCapacityRaceTest extends MysqlTestBase {
         fixtures.clearAll();
     }
 
-    /**
-     * 本用例只关心落地节点的容量竞争，第一跳一概不动：frontAction 传 KEEP
-     * （必填、无缺省值，整体保存的每个调用点都要显式表态）。
-     */
+    /** 本用例只关心落地节点的容量竞争，第一跳不在这个整体保存里，不用管 */
     private UserSaveRequest saveRequest(Long landNodeId) {
         UserSaveRequest request = new UserSaveRequest();
         request.setStatus(UserStatus.ACTIVE);
-        request.setFrontAction(FrontAction.KEEP);
         request.setLandNodeId(landNodeId);
         return request;
     }
@@ -91,8 +86,8 @@ class AdminUserLandCapacityRaceTest extends MysqlTestBase {
     void staleSnapshotMustNotBypassCapacityCheck() {
         Long front = fixtures.createFrontNode("FRONT-1");
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.20", 1);
-        Long userU = fixtures.createUser("logto-u", front, land);
-        Long userW = fixtures.createUser("logto-w", front, null);
+        Long userU = fixtures.createUser("logto-u", land);
+        Long userW = fixtures.createUser("logto-w", null);
 
         // 主流程（重存 U，落地仍指向 LAND-1）第一次锁定读节点行之前：
         // 另一个管理员先把 U 解绑，再把最后一个名额分给 W，两个事务都已提交
