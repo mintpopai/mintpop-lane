@@ -72,10 +72,10 @@ async function allocateFront(): Promise<void> {
   allocatingFront.value = true;
   try {
     await adminApi().allocateUserFront(userId);
-    showToast("success", "已分配第一跳");
+    showToast("success", "已分配第一跳，用户下次建立链路时生效");
     await loadUser();
   } catch (error) {
-    // 410050 主用名额已满等业务错误，服务端给的中文提示直接用
+    // 410050 没有可分配的第一跳订阅等业务错误，服务端给的中文提示直接用
     reportError(error, "分配失败");
   } finally {
     allocatingFront.value = false;
@@ -917,7 +917,7 @@ async function confirmUnbind(): Promise<void> {
     <ConfirmDialog
       v-if="pendingClearFront"
       title="取消第一跳分配"
-      message="取消后用户会立即断开第一跳，直到重新分配。确认取消？"
+      message="取消后，用户下次建立链路时将没有第一跳，直到重新分配。确认取消？"
       confirm-text="确认"
       :busy="clearingFront"
       @confirm="confirmClearFront()"

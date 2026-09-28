@@ -155,7 +155,7 @@ async function mountNodesViewWithGroups(groups: Partial<AirportSubscriptionRespo
   return render();
 }
 
-async function setGroup(wrapper: Wrapper, value: "ALL" | "NONE" | number) {
+async function setGroup(wrapper: Wrapper, value: "ALL" | number) {
   wrapper.findComponent({ name: "FilterChips" }).vm.$emit("update:modelValue", value);
   await wrapper.vm.$nextTick();
 }
@@ -256,7 +256,6 @@ describe("NodesView 订阅带", () => {
 
     expect(wrapper.findComponent({ name: "FilterChips" }).props("options")).toEqual([
       { value: "ALL", label: "全部", count: 3 },
-      { value: "NONE", label: "未归属", count: 1 },
       { value: 100, label: "机场 A", count: 2 },
       { value: 200, label: "机场 B", count: 0 },
     ]);
@@ -264,14 +263,11 @@ describe("NodesView 订阅带", () => {
     expect(GROUPS[0].nodeCount).toBe(999);
   });
 
-  it("选某个订阅就只剩那一批，选「未归属」只剩散的", async () => {
+  it("选某个订阅就只剩那一批", async () => {
     const wrapper = await render();
 
     await setGroup(wrapper, 100);
     expect(names(wrapper)).toEqual(["FRONT-A1", "FRONT-A2"]);
-
-    await setGroup(wrapper, "NONE");
-    expect(names(wrapper)).toEqual(["FRONT-散"]);
   });
 
   it("订阅与状态两级条件叠加", async () => {
@@ -411,10 +407,10 @@ describe("NodesView 空态", () => {
   });
 
   it("有节点但筛没了是另一回事：空态说法按原始数量判，不按筛完的", async () => {
-    // 三个第一跳节点里没有「未归属 + 已禁用」的组合
+    // 机场 B 订阅下一个节点都没有，叠加「已禁用」依然是空
     const wrapper = await render();
 
-    await setGroup(wrapper, "NONE");
+    await setGroup(wrapper, 200);
     await setStatus(wrapper, "DISABLED");
 
     expect(wrapper.findComponent(DataCard).props("empty")).toBe(true);
@@ -423,7 +419,7 @@ describe("NodesView 空态", () => {
 
   it("筛没了时给「查看全部」，一点把两级条件都清掉", async () => {
     const wrapper = await render();
-    await setGroup(wrapper, "NONE");
+    await setGroup(wrapper, 200);
     await setStatus(wrapper, "DISABLED");
 
     const reset = wrapper.findAll(".admin-btn-ghost").find((b) => b.text() === "查看全部")!;

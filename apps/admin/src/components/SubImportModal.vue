@@ -21,6 +21,8 @@ const submitting = ref(false);
 // 创建模式才需要选机场：重新拉取用的是已有订阅上早已定死的机场，不需要再选一次
 const airports = ref<AirportResponse[]>([]);
 const airportsLoaded = ref(false);
+// 加载机场失败：与「一家机场都没有」区分开，否则会把网络/服务端故障误报成「还没有机场」
+const airportsLoadFailed = ref(false);
 const airportId = ref<number | null>(null);
 const account = ref("");
 const bandwidth = ref("");
@@ -31,15 +33,26 @@ onMounted(async () => {
   }
   try {
     airports.value = await adminApi().listAirports();
+  } catch (error) {
+    airportsLoadFailed.value = true;
+    showToast(
+      "error",
+      "加载机场失败：" + (error instanceof BizError ? error.message : (error as Error).message),
+    );
   } finally {
     airportsLoaded.value = true;
   }
 });
 
 const airportOptions = computed(() => airports.value.map((a) => ({ value: a.id, label: a.name })));
-// 一家机场都没有时创建表单没法填出所属机场，与其让人填完才在提交时被拒，不如先挡住入口
+// 一家机场都没有时创建表单没法填出所属机场，与其让人填完才在提交时被拒，不如先挡住入口；
+// 加载失败时不误判成「还没有机场」（那条提示会引导去建机场，掩盖了真正的加载失败）
 const noAirport = computed(
-  () => !props.group && airportsLoaded.value && airports.value.length === 0,
+  () =>
+    !props.group &&
+    airportsLoaded.value &&
+    !airportsLoadFailed.value &&
+    airports.value.length === 0,
 );
 
 const title = computed(() => (props.group ? `重新拉取：${props.group.name}` : "从订阅导入节点"));

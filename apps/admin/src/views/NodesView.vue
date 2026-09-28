@@ -31,8 +31,8 @@ const probingNode = ref<AdminNodeResponse | null>(null);
 
 // —— 机场订阅 ——
 const groupList = ref<AirportSubscriptionResponse[]>([]);
-// "ALL"=全部；"NONE"=未归属；数字=某订阅 id
-const currentGroup = ref<"ALL" | "NONE" | number>("ALL");
+// "ALL"=全部；数字=某订阅 id。迁移后第一跳节点必然属于某个订阅，不再有「未归属」一档
+const currentGroup = ref<"ALL" | number>("ALL");
 const importModalOpen = ref(false);
 const refetchingGroup = ref<AirportSubscriptionResponse | null>(null);
 const editingSubscription = ref<AirportSubscriptionResponse | null>(null);
@@ -75,11 +75,6 @@ const roleOptions = computed(() =>
    订阅的计数不用服务端的 group.nodeCount：那是全量，与上面的口径对不上 */
 const groupOptions = computed(() => [
   { value: "ALL" as const, label: "全部", count: frontNodes.value.length },
-  {
-    value: "NONE" as const,
-    label: "未归属",
-    count: frontNodes.value.filter((node) => node.airportSubscriptionId === null).length,
-  },
   ...groupList.value.map((group) => ({
     value: group.id,
     label: group.name,
@@ -112,11 +107,7 @@ const currentList = computed(() => {
   if (currentRole.value !== "FRONT" || currentGroup.value === "ALL") {
     return kind;
   }
-  return kind.filter((node) =>
-    currentGroup.value === "NONE"
-      ? node.airportSubscriptionId === null
-      : node.airportSubscriptionId === currentGroup.value,
-  );
+  return kind.filter((node) => node.airportSubscriptionId === currentGroup.value);
 });
 
 /* 当前选中的订阅对象。订阅只属于第一跳，所以这里连 role 一起判——否则切到落地 tab 后，
@@ -219,7 +210,7 @@ async function confirmDeleteGroup(): Promise<void> {
     pendingDeleteGroup.value = null;
     await load();
   } catch (error) {
-    // 410013：订阅下有节点被用户绑定。服务端中文提示直接用
+    // 410013：订阅仍被用户的第一跳列表引用。服务端中文提示直接用
     showToast(
       "error",
       error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`,

@@ -145,6 +145,15 @@ describe("SubImportModal", () => {
     expect(document.querySelector("button.admin-btn:disabled")).not.toBeNull();
   });
 
+  it("加载机场失败时提示加载失败，不误判为还没有机场", async () => {
+    listAirports.mockRejectedValueOnce(new BizError(500, "机场服务暂不可用"));
+    mountModal(null);
+    await flushPromises();
+
+    expect(showToast).toHaveBeenCalledWith("error", "加载机场失败：机场服务暂不可用");
+    expect(document.body.textContent).not.toContain("还没有机场");
+  });
+
   it("带宽不是正整数时不提交", async () => {
     mountModal(null);
     await flushPromises();
