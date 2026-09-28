@@ -96,7 +96,12 @@ const timezoneHint = computed(() => {
 const timeZoneOptions = Intl.supportedValuesOf("timeZone");
 
 const title = computed(() => (props.editing ? `编辑节点：${props.editing.name}` : "新建节点"));
-const roleOptions = Object.entries(NODE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
+// 第一跳只能来自机场订阅导入，这个表单不再提供「新建/改为第一跳」的路：
+// 新建节点、或编辑一个本来就不是第一跳的节点时，角色下拉里不出现「第一跳」；
+// 编辑一个历史遗留的手工第一跳节点时仍保留该选项，不强行把它下架
+const roleOptions = Object.entries(NODE_ROLE_LABELS)
+  .filter(([value]) => value !== "FRONT" || props.editing?.role === "FRONT")
+  .map(([value, label]) => ({ value, label }));
 // 订阅导入的节点：参数由「重新拉取」统一更新，表单只放行名称/状态/备注
 const isSubscriptionNode = computed(() => props.editing?.protocol === "MIHOMO");
 // MIHOMO 只能经订阅导入产生，协议下拉不提供
@@ -174,9 +179,9 @@ async function submit(): Promise<void> {
       </div>
 
       <p v-if="isSubscriptionNode" class="admin-note">
-        订阅导入的节点（{{ props.editing?.sourceType }}，来自分组「{{
-          props.editing?.groupName
-        }}」）。 连接参数以订阅为准，改动请到分组上「重新拉取」；这里只能改名称、状态与备注。
+        订阅导入的节点（{{ props.editing?.sourceType }}，来自订阅「{{
+          props.editing?.airportSubscriptionName
+        }}」）。 连接参数以订阅为准，改动请到订阅上「重新拉取」；这里只能改名称、状态与备注。
       </p>
 
       <div v-if="!isSubscriptionNode" class="admin-form-row">

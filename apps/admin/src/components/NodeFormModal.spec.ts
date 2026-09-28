@@ -29,8 +29,8 @@ function landNode(): AdminNodeResponse {
     secretConfigured: true,
     capacity: 10,
     assignedUserCount: 0,
-    groupId: null,
-    groupName: null,
+    airportSubscriptionId: null,
+    airportSubscriptionName: null,
     sourceType: null,
     failureDomain: null,
     createdAt: "2026-09-01T00:00:00Z",
@@ -41,6 +41,8 @@ function landNode(): AdminNodeResponse {
 beforeEach(() => {
   vi.clearAllMocks();
   lookupIpTimezone.mockResolvedValue(null);
+  // jsdom 不实现 scrollIntoView，AdminSelect 展开面板定位高亮项时会调它
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -124,5 +126,43 @@ describe("NodeFormModal 出口 IP 与时区联动", () => {
 
     await vi.waitFor(() => expect(hint()).toContain("请手动填写"));
     expect(query<HTMLInputElement>("#node-egress-tz").element.value).toBe("");
+  });
+});
+
+describe("NodeFormModal 角色下拉不提供第一跳", () => {
+  /** 选中项的 <li> 还带一个 ✓ 勾号 span，一并算进 textContent，故用 includes 判断而非整串比对 */
+  function hasRoleOption(text: string): boolean {
+    return Array.from(document.querySelectorAll("li")).some((li) => li.textContent?.includes(text));
+  }
+
+  function frontNode(): AdminNodeResponse {
+    return { ...landNode(), id: 9, name: "US-01", role: "FRONT", protocol: "TROJAN" };
+  }
+
+  it("新建节点时角色下拉没有「第一跳」——第一跳只能从机场订阅导入", async () => {
+    mount(NodeFormModal, { attachTo: document.body, props: { role: "LAND", editing: null } });
+
+    await query('button[aria-label="角色"]').trigger("click");
+
+    expect(hasRoleOption("第一跳（出国）")).toBe(false);
+  });
+
+  it("编辑落地节点时角色下拉也没有「第一跳」——不许把节点改成第一跳", async () => {
+    mount(NodeFormModal, { attachTo: document.body, props: { role: "LAND", editing: landNode() } });
+
+    await query('button[aria-label="角色"]').trigger("click");
+
+    expect(hasRoleOption("第一跳（出国）")).toBe(false);
+  });
+
+  it("编辑历史遗留的手工第一跳节点时，角色下拉仍保留「第一跳」，不强行下架", async () => {
+    mount(NodeFormModal, {
+      attachTo: document.body,
+      props: { role: "FRONT", editing: frontNode() },
+    });
+
+    await query('button[aria-label="角色"]').trigger("click");
+
+    expect(hasRoleOption("第一跳（出国）")).toBe(true);
   });
 });
