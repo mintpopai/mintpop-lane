@@ -7,6 +7,7 @@ import type {
   AdminSubscriptionResponse,
   AdminUserResponse,
   CredentialRevokeResult,
+  FrontSubscriptionBrief,
   UserSaveRequest,
 } from "../api/types";
 import { useRebindStore } from "../stores/rebind";
@@ -26,6 +27,8 @@ const credentialRevoke = vi.fn<(subscriptionId: number) => Promise<CredentialRev
 const unbindSubscriptionDevice = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 // 角标 store 用它数待处理换机申请；store 只取 length，故这里给几个空对象就够
 const listDeviceRebindRequests = vi.fn<(status?: string) => Promise<unknown[]>>(async () => []);
+const allocateUserFront = vi.fn<(id: number) => Promise<FrontSubscriptionBrief[]>>();
+const clearUserFront = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 
 vi.mock("../api", () => ({
   adminApi: () => ({
@@ -38,6 +41,8 @@ vi.mock("../api", () => ({
     credentialRevoke,
     unbindSubscriptionDevice,
     listDeviceRebindRequests,
+    allocateUserFront,
+    clearUserFront,
   }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
@@ -51,10 +56,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     email: "zhang@acme.com",
     role: "MEMBER",
     status: "ACTIVE",
-    frontNodeId: null,
-    frontNodeName: null,
-    frontNodes: [],
-    failureDomainCount: 0,
+    frontSubscriptions: [],
     landNodeId: null,
     landNodeName: null,
     egressIp: null,
@@ -82,8 +84,8 @@ function node(overrides: Partial<AdminNodeResponse> = {}): AdminNodeResponse {
     secretConfigured: true,
     capacity: null,
     assignedUserCount: null,
-    groupId: null,
-    groupName: null,
+    airportSubscriptionId: null,
+    airportSubscriptionName: null,
     sourceType: null,
     failureDomain: null,
     createdAt: "2026-08-01T00:00:00Z",
@@ -505,81 +507,6 @@ describe("UserDetailView · 链路资源", () => {
     return new DOMWrapper(btn);
   }
 
-  it("没有改动时保存按钮禁用——没有可保存的东西", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
-    listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({
-        id: 11,
-        name: "LAND-东京",
-        role: "LAND",
-        capacity: 10,
-        assignedUserCount: 3,
-        egressIp: "1.2.3.4",
-      }),
-    ]);
-    await mountView([]);
-    // 等两个下拉都回显出当前分配，说明用户与节点都已加载完
-    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
-    await vi.waitFor(() =>
-      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
-    );
-    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
-
-    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeDefined();
-  });
-
-  it("换落地节点后保存提交新节点 id，用户处置态原样透传——这页不动状态，状态在用户列表切换", async () => {
-    getUser.mockResolvedValue(user({ status: "SUSPENDED", frontNodeId: 1, landNodeId: 11 }));
-    listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
-      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
-    ]);
-    await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
-
-    await selectTrigger("落地节点").trigger("click");
-    const option = queryAll("li").find((li) => li.text().includes("LAND-新宿"));
-    if (!option) {
-      throw new Error("选项未找到：LAND-新宿");
-    }
-    await option.trigger("click");
-    await buttonInCard(".link-card", "保存").trigger("click");
-
-    await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, {
-        status: "SUSPENDED",
-        frontAction: "KEEP",
-        landNodeId: 12,
-        remark: "",
-      }),
-    );
-  });
-
-  it("改链路时备注原样带回，不会把管理员写的备注顺手清掉", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11, remark: "老客户" }));
-    listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
-      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
-    ]);
-    await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
-
-    await selectTrigger("落地节点").trigger("click");
-    const option = queryAll("li").find((li) => li.text().includes("LAND-新宿"));
-    if (!option) {
-      throw new Error("选项未找到：LAND-新宿");
-    }
-    await option.trigger("click");
-    await buttonInCard(".link-card", "保存").trigger("click");
-
-    await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ remark: "老客户" })),
-    );
-  });
-
   /** 展开某个下拉并点中文案含 text 的那一项 */
   async function pickOption(selectLabel: string, text: string): Promise<void> {
     await selectTrigger(selectLabel).trigger("click");
@@ -590,50 +517,27 @@ describe("UserDetailView · 链路资源", () => {
     await option.trigger("click");
   }
 
-  it("第一跳下拉给出「自动分配（按故障域）」这一档：选中保存后发 frontAction=AUTO", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+  it("没有改动时保存按钮禁用——没有可保存的东西", async () => {
+    getUser.mockResolvedValue(user({ landNodeId: 11 }));
     listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({
+        id: 11,
+        name: "LAND-东京",
+        role: "LAND",
+        capacity: 10,
+        assignedUserCount: 3,
+        egressIp: "1.2.3.4",
+      }),
     ]);
     await mountView([]);
-    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
-    await vi.waitFor(() =>
-      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
-    );
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
 
-    await pickOption("第一跳节点", "自动分配（按故障域）");
-    await buttonInCard(".link-card", "保存").trigger("click");
-
-    await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "AUTO" })),
-    );
+    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeDefined();
   });
 
-  it("「不分配」就是字面上的不分配：发 frontAction=CLEAR", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+  it("换落地节点后保存提交新节点 id，用户处置态原样透传——这页不动状态，状态在用户列表切换", async () => {
+    getUser.mockResolvedValue(user({ status: "SUSPENDED", landNodeId: 11 }));
     listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
-    ]);
-    await mountView([]);
-    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
-    await vi.waitFor(() =>
-      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
-    );
-
-    await pickOption("第一跳节点", "不分配");
-    await buttonInCard(".link-card", "保存").trigger("click");
-
-    await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "CLEAR" })),
-    );
-  });
-
-  it("只改落地节点时第一跳发 KEEP——没碰下拉就是没碰，服务端不必也不该去猜", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
-    listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
       node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
     ]);
@@ -644,76 +548,133 @@ describe("UserDetailView · 链路资源", () => {
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "KEEP" })),
+      expect(updateUser).toHaveBeenCalledWith(3, {
+        status: "SUSPENDED",
+        landNodeId: 12,
+        remark: "",
+      }),
     );
   });
 
-  it("第一跳只能选「不分配」或「自动分配」，下拉里不列具体节点", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+  it("改链路时备注原样带回，不会把管理员写的备注顺手清掉", async () => {
+    getUser.mockResolvedValue(user({ landNodeId: 11, remark: "老客户" }));
     listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 2, name: "US-02", role: "FRONT" }),
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
     ]);
     await mountView([]);
-    await vi.waitFor(() => expect(listNodes).toHaveBeenCalled());
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
 
-    await selectTrigger("第一跳节点").trigger("click");
-    // 选中项前面带一个 ✓，按「包含」比对而不是全等
-    const labels = queryAll("li").map((li) => li.text());
-    expect(labels).toHaveLength(2);
-    expect(labels.some((text) => text.includes("不分配"))).toBe(true);
-    expect(labels.some((text) => text.includes("自动分配（按故障域）"))).toBe(true);
-    expect(labels.some((text) => text.includes("US-0"))).toBe(false);
-  });
-
-  it("已分配的用户回显「自动分配」，再选一次它即按当前节点池重新分配（发 AUTO）", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
-    listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
-      node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
-    ]);
-    await mountView([]);
-    await vi.waitFor(() =>
-      expect(document.querySelector('[aria-label="第一跳节点"]')?.textContent).toContain(
-        "自动分配（按故障域）",
-      ),
-    );
-    // 回填不算碰过：什么都没改时保存按钮不可用
-    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeDefined();
-
-    // 值没变但意图变了：按「值是否等于初始值」判断会把重新分配锁死
-    await pickOption("第一跳节点", "自动分配（按故障域）");
-    expect(buttonInCard(".link-card", "保存").attributes("disabled")).toBeUndefined();
+    await pickOption("落地节点", "LAND-新宿");
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "AUTO" })),
+      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ remark: "老客户" })),
     );
   });
 
-  it("自动分配落空时把服务端的说法原样提示出来，不当作保存成功", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11 }));
+  it("只改落地节点，请求体只带 status、landNodeId、remark", async () => {
+    getUser.mockResolvedValue(user({ landNodeId: 11 }));
     listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
+      node({ id: 12, name: "LAND-新宿", role: "LAND", capacity: 10, assignedUserCount: 0 }),
     ]);
-    updateUser.mockRejectedValueOnce(
-      new BizError(410048, "没有可分配的美国前置节点，无法自动分配"),
-    );
     await mountView([]);
-    // 已分配的用户回显「自动分配」，以此判断链路卡已完成回填
-    await vi.waitFor(() =>
-      expect(selectTrigger("第一跳节点").text()).toContain("自动分配（按故障域）"),
-    );
+    await vi.waitFor(() => expect(document.body.textContent).toContain("LAND-东京"));
 
-    await pickOption("第一跳节点", "自动分配（按故障域）");
+    await pickOption("落地节点", "LAND-新宿");
     await buttonInCard(".link-card", "保存").trigger("click");
 
     await vi.waitFor(() =>
-      expect(showToast).toHaveBeenCalledWith("error", "没有可分配的美国前置节点，无法自动分配"),
+      expect(updateUser).toHaveBeenCalledWith(3, {
+        status: "ACTIVE",
+        landNodeId: 12,
+        remark: "",
+      }),
     );
-    expect(showToast).not.toHaveBeenCalledWith("success", "已保存");
+  });
+});
+
+describe("UserDetailView · 第一跳", () => {
+  const assigned = [
+    {
+      position: 0,
+      airportSubscriptionId: 11,
+      airportName: "泰山云",
+      subscriptionName: "ts-01",
+      account: "a@x.com",
+    },
+    {
+      position: 1,
+      airportSubscriptionId: 21,
+      airportName: "B 机场",
+      subscriptionName: "b-02",
+      account: "b@x.com",
+    },
+  ];
+
+  it("按顺位展示主用与备用：机场名、订阅名、账号", async () => {
+    getUser.mockResolvedValue(user({ frontSubscriptions: assigned }));
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("泰山云"));
+
+    const rows = Array.from(document.querySelectorAll(".front-sub-row")).map(
+      (r) => r.textContent ?? "",
+    );
+    expect(rows[0]).toContain("主用");
+    expect(rows[0]).toContain("ts-01");
+    expect(rows[0]).toContain("a@x.com");
+    expect(rows[1]).toContain("备用1");
+    expect(rows[1]).toContain("B 机场");
+  });
+
+  it("未分配时明确说未分配", async () => {
+    getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配第一跳"));
+  });
+
+  it("点「自动分配」直接调接口并刷新", async () => {
+    getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
+    allocateUserFront.mockResolvedValue(assigned);
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配第一跳"));
+
+    await buttonInCard(".front-card", "自动分配").trigger("click");
+
+    await vi.waitFor(() => expect(allocateUserFront).toHaveBeenCalledWith(3));
+    expect(showToast).toHaveBeenCalledWith("success", "已分配第一跳");
+  });
+
+  it("主用名额已满时把服务端的说法原样提示出来", async () => {
+    getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
+    allocateUserFront.mockRejectedValueOnce(
+      new BizError(410050, "第一跳主用名额已满，请增购机场订阅"),
+    );
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配第一跳"));
+
+    await buttonInCard(".front-card", "自动分配").trigger("click");
+
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("error", "第一跳主用名额已满，请增购机场订阅"),
+    );
+  });
+
+  it("「取消分配」要二次确认，确认后才调接口", async () => {
+    getUser.mockResolvedValue(user({ frontSubscriptions: assigned }));
+    await mountView([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain("泰山云"));
+
+    await buttonInCard(".front-card", "取消分配").trigger("click");
+    expect(clearUserFront).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("用户会立即断开第一跳");
+
+    const confirm = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "确认",
+    )!;
+    confirm.click();
+    await vi.waitFor(() => expect(clearUserFront).toHaveBeenCalledWith(3));
   });
 });
 
@@ -767,9 +728,8 @@ describe("UserDetailView · 备注", () => {
   });
 
   it("改了备注后保存，处置态与链路分配原样带回", async () => {
-    getUser.mockResolvedValue(user({ status: "SUSPENDED", frontNodeId: 1, landNodeId: 11 }));
+    getUser.mockResolvedValue(user({ status: "SUSPENDED", landNodeId: 11 }));
     listNodes.mockResolvedValue([
-      node({ id: 1, name: "US-01", role: "FRONT" }),
       node({ id: 11, name: "LAND-东京", role: "LAND", capacity: 10, assignedUserCount: 3 }),
     ]);
     await mountView([]);
@@ -781,25 +741,11 @@ describe("UserDetailView · 备注", () => {
     await vi.waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith(3, {
         status: "SUSPENDED",
-        frontAction: "KEEP",
         landNodeId: 11,
         remark: "试用期，月底回访",
       }),
     );
     await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith("success", "已保存"));
-  });
-
-  it("改备注一律发 frontAction=KEEP——它是「本项未被触碰」的显式表达，组因此不会被改掉", async () => {
-    getUser.mockResolvedValue(user({ frontNodeId: 1, landNodeId: 11, remark: "老客户" }));
-    await mountView([]);
-    await vi.waitFor(() => expect(remarkInput().element.value).toBe("老客户"));
-
-    await remarkInput().setValue("老客户，续费谈过");
-    await buttonInCard(".remark-card", "保存").trigger("click");
-
-    await vi.waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(3, expect.objectContaining({ frontAction: "KEEP" })),
-    );
   });
 
   it("清空备注也算改动，能提交出去", async () => {
@@ -856,71 +802,5 @@ describe("UserDetailView · 待开通订阅", () => {
     expect(document.querySelector(".pill.pending")).toBeNull();
     const issue = buttonByText("签发凭证");
     expect(issue.attributes("disabled")).toBeUndefined();
-  });
-});
-
-describe("UserDetailView · 前置节点组", () => {
-  it("按故障域分组列出用户被分配的前置节点", async () => {
-    getUser.mockResolvedValue(
-      user({
-        frontNodes: [
-          { id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" },
-          { id: 2, name: "🇺🇸[US]A2", failureDomain: "jp.tsdns.top" },
-          { id: 5, name: "🇺🇸[US]B1", failureDomain: "relay.other.net" },
-        ],
-        failureDomainCount: 2,
-      }),
-    );
-    await mountView([]);
-
-    await vi.waitFor(() => expect(document.body.textContent).toContain("jp.tsdns.top"));
-    expect(document.body.textContent).toContain("relay.other.net");
-    expect(document.body.textContent).toContain("🇺🇸[US]A1");
-    expect(document.body.textContent).toContain("🇺🇸[US]B1");
-  });
-
-  // failureDomainCount === 0：管理员手工指定单个节点是保留的运维逃生口，不走分配算法，
-  // 完全可能挂着一个 failureDomain 还没解析出来（null）的节点。这种「未知」比「已知只
-  // 有 1 个」更糟——如果警告只在 === 1 时出现，这条路径会把最该出现的信号漏掉
-  it("一个故障域都没解析出来时（failureDomainCount 为 0）也显式警告「入口无冗余」", async () => {
-    getUser.mockResolvedValue(
-      user({
-        frontNodes: [{ id: 1, name: "🇺🇸[US]A1", failureDomain: null }],
-        failureDomainCount: 0,
-      }),
-    );
-    await mountView([]);
-
-    await vi.waitFor(() => expect(document.body.textContent).toContain("入口无冗余"));
-    expect(document.querySelector(".front-domain-warning")).not.toBeNull();
-  });
-
-  it("只有一个故障域时显式警告「入口无冗余」", async () => {
-    getUser.mockResolvedValue(
-      user({
-        frontNodes: [{ id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" }],
-        failureDomainCount: 1,
-      }),
-    );
-    await mountView([]);
-
-    await vi.waitFor(() => expect(document.body.textContent).toContain("入口无冗余"));
-    expect(document.querySelector(".front-domain-warning")).not.toBeNull();
-  });
-
-  it("有两个及以上故障域时不显示警告", async () => {
-    getUser.mockResolvedValue(
-      user({
-        frontNodes: [
-          { id: 1, name: "🇺🇸[US]A1", failureDomain: "jp.tsdns.top" },
-          { id: 5, name: "🇺🇸[US]B1", failureDomain: "relay.other.net" },
-        ],
-        failureDomainCount: 2,
-      }),
-    );
-    await mountView([]);
-
-    await vi.waitFor(() => expect(document.body.textContent).toContain("jp.tsdns.top"));
-    expect(document.querySelector(".front-domain-warning")).toBeNull();
   });
 });

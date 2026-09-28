@@ -31,10 +31,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     email: "a@acme.com",
     role: "MEMBER",
     status: "ACTIVE",
-    frontNodeId: null,
-    frontNodeName: null,
-    frontNodes: [],
-    failureDomainCount: 0,
+    frontSubscriptions: [],
     landNodeId: null,
     landNodeName: null,
     egressIp: null,
@@ -133,7 +130,6 @@ describe("UsersView 处置态转换", () => {
 
     expect(updateUser).toHaveBeenCalledWith(1, {
       status: "SUSPENDED",
-      frontAction: "KEEP",
       landNodeId: null,
       remark: "",
     });
@@ -153,7 +149,7 @@ describe("UsersView 处置态转换", () => {
   });
 
   it("改状态时落地节点原样带回，不会顺手把人的链路清了", async () => {
-    pageUsers.mockResolvedValue(page([user({ frontNodeId: 4, landNodeId: 7 })]));
+    pageUsers.mockResolvedValue(page([user({ landNodeId: 7 })]));
     const wrapper = await render();
 
     await action(wrapper, 0, "停用").trigger("click");
@@ -161,21 +157,23 @@ describe("UsersView 处置态转换", () => {
 
     expect(updateUser).toHaveBeenCalledWith(1, {
       status: "SUSPENDED",
-      frontAction: "KEEP",
       landNodeId: 7,
       remark: "",
     });
   });
 
-  it("改状态一律发 frontAction=KEEP，且不带任何第一跳节点 id——列表快照可能已经过期，回带它等于让服务端拿旧值去猜意图", async () => {
-    pageUsers.mockResolvedValue(page([user({ frontNodeId: 4, landNodeId: 7 })]));
+  it("改状态只带 status、landNodeId、remark——列表快照可能已经过期，不该带任何第一跳字段回去", async () => {
+    pageUsers.mockResolvedValue(page([user({ landNodeId: 7 })]));
     const wrapper = await render();
 
     await action(wrapper, 0, "停用").trigger("click");
     await flushPromises();
 
-    expect(updateUser).toHaveBeenCalledWith(1, expect.objectContaining({ frontAction: "KEEP" }));
-    expect(updateUser.mock.calls[0][1]).not.toHaveProperty("frontNodeId");
+    expect(updateUser).toHaveBeenCalledWith(1, {
+      status: "SUSPENDED",
+      landNodeId: 7,
+      remark: "",
+    });
   });
 
   it("改状态时备注也原样带回——整体保存接口，不带就等于顺手清空", async () => {
@@ -426,12 +424,35 @@ describe("UsersView 表格内容", () => {
     expect(pills[0].text()).toContain("Claude Code");
   });
 
-  it("没有在期订阅时说「无」，落地节点没分配时说「未分配」", async () => {
+  it("没有在期订阅时说「无」，落地节点没分配时说「未分配」，第一跳没分配时显示「—」", async () => {
     const wrapper = await render();
 
     const row = wrapper.findAll("tbody tr")[0];
+    expect(row.findAll("td")[4].text()).toBe("—");
     expect(row.findAll("td")[5].text()).toBe("未分配");
     expect(row.findAll("td")[7].text()).toBe("无");
+  });
+
+  it("第一跳列显示当前主用订阅所属的机场名", async () => {
+    pageUsers.mockResolvedValue(
+      page([
+        user({
+          frontSubscriptions: [
+            {
+              position: 0,
+              airportSubscriptionId: 11,
+              airportName: "泰山云",
+              subscriptionName: "ts-01",
+              account: "a@x.com",
+            },
+          ],
+        }),
+      ]),
+    );
+    const wrapper = await render();
+
+    const row = wrapper.findAll("tbody tr")[0];
+    expect(row.findAll("td")[4].text()).toBe("泰山云");
   });
 
   it("备注列照仓里惯例排在「更新时间」前一格", async () => {

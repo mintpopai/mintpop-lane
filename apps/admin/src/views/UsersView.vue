@@ -227,7 +227,7 @@ onMounted(loadList);
           <td>
             <span class="state" :data-state="row.status">{{ USER_STATUS_LABELS[row.status] }}</span>
           </td>
-          <td>{{ row.frontNodeName ?? "—" }}</td>
+          <td>{{ row.frontSubscriptions[0]?.airportName ?? "—" }}</td>
           <td>
             <template v-if="row.landNodeName">{{ row.landNodeName }}</template>
             <span v-else class="muted">未分配</span>

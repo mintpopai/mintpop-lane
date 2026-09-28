@@ -3,19 +3,12 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import {
-  AGENT_TYPE,
-  AGENT_TYPE_LABELS,
-  FRONT_ACTION,
-  USER_ROLE_LABELS,
-  USER_STATUS_LABELS,
-} from "../api/types";
+import { AGENT_TYPE, AGENT_TYPE_LABELS, USER_ROLE_LABELS, USER_STATUS_LABELS } from "../api/types";
 import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
   AdminUserResponse,
   EnterpriseResponse,
-  FrontNodeBrief,
   PlanResponse,
 } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -43,14 +36,7 @@ import {
   validateSubscriptionForm,
   type SubscriptionFormModel,
 } from "../utils/subscriptionForm";
-import {
-  buildUserPayload,
-  FRONT_SELECTION,
-  frontSelectionToAction,
-  selectableLandNodes,
-  userToForm,
-  type FrontSelection,
-} from "../utils/userForm";
+import { buildUserPayload, selectableLandNodes, userToForm } from "../utils/userForm";
 
 /**
  * 某个用户的管理独立页：链路资源（第一跳/落地节点）分配 + 订阅管理。
@@ -67,39 +53,47 @@ const userError = ref("");
 
 /** 链路资源表单：初值取自用户当前分配，保存后随重拉的用户刷新 */
 const nodes = ref<AdminNodeResponse[]>([]);
-/**
- * 第一跳下拉的当前取值，两态：null（不分配）/ AUTO_ALLOCATE（按故障域分配一组）。
- * 不开放手工指定节点。回填时已有前置组就显示「自动分配」，没有就显示「不分配」；
- * 已分配的用户再选一次「自动分配」即按当前节点池重新分配一组（下拉选中同一项也会触发选择）。
- */
-const frontSelection = ref<FrontSelection>(null);
-/**
- * 管理员这次<b>有没有真的操作过第一跳下拉</b>。只在 onFrontSelected（下拉真的选中某一项）里置 true，
- * 页面回填（loadUser）不算，保存成功重拉之后归零。
- * <p>
- * 刻意用「碰没碰过」而不是「当前值是否等于初始值」——后者是在<b>从取值反推意图</b>：
- * ① 回填值只是打开页面那一刻的快照，其间别人改过这个用户的第一跳，比值就会判错；
- * ② 「按当前节点池重新分配一组」与「这次没动第一跳」回填值都是「自动分配」，比值永远分不开，
- *    重新分配这个意图就提交不出去。
- * <p>
- * 代价：因为「选中即当真」，管理员点开下拉又选回原来那一项，仍然算碰过，保存会真的执行那个处置。
- * 这是 ② 可表达的必然代价而不是缺陷，想放弃这次改动刷新页面即可。<b>看到这里别顺手改回比值。</b>
- */
-const frontTouched = ref(false);
 const landNodeId = ref<number | null>(null);
 const savingNodes = ref(false);
-/**
- * 「有没有可保存的东西」：第一跳看「碰没碰过」，落地节点仍然比值（它只有一个字段、
- * 也没有「钉死到当前值」这种与「没动」同形的意图，比值在这里是够用的）。
- */
-const linkDirty = computed(
-  () => user.value !== null && (frontTouched.value || landNodeId.value !== user.value.landNodeId),
-);
+/** 「有没有可保存的东西」：落地节点只有一个字段，也没有「钉死到当前值」这种与「没动」同形的意图，比值就够用 */
+const linkDirty = computed(() => user.value !== null && landNodeId.value !== user.value.landNodeId);
 
-/** 下拉真的被选中某一项时才走到这里：页面回填不会触发，因此 frontTouched 只记录人的操作 */
-function onFrontSelected(value: FrontSelection): void {
-  frontSelection.value = value;
-  frontTouched.value = true;
+/** 第一跳（机场订阅）分配：自动分配/取消分配都是一次性动作，不走表单比对 */
+const allocatingFront = ref(false);
+const pendingClearFront = ref(false);
+const clearingFront = ref(false);
+
+/** 顺位的中文名：0 主用，其余「备用N」 */
+function positionLabel(position: number): string {
+  return position === 0 ? "主用" : `备用${position}`;
+}
+
+async function allocateFront(): Promise<void> {
+  allocatingFront.value = true;
+  try {
+    await adminApi().allocateUserFront(userId);
+    showToast("success", "已分配第一跳");
+    await loadUser();
+  } catch (error) {
+    // 410050 主用名额已满等业务错误，服务端给的中文提示直接用
+    reportError(error, "分配失败");
+  } finally {
+    allocatingFront.value = false;
+  }
+}
+
+async function confirmClearFront(): Promise<void> {
+  clearingFront.value = true;
+  try {
+    await adminApi().clearUserFront(userId);
+    showToast("success", "已取消第一跳分配");
+    pendingClearFront.value = false;
+    await loadUser();
+  } catch (error) {
+    reportError(error, "取消分配失败");
+  } finally {
+    clearingFront.value = false;
+  }
 }
 
 /**
@@ -148,13 +142,6 @@ const rebind = useRebindStore();
 /** 管理员当前浏览器时区，标在表单里免得填的人心里没数 */
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-// 两个档位对应服务端的两条互斥处置：「不分配」真的清空整组（取消分配、腾出节点以便删除的
-// 唯一入口），「自动分配」按故障域重算一组。不开放手工指定节点——节点随订阅刷新会增减，
-// 手工钉死的用户跟不上变化
-const frontOptions = [
-  { value: null, label: "不分配" },
-  { value: FRONT_SELECTION.AUTO_ALLOCATE, label: "自动分配（按故障域）" },
-];
 // 锚点用「库里那条记录原本占着的节点」而不是表单当前选中值：后者一旦被改动，
 // 原节点就会从下拉里消失、再也切不回去，只能刷新页面丢弃改动重来
 const landOptions = computed(() => [
@@ -164,54 +151,6 @@ const landOptions = computed(() => [
     label: `${node.name}（${node.egressIp ?? "未填出口 IP"} · ${node.assignedUserCount ?? 0}/${node.capacity ?? 0}）`,
   })),
 ]);
-
-/** 该用户被分配的一组前置节点，按故障域分桶：同一故障域的节点共用一台中转入口机 */
-interface FrontDomainGroup {
-  failureDomain: string;
-  nodes: FrontNodeBrief[];
-}
-
-const frontNodeGroups = computed<FrontDomainGroup[]>(() => {
-  const map = new Map<string, FrontNodeBrief[]>();
-  for (const node of user.value?.frontNodes ?? []) {
-    // failureDomain 未解析出来时用占位字符串归一桶，避免 Map key 为 null 时互相拆散
-    const domain = node.failureDomain ?? "（未解析）";
-    const bucket = map.get(domain) ?? [];
-    bucket.push(node);
-    map.set(domain, bucket);
-  }
-  // 字典序排列，与服务端 FrontNodeAllocator 分桶时的遍历顺序一致，方便对照
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([failureDomain, groupNodes]) => ({ failureDomain, nodes: groupNodes }));
-});
-
-/**
- * 「入口无冗余」的常驻警示文案；不需要显示时为 null。
- *
- * 覆盖两种同样糟糕的处境，判定条件是 `< 2` 而不是 `=== 1`：
- * - failureDomainCount === 1：所有前置节点解析到同一个故障域，共用一台中转入口机，
- *   入口一挂全部失效，fallback 是假冗余。
- * - failureDomainCount === 0：这组节点里没有任何一个解析出故障域——管理员手工指定单个
- *   节点是保留的运维逃生口（不走分配算法），完全可能挂着一个 failureDomain 还是 null
- *   的节点。这种「未知」比「已知只有 1 个」更糟：既没有任何已确认的冗余，故障域本身
- *   还没解析出来，必须一并点出来，不能被 `=== 1` 的判定漏掉。
- *
- * 这是长期状态（现状是只有一家机场），不是一次性通知，故不做成 toast。
- */
-const frontRedundancyWarning = computed<string | null>(() => {
-  const count = user.value?.failureDomainCount;
-  if (count === undefined || count >= 2) {
-    return null;
-  }
-  if (count === 0) {
-    return (
-      "入口无冗余：这一组前置节点的故障域尚未解析成功，暂无法确认是否共用同一台中转入口机——" +
-      "按最坏情况处理，视同没有冗余。需要采购第二家机场，并尽快让节点解析出故障域。"
-    );
-  }
-  return "入口无冗余：当前只有 1 个故障域，这一组节点共用同一台中转入口机，入口一挂全部失效。需要采购第二家机场。";
-});
 
 /** 第一步选 agent 类型：只列有上架套餐的类型 */
 const agentOptions = computed(() => agentTypeOptions(plans.value));
@@ -307,9 +246,6 @@ function reportError(error: unknown, prefix: string): void {
 async function loadUser(): Promise<void> {
   try {
     user.value = await adminApi().getUser(userId);
-    frontSelection.value = user.value.frontNodeId === null ? null : FRONT_SELECTION.AUTO_ALLOCATE;
-    // 重拉即是一次回填：这一轮的操作已经落库，下一轮从「没碰过」重新开始
-    frontTouched.value = false;
     landNodeId.value = user.value.landNodeId;
     remark.value = user.value.remark ?? "";
     userError.value = "";
@@ -333,17 +269,10 @@ async function saveNodes(): Promise<void> {
   savingNodes.value = true;
   try {
     // 这个接口是整体保存：处置态（口子在用户列表）与备注（下面那张卡）都不归本卡管，
-    // 从 userToForm 摊平原样带回，只覆盖本卡编辑的两个节点
+    // 从 userToForm 摊平原样带回，只覆盖本卡编辑的落地节点
     await adminApi().updateUser(
       userId,
-      buildUserPayload({
-        ...userToForm(user.value),
-        // 没碰过第一跳下拉就显式说「这次没动它」，碰过才把下拉的档位翻译成处置
-        frontAction: frontTouched.value
-          ? frontSelectionToAction(frontSelection.value)
-          : FRONT_ACTION.KEEP,
-        landNodeId: landNodeId.value,
-      }),
+      buildUserPayload({ ...userToForm(user.value), landNodeId: landNodeId.value }),
     );
     showToast("success", "已保存");
     // 用户（节点名/出口 IP）与节点（落地占用数）都变了，一起重拉
@@ -590,22 +519,47 @@ async function confirmUnbind(): Promise<void> {
 
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
+      <!-- 第一跳（机场订阅）：分配只由管理员手动触发——「自动分配」整份重算主用与备用，
+           「取消分配」清空。第一跳不再开放手工指定节点，只能来自机场订阅 -->
+      <section class="admin-card front-card">
+        <div class="front-card-head">
+          <h4 class="block-title">第一跳（机场订阅）</h4>
+          <div class="front-card-actions">
+            <button
+              type="button"
+              class="admin-btn"
+              :disabled="allocatingFront || !user"
+              @click="allocateFront()"
+            >
+              {{ allocatingFront ? "分配中…" : "自动分配" }}
+            </button>
+            <button
+              type="button"
+              class="admin-btn-ghost"
+              :disabled="!user || user.frontSubscriptions.length === 0"
+              @click="pendingClearFront = true"
+            >
+              取消分配
+            </button>
+          </div>
+        </div>
+        <p v-if="user && user.frontSubscriptions.length === 0" class="muted">
+          未分配第一跳。点「自动分配」按各机场订阅的负载排出主用与备用。
+        </p>
+        <ul v-else-if="user" class="front-sub-list">
+          <li v-for="item in user.frontSubscriptions" :key="item.position" class="front-sub-row">
+            <span class="pill">{{ positionLabel(item.position) }}</span>
+            <span>{{ item.airportName }} · {{ item.subscriptionName }}</span>
+            <span class="muted">（账号 {{ item.account }}）</span>
+          </li>
+        </ul>
+      </section>
+
       <!-- 链路资源：从前在用户列表的编辑弹窗里，随订阅一起收进本页统一管理。
-           两个下拉与保存钮排成一行、底对齐——保存只在有改动时可点，没改动就没有可保存的东西 -->
+           下拉与保存钮排成一行、底对齐——保存只在有改动时可点，没改动就没有可保存的东西 -->
       <section class="admin-card link-card">
         <h4 class="block-title">链路资源</h4>
         <div class="link-grid">
-          <div class="admin-field">
-            <label for="user-front">第一跳节点</label>
-            <!-- 刻意不用 v-model：要区分「人选的」与「页面回填的」，只有前者算动过第一跳 -->
-            <Select
-              id="user-front"
-              :model-value="frontSelection"
-              :options="frontOptions"
-              aria-label="第一跳节点"
-              @update:model-value="onFrontSelected($event as FrontSelection)"
-            />
-          </div>
           <div class="admin-field">
             <label for="user-land">落地节点</label>
             <Select
@@ -624,30 +578,6 @@ async function confirmUnbind(): Promise<void> {
             {{ savingNodes ? "保存中…" : "保存" }}
           </button>
         </div>
-      </section>
-
-      <!-- 前置节点组：只读展示当前实际分配到的完整一组（不止上面下拉里的「主」节点），
-           按故障域分桶——同一故障域下的节点共用一台中转入口机，入口一挂它们一起挂，
-           彼此不构成真冗余。少于 2 个故障域（含「一个都没解析出来」）时给出常驻警示，
-           而不是可关闭的 toast：这是长期状态（现状只有一家机场），会一直显示到采购
-           第二家机场为止 -->
-      <section v-if="user && frontNodeGroups.length > 0" class="admin-card front-domain-card">
-        <h4 class="block-title">前置节点组</h4>
-        <div v-if="frontRedundancyWarning" class="front-domain-warning">
-          <p>{{ frontRedundancyWarning }}</p>
-        </div>
-        <ul class="front-domain-list">
-          <li
-            v-for="group in frontNodeGroups"
-            :key="group.failureDomain"
-            class="front-domain-group"
-          >
-            <p class="front-domain-name fact">{{ group.failureDomain }}</p>
-            <ul class="front-domain-nodes">
-              <li v-for="node in group.nodes" :key="node.id">{{ node.name }}</li>
-            </ul>
-          </li>
-        </ul>
       </section>
 
       <!-- 备注：管理员自用说明，只在管理端可见，不下发给用户。
@@ -985,6 +915,16 @@ async function confirmUnbind(): Promise<void> {
     </div>
 
     <ConfirmDialog
+      v-if="pendingClearFront"
+      title="取消第一跳分配"
+      message="取消后用户会立即断开第一跳，直到重新分配。确认取消？"
+      confirm-text="确认"
+      :busy="clearingFront"
+      @confirm="confirmClearFront()"
+      @cancel="pendingClearFront = false"
+    />
+
+    <ConfirmDialog
       v-if="pendingDelete"
       title="删除确认"
       :message="`确认删除订阅「${pendingDelete.name}」（分配号 ${formatAssignmentNo(pendingDelete.assignmentNo)}）？`"
@@ -1064,70 +1004,46 @@ async function confirmUnbind(): Promise<void> {
 
 .link-card {
   padding: 20px 24px;
+  margin-top: 16px;
 }
 
-/* 两个下拉 + 保存钮一行排开、底对齐：36px 的按钮正好与控件同高 */
+/* 落地节点下拉 + 保存钮一行排开、底对齐：36px 的按钮正好与控件同高 */
 .link-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 16px;
   align-items: end;
 }
 
-/* 前置节点组：与链路资源卡视觉同族，夹在它与备注卡之间 */
-.front-domain-card {
+.front-card {
   padding: 20px 24px;
-  margin-top: 16px;
 }
 
-/* 「入口无冗余」是长期状态、不是一次性通知，与 .revoke-warn 同一套「需要停下来看」的
-   琥珀色语义，但没有关闭按钮——它不该被关掉，要一直挂到采购第二家机场为止 */
-.front-domain-warning {
-  margin-bottom: 16px;
-  padding: 14px 20px;
-  border-radius: var(--radius-card);
-  border: 1px solid color-mix(in srgb, #b4720b 35%, var(--color-border));
-  background: color-mix(in srgb, #b4720b 10%, #ffffff);
-}
-
-.front-domain-warning p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--color-ink);
-}
-
-.front-domain-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.front-card-head {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.front-domain-group {
-  padding: 12px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-}
-
-/* 故障域名是系统事实（域名），走等宽字体与其它 .fact 一致 */
-.front-domain-name {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--color-ink-secondary);
-}
-
-.front-domain-nodes {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.front-card-actions {
   display: flex;
+  gap: 8px;
+}
+
+.front-sub-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.front-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  font-size: 14px;
-  color: var(--color-ink);
 }
 
 .remark-card {
