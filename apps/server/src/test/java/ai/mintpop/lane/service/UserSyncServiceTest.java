@@ -1,5 +1,7 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.UserRole;
@@ -23,6 +25,8 @@ class UserSyncServiceTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -38,7 +42,7 @@ class UserSyncServiceTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).clearAll();
+        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository).clearAll();
     }
 
     @Test
@@ -71,7 +75,7 @@ class UserSyncServiceTest extends MysqlTestBase {
         UserDto user = userSyncService.syncOnLogin("logto-b", "b@example.com");
         // 管理员改库提权 + 分配节点
         DatabaseFixtures fixtures =
-                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         Long front = fixtures.createFrontNode("FRONT-1");
         UserDto stored = userRepository.findById(user.getId()).orElseThrow();
         stored.setRole(UserRole.ADMIN);

@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.entity.UserDevice;
@@ -49,6 +51,8 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -101,7 +105,7 @@ class LinkControllerTest extends MysqlTestBase {
         // 容忍范围内（那样测试会随沙箱系统时间漂移而变得不稳定）
         when(clock.instant()).thenReturn(Instant.now());
 
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
         Long land1 = fixtures.createLandNode("LAND-1", "77.47.143.6");

@@ -1,8 +1,10 @@
 package ai.mintpop.lane.support;
 
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.entity.Plan;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
@@ -10,6 +12,8 @@ import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -33,13 +37,18 @@ public class DatabaseFixtures {
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final AirportRepository airportRepository;
+    private final AirportSubscriptionRepository airportSubscriptionRepository;
 
     public DatabaseFixtures(JdbcTemplate jdbc, ProxyNodeRepository nodeRepository,
-                             UserRepository userRepository, SubscriptionRepository subscriptionRepository) {
+                             UserRepository userRepository, SubscriptionRepository subscriptionRepository,
+                             AirportRepository airportRepository, AirportSubscriptionRepository airportSubscriptionRepository) {
         this.jdbc = jdbc;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.airportRepository = airportRepository;
+        this.airportSubscriptionRepository = airportSubscriptionRepository;
     }
 
     /** 清空全部业务表。外键约束在清库期间临时关掉，顺序因此不敏感。 */
@@ -57,6 +66,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
         jdbc.execute("TRUNCATE TABLE airport_subscription");
+        jdbc.execute("TRUNCATE TABLE airport");
         jdbc.execute("TRUNCATE TABLE plan");
         jdbc.execute("TRUNCATE TABLE enterprise");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
@@ -168,6 +178,24 @@ public class DatabaseFixtures {
         node.setSourceName(name);
         node.setSourceType("anytls");
         return nodeRepository.create(node);
+    }
+
+    /** 建一个机场，返回 id */
+    public Long createAirport(String name) {
+        Airport airport = new Airport();
+        airport.setName(name);
+        return airportRepository.create(airport);
+    }
+
+    /** 在指定机场下建一个机场订阅（订阅链接为占位值），返回 id */
+    public Long createAirportSubscription(Long airportId, String name, int bandwidthMbps) {
+        AirportSubscriptionDto subscription = new AirportSubscriptionDto();
+        subscription.setAirportId(airportId);
+        subscription.setName(name);
+        subscription.setAccount(name + "@airport.example");
+        subscription.setBandwidthMbps(bandwidthMbps);
+        subscription.setSubUrl("https://sub.example.com/" + name + "?token=t");
+        return airportSubscriptionRepository.create(subscription);
     }
 
     /** 建一个上架套餐（USD），返回 id。传 enabled=false 建下架套餐 */

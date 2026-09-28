@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
@@ -46,6 +48,8 @@ class DeviceBindingFlowTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -88,7 +92,7 @@ class DeviceBindingFlowTest extends MysqlTestBase {
     @BeforeEach
     void setUp() {
         DatabaseFixtures fixtures =
-                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.7");

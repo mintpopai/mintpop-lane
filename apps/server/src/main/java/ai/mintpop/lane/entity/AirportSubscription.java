@@ -20,7 +20,16 @@ public class AirportSubscription {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    /** 所属机场 id，引用 airport；创建后不可改 */
+    private Long airportId;
+
     private String name;
+
+    /** 购买该订阅所用的机场账号（如邮箱），自由文本 */
+    private String account;
+
+    /** 订阅总带宽（Mbps），创建后不可改 */
+    private Integer bandwidthMbps;
 
     /** 订阅链接的密文（链接含 token，属凭据） */
     private String subUrlCipher;

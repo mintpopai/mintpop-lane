@@ -29,4 +29,7 @@ public interface AirportSubscriptionRepository {
      * 必须按 id 排除，不能在 Java 层用 equals 比较新旧名字来代替。
      */
     boolean existsByNameExcludingId(String name, Long excludeId);
+
+    /** 该机场下是否还有订阅：删机场前的引用检查 */
+    boolean existsByAirportId(Long airportId);
 }

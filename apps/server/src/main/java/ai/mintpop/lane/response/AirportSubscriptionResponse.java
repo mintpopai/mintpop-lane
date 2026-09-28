@@ -9,6 +9,16 @@ import java.time.Instant;
 public record AirportSubscriptionResponse(
         Long id,
         String name,
+        /** 所属机场 id */
+        Long airportId,
+        /** 所属机场名 */
+        String airportName,
+        /** 购买该订阅所用的机场账号 */
+        String account,
+        /** 订阅总带宽（Mbps） */
+        Integer bandwidthMbps,
+        /** 主用容量：bandwidthMbps / 20 向下取整 */
+        int primaryCapacity,
         /** 打码后的订阅链接，只留 scheme 与 host */
         String subUrlMasked,
         long nodeCount,

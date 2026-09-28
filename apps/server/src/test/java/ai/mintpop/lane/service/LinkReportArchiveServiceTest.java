@@ -1,5 +1,7 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.entity.LinkReportDaily;
@@ -44,6 +46,8 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired
     private LinkReportRepository linkReportRepository;
     @Autowired
@@ -61,7 +65,7 @@ class LinkReportArchiveServiceTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         userId = fixtures.createUser("u1", null, null);
         properties = new LinkReportProperties(); // 默认 rawRetentionDays=7、dailyRetentionDays=90

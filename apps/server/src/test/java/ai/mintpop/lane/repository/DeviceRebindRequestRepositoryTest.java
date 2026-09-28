@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.entity.DeviceRebindRequest;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.RebindRequestStatus;
@@ -21,6 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DeviceRebindRequestRepositoryTest extends MysqlTestBase {
 
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private ProxyNodeRepository nodeRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private SubscriptionRepository subscriptionRepository;
@@ -35,7 +39,7 @@ class DeviceRebindRequestRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         userId = fixtures.createUser("logto-rebind-owner", null, null);
         subscriptionId = fixtures.createSubscription(userId, AgentType.CLAUDE, "Claude 席位",

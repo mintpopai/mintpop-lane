@@ -5,7 +5,9 @@ import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.parser.SubYamlParser;
+import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
@@ -45,6 +47,7 @@ import static org.mockito.Mockito.when;
 class AdminAirportSubscriptionServiceImplTest {
 
     @Mock private AirportSubscriptionRepository airportSubscriptionRepository;
+    @Mock private AirportRepository airportRepository;
     @Mock private ProxyNodeRepository nodeRepository;
     @Mock private UserRepository userRepository;
     @Mock private UserFrontNodeRepository userFrontNodeRepository;
@@ -73,7 +76,7 @@ class AdminAirportSubscriptionServiceImplTest {
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, null, null, null));
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
-        service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, nodeRepository, userRepository,
+        service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, airportRepository, nodeRepository, userRepository,
                 userFrontNodeRepository,
                 subFetchClient, new SubYamlParser(), transactionTemplate,
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
@@ -146,12 +149,19 @@ class AdminAirportSubscriptionServiceImplTest {
     @Test
     @DisplayName("新建订阅时额度已跨档：当场推送告警，且传给告警服务的订阅带着真实自增 id（不是 null）")
     void alertsOnCreateWhenQuotaAlreadyCrossed() {
+        Airport airport = new Airport();
+        airport.setId(1L);
+        airport.setName("泰山云");
+        when(airportRepository.findById(1L)).thenReturn(Optional.of(airport));
         when(airportSubscriptionRepository.create(any())).thenReturn(42L);
         when(nodeRepository.findByAirportSubscriptionIdAndSourceName(anyLong(), anyString())).thenReturn(Optional.empty());
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, 95L, 100L, null));
 
         AirportSubscriptionCreateRequest request = new AirportSubscriptionCreateRequest();
         request.setName("新机场");
+        request.setAirportId(1L);
+        request.setAccount("a@x.com");
+        request.setBandwidthMbps(300);
         request.setSubUrl("https://example.com/sub?token=y");
 
         Long airportSubscriptionId = service.create(request);

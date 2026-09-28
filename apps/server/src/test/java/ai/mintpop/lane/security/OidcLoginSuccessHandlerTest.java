@@ -1,5 +1,7 @@
 package ai.mintpop.lane.security;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.config.AuthProperties;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -42,6 +44,8 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -51,7 +55,7 @@ class OidcLoginSuccessHandlerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).clearAll();
+        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository).clearAll();
     }
 
     private static OidcUser oidcUser(String subject, String email) {

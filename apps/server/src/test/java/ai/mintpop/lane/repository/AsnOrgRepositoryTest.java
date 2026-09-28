@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,8 @@ class AsnOrgRepositoryTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private AsnOrgRepository repository;
@@ -41,7 +45,7 @@ class AsnOrgRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).clearAll();
+        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository).clearAll();
     }
 
     @Test

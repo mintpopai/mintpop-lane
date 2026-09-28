@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
@@ -30,12 +32,14 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     private DatabaseFixtures fixtures;
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, repository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, repository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
     }
 
@@ -222,7 +226,9 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
     }
 
     private Long createGroup() {
-        jdbc.update("INSERT INTO airport_subscription (name, sub_url_cipher) VALUES ('测试组', '密文占位')");
+        Long airportId = fixtures.createAirport("泰山云");
+        jdbc.update("INSERT INTO airport_subscription (airport_id, name, account, bandwidth_mbps, sub_url_cipher) "
+                + "VALUES (?, '测试组', 'a@x.com', 300, '密文占位')", airportId);
         return jdbc.queryForObject("SELECT id FROM airport_subscription WHERE name = '测试组'", Long.class);
     }
 }

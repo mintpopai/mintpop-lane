@@ -82,6 +82,9 @@ public enum BizCodeEnum {
     FRONT_NODE_UNALLOCATABLE(410048, "没有可分配的美国前置节点，无法自动分配"),
     // 导入不再逐个勾选、自动取美国节点：一个都没有时必须报错，不建一个空订阅冒充导入成功
     SUB_NO_US_NODES(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
+    AIRPORT_NOT_FOUND(410051, "机场不存在"),
+    AIRPORT_NAME_DUPLICATED(410052, "机场名已存在"),
+    AIRPORT_IN_USE(410053, "机场下还有订阅，无法删除"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

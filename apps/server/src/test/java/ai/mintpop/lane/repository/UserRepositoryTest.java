@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserRole;
@@ -32,6 +34,8 @@ class UserRepositoryTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     private DatabaseFixtures fixtures;
     private Long frontId;
@@ -39,7 +43,7 @@ class UserRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         frontId = fixtures.createFrontNode("FRONT-1");
         landId = fixtures.createLandNode("LAND-1", "203.0.113.10");

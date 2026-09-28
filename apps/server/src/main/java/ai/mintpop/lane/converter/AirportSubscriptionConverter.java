@@ -18,7 +18,10 @@ public class AirportSubscriptionConverter {
     public AirportSubscriptionDto toDto(AirportSubscription entity) {
         AirportSubscriptionDto dto = new AirportSubscriptionDto();
         dto.setId(entity.getId());
+        dto.setAirportId(entity.getAirportId());
         dto.setName(entity.getName());
+        dto.setAccount(entity.getAccount());
+        dto.setBandwidthMbps(entity.getBandwidthMbps());
         dto.setSubUrl(cipher.decrypt(entity.getSubUrlCipher()));
         dto.setRemark(entity.getRemark());
         dto.setUsedBytes(entity.getTrafficUsedBytes());
@@ -34,7 +37,10 @@ public class AirportSubscriptionConverter {
     public AirportSubscription toEntity(AirportSubscriptionDto dto) {
         AirportSubscription entity = new AirportSubscription();
         entity.setId(dto.getId());
+        entity.setAirportId(dto.getAirportId());
         entity.setName(dto.getName());
+        entity.setAccount(dto.getAccount());
+        entity.setBandwidthMbps(dto.getBandwidthMbps());
         entity.setSubUrlCipher(cipher.encrypt(dto.getSubUrl()));
         entity.setRemark(dto.getRemark());
         entity.setTrafficUsedBytes(dto.getUsedBytes());

@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
+import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -59,6 +61,9 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
     private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
+    private AirportRepository airportRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -78,6 +83,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
 
     private DatabaseFixtures fixtures;
     private Long adminId;
+    private Long airportId;
 
     private static final String SUB_URL = "https://sub.example.com/c?token=秘密token";
 
@@ -105,9 +111,11 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository,
+                airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        airportId = fixtures.createAirport("泰山云");
         stubSubscription(SUBSCRIPTION);
     }
 
@@ -117,7 +125,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
 
     /** 只给订阅名与链接建订阅，返回订阅 id */
     private Long createGroup(String name) throws Exception {
-        var body = Map.of("name", name, "subUrl", SUB_URL);
+        var body = Map.of("name", name, "subUrl", SUB_URL, "airportId", airportId, "account", "a@x.com", "bandwidthMbps", 300);
         var result = mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(jsonPath("$.code").value(0))
@@ -178,7 +186,8 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
         createGroupImportingTwoNodes();
         mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("name", "机场A", "subUrl", SUB_URL))))
+                        .content(json(Map.of("name", "机场A", "subUrl", SUB_URL, "airportId", airportId,
+                                "account", "a@x.com", "bandwidthMbps", 300))))
                 .andExpect(jsonPath("$.code").value(410010));
 
         stubSubscription("""
@@ -189,7 +198,8 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
                 """);
         mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("name", "机场B", "subUrl", SUB_URL))))
+                        .content(json(Map.of("name", "机场B", "subUrl", SUB_URL, "airportId", airportId,
+                                "account", "a@x.com", "bandwidthMbps", 300))))
                 .andExpect(jsonPath("$.code").value(410049));
         assertThat(airportSubscriptionRepository.existsByName("机场B")).isFalse();
     }
@@ -224,12 +234,12 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
     void renameGroup() throws Exception {
         Long airportSubscriptionId = createGroupImportingTwoNodes();
         mockMvc.perform(put("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A-新名"))))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A-新名", "account", "a@x.com"))))
                 .andExpect(jsonPath("$.code").value(0));
         assertThat(airportSubscriptionRepository.findById(airportSubscriptionId).orElseThrow().getName()).isEqualTo("机场A-新名");
 
         mockMvc.perform(put("/api/admin/airport-subscriptions/99999").header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "X"))))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "X", "account", "a@x.com"))))
                 .andExpect(jsonPath("$.code").value(410009));
     }
 
@@ -239,7 +249,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
         Long airportSubscriptionId = createGroup("Airport A");
 
         mockMvc.perform(put("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "AIRPORT A"))))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "AIRPORT A", "account", "a@x.com"))))
                 .andExpect(jsonPath("$.code").value(0));
         assertThat(airportSubscriptionRepository.findById(airportSubscriptionId).orElseThrow().getName()).isEqualTo("AIRPORT A");
     }
@@ -251,7 +261,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
         Long groupB = createGroup("机场B");
 
         mockMvc.perform(put("/api/admin/airport-subscriptions/" + groupB).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A"))))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("name", "机场A", "account", "a@x.com"))))
                 .andExpect(jsonPath("$.code").value(410010));
         assertThat(airportSubscriptionRepository.findById(groupB).orElseThrow().getName()).isEqualTo("机场B");
         assertThat(airportSubscriptionRepository.findById(groupA).orElseThrow().getName()).isEqualTo("机场A");
@@ -299,5 +309,39 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0));
         assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).isEmpty();
         assertThat(airportSubscriptionRepository.findById(airportSubscriptionId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("新建订阅：机场不存在报 410051；列表带机场名、账号、带宽与主用容量")
+    void createCarriesAirportAccountBandwidth() throws Exception {
+        mockMvc.perform(post("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("name", "X", "subUrl", SUB_URL, "airportId", 99999,
+                                "account", "a@x.com", "bandwidthMbps", 300))))
+                .andExpect(jsonPath("$.code").value(410051));
+
+        createGroupImportingTwoNodes();
+        mockMvc.perform(get("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].airportName").value("泰山云"))
+                .andExpect(jsonPath("$.data[0].account").value("a@x.com"))
+                .andExpect(jsonPath("$.data[0].bandwidthMbps").value(300))
+                .andExpect(jsonPath("$.data[0].primaryCapacity").value(15));
+    }
+
+    @Test
+    @DisplayName("编辑只改名称、账号、备注：入参里带机场与带宽也不生效")
+    void updateIgnoresAirportAndBandwidth() throws Exception {
+        Long id = createGroupImportingTwoNodes();
+        Long otherAirport = fixtures.createAirport("B 机场");
+        mockMvc.perform(put("/api/admin/airport-subscriptions/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("name", "新名", "account", "b@x.com", "remark", "r",
+                                "airportId", otherAirport, "bandwidthMbps", 999))))
+                .andExpect(jsonPath("$.code").value(0));
+        AirportSubscriptionDto saved = airportSubscriptionRepository.findById(id).orElseThrow();
+        assertThat(saved.getName()).isEqualTo("新名");
+        assertThat(saved.getAccount()).isEqualTo("b@x.com");
+        assertThat(saved.getAirportId()).isEqualTo(airportId);
+        assertThat(saved.getBandwidthMbps()).isEqualTo(300);
     }
 }

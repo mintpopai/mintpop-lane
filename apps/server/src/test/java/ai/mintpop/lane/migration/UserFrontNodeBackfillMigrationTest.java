@@ -109,10 +109,14 @@ class UserFrontNodeBackfillMigrationTest extends MysqlTestBase {
             // 否则上面这套「让列写反也能绕过 FK」的设计本身就失效了
             assertThat(historyUserId).isNotEqualTo(historyNodeId);
 
-            // 第二段：跑到最新版本，触发 V21 的回填
+            // 第二段：只迁到 V21，触发回填。不能跑到最新版本——V26（机场订阅按机场分配）
+            // 会清空 user_front_node、proxy_node 里的 FRONT 节点与 app_user.front_node_id
+            // （spec §3.1：不做旧数据迁移），跑到最新版本会把这里刚回填出的那一行冲掉，
+            // 而这条用例只关心「V21 的回填语句本身有没有把列写对」，与之后版本的清空逻辑无关
             Flyway.configure()
                     .dataSource(schemaUrl, "root", rootPassword)
                     .locations("classpath:db/migration")
+                    .target("21")
                     .load()
                     .migrate();
 

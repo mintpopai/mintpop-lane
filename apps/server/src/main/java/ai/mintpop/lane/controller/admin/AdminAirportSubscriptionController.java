@@ -1,7 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
-import ai.mintpop.lane.request.AirportSubscriptionRenameRequest;
+import ai.mintpop.lane.request.AirportSubscriptionUpdateRequest;
 import ai.mintpop.lane.request.SubAuditRequest;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.response.AirportSubscriptionResponse;
@@ -50,8 +50,8 @@ public class AdminAirportSubscriptionController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Void> rename(@PathVariable Long id, @Valid @RequestBody AirportSubscriptionRenameRequest request) {
-        adminAirportSubscriptionService.rename(id, request);
+    public ApiResponse<Void> update(@PathVariable Long id, @Valid @RequestBody AirportSubscriptionUpdateRequest request) {
+        adminAirportSubscriptionService.update(id, request);
         return ApiResponse.success();
     }
 

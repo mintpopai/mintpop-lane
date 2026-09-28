@@ -20,6 +20,9 @@ class AirportSubscriptionRepositoryTest extends MysqlTestBase {
     private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
+    private AirportRepository airportRepository;
+
+    @Autowired
     private ProxyNodeRepository nodeRepository;
 
     @Autowired
@@ -30,15 +33,22 @@ class AirportSubscriptionRepositoryTest extends MysqlTestBase {
 
     private DatabaseFixtures fixtures;
 
+    private Long airportId;
+
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository,
+                airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
+        airportId = fixtures.createAirport("泰山云");
     }
 
     private AirportSubscriptionDto newGroup(String name) {
         AirportSubscriptionDto group = new AirportSubscriptionDto();
+        group.setAirportId(airportId);
         group.setName(name);
+        group.setAccount(name + "@airport.example");
+        group.setBandwidthMbps(300);
         group.setSubUrl("https://sub.example.com/c?token=秘密token");
         group.setRemark("测试用");
         return group;

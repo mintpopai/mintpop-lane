@@ -64,4 +64,10 @@ public class MybatisAirportSubscriptionRepository implements AirportSubscription
         return mapper.selectCount(Wrappers.<AirportSubscription>lambdaQuery()
                 .eq(AirportSubscription::getName, name).ne(AirportSubscription::getId, excludeId)) > 0;
     }
+
+    @Override
+    public boolean existsByAirportId(Long airportId) {
+        return mapper.selectCount(Wrappers.<AirportSubscription>lambdaQuery()
+                .eq(AirportSubscription::getAirportId, airportId)) > 0;
+    }
 }

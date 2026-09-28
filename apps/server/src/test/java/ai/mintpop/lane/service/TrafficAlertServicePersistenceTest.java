@@ -2,6 +2,8 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
+import ai.mintpop.lane.entity.Airport;
+import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.support.MysqlTestBase;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +33,9 @@ class TrafficAlertServicePersistenceTest extends MysqlTestBase {
     private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
+    private AirportRepository airportRepository;
+
+    @Autowired
     private TrafficAlertService service;
 
     @BeforeEach
@@ -38,6 +43,7 @@ class TrafficAlertServicePersistenceTest extends MysqlTestBase {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
         jdbc.execute("TRUNCATE TABLE proxy_node");
         jdbc.execute("TRUNCATE TABLE airport_subscription");
+        jdbc.execute("TRUNCATE TABLE airport");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
@@ -47,8 +53,15 @@ class TrafficAlertServicePersistenceTest extends MysqlTestBase {
     }
 
     private Long createGroup() {
+        Airport airport = new Airport();
+        airport.setName("泰山云");
+        Long airportId = airportRepository.create(airport);
+
         AirportSubscriptionDto group = new AirportSubscriptionDto();
+        group.setAirportId(airportId);
         group.setName("TaiShan Net");
+        group.setAccount("a@x.com");
+        group.setBandwidthMbps(300);
         group.setSubUrl("https://sub.example.com/c?token=t");
         return airportSubscriptionRepository.create(group);
     }

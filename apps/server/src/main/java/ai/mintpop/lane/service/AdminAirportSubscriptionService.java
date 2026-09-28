@@ -1,7 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
-import ai.mintpop.lane.request.AirportSubscriptionRenameRequest;
+import ai.mintpop.lane.request.AirportSubscriptionUpdateRequest;
 import ai.mintpop.lane.response.AirportSubscriptionResponse;
 
 import java.util.List;
@@ -13,7 +13,7 @@ public interface AdminAirportSubscriptionService {
 
     List<AirportSubscriptionResponse> list();
 
-    void rename(Long id, AirportSubscriptionRenameRequest request);
+    void update(Long id, AirportSubscriptionUpdateRequest request);
 
     /** 用订阅里存的链接重拉，自动导入其中的美国节点：已入池的更新参数，新的入库 */
     void importNodes(Long id);

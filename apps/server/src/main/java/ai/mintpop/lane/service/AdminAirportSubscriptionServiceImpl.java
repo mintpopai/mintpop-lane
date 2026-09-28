@@ -4,18 +4,20 @@ import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
+import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
-import ai.mintpop.lane.request.AirportSubscriptionRenameRequest;
+import ai.mintpop.lane.request.AirportSubscriptionUpdateRequest;
 import ai.mintpop.lane.response.AirportSubscriptionResponse;
 import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.dao.DuplicateKeyException;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @Service
 public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscriptionService {
@@ -38,6 +41,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private static final int NODE_NAME_MAX_CODE_POINTS = 64;
 
     private final AirportSubscriptionRepository airportSubscriptionRepository;
+    private final AirportRepository airportRepository;
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
     private final UserFrontNodeRepository userFrontNodeRepository;
@@ -47,13 +51,15 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private final FailureDomainSyncer failureDomainSyncer;
     private final TrafficAlertService trafficAlertService;
 
-    public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository, ProxyNodeRepository nodeRepository,
+    public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository,
+                                     AirportRepository airportRepository, ProxyNodeRepository nodeRepository,
                                      UserRepository userRepository, UserFrontNodeRepository userFrontNodeRepository,
                                      SubFetchClient subFetchClient,
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
                                      FailureDomainSyncer failureDomainSyncer,
                                      TrafficAlertService trafficAlertService) {
         this.airportSubscriptionRepository = airportSubscriptionRepository;
+        this.airportRepository = airportRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.userFrontNodeRepository = userFrontNodeRepository;
@@ -69,6 +75,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         if (airportSubscriptionRepository.existsByName(request.getName())) {
             throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_NAME_DUPLICATED);
         }
+        airportRepository.findById(request.getAirportId())
+                .orElseThrow(() -> new BizException(BizCodeEnum.AIRPORT_NOT_FOUND));
         // 先拉订阅再建订阅：拉取失败时不留下空订阅；
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建订阅 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
@@ -77,7 +85,10 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
 
         AirportSubscriptionDto group = new AirportSubscriptionDto();
+        group.setAirportId(request.getAirportId());
         group.setName(request.getName());
+        group.setAccount(request.getAccount());
+        group.setBandwidthMbps(request.getBandwidthMbps());
         group.setSubUrl(request.getSubUrl());
         group.setRemark(request.getRemark());
         applyTrafficInfo(group, fetched.subFetchResult());
@@ -98,10 +109,17 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
 
     @Override
     public List<AirportSubscriptionResponse> list() {
+        Map<Long, String> airportNames = airportRepository.findAll().stream()
+                .collect(Collectors.toMap(Airport::getId, Airport::getName));
         return airportSubscriptionRepository.findAll().stream()
                 .map(group -> new AirportSubscriptionResponse(
                         group.getId(),
                         group.getName(),
+                        group.getAirportId(),
+                        airportNames.get(group.getAirportId()),
+                        group.getAccount(),
+                        group.getBandwidthMbps(),
+                        FrontAllocationPlanner.primaryCapacity(group.getBandwidthMbps()),
                         maskUrl(group.getSubUrl()),
                         nodeRepository.countByAirportSubscriptionId(group.getId()),
                         group.getRemark(),
@@ -115,13 +133,14 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     }
 
     @Override
-    public void rename(Long id, AirportSubscriptionRenameRequest request) {
+    public void update(Long id, AirportSubscriptionUpdateRequest request) {
         AirportSubscriptionDto group = getGroup(id);
         // 重名检查按 id 排除自身：表是 ai_ci 排序规则，只改大小写时 existsByName 会匹配到自己
         if (airportSubscriptionRepository.existsByNameExcludingId(request.getName(), id)) {
             throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_NAME_DUPLICATED);
         }
         group.setName(request.getName());
+        group.setAccount(request.getAccount());
         group.setRemark(request.getRemark());
         wrapUniqueViolation(() -> {
             airportSubscriptionRepository.update(group);
