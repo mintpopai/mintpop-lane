@@ -24,6 +24,8 @@ public record AdminUserResponse(
          * fallback 是假冗余，需要采购第二家机场；管理端据此常驻警示，不是一次性通知。
          */
         int failureDomainCount,
+        /** 该用户的第一跳机场订阅列表，按顺位排列；未分配为空列表 */
+        List<FrontSubscriptionBrief> frontSubscriptions,
         Long landNodeId,
         String landNodeName,
         /** 该用户的期望出口 IP，取自其落地节点；未分配或落地未填出口时为 null */

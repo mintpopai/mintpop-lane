@@ -17,6 +17,7 @@ import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.UserSaveRequest;
 import ai.mintpop.lane.response.AdminUserResponse;
+import ai.mintpop.lane.response.FrontSubscriptionBrief;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,17 +38,20 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserFrontNodeRepository userFrontNodeRepository;
     private final FrontNodeAllocator frontNodeAllocator;
+    private final FrontSubscriptionService frontSubscriptionService;
     private final Clock clock;
 
     public AdminUserServiceImpl(UserRepository userRepository, ProxyNodeRepository nodeRepository,
                                  SubscriptionRepository subscriptionRepository,
                                  UserFrontNodeRepository userFrontNodeRepository,
-                                 FrontNodeAllocator frontNodeAllocator, Clock clock) {
+                                 FrontNodeAllocator frontNodeAllocator,
+                                 FrontSubscriptionService frontSubscriptionService, Clock clock) {
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.userFrontNodeRepository = userFrontNodeRepository;
         this.frontNodeAllocator = frontNodeAllocator;
+        this.frontSubscriptionService = frontSubscriptionService;
         this.clock = clock;
     }
 
@@ -72,10 +76,12 @@ public class AdminUserServiceImpl implements AdminUserService {
         // （UsersView 列表页目前虽不展示 frontNodes/failureDomainCount，但 toResponse 是
         // page()/get() 共用的同一份组装逻辑，响应形状必须一致，不能靠「列表页不查」取巧）
         Map<Long, List<Long>> frontNodeIdsByUser = userFrontNodeRepository.findNodeIdsByUserIds(userIds);
+        Map<Long, List<FrontSubscriptionBrief>> frontSubscriptionsByUser = frontSubscriptionService.briefsOf(userIds);
 
         List<AdminUserResponse> records = page.records().stream()
                 .map(user -> toResponse(user, nodes, briefs.getOrDefault(user.getId(), List.of()),
-                        frontNodeIdsByUser.getOrDefault(user.getId(), List.of())))
+                        frontNodeIdsByUser.getOrDefault(user.getId(), List.of()),
+                        frontSubscriptionsByUser.getOrDefault(user.getId(), List.of())))
                 .toList();
         return new PageResult<>(records, page.total(), page.pageNo(), page.pageSize());
     }
@@ -93,7 +99,9 @@ public class AdminUserServiceImpl implements AdminUserService {
                         s.getId(), s.getName(), s.getAgentType(), s.getEndsAt()))
                 .toList();
         List<Long> frontNodeIds = userFrontNodeRepository.findNodeIdsByUserId(id);
-        return toResponse(user, nodes, briefs, frontNodeIds);
+        List<FrontSubscriptionBrief> frontSubscriptions = frontSubscriptionService.briefsOf(List.of(id))
+                .getOrDefault(id, List.of());
+        return toResponse(user, nodes, briefs, frontNodeIds, frontSubscriptions);
     }
 
     /**
@@ -240,7 +248,8 @@ public class AdminUserServiceImpl implements AdminUserService {
      */
     private AdminUserResponse toResponse(UserDto user, Map<Long, ProxyNodeDto> nodes,
                                          List<AdminUserResponse.ActiveSubscriptionBrief> activeSubscriptions,
-                                         List<Long> frontNodeIds) {
+                                         List<Long> frontNodeIds,
+                                         List<FrontSubscriptionBrief> frontSubscriptions) {
         ProxyNodeDto front = nodes.get(user.getFrontNodeId());
         ProxyNodeDto land = user.getLandNodeId() == null ? null : nodes.get(user.getLandNodeId());
 
@@ -268,6 +277,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 front == null ? null : front.getName(),
                 frontNodes,
                 failureDomainCount,
+                frontSubscriptions,
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),
                 land == null ? null : land.getEgressIp(),

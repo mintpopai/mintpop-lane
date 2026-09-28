@@ -43,6 +43,7 @@ class AdminUserServiceImplTest {
     @Mock private SubscriptionRepository subscriptionRepository;
     @Mock private UserFrontNodeRepository userFrontNodeRepository;
     @Mock private FrontNodeAllocator frontNodeAllocator;
+    @Mock private FrontSubscriptionService frontSubscriptionService;
 
     private AdminUserServiceImpl service;
 
@@ -50,7 +51,7 @@ class AdminUserServiceImplTest {
     void setUp() {
         Clock clock = Clock.fixed(Instant.parse("2026-09-18T00:00:00Z"), ZoneOffset.UTC);
         service = new AdminUserServiceImpl(userRepository, nodeRepository, subscriptionRepository,
-                userFrontNodeRepository, frontNodeAllocator, clock);
+                userFrontNodeRepository, frontNodeAllocator, frontSubscriptionService, clock);
     }
 
     private ProxyNodeDto frontNode(long id, String name, String failureDomain) {

@@ -13,6 +13,7 @@ import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -68,6 +69,9 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
 
     @Autowired
     private UserFrontNodeRepository userFrontNodeRepository;
+
+    @Autowired
+    private UserFrontSubscriptionRepository userFrontSubscriptionRepository;
 
     @Autowired
     private SubscriptionRepository subscriptionRepository;
@@ -309,6 +313,21 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0));
         assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).isEmpty();
         assertThat(airportSubscriptionRepository.findById(airportSubscriptionId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("订阅被用户的第一跳列表引用时删除报 410013；解除引用后可删")
+    void deleteBlockedByFrontSubscriptionReference() throws Exception {
+        Long airportSubscriptionId = createGroupImportingTwoNodes();
+        Long userId = fixtures.createUser("logto-user-front-sub", null, null);
+        userFrontSubscriptionRepository.replaceForUser(userId, List.of(airportSubscriptionId));
+
+        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(410013));
+
+        userFrontSubscriptionRepository.deleteByUserId(userId);
+        mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test

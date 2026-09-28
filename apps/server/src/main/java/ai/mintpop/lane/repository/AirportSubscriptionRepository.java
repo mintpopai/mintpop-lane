@@ -32,4 +32,7 @@ public interface AirportSubscriptionRepository {
 
     /** 该机场下是否还有订阅：删机场前的引用检查 */
     boolean existsByAirportId(Long airportId);
+
+    /** 全部订阅并加行锁（SELECT … FOR UPDATE）：串行化并发的第一跳分配，必须在事务内调用 */
+    List<AirportSubscriptionDto> findAllForUpdate();
 }

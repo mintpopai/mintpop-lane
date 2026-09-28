@@ -631,6 +631,28 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("自动分配返回按顺位的列表，详情里 frontSubscriptions 与之一致；取消分配后为空")
+    void allocateAndClearFront() throws Exception {
+        Long airportId = fixtures.createAirport("泰山云");
+        Long subId = fixtures.createAirportSubscription(airportId, "ts-01", 300);
+        fixtures.createSubscriptionNode(subId, "🇺🇸[US]Santa Clara 01", NodeStatus.ENABLED);
+
+        mockMvc.perform(post("/api/admin/users/" + memberNoSubId + "/front/allocate")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].position").value(0))
+                .andExpect(jsonPath("$.data[0].airportName").value("泰山云"));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.frontSubscriptions[0].subscriptionName").value("ts-01"));
+
+        mockMvc.perform(delete("/api/admin/users/" + memberNoSubId + "/front")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.frontSubscriptions.length()").value(0));
+    }
+
+    @Test
     @DisplayName("关键词搜索能命中备注")
     void keywordMatchesRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))

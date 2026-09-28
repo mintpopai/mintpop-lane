@@ -15,6 +15,7 @@ import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontNodeRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
 import ai.mintpop.lane.request.AirportSubscriptionUpdateRequest;
@@ -45,6 +46,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
     private final UserFrontNodeRepository userFrontNodeRepository;
+    private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
     private final TransactionTemplate transactionTemplate;
@@ -54,6 +56,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository,
                                      AirportRepository airportRepository, ProxyNodeRepository nodeRepository,
                                      UserRepository userRepository, UserFrontNodeRepository userFrontNodeRepository,
+                                     UserFrontSubscriptionRepository userFrontSubscriptionRepository,
                                      SubFetchClient subFetchClient,
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
                                      FailureDomainSyncer failureDomainSyncer,
@@ -63,6 +66,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.userFrontNodeRepository = userFrontNodeRepository;
+        this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
         this.transactionTemplate = transactionTemplate;
@@ -111,6 +115,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     public List<AirportSubscriptionResponse> list() {
         Map<Long, String> airportNames = airportRepository.findAll().stream()
                 .collect(Collectors.toMap(Airport::getId, Airport::getName));
+        Map<Long, Long> primaryUsedBySubscription = userFrontSubscriptionRepository.countPrimaryByAirportSubscription();
         return airportSubscriptionRepository.findAll().stream()
                 .map(group -> new AirportSubscriptionResponse(
                         group.getId(),
@@ -119,6 +124,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                         airportNames.get(group.getAirportId()),
                         group.getAccount(),
                         group.getBandwidthMbps(),
+                        primaryUsedBySubscription.getOrDefault(group.getId(), 0L).intValue(),
                         FrontAllocationPlanner.primaryCapacity(group.getBandwidthMbps()),
                         maskUrl(group.getSubUrl()),
                         nodeRepository.countByAirportSubscriptionId(group.getId()),
@@ -169,6 +175,10 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     @Transactional
     public void delete(Long id) {
         getGroup(id);
+        // 订阅被用户的第一跳列表引用时不能删：先给这些用户重新分配
+        if (userFrontSubscriptionRepository.existsByAirportSubscriptionId(id)) {
+            throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_IN_USE);
+        }
         List<ProxyNodeDto> nodes = nodeRepository.findByAirportSubscriptionId(id);
         // 先整体校验再删：不做「删到一半发现被引用」的部分删除
         for (ProxyNodeDto node : nodes) {

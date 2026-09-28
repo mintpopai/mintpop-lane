@@ -6,6 +6,7 @@ import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.request.AirportSaveRequest;
 import ai.mintpop.lane.response.AirportResponse;
 import org.springframework.dao.DuplicateKeyException;
@@ -21,19 +22,24 @@ public class AdminAirportServiceImpl implements AdminAirportService {
 
     private final AirportRepository airportRepository;
     private final AirportSubscriptionRepository airportSubscriptionRepository;
+    private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
 
     public AdminAirportServiceImpl(AirportRepository airportRepository,
-                                   AirportSubscriptionRepository airportSubscriptionRepository) {
+                                   AirportSubscriptionRepository airportSubscriptionRepository,
+                                   UserFrontSubscriptionRepository userFrontSubscriptionRepository) {
         this.airportRepository = airportRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
+        this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
     }
 
     @Override
     public List<AirportResponse> list() {
         Map<Long, List<AirportSubscriptionDto>> subsByAirport = airportSubscriptionRepository.findAll().stream()
                 .collect(Collectors.groupingBy(AirportSubscriptionDto::getAirportId));
+        Map<Long, Long> primaryUsedBySubscription = userFrontSubscriptionRepository.countPrimaryByAirportSubscription();
         return airportRepository.findAll().stream()
-                .map(airport -> toResponse(airport, subsByAirport.getOrDefault(airport.getId(), List.of())))
+                .map(airport -> toResponse(airport, subsByAirport.getOrDefault(airport.getId(), List.of()),
+                        primaryUsedBySubscription))
                 .toList();
     }
 
@@ -90,11 +96,15 @@ public class AdminAirportServiceImpl implements AdminAirportService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private AirportResponse toResponse(Airport airport, List<AirportSubscriptionDto> subscriptions) {
+    private AirportResponse toResponse(Airport airport, List<AirportSubscriptionDto> subscriptions,
+                                       Map<Long, Long> primaryUsedBySubscription) {
         int capacity = subscriptions.stream()
                 .mapToInt(s -> FrontAllocationPlanner.primaryCapacity(s.getBandwidthMbps()))
                 .sum();
+        int used = subscriptions.stream()
+                .mapToInt(s -> primaryUsedBySubscription.getOrDefault(s.getId(), 0L).intValue())
+                .sum();
         return new AirportResponse(airport.getId(), airport.getName(), airport.getWebsiteUrl(), airport.getRemark(),
-                subscriptions.size(), capacity, airport.getCreatedAt(), airport.getUpdatedAt());
+                subscriptions.size(), used, capacity, airport.getCreatedAt(), airport.getUpdatedAt());
     }
 }

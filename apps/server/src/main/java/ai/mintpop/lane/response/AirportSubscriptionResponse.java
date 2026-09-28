@@ -17,6 +17,8 @@ public record AirportSubscriptionResponse(
         String account,
         /** 订阅总带宽（Mbps） */
         Integer bandwidthMbps,
+        /** 当前主用人数 */
+        int primaryUsed,
         /** 主用容量：bandwidthMbps / 20 向下取整 */
         int primaryCapacity,
         /** 打码后的订阅链接，只留 scheme 与 host */

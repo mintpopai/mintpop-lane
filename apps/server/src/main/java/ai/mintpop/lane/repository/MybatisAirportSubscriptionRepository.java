@@ -70,4 +70,12 @@ public class MybatisAirportSubscriptionRepository implements AirportSubscription
         return mapper.selectCount(Wrappers.<AirportSubscription>lambdaQuery()
                 .eq(AirportSubscription::getAirportId, airportId)) > 0;
     }
+
+    @Override
+    public List<AirportSubscriptionDto> findAllForUpdate() {
+        return mapper.selectList(Wrappers.<AirportSubscription>lambdaQuery()
+                        .orderByAsc(AirportSubscription::getId)
+                        .last("FOR UPDATE"))
+                .stream().map(converter::toDto).toList();
+    }
 }

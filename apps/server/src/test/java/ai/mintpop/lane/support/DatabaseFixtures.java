@@ -10,6 +10,7 @@ import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.repository.AirportRepository;
@@ -57,6 +58,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE plan_order");
         jdbc.execute("TRUNCATE TABLE device_rebind_request");
         jdbc.execute("TRUNCATE TABLE user_device");
+        jdbc.execute("TRUNCATE TABLE user_front_subscription");
         jdbc.execute("TRUNCATE TABLE user_front_node");
         jdbc.execute("TRUNCATE TABLE link_report");
         jdbc.execute("TRUNCATE TABLE link_report_daily");
@@ -196,6 +198,23 @@ public class DatabaseFixtures {
         subscription.setBandwidthMbps(bandwidthMbps);
         subscription.setSubUrl("https://sub.example.com/" + name + "?token=t");
         return airportSubscriptionRepository.create(subscription);
+    }
+
+    /** 在机场订阅下建一个订阅导入形态的前置节点（MIHOMO），sourceName 决定是否判定为美国 */
+    public Long createSubscriptionNode(Long airportSubscriptionId, String sourceName, NodeStatus status) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName(sourceName + "#" + airportSubscriptionId);
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.MIHOMO);
+        node.setServerAddr("us01a.example.com");
+        node.setPort(35660);
+        node.setSecret(Map.of("type", "anytls", "server", "us01a.example.com", "port", 35660, "password", "p"));
+        node.setAirportSubscriptionId(airportSubscriptionId);
+        node.setSourceName(sourceName);
+        node.setSourceType("anytls");
+        node.setStatus(status);
+        node.setFailureDomain("jp.tsdns.top");
+        return nodeRepository.create(node);
     }
 
     /** 建一个上架套餐（USD），返回 id。传 enabled=false 建下架套餐 */

@@ -5,6 +5,7 @@ import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -20,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static ai.mintpop.lane.enumeration.UserRole.ADMIN;
@@ -43,6 +45,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
     @Autowired private SubscriptionRepository subscriptionRepository;
     @Autowired private AirportRepository airportRepository;
     @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
+    @Autowired private UserFrontSubscriptionRepository userFrontSubscriptionRepository;
     @Autowired private SessionTokenService sessionTokenService;
 
     private DatabaseFixtures fixtures;
@@ -74,19 +77,22 @@ class AdminAirportControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("新建后列表可见：带订阅数与主用总容量（全部订阅 带宽/20 之和）")
+    @DisplayName("新建后列表可见：带订阅数、当前主用人数与主用总容量（全部订阅 带宽/20 之和）")
     void createAndList() throws Exception {
         mockMvc.perform(post("/api/admin/airports").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(body("泰山云"))))
                 .andExpect(jsonPath("$.code").value(0));
         Long airportId = airportRepository.findAll().get(0).getId();
-        fixtures.createAirportSubscription(airportId, "ts-01", 300);
+        Long subId = fixtures.createAirportSubscription(airportId, "ts-01", 300);
         fixtures.createAirportSubscription(airportId, "ts-02", 110);
+        Long userId = fixtures.createUser("logto-front-user", null, null);
+        userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId));
 
         mockMvc.perform(get("/api/admin/airports").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data[0].name").value("泰山云"))
                 .andExpect(jsonPath("$.data[0].websiteUrl").value("https://taishan.example.com"))
                 .andExpect(jsonPath("$.data[0].subscriptionCount").value(2))
+                .andExpect(jsonPath("$.data[0].primaryUsed").value(1))
                 // 300/20=15，110/20=5（向下取整）
                 .andExpect(jsonPath("$.data[0].primaryCapacity").value(20));
     }
