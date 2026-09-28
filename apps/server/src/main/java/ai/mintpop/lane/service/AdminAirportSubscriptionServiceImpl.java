@@ -22,6 +22,7 @@ import ai.mintpop.lane.response.AirportSubscriptionResponse;
 import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -169,9 +170,14 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     }
 
     @Override
-    @Transactional
+    // 隔离级别用 READ_COMMITTED：先对该订阅行加锁（FOR UPDATE）会等待分配事务提交，
+    // 但默认的 REPEATABLE_READ 下，加锁之后的普通 SELECT（existsByAirportSubscriptionId）
+    // 仍可能读到事务开始时的旧快照，看不见分配事务刚提交写入的引用；READ_COMMITTED 让
+    // 每条语句都用最新的读视图，加锁等待之后才能读到分配事务提交的结果
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void delete(Long id) {
-        getGroup(id);
+        airportSubscriptionRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_NOT_FOUND));
         // 订阅被用户的第一跳列表引用时不能删：先给这些用户重新分配
         if (userFrontSubscriptionRepository.existsByAirportSubscriptionId(id)) {
             throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_IN_USE);

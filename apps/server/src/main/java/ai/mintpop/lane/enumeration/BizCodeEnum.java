@@ -83,8 +83,8 @@ public enum BizCodeEnum {
     AIRPORT_NOT_FOUND(410051, "机场不存在"),
     AIRPORT_NAME_DUPLICATED(410052, "机场名已存在"),
     AIRPORT_IN_USE(410053, "机场下还有订阅，无法删除"),
-    // 只有主用占容量：所有订阅都满了才报，提醒增购机场订阅
-    FRONT_CAPACITY_FULL(410050, "第一跳主用名额已满，请增购机场订阅"),
+    // planned 为空的两种成因都会报这条：所有订阅主用占满，或压根没有可用的候选订阅（没有启用中的美国节点）
+    FRONT_CAPACITY_FULL(410050, "没有可分配的第一跳订阅：主用名额已满，或没有启用中的美国节点"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

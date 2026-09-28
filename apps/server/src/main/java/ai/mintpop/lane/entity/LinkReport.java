@@ -58,7 +58,13 @@ public class LinkReport {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer p50LatencyMs;
 
-    /** 窗口内该故障域对应的 fallback 组 now 字段发生变化的次数，即故障转移次数 */
+    /**
+     * 窗口内该故障域对应的 fallback 组 now 字段发生变化的次数，即故障转移次数。
+     * 已知限制（机场订阅与第一跳分配四期后）：内层改为 url-test 后，该计数也会把
+     * "有更快节点出现"的择优切换计入，不再单纯是"原节点不可用才切换"；且只统计内层，
+     * 真正的跨订阅（主用/备用）切换发生在外层 us-front，目前不采集，本列反映不出来。
+     * 见设计文档 2026-09-28-机场订阅与第一跳分配-design.md 第六节。
+     */
     private Integer failovers;
 
     /** 客户端实际解析到的中转入口 IP；客户端解析失败时为 null */

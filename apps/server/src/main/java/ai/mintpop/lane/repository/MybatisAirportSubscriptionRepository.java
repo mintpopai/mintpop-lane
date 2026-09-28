@@ -78,4 +78,15 @@ public class MybatisAirportSubscriptionRepository implements AirportSubscription
                         .last("FOR UPDATE"))
                 .stream().map(converter::toDto).toList();
     }
+
+    @Override
+    public Optional<AirportSubscriptionDto> findByIdForUpdate(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return mapper.selectList(Wrappers.<AirportSubscription>lambdaQuery()
+                        .eq(AirportSubscription::getId, id)
+                        .last("FOR UPDATE"))
+                .stream().findFirst().map(converter::toDto);
+    }
 }

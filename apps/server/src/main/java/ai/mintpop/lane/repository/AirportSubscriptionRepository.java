@@ -35,4 +35,11 @@ public interface AirportSubscriptionRepository {
 
     /** 全部订阅并加行锁（SELECT … FOR UPDATE）：串行化并发的第一跳分配，必须在事务内调用 */
     List<AirportSubscriptionDto> findAllForUpdate();
+
+    /**
+     * 按 id 查询并加行锁（SELECT … FOR UPDATE）：删订阅前先锁住该行，
+     * 与分配流程的 {@link #findAllForUpdate()} 争用同一把锁，避免「引用检查」与
+     * 「写入引用」两个事务交错导致删除时撞外键，必须在事务内调用。
+     */
+    Optional<AirportSubscriptionDto> findByIdForUpdate(Long id);
 }

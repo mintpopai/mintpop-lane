@@ -112,6 +112,30 @@ class AdminAirportControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("地址、备注清空后保存生效：列表与库里都变回 null")
+    void clearWebsiteUrlAndRemark() throws Exception {
+        mockMvc.perform(post("/api/admin/airports").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body("泰山云"))))
+                .andExpect(jsonPath("$.code").value(0));
+        Long id = airportRepository.findAll().get(0).getId();
+
+        Map<String, Object> clearBody = new HashMap<>();
+        clearBody.put("name", "泰山云");
+        clearBody.put("websiteUrl", null);
+        clearBody.put("remark", null);
+        mockMvc.perform(put("/api/admin/airports/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(clearBody)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        mockMvc.perform(get("/api/admin/airports").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].websiteUrl").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data[0].remark").value(org.hamcrest.Matchers.nullValue()));
+        var airport = airportRepository.findById(id).orElseThrow();
+        assertThat(airport.getWebsiteUrl()).isNull();
+        assertThat(airport.getRemark()).isNull();
+    }
+
+    @Test
     @DisplayName("机场下还有订阅时删除报 410053；删光订阅后可删；不存在报 410051")
     void deleteProtection() throws Exception {
         Long id = fixtures.createAirport("泰山云");
