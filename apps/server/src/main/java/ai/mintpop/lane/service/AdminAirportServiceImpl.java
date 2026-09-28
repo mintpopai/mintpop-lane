@@ -64,14 +64,14 @@ public class AdminAirportServiceImpl implements AdminAirportService {
     @Override
     public void delete(Long id) {
         airportRepository.findById(id).orElseThrow(() -> new BizException(BizCodeEnum.AIRPORT_NOT_FOUND));
-        // 外键会挡住,但那是原始数据库异常;先查给出可读错误
+        // 外键会挡住，但那是原始数据库异常；先查给出可读错误
         if (airportSubscriptionRepository.existsByAirportId(id)) {
             throw new BizException(BizCodeEnum.AIRPORT_IN_USE);
         }
         airportRepository.deleteById(id);
     }
 
-    /** 唯一约束兜底:预检查之后两个管理员同时提交仍可能撞名 */
+    /** 唯一约束兜底：预检查之后两个管理员同时提交仍可能撞名 */
     private <T> T wrapUniqueViolation(Supplier<T> action) {
         try {
             return action.get();
