@@ -1,15 +1,20 @@
 package ai.mintpop.lane.support;
 
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
 import ai.mintpop.lane.dto.UserDto;
+import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.entity.Plan;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.UserRole;
 import ai.mintpop.lane.enumeration.UserStatus;
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -33,13 +38,18 @@ public class DatabaseFixtures {
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final AirportRepository airportRepository;
+    private final AirportSubscriptionRepository airportSubscriptionRepository;
 
     public DatabaseFixtures(JdbcTemplate jdbc, ProxyNodeRepository nodeRepository,
-                             UserRepository userRepository, SubscriptionRepository subscriptionRepository) {
+                             UserRepository userRepository, SubscriptionRepository subscriptionRepository,
+                             AirportRepository airportRepository, AirportSubscriptionRepository airportSubscriptionRepository) {
         this.jdbc = jdbc;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.airportRepository = airportRepository;
+        this.airportSubscriptionRepository = airportSubscriptionRepository;
     }
 
     /** 清空全部业务表。外键约束在清库期间临时关掉，顺序因此不敏感。 */
@@ -48,7 +58,7 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE plan_order");
         jdbc.execute("TRUNCATE TABLE device_rebind_request");
         jdbc.execute("TRUNCATE TABLE user_device");
-        jdbc.execute("TRUNCATE TABLE user_front_node");
+        jdbc.execute("TRUNCATE TABLE user_front_subscription");
         jdbc.execute("TRUNCATE TABLE link_report");
         jdbc.execute("TRUNCATE TABLE link_report_daily");
         jdbc.execute("TRUNCATE TABLE link_alert_state");
@@ -56,7 +66,8 @@ public class DatabaseFixtures {
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
-        jdbc.execute("TRUNCATE TABLE node_group");
+        jdbc.execute("TRUNCATE TABLE airport_subscription");
+        jdbc.execute("TRUNCATE TABLE airport");
         jdbc.execute("TRUNCATE TABLE plan");
         jdbc.execute("TRUNCATE TABLE enterprise");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
@@ -110,17 +121,16 @@ public class DatabaseFixtures {
     }
 
     /** 建一个普通用户（无订阅、无凭据） */
-    public Long createUser(String subject, Long frontNodeId, Long landNodeId) {
-        return createUser(subject, UserRole.MEMBER, UserStatus.ACTIVE, frontNodeId, landNodeId);
+    public Long createUser(String subject, Long landNodeId) {
+        return createUser(subject, UserRole.MEMBER, UserStatus.ACTIVE, landNodeId);
     }
 
-    public Long createUser(String subject, UserRole role, UserStatus status, Long frontNodeId, Long landNodeId) {
+    public Long createUser(String subject, UserRole role, UserStatus status, Long landNodeId) {
         UserDto user = new UserDto();
         user.setSubject(subject);
         user.setEmail(subject + "@test.example");
         user.setRole(role);
         user.setStatus(status);
-        user.setFrontNodeId(frontNodeId);
         user.setLandNodeId(landNodeId);
         return userRepository.create(user);
     }
@@ -146,16 +156,24 @@ public class DatabaseFixtures {
         return subscriptionRepository.create(s);
     }
 
-    /** 建一个「已开通可用」的用户：有节点、有一条在期 CLAUDE 订阅 */
-    public Long createActiveUser(String subject, Long frontNodeId, Long landNodeId, String credential) {
-        Long userId = createUser(subject, frontNodeId, landNodeId);
+    /** 建一个「已开通可用」的用户：有落地节点、有一条在期 CLAUDE 订阅 */
+    public Long createActiveUser(String subject, Long landNodeId, String credential) {
+        Long userId = createUser(subject, landNodeId);
         createSubscription(userId, AgentType.CLAUDE, "Claude 席位",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), credential);
         return userId;
     }
 
-    /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；groupId 可为 null */
-    public Long createMihomoNode(String name, Long groupId) {
+    /** 直接写用户的第一跳订阅列表（按顺位），绕过分配算法，给下发、签发类测试造前置条件 */
+    public void assignFront(Long userId, Long... airportSubscriptionIds) {
+        for (int position = 0; position < airportSubscriptionIds.length; position++) {
+            jdbc.update("INSERT INTO user_front_subscription (user_id, position, airport_subscription_id) VALUES (?, ?, ?)",
+                    userId, position, airportSubscriptionIds[position]);
+        }
+    }
+
+    /** 建一个订阅导入形态的 MIHOMO 节点（整份参数在 secret 里）；airportSubscriptionId 可为 null */
+    public Long createMihomoNode(String name, Long airportSubscriptionId) {
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName(name);
         node.setRole(NodeRole.FRONT);
@@ -164,9 +182,44 @@ public class DatabaseFixtures {
         node.setPort(35355);
         node.setSecret(Map.of("type", "anytls", "server", "hk01.example.com",
                 "port", 35355, "password", "mihomo-密码"));
-        node.setGroupId(groupId);
+        node.setAirportSubscriptionId(airportSubscriptionId);
         node.setSourceName(name);
         node.setSourceType("anytls");
+        return nodeRepository.create(node);
+    }
+
+    /** 建一个机场，返回 id */
+    public Long createAirport(String name) {
+        Airport airport = new Airport();
+        airport.setName(name);
+        return airportRepository.create(airport);
+    }
+
+    /** 在指定机场下建一个机场订阅（订阅链接为占位值），返回 id */
+    public Long createAirportSubscription(Long airportId, String name, int bandwidthMbps) {
+        AirportSubscriptionDto subscription = new AirportSubscriptionDto();
+        subscription.setAirportId(airportId);
+        subscription.setName(name);
+        subscription.setAccount(name + "@airport.example");
+        subscription.setBandwidthMbps(bandwidthMbps);
+        subscription.setSubUrl("https://sub.example.com/" + name + "?token=t");
+        return airportSubscriptionRepository.create(subscription);
+    }
+
+    /** 在机场订阅下建一个订阅导入形态的前置节点（MIHOMO），sourceName 决定是否判定为美国 */
+    public Long createSubscriptionNode(Long airportSubscriptionId, String sourceName, NodeStatus status) {
+        ProxyNodeDto node = new ProxyNodeDto();
+        node.setName(sourceName + "#" + airportSubscriptionId);
+        node.setRole(NodeRole.FRONT);
+        node.setProtocol(NodeProtocol.MIHOMO);
+        node.setServerAddr("us01a.example.com");
+        node.setPort(35660);
+        node.setSecret(Map.of("type", "anytls", "server", "us01a.example.com", "port", 35660, "password", "p"));
+        node.setAirportSubscriptionId(airportSubscriptionId);
+        node.setSourceName(sourceName);
+        node.setSourceType("anytls");
+        node.setStatus(status);
+        node.setFailureDomain("jp.tsdns.top");
         return nodeRepository.create(node);
     }
 

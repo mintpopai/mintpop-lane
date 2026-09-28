@@ -40,6 +40,7 @@ onMounted(() => rebind.refresh());
         换机申请
         <span v-if="rebind.pendingCount > 0" class="rail-badge">{{ rebind.pendingCount }}</span>
       </RouterLink>
+      <RouterLink :to="{ name: 'AIRPORTS' }" class="rail-link">机场</RouterLink>
       <RouterLink :to="{ name: 'NODES' }" class="rail-link">节点池</RouterLink>
       <RouterLink :to="{ name: 'PLANS' }" class="rail-link">套餐</RouterLink>
       <RouterLink :to="{ name: 'ENTERPRISES' }" class="rail-link">企业</RouterLink>

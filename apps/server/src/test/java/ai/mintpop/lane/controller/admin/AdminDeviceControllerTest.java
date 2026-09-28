@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.entity.DeviceRebindRequest;
 import ai.mintpop.lane.enumeration.RebindRequestStatus;
 import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
@@ -55,6 +57,8 @@ class AdminDeviceControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -103,10 +107,10 @@ class AdminDeviceControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
-        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null);
         subscriptionId = fixtures.createSubscription(memberId, CLAUDE, "Claude 月付",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "sk-ant-test");
 

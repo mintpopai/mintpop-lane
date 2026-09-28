@@ -1,5 +1,7 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.UserRole;
@@ -23,6 +25,8 @@ class UserSyncServiceTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -38,7 +42,7 @@ class UserSyncServiceTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository).clearAll();
+        new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository).clearAll();
     }
 
     @Test
@@ -51,7 +55,6 @@ class UserSyncServiceTest extends MysqlTestBase {
         assertThat(read.getEmail()).isEqualTo("new@example.com");
         assertThat(read.getRole()).isEqualTo(UserRole.MEMBER);
         assertThat(read.getStatus()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(read.getFrontNodeId()).isNull();
         assertThat(read.getLandNodeId()).isNull();
     }
 
@@ -71,18 +74,18 @@ class UserSyncServiceTest extends MysqlTestBase {
         UserDto user = userSyncService.syncOnLogin("logto-b", "b@example.com");
         // 管理员改库提权 + 分配节点
         DatabaseFixtures fixtures =
-                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
-        Long front = fixtures.createFrontNode("FRONT-1");
+                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
+        Long land = fixtures.createLandNode("LAND-1", "203.0.113.10");
         UserDto stored = userRepository.findById(user.getId()).orElseThrow();
         stored.setRole(UserRole.ADMIN);
-        stored.setFrontNodeId(front);
+        stored.setLandNodeId(land);
         userRepository.update(stored);
 
         userSyncService.syncOnLogin("logto-b", "b2@example.com");
 
         UserDto read = userRepository.findById(user.getId()).orElseThrow();
         assertThat(read.getRole()).isEqualTo(UserRole.ADMIN);
-        assertThat(read.getFrontNodeId()).isEqualTo(front);
+        assertThat(read.getLandNodeId()).isEqualTo(land);
         assertThat(read.getEmail()).isEqualTo("b2@example.com");
     }
 

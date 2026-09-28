@@ -82,22 +82,22 @@ public class MybatisProxyNodeRepository implements ProxyNodeRepository {
     }
 
     @Override
-    public Optional<ProxyNodeDto> findByGroupIdAndSourceName(Long groupId, String sourceName) {
+    public Optional<ProxyNodeDto> findByAirportSubscriptionIdAndSourceName(Long airportSubscriptionId, String sourceName) {
         return mapper.selectList(Wrappers.<ProxyNode>lambdaQuery()
-                        .eq(ProxyNode::getGroupId, groupId).eq(ProxyNode::getSourceName, sourceName))
+                        .eq(ProxyNode::getAirportSubscriptionId, airportSubscriptionId).eq(ProxyNode::getSourceName, sourceName))
                 .stream().findFirst().map(converter::toDto);
     }
 
     @Override
-    public List<ProxyNodeDto> findByGroupId(Long groupId) {
+    public List<ProxyNodeDto> findByAirportSubscriptionId(Long airportSubscriptionId) {
         return mapper.selectList(Wrappers.<ProxyNode>lambdaQuery()
-                        .eq(ProxyNode::getGroupId, groupId).orderByAsc(ProxyNode::getId))
+                        .eq(ProxyNode::getAirportSubscriptionId, airportSubscriptionId).orderByAsc(ProxyNode::getId))
                 .stream().map(converter::toDto).toList();
     }
 
     @Override
-    public long countByGroupId(Long groupId) {
-        return mapper.selectCount(Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getGroupId, groupId));
+    public long countByAirportSubscriptionId(Long airportSubscriptionId) {
+        return mapper.selectCount(Wrappers.<ProxyNode>lambdaQuery().eq(ProxyNode::getAirportSubscriptionId, airportSubscriptionId));
     }
 
     @Override

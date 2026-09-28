@@ -3,14 +3,14 @@ import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
-import type { AdminNodeResponse, NodeGroupResponse, NodeRole } from "../api/types";
-import AdminModal from "../components/AdminModal.vue";
+import type { AdminNodeResponse, AirportSubscriptionResponse, NodeRole } from "../api/types";
 import Select from "../components/AdminSelect.vue";
+import AirportSubscriptionEditModal from "../components/AirportSubscriptionEditModal.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import FilterChips from "../components/FilterChips.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
-import NodeGroupAuditModal from "../components/NodeGroupAuditModal.vue";
+import AirportSubscriptionAuditModal from "../components/AirportSubscriptionAuditModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import PageHead from "../components/PageHead.vue";
 import SubImportModal from "../components/SubImportModal.vue";
@@ -29,20 +29,18 @@ const deleting = ref(false);
 /** 正在做连通性检测的落地节点；弹窗打开即探测 */
 const probingNode = ref<AdminNodeResponse | null>(null);
 
-// —— 分组 ——
-const groupList = ref<NodeGroupResponse[]>([]);
-// "ALL"=全部；"NONE"=未分组；数字=某分组 id
-const currentGroup = ref<"ALL" | "NONE" | number>("ALL");
+// —— 机场订阅 ——
+const groupList = ref<AirportSubscriptionResponse[]>([]);
+// "ALL"=全部；数字=某订阅 id。迁移后第一跳节点必然属于某个订阅，不再有「未归属」一档
+const currentGroup = ref<"ALL" | number>("ALL");
 const importModalOpen = ref(false);
-const refetchingGroup = ref<NodeGroupResponse | null>(null);
-const renamingGroup = ref<NodeGroupResponse | null>(null);
-const renameInput = ref("");
-const renaming = ref(false);
-const pendingDeleteGroup = ref<NodeGroupResponse | null>(null);
+const refetchingGroup = ref<AirportSubscriptionResponse | null>(null);
+const editingSubscription = ref<AirportSubscriptionResponse | null>(null);
+const pendingDeleteGroup = ref<AirportSubscriptionResponse | null>(null);
 const deletingGroup = ref(false);
 
 // —— 采购尽调：候选机场是否与库里已有节点撞故障域，只读，不落库。
-// 弹窗自身的状态与逻辑都在 NodeGroupAuditModal 组件里，这里只管开关 ——
+// 弹窗自身的状态与逻辑都在 AirportSubscriptionAuditModal 组件里，这里只管开关 ——
 const auditModalOpen = ref(false);
 
 /** 启用状态筛选，两跳共用：ALL=不筛 */
@@ -72,29 +70,24 @@ const roleOptions = computed(() =>
   })),
 );
 
-/* 二级带只给第一跳：分组是它的主视角（节点本就是按订阅链接成批导进来的），值少、每次都要切、
-   计数有意义。落地节点没有组，它的二级带就空着——那条带里还有状态下拉，仍然有内容，切 tab 不塌。
-   分组的计数不用服务端的 group.nodeCount：那是全量，与上面的口径对不上 */
+/* 二级带只给第一跳：机场订阅是它的主视角（节点本就是按订阅链接成批导进来的），值少、每次都要切、
+   计数有意义。落地节点没有订阅，它的二级带就空着——那条带里还有状态下拉，仍然有内容，切 tab 不塌。
+   订阅的计数不用服务端的 group.nodeCount：那是全量，与上面的口径对不上 */
 const groupOptions = computed(() => [
   { value: "ALL" as const, label: "全部", count: frontNodes.value.length },
-  {
-    value: "NONE" as const,
-    label: "未分组",
-    count: frontNodes.value.filter((node) => node.groupId === null).length,
-  },
   ...groupList.value.map((group) => ({
     value: group.id,
     label: group.name,
-    count: frontNodes.value.filter((node) => node.groupId === group.id).length,
+    count: frontNodes.value.filter((node) => node.airportSubscriptionId === group.id).length,
   })),
 ]);
 
 /**
- * 分组的流量用量百分比。null 表示「该机场没提供额度头」，与 0% 是两回事——
+ * 订阅的流量用量百分比。null 表示「该机场没提供额度头」，与 0% 是两回事——
  * 不能把「没数据」显示成「用了 0%」，那是在骗人。total 缺失或非正也一并视为没有数据，
  * 避免除出 NaN / Infinity。封顶 100：机场统计口径可能比订阅端晚一拍，用量偶尔会略超总量。
  */
-function quotaPercent(group: NodeGroupResponse): number | null {
+function quotaPercent(group: AirportSubscriptionResponse): number | null {
   if (group.usedBytes === null || group.totalBytes === null || group.totalBytes <= 0) {
     return null;
   }
@@ -109,18 +102,16 @@ const statusOptions: { value: "ALL" | "ENABLED" | "DISABLED"; label: string }[] 
 ];
 
 const currentList = computed(() => {
-  // frontNodes / landNodes 已经过了状态下拉，这里只再叠一层分组
+  // frontNodes / landNodes 已经过了状态下拉，这里只再叠一层订阅
   const kind = currentRole.value === "FRONT" ? frontNodes.value : landNodes.value;
   if (currentRole.value !== "FRONT" || currentGroup.value === "ALL") {
     return kind;
   }
-  return kind.filter((node) =>
-    currentGroup.value === "NONE" ? node.groupId === null : node.groupId === currentGroup.value,
-  );
+  return kind.filter((node) => node.airportSubscriptionId === currentGroup.value);
 });
 
-/* 当前选中的分组对象。分组只属于第一跳，所以这里连 role 一起判——否则切到落地 tab 后，
-   上一次选中的分组操作（重新拉取 / 改名 / 删除分组）会跟着漏进落地视图的工具条。
+/* 当前选中的订阅对象。订阅只属于第一跳，所以这里连 role 一起判——否则切到落地 tab 后，
+   上一次选中的订阅操作（重新拉取 / 编辑 / 删除订阅）会跟着漏进落地视图的工具条。
    选中态只可能来自 chips 点击，正常恒能找到，找不到时按钮区整体不渲染 */
 const selectedGroup = computed(() =>
   currentRole.value === "FRONT" && typeof currentGroup.value === "number"
@@ -140,7 +131,7 @@ const emptyText = computed(() => {
     return "这一批里没有节点。";
   }
   return currentRole.value === "FRONT"
-    ? "还没有第一跳节点。手工建一个，或者把机场订阅链接整批导进来。"
+    ? "还没有第一跳节点。先建机场，再从订阅导入。"
     : "还没有落地节点。落地节点要填出口 IP 与容量，用户的出口就是从这里分配的。";
 });
 
@@ -154,11 +145,11 @@ async function load(): Promise<void> {
   try {
     const [nodes, groups] = await Promise.all([
       adminApi().listNodes(),
-      adminApi().listNodeGroups(),
+      adminApi().listAirportSubscriptions(),
     ]);
     allNodes.value = nodes;
     groupList.value = groups;
-    // 当前选中的分组被删掉后回落到「全部」
+    // 当前选中的订阅被删掉后回落到「全部」
     if (
       typeof currentGroup.value === "number" &&
       !groups.some((g) => g.id === currentGroup.value)
@@ -204,40 +195,8 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
-function openRefetch(group: NodeGroupResponse): void {
+function openRefetch(group: AirportSubscriptionResponse): void {
   refetchingGroup.value = group;
-}
-
-function openRename(group: NodeGroupResponse): void {
-  renamingGroup.value = group;
-  renameInput.value = group.name;
-}
-
-async function confirmRename(): Promise<void> {
-  if (!renamingGroup.value) {
-    return;
-  }
-  if (!renameInput.value.trim()) {
-    showToast("error", "分组名不能为空");
-    return;
-  }
-  renaming.value = true;
-  try {
-    await adminApi().renameNodeGroup(renamingGroup.value.id, {
-      name: renameInput.value.trim(),
-      remark: renamingGroup.value.remark ?? "",
-    });
-    showToast("success", "已改名");
-    renamingGroup.value = null;
-    await load();
-  } catch (error) {
-    showToast(
-      "error",
-      error instanceof BizError ? error.message : `改名失败：${(error as Error).message}`,
-    );
-  } finally {
-    renaming.value = false;
-  }
 }
 
 async function confirmDeleteGroup(): Promise<void> {
@@ -246,12 +205,12 @@ async function confirmDeleteGroup(): Promise<void> {
   }
   deletingGroup.value = true;
   try {
-    await adminApi().deleteNodeGroup(pendingDeleteGroup.value.id);
-    showToast("success", "已删除分组及其节点");
+    await adminApi().deleteAirportSubscription(pendingDeleteGroup.value.id);
+    showToast("success", "已删除订阅及其节点");
     pendingDeleteGroup.value = null;
     await load();
   } catch (error) {
-    // 410013：组内有节点被用户绑定。服务端中文提示直接用
+    // 410013：订阅仍被用户的第一跳列表引用。服务端中文提示直接用
     showToast(
       "error",
       error instanceof BizError ? error.message : `删除失败：${(error as Error).message}`,
@@ -269,7 +228,7 @@ onMounted(load);
     <template #facts>
       共 <span class="fact">{{ allNodes.length }}</span> 个节点 ·
       <span class="fact">{{ groupList.length }}</span>
-      个分组。落地节点按容量分配，已绑人数在表里直接可见。
+      个订阅。落地节点按容量分配，已绑人数在表里直接可见。
     </template>
     <template #actions>
       <button
@@ -280,7 +239,7 @@ onMounted(load);
       >
         从订阅导入
       </button>
-      <!-- 采购前的尽调工具：只读探测候选机场，不依赖当前选中的分组，故放页头而不是工具条 -->
+      <!-- 采购前的尽调工具：只读探测候选机场，不依赖当前选中的订阅，故放页头而不是工具条 -->
       <button
         v-if="currentRole === 'FRONT'"
         type="button"
@@ -289,18 +248,25 @@ onMounted(load);
       >
         尽调
       </button>
-      <button type="button" class="admin-btn" @click="create()">新建节点</button>
+      <!-- 第一跳只能来自机场订阅导入，这里不再提供手工新建的口子 -->
+      <button v-if="currentRole === 'LAND'" type="button" class="admin-btn" @click="create()">
+        新建节点
+      </button>
     </template>
   </PageHead>
 
   <!-- 一级：换的是看哪一跳，用 tab；二级是在这一跳里挑一批看，用 chip。两层不同形，管辖关系才读得出来 -->
   <ViewTabs v-model="currentRole" :options="roleOptions" label="按跳数分" />
 
-  <!-- 分组额度：机场订阅有流量额度，跑满会让该订阅下几十个节点同时全部失效，所以常驻展示、
-       不随「选中哪个分组」筛选变化——正因为不显眼才最该常驻提醒 -->
+  <!-- 订阅额度：机场订阅有流量额度，跑满会让该订阅下几十个节点同时全部失效，所以常驻展示、
+       不随「选中哪个订阅」筛选变化——正因为不显眼才最该常驻提醒 -->
   <div v-if="currentRole === 'FRONT' && groupList.length > 0" class="group-quota-panel">
     <div v-for="g in groupList" :key="g.id" class="group-quota-row">
       <span class="group-quota-name">{{ g.name }}</span>
+      <span class="muted group-quota-meta">
+        {{ g.airportName }} · {{ g.account }} · {{ g.bandwidthMbps }} Mbps · 主用
+        <span class="fact">{{ g.primaryUsed }} / {{ g.primaryCapacity }}</span>
+      </span>
       <template v-if="quotaPercent(g) !== null">
         <div class="group-quota-bar">
           <div class="group-quota-bar-fill" :style="{ width: `${quotaPercent(g)}%` }" />
@@ -319,7 +285,7 @@ onMounted(load);
       v-if="currentRole === 'FRONT'"
       v-model="currentGroup"
       :options="groupOptions"
-      label="按分组筛选"
+      label="按订阅筛选"
     />
     <Select
       v-model="currentStatus"
@@ -329,14 +295,16 @@ onMounted(load);
       :options="statusOptions"
     />
 
-    <!-- 选中某个分组时露出它的操作。这些是「当前所选批次」的操作，不是页面级操作，
+    <!-- 选中某个订阅时露出它的操作。这些是「当前所选批次」的操作，不是页面级操作，
          所以留在筛选带右侧，不上提到页头 -->
     <template v-if="selectedGroup">
       <span class="spacer" />
       <button type="button" class="admin-link" @click="openRefetch(selectedGroup)">重新拉取</button>
-      <button type="button" class="admin-link" @click="openRename(selectedGroup)">改名</button>
+      <button type="button" class="admin-link" @click="editingSubscription = selectedGroup">
+        编辑
+      </button>
       <button type="button" class="admin-link danger" @click="pendingDeleteGroup = selectedGroup">
-        删除分组
+        删除订阅
       </button>
     </template>
   </div>
@@ -348,7 +316,8 @@ onMounted(load);
     :empty-text="emptyText"
   >
     <template #empty-action>
-      <!-- 空态说明里许诺了哪几条路，就把哪几条路摆出来，顺序与页头右上那对按钮一致 -->
+      <!-- 空态说明里许诺了哪几条路，就把哪几条路摆出来。第一跳只有「从订阅导入」——
+           第一跳只能来自机场订阅，手工新建这条路已不存在；落地只有「新建节点」 -->
       <template v-if="kindEmpty">
         <button
           v-if="currentRole === 'FRONT'"
@@ -358,7 +327,9 @@ onMounted(load);
         >
           从订阅导入
         </button>
-        <button type="button" class="admin-btn" @click="create()">新建节点</button>
+        <button v-if="currentRole === 'LAND'" type="button" class="admin-btn" @click="create()">
+          新建节点
+        </button>
       </template>
       <button v-else type="button" class="admin-btn-ghost" @click="resetFilters()">查看全部</button>
     </template>
@@ -368,7 +339,7 @@ onMounted(load);
         <tr>
           <th>节点名</th>
           <th>协议</th>
-          <th v-if="currentRole === 'FRONT'">分组</th>
+          <th v-if="currentRole === 'FRONT'">订阅</th>
           <th>地址</th>
           <th>故障域</th>
           <template v-if="currentRole === 'LAND'">
@@ -387,7 +358,9 @@ onMounted(load);
           <td>{{ row.name }}</td>
           <td class="fact">{{ row.sourceType ?? row.protocol }}</td>
           <td v-if="currentRole === 'FRONT'">
-            <span v-if="row.groupName" class="pill">{{ row.groupName }}</span>
+            <span v-if="row.airportSubscriptionName" class="pill">{{
+              row.airportSubscriptionName
+            }}</span>
             <span v-else class="muted">—</span>
           </td>
           <td class="fact">{{ row.serverAddr }}:{{ row.port }}</td>
@@ -470,38 +443,26 @@ onMounted(load);
     @saved="load()"
     @close="refetchingGroup = null"
   />
-  <AdminModal
-    v-if="renamingGroup"
-    :title="`分组改名：${renamingGroup.name}`"
-    @close="renamingGroup = null"
-  >
-    <div class="admin-form">
-      <div class="admin-field">
-        <label for="group-rename">分组名</label>
-        <input id="group-rename" v-model="renameInput" class="admin-input" />
-      </div>
-    </div>
-    <template #footer>
-      <button type="button" class="admin-btn-ghost" @click="renamingGroup = null">取消</button>
-      <button type="button" class="admin-btn" :disabled="renaming" @click="confirmRename()">
-        {{ renaming ? "保存中…" : "保存" }}
-      </button>
-    </template>
-  </AdminModal>
+  <AirportSubscriptionEditModal
+    v-if="editingSubscription"
+    :subscription="editingSubscription"
+    @saved="load()"
+    @close="editingSubscription = null"
+  />
   <ConfirmDialog
     v-if="pendingDeleteGroup"
-    title="删除分组确认"
-    :message="`确认删除分组「${pendingDeleteGroup.name}」？组内 ${pendingDeleteGroup.nodeCount} 个节点会一并删除。`"
+    title="删除订阅确认"
+    :message="`确认删除订阅「${pendingDeleteGroup.name}」？该订阅下的 ${pendingDeleteGroup.nodeCount} 个节点会一并删除。`"
     :busy="deletingGroup"
     @confirm="confirmDeleteGroup()"
     @cancel="pendingDeleteGroup = null"
   />
-  <NodeGroupAuditModal v-if="auditModalOpen" @close="auditModalOpen = false" />
+  <AirportSubscriptionAuditModal v-if="auditModalOpen" @close="auditModalOpen = false" />
 </template>
 
 <style scoped>
-/* —— 分组额度：常驻一条，不随「选中哪个分组」的筛选变化。
-   跑满额度会让整个订阅下的节点同时失效，这条提醒不能只在点开某个分组时才看得到 —— */
+/* —— 订阅额度：常驻一条，不随「选中哪个订阅」的筛选变化。
+   跑满额度会让整个订阅下的节点同时失效，这条提醒不能只在点开某个订阅时才看得到 —— */
 .group-quota-panel {
   display: flex;
   flex-direction: column;
@@ -525,6 +486,11 @@ onMounted(load);
   min-width: 96px;
   font-weight: 600;
   color: var(--color-ink);
+}
+
+.group-quota-meta {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .group-quota-bar {

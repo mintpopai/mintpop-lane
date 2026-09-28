@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.entity.LinkReportDaily;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
@@ -18,6 +20,8 @@ class LinkReportDailyRepositoryTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private LinkReportDailyRepository repository;
@@ -38,9 +42,9 @@ class LinkReportDailyRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("u1", null, null);
+        userId = fixtures.createUser("u1", null);
     }
 
     private LinkReportDaily newRow(Long userId, String failureDomain, String asn, LocalDate statDate,
@@ -61,7 +65,7 @@ class LinkReportDailyRepositoryTest extends MysqlTestBase {
     @DisplayName("aggregateGlobalByDomainAndAsn 连用户维度也在 SQL 层求和掉，行数是分组数")
     void aggregateGlobalByDomainAndAsnGroupsAcrossUsers() {
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
 
         repository.upsertDay(newRow(userA, "jp.tsdns.top", "AS4134", DAY, 100, 90));
         repository.upsertDay(newRow(userB, "jp.tsdns.top", "AS4134", DAY, 50, 40));

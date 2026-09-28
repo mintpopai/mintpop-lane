@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.entity.Enterprise;
@@ -59,6 +61,8 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -150,11 +154,10 @@ class AdminSubscriptionControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        Long frontId = fixtures.createFrontNode("FRONT-1");
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, frontId, null);
-        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, frontId, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null);
         monthlyPlanId = createPlan("Claude 月付", AgentType.CLAUDE, 30, "99.99", true);
         codexMonthlyPlanId = createPlan("Codex 月付（凭据测试）", AgentType.CODEX, 30, "99.99", true);
     }

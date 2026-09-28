@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
@@ -57,6 +59,8 @@ class DeviceBindingControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -108,10 +112,10 @@ class DeviceBindingControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        ownerId = fixtures.createUser("logto-owner", null, null);
-        strangerId = fixtures.createUser("logto-stranger", null, null);
+        ownerId = fixtures.createUser("logto-owner", null);
+        strangerId = fixtures.createUser("logto-stranger", null);
         subscriptionId = fixtures.createSubscription(ownerId, CLAUDE, "Claude 月付",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "sk-ant-test");
     }
@@ -232,7 +236,7 @@ class DeviceBindingControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("过期订阅：绑定与换机申请都被拦下，报 510010")
     void expiredSubscriptionIsRejectedOnBothEndpoints() throws Exception {
-        Long expiredId = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository)
+        Long expiredId = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository)
                 .createSubscription(ownerId, CLAUDE, "Claude 月付（已过期）",
                         Instant.now().minus(60, ChronoUnit.DAYS),
                         Instant.now().minus(1, ChronoUnit.DAYS), "sk-ant-test");
@@ -259,7 +263,7 @@ class DeviceBindingControllerTest extends MysqlTestBase {
     @Test
     @DisplayName("待开通订阅（起期未填）：绑定与换机申请都被拦下，报 410041")
     void pendingActivationSubscriptionIsRejectedOnBothEndpoints() throws Exception {
-        Long pendingId = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository)
+        Long pendingId = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository)
                 .createSubscription(ownerId, CLAUDE, "Claude 月付（待开通）", null, null, "sk-ant-test");
 
         mockMvc.perform(post("/api/subscriptions/" + pendingId + "/device/bind")

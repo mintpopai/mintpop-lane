@@ -4,13 +4,16 @@ import type {
   AdminNodeResponse,
   AdminSubscriptionResponse,
   AdminUserResponse,
+  AirportResponse,
+  AirportSaveRequest,
+  AirportSubscriptionCreateRequest,
+  AirportSubscriptionResponse,
+  AirportSubscriptionUpdateRequest,
   CredentialAuthorizationStart,
   CredentialExchangeRequest,
   CredentialIssueResult,
   CredentialRevokeResult,
-  NodeGroupCreateRequest,
-  NodeGroupRenameRequest,
-  NodeGroupResponse,
+  FrontSubscriptionBrief,
   NodeProbeResponse,
   NodeRole,
   NodeSaveRequest,
@@ -60,13 +63,21 @@ export interface AdminApi {
   /** 强制解绑订阅当前绑定的设备。与有没有申请无关，故挂在订阅下 */
   unbindSubscriptionDevice(id: number): Promise<void>;
   /** 采购尽调：候选机场的试用订阅是否与库里已有节点撞故障域。只读，不落库 */
-  auditNodeGroup(body: SubAuditRequest): Promise<SubAuditResponse>;
-  createNodeGroup(body: NodeGroupCreateRequest): Promise<number>;
-  listNodeGroups(): Promise<NodeGroupResponse[]>;
-  renameNodeGroup(id: number, body: NodeGroupRenameRequest): Promise<void>;
+  auditAirportSubscription(body: SubAuditRequest): Promise<SubAuditResponse>;
+  createAirportSubscription(body: AirportSubscriptionCreateRequest): Promise<number>;
+  listAirportSubscriptions(): Promise<AirportSubscriptionResponse[]>;
+  updateAirportSubscription(id: number, body: AirportSubscriptionUpdateRequest): Promise<void>;
   /** 用保存的链接重新拉取，服务端自动导入其中的美国节点 */
-  importNodeGroup(id: number): Promise<void>;
-  deleteNodeGroup(id: number): Promise<void>;
+  importAirportSubscription(id: number): Promise<void>;
+  deleteAirportSubscription(id: number): Promise<void>;
+  listAirports(): Promise<AirportResponse[]>;
+  createAirport(body: AirportSaveRequest): Promise<number>;
+  updateAirport(id: number, body: AirportSaveRequest): Promise<void>;
+  deleteAirport(id: number): Promise<void>;
+  /** 自动分配：整份重算该用户在各机场的第一跳订阅，返回分配后的完整列表 */
+  allocateUserFront(id: number): Promise<FrontSubscriptionBrief[]>;
+  /** 取消分配：清空该用户的第一跳 */
+  clearUserFront(id: number): Promise<void>;
   listPlans(): Promise<PlanResponse[]>;
   createPlan(body: PlanSaveRequest): Promise<number>;
   updatePlan(id: number, body: PlanSaveRequest): Promise<void>;
@@ -188,34 +199,61 @@ export function createAdminApi(http: HttpClient): AdminApi {
       return http.request(`/admin/subscriptions/${id}/device/unbind`, { method: "POST" });
     },
 
-    auditNodeGroup(body) {
-      return http.request("/admin/node-groups/audit", {
+    auditAirportSubscription(body) {
+      return http.request("/admin/airport-subscriptions/audit", {
         method: "POST",
         body: JSON.stringify(body),
       });
     },
 
-    createNodeGroup(body) {
-      return http.request("/admin/node-groups", { method: "POST", body: JSON.stringify(body) });
+    createAirportSubscription(body) {
+      return http.request("/admin/airport-subscriptions", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     },
 
-    listNodeGroups() {
-      return http.request("/admin/node-groups");
+    listAirportSubscriptions() {
+      return http.request("/admin/airport-subscriptions");
     },
 
-    renameNodeGroup(id, body) {
-      return http.request(`/admin/node-groups/${id}`, {
+    updateAirportSubscription(id, body) {
+      return http.request(`/admin/airport-subscriptions/${id}`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
     },
 
-    importNodeGroup(id) {
-      return http.request(`/admin/node-groups/${id}/import`, { method: "POST" });
+    importAirportSubscription(id) {
+      return http.request(`/admin/airport-subscriptions/${id}/import`, { method: "POST" });
     },
 
-    deleteNodeGroup(id) {
-      return http.request(`/admin/node-groups/${id}`, { method: "DELETE" });
+    deleteAirportSubscription(id) {
+      return http.request(`/admin/airport-subscriptions/${id}`, { method: "DELETE" });
+    },
+
+    listAirports() {
+      return http.request("/admin/airports");
+    },
+
+    createAirport(body) {
+      return http.request("/admin/airports", { method: "POST", body: JSON.stringify(body) });
+    },
+
+    updateAirport(id, body) {
+      return http.request(`/admin/airports/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    deleteAirport(id) {
+      return http.request(`/admin/airports/${id}`, { method: "DELETE" });
+    },
+
+    allocateUserFront(id) {
+      return http.request(`/admin/users/${id}/front/allocate`, { method: "POST" });
+    },
+
+    clearUserFront(id) {
+      return http.request(`/admin/users/${id}/front`, { method: "DELETE" });
     },
 
     listPlans() {

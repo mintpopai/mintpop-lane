@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AdminNodeResponse, AdminUserResponse } from "../api/types";
-import {
-  buildUserPayload,
-  FRONT_SELECTION,
-  frontSelectionToAction,
-  selectableLandNodes,
-  userToForm,
-} from "./userForm";
+import { buildUserPayload, selectableLandNodes, userToForm } from "./userForm";
 
 function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
   return {
@@ -24,8 +18,8 @@ function makeNode(overrides: Partial<AdminNodeResponse>): AdminNodeResponse {
     secretConfigured: true,
     capacity: null,
     assignedUserCount: null,
-    groupId: null,
-    groupName: null,
+    airportSubscriptionId: null,
+    airportSubscriptionName: null,
     sourceType: null,
     failureDomain: null,
     createdAt: "2026-08-18T10:00:00",
@@ -41,10 +35,7 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
     email: "zhangsan@example.com",
     role: "MEMBER",
     status: "ACTIVE",
-    frontNodeId: 1,
-    frontNodeName: "US-01",
-    frontNodes: [],
-    failureDomainCount: 0,
+    frontSubscriptions: [],
     landNodeId: 11,
     landNodeName: "LAND-东京-03",
     egressIp: "1.2.3.4",
@@ -61,7 +52,6 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload({
       id: 5,
       status: "ACTIVE",
-      frontAction: "KEEP",
       landNodeId: null,
       remark: "",
     });
@@ -74,7 +64,6 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload({
       id: 5,
       status: "ACTIVE",
-      frontAction: "KEEP",
       landNodeId: 11,
       remark: "",
     });
@@ -86,7 +75,6 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload({
       id: 5,
       status: "ACTIVE",
-      frontAction: "KEEP",
       // el-select clearable 清空后 v-model 拿到的是 undefined，类型上仍标成 null
       landNodeId: undefined as unknown as null,
       remark: "",
@@ -99,7 +87,6 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload({
       id: 5,
       status: "ACTIVE",
-      frontAction: "KEEP",
       landNodeId: null,
       remark: "  老客户，续费谈过  ",
     });
@@ -111,7 +98,6 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload({
       id: 5,
       status: "ACTIVE",
-      frontAction: "KEEP",
       landNodeId: null,
       remark: "   ",
     });
@@ -123,7 +109,6 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload({
       id: 5,
       status: "SUSPENDED",
-      frontAction: "KEEP",
       landNodeId: null,
       remark: "",
     });
@@ -161,13 +146,12 @@ describe("selectableLandNodes", () => {
 });
 
 describe("userToForm", () => {
-  it("按新模型逐字段回填：第一跳一律是 KEEP", () => {
+  it("按新模型逐字段回填", () => {
     const form = userToForm(makeUser());
 
     expect(form).toEqual({
       id: 5,
       status: "ACTIVE",
-      frontAction: "KEEP",
       landNodeId: 11,
       remark: "",
     });
@@ -179,19 +163,5 @@ describe("userToForm", () => {
 
   it("有备注就原样回填", () => {
     expect(userToForm(makeUser({ remark: "试用期" })).remark).toBe("试用期");
-  });
-
-  it("回填永远是 KEEP——改备注、改状态这些保存不该顺手动别人的前置组", () => {
-    expect(userToForm(makeUser({ frontNodeId: 7 })).frontAction).toBe("KEEP");
-  });
-});
-
-describe("frontSelectionToAction", () => {
-  it("选「自动分配」发 AUTO：请服务端按故障域重算一组", () => {
-    expect(frontSelectionToAction(FRONT_SELECTION.AUTO_ALLOCATE)).toBe("AUTO");
-  });
-
-  it("选「不分配」发 CLEAR：字面意思的清空，而不是暗示自动分配", () => {
-    expect(frontSelectionToAction(null)).toBe("CLEAR");
   });
 });

@@ -1,0 +1,45 @@
+package ai.mintpop.lane.repository;
+
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
+
+import java.util.List;
+import java.util.Optional;
+
+/** 机场订阅的读写口。上层只依赖这个接口，看不到 MyBatis-Plus 与密文。 */
+public interface AirportSubscriptionRepository {
+
+    Optional<AirportSubscriptionDto> findById(Long id);
+
+    /** 全部订阅，按 id 升序 */
+    List<AirportSubscriptionDto> findAll();
+
+    /** 新建，返回自增主键 */
+    Long create(AirportSubscriptionDto group);
+
+    /** 按 id 更新。入参须是先 findById 拿到的完整 DTO */
+    void update(AirportSubscriptionDto group);
+
+    void deleteById(Long id);
+
+    boolean existsByName(String name);
+
+    /**
+     * 更新时的重名检查：排除自身那一行。
+     * 表的排序规则是忽略大小写的 ai_ci，只改大小写的改名会让 existsByName 匹配到自己，
+     * 必须按 id 排除，不能在 Java 层用 equals 比较新旧名字来代替。
+     */
+    boolean existsByNameExcludingId(String name, Long excludeId);
+
+    /** 该机场下是否还有订阅：删机场前的引用检查 */
+    boolean existsByAirportId(Long airportId);
+
+    /** 全部订阅并加行锁（SELECT … FOR UPDATE）：串行化并发的第一跳分配，必须在事务内调用 */
+    List<AirportSubscriptionDto> findAllForUpdate();
+
+    /**
+     * 按 id 查询并加行锁（SELECT … FOR UPDATE）：删订阅前先锁住该行，
+     * 与分配流程的 {@link #findAllForUpdate()} 争用同一把锁，避免「引用检查」与
+     * 「写入引用」两个事务交错导致删除时撞外键，必须在事务内调用。
+     */
+    Optional<AirportSubscriptionDto> findByIdForUpdate(Long id);
+}

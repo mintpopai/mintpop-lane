@@ -30,9 +30,9 @@ public record AdminNodeResponse(
         Integer capacity,
         /** 该落地节点当前绑定的用户数；非 LAND 为 null */
         Long assignedUserCount,
-        /** 所属分组；手工节点为 null */
-        Long groupId,
-        String groupName,
+        /** 所属机场订阅；手工节点为 null */
+        Long airportSubscriptionId,
+        String airportSubscriptionName,
         /** 订阅节点的真实 mihomo type（如 anytls）；手工节点为 null */
         String sourceType,
         /** 故障域：节点域名 CNAME 链的终点。仅对 FRONT 节点有意义；null 表示尚未解析或解析失败 */

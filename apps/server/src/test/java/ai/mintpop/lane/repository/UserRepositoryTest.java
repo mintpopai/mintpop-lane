@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.dto.UserDto;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.UserRole;
@@ -32,30 +34,29 @@ class UserRepositoryTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     private DatabaseFixtures fixtures;
-    private Long frontId;
     private Long landId;
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, repository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        frontId = fixtures.createFrontNode("FRONT-1");
         landId = fixtures.createLandNode("LAND-1", "203.0.113.10");
     }
 
     @Test
     @DisplayName("用户存取往返，邮箱能原样取回")
     void userRoundTrip() {
-        Long id = fixtures.createUser("logto-user-1", frontId, landId);
+        Long id = fixtures.createUser("logto-user-1", landId);
 
         UserDto loaded = repository.findBySubject("logto-user-1").orElseThrow();
 
         assertThat(loaded.getId()).isEqualTo(id);
         assertThat(loaded.getRole()).isEqualTo(UserRole.MEMBER);
         assertThat(loaded.getStatus()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(loaded.getFrontNodeId()).isEqualTo(frontId);
         assertThat(loaded.getLandNodeId()).isEqualTo(landId);
         assertThat(loaded.getEmail()).isEqualTo("logto-user-1@test.example");
         assertThat(loaded.getCreatedAt()).isNotNull();
@@ -64,9 +65,9 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("同一个 Logto 账号不能录两次")
     void sameSubjectCannotBeRegisteredTwice() {
-        fixtures.createUser("logto-user-1", frontId, null);
+        fixtures.createUser("logto-user-1", null);
 
-        assertThatThrownBy(() -> fixtures.createUser("logto-user-1", frontId, null))
+        assertThatThrownBy(() -> fixtures.createUser("logto-user-1", null))
                 .isInstanceOf(DuplicateKeyException.class);
         assertThat(repository.findBySubject("logto-user-1")).isPresent();
     }
@@ -74,8 +75,8 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("同一个落地节点可以绑给多个用户，计数随之增长")
     void sameLandNodeCanBindMultipleUsers() {
-        fixtures.createUser("logto-user-1", frontId, landId);
-        fixtures.createUser("logto-user-2", frontId, landId);
+        fixtures.createUser("logto-user-1", landId);
+        fixtures.createUser("logto-user-2", landId);
 
         assertThat(repository.countByLandNodeId(landId)).isEqualTo(2);
     }
@@ -83,7 +84,7 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("更新能把落地分配置空——null 必须真的写进库，不能被静默忽略")
     void updateCanClearLandAssignment() {
-        Long id = fixtures.createUser("logto-user-1", frontId, landId);
+        Long id = fixtures.createUser("logto-user-1", landId);
         UserDto user = repository.findById(id).orElseThrow();
         user.setLandNodeId(null);
         user.setStatus(UserStatus.SUSPENDED);
@@ -100,20 +101,18 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("按落地节点统计绑定人数，供节点删除与容量校验使用")
     void countUsersByLandNode() {
-        fixtures.createUser("logto-user-1", frontId, landId);
+        fixtures.createUser("logto-user-1", landId);
 
         assertThat(repository.countByLandNodeId(landId)).isEqualTo(1);
         assertThat(repository.countByLandNodeId(null)).isZero();
-        assertThat(repository.existsByFrontNodeId(frontId)).isTrue();
-        assertThat(repository.existsByFrontNodeId(landId)).isFalse();
     }
 
     @Test
     @DisplayName("分页搜索：关键字命中姓名或 subject，为空时返回全部")
     void pagedSearch() {
-        fixtures.createUser("logto-user-1", frontId, landId);
-        fixtures.createUser("logto-user-2", frontId, null);
-        fixtures.createUser("另一个人", frontId, null);
+        fixtures.createUser("logto-user-1", landId);
+        fixtures.createUser("logto-user-2", null);
+        fixtures.createUser("另一个人", null);
 
         assertThat(repository.search(null, null, 1, 10).total()).isEqualTo(3);
         assertThat(repository.search("logto-user", null, 1, 10).total()).isEqualTo(2);
@@ -131,8 +130,8 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("分页搜索：关键字也能命中邮箱")
     void pagedSearchMatchesEmail() {
-        fixtures.createUser("logto-user-1", frontId, landId);
-        fixtures.createUser("logto-user-2", frontId, null);
+        fixtures.createUser("logto-user-1", landId);
+        fixtures.createUser("logto-user-2", null);
 
         assertThat(repository.search("logto-user-1@test.example", null, 1, 10).records())
                 .singleElement()
@@ -143,10 +142,10 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("按有无在期订阅筛选")
     void filterByActiveSubscription() {
-        Long withSub = fixtures.createUser("logto-user-1", frontId, landId);
+        Long withSub = fixtures.createUser("logto-user-1", landId);
         fixtures.createSubscription(withSub, AgentType.CLAUDE, "Claude 席位",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), null);
-        fixtures.createUser("logto-user-2", frontId, null);
+        fixtures.createUser("logto-user-2", null);
 
         var activeOnly = repository.search(null, true, 1, 10);
         assertThat(activeOnly.total()).isEqualTo(1);
@@ -162,7 +161,7 @@ class UserRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("删除用户后落地出口即释放")
     void deleteUserReleasesLandNode() {
-        Long id = fixtures.createUser("logto-user-1", frontId, landId);
+        Long id = fixtures.createUser("logto-user-1", landId);
 
         repository.deleteById(id);
 

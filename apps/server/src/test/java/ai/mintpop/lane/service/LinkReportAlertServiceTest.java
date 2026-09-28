@@ -1,5 +1,7 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.repository.AsnOrgRepository;
@@ -55,6 +57,8 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired
     private LinkReportRepository linkReportRepository;
     @Autowired
@@ -76,9 +80,9 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("u1", null, null);
+        userId = fixtures.createUser("u1", null);
         email = "u1@test.example"; // DatabaseFixtures.createUser 固定拼 subject + "@test.example"
 
         notifyService = mock(NodeNotifyService.class);
@@ -316,7 +320,7 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @DisplayName("checkAll 定时扫描：多个不同用户的劣化各自独立推送，不是只看到第一个用户")
     void checkAllNotifiesEachDegradedUserIndependently() {
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
         String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5)); // 落在默认 15 分钟回看窗口内
 
@@ -334,9 +338,9 @@ class LinkReportAlertServiceTest extends MysqlTestBase {
     @Test
     @DisplayName("checkAll：两个不同用户共享同一故障域名时，各自按 userId 独立推送、不互相混淆")
     void checkAllDistinguishesUsersSharingSameFailureDomain() {
-        // 更贴近真实拓扑：多个用户接同一机场分组，共用同一个故障域名
+        // 更贴近真实拓扑：多个用户接同一机场订阅，共用同一个故障域名
         Long userA = userId;
-        Long userB = fixtures.createUser("u2", null, null);
+        Long userB = fixtures.createUser("u2", null);
         String emailB = "u2@test.example";
         Instant windowStart = NOW.minus(Duration.ofMinutes(5));
 

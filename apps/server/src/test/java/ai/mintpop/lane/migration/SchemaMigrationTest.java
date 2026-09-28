@@ -29,7 +29,7 @@ class SchemaMigrationTest extends MysqlTestBase {
         jdbc.execute("TRUNCATE TABLE subscription");
         jdbc.execute("TRUNCATE TABLE app_user");
         jdbc.execute("TRUNCATE TABLE proxy_node");
-        jdbc.execute("TRUNCATE TABLE node_group");
+        jdbc.execute("TRUNCATE TABLE airport_subscription");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
@@ -41,11 +41,11 @@ class SchemaMigrationTest extends MysqlTestBase {
         return jdbc.queryForObject("SELECT id FROM proxy_node WHERE name = ?", Long.class, name);
     }
 
-    private void createUser(String subject, long frontNodeId, Long landNodeId) {
+    private void createUser(String subject, Long landNodeId) {
         jdbc.update("""
-                INSERT INTO app_user (subject, email, front_node_id, land_node_id)
-                VALUES (?, ?, ?, ?)
-                """, subject, subject + "@test.example", frontNodeId, landNodeId);
+                INSERT INTO app_user (subject, email, land_node_id)
+                VALUES (?, ?, ?)
+                """, subject, subject + "@test.example", landNodeId);
     }
 
     @Test
@@ -89,10 +89,8 @@ class SchemaMigrationTest extends MysqlTestBase {
     @Test
     @DisplayName("多个用户可以同时处于「未分配落地」状态")
     void multipleUsersWithoutLandCanCoexist() {
-        long front = createNode("FRONT-1", "FRONT");
-
-        createUser("u1", front, null);
-        createUser("u2", front, null);
+        createUser("u1", null);
+        createUser("u2", null);
 
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM app_user", Integer.class)).isEqualTo(2);
     }
@@ -100,11 +98,10 @@ class SchemaMigrationTest extends MysqlTestBase {
     @Test
     @DisplayName("V5 后同一个落地节点可以绑给多个用户（容量制取代一人一座）")
     void sameLandNodeCanBindMultipleUsers() {
-        long front = createNode("FRONT-1", "FRONT");
         long land = createNode("LAND-1", "LAND");
 
-        createUser("u1", front, land);
-        createUser("u2", front, land);
+        createUser("u1", land);
+        createUser("u2", land);
 
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM app_user WHERE land_node_id = ?", Integer.class, land)).isEqualTo(2);
@@ -140,18 +137,18 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("V2 迁移建出 node_group 表并带中文注释，proxy_node 挂上分组外键列")
-    void v2MigrationCreatesNodeGroupTable() {
+    @DisplayName("V2 迁移建出 airport_subscription 表并带中文注释，proxy_node 挂上机场订阅外键列")
+    void v2MigrationCreatesAirportSubscriptionTable() {
         String comment = jdbc.queryForObject("""
                 SELECT column_comment FROM information_schema.columns
-                WHERE table_schema = DATABASE() AND table_name = 'node_group' AND column_name = 'sub_url_cipher'
+                WHERE table_schema = DATABASE() AND table_name = 'airport_subscription' AND column_name = 'sub_url_cipher'
                 """, String.class);
         assertThat(comment).contains("AES-GCM");
 
         Integer cols = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM information_schema.columns
                 WHERE table_schema = DATABASE() AND table_name = 'proxy_node'
-                  AND column_name IN ('group_id', 'source_name', 'source_type')
+                  AND column_name IN ('airport_subscription_id', 'source_name', 'source_type')
                 """, Integer.class);
         assertThat(cols).isEqualTo(3);
     }
@@ -528,59 +525,32 @@ class SchemaMigrationTest extends MysqlTestBase {
         try (Connection conn = dataSource.getConnection()) {
             assertThat(columnExists(conn, "proxy_node", "failure_domain")).isTrue();
             assertThat(columnExists(conn, "proxy_node", "failure_domain_checked_at")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_used_bytes")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_total_bytes")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_expires_at")).isTrue();
-            assertThat(columnExists(conn, "node_group", "traffic_alerted_pct")).isTrue();
-            assertThat(columnExists(conn, "node_group", "fetched_at")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_used_bytes")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_total_bytes")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_expires_at")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "traffic_alerted_pct")).isTrue();
+            assertThat(columnExists(conn, "airport_subscription", "fetched_at")).isTrue();
             assertThat(tableExists(conn, "entry_ip_history")).isTrue();
         }
     }
 
     @Test
-    @DisplayName("V21 建出 user_front_node 表，并把现有 front_node_id 回填进去")
-    void v21AddsUserFrontNodeTable() throws Exception {
+    @DisplayName("V28 删掉按节点分配的第一跳结构：user_front_node 表与 app_user.front_node_id 列都不复存在")
+    void v28DropsNodeBasedFrontAssignment() throws Exception {
         try (Connection conn = dataSource.getConnection()) {
-            assertThat(tableExists(conn, "user_front_node")).isTrue();
-            assertThat(columnExists(conn, "user_front_node", "user_id")).isTrue();
-            assertThat(columnExists(conn, "user_front_node", "node_id")).isTrue();
-            assertThat(columnComment(conn, "user_front_node", "node_id")).isNotBlank();
-            assertThat(columnComment(conn, "user_front_node", "user_id")).isNotBlank();
-            assertThat(columnComment(conn, "user_front_node", "id")).isNotBlank();
-            assertThat(columnComment(conn, "user_front_node", "created_at")).isNotBlank();
-            assertThat(isNullable(conn, "user_front_node", "user_id")).isFalse();
-            assertThat(isNullable(conn, "user_front_node", "node_id")).isFalse();
+            // V21 建的关联表与 V1 的主前置节点列一并删除，第一跳改由 user_front_subscription 按机场订阅承载
+            assertThat(tableExists(conn, "user_front_node")).isFalse();
+            assertThat(columnExists(conn, "app_user", "front_node_id")).isFalse();
+            assertThat(tableExists(conn, "user_front_subscription")).isTrue();
         }
 
-        // app_user.front_node_id 保留不动，但注释应已收窄为「主前置节点」语义
-        String frontNodeComment = jdbc.queryForObject("""
-                SELECT column_comment FROM information_schema.columns
-                WHERE table_schema = DATABASE() AND table_name = 'app_user' AND column_name = 'front_node_id'
-                """, String.class);
-        assertThat(frontNodeComment).contains("主前置节点");
-
-        // user_front_node 与 proxy_node/app_user 之间的外键存在，且 (user_id, node_id) 唯一，
-        // 这两点直接决定「回填不会产出脏数据、重复回填不会插出重复行」，比迁移时机上不可控的行数计数更有区分力
-        Integer fkToUser = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM information_schema.key_column_usage
-                WHERE table_schema = DATABASE() AND table_name = 'user_front_node'
-                  AND column_name = 'user_id' AND referenced_table_name = 'app_user'
+        // 外键随列一起删掉，app_user 不再引用前置节点
+        Integer fkToFront = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE() AND table_name = 'app_user'
+                  AND constraint_name = 'fk_app_user_front_node'
                 """, Integer.class);
-        assertThat(fkToUser).isEqualTo(1);
-
-        Integer fkToNode = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM information_schema.key_column_usage
-                WHERE table_schema = DATABASE() AND table_name = 'user_front_node'
-                  AND column_name = 'node_id' AND referenced_table_name = 'proxy_node'
-                """, Integer.class);
-        assertThat(fkToNode).isEqualTo(1);
-
-        Integer uniqueOnPair = jdbc.queryForObject("""
-                SELECT COUNT(DISTINCT column_name) FROM information_schema.statistics
-                WHERE table_schema = DATABASE() AND table_name = 'user_front_node'
-                  AND index_name = 'uk_user_front_node' AND non_unique = 0
-                """, Integer.class);
-        assertThat(uniqueOnPair).isEqualTo(2);
+        assertThat(fkToFront).isZero();
     }
 
     @Test

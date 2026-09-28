@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.client.StripeGateway;
 import ai.mintpop.lane.client.StripeWebhookEvent;
 import ai.mintpop.lane.config.PaymentProperties;
@@ -55,6 +57,8 @@ class PaymentControllerTest extends MysqlTestBase {
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private ProxyNodeRepository nodeRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private SubscriptionRepository subscriptionRepository;
@@ -97,10 +101,10 @@ class PaymentControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        buyerId = fixtures.createUser("logto-buyer", null, null);
-        otherId = fixtures.createUser("logto-other", null, null);
+        buyerId = fixtures.createUser("logto-buyer", null);
+        otherId = fixtures.createUser("logto-other", null);
         planId = DatabaseFixtures.createPlan(planRepository, "Claude 月付", AgentType.CLAUDE, 30, "99.99", true);
         // 测试配置里没有密钥；这里临时填上，让「已配置」分支可测。@AfterEach 复原
         paymentProperties.setSecretKey("sk_unit_test_placeholder");

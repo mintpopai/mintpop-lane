@@ -31,7 +31,11 @@ public class LinkHeartbeatRequest {
     /** alive 样本的延迟中位数（毫秒）；窗口内没有 alive 样本时为 null，0 是合法值 */
     private Integer p50LatencyMs;
 
-    /** 窗口内该故障域对应 fallback 组 now 字段发生变化的次数 */
+    /**
+     * 窗口内该故障域对应 fallback 组 now 字段发生变化的次数。已知限制见
+     * {@link ai.mintpop.lane.entity.LinkReport#getFailovers()} 的注释：内层改为
+     * url-test 后该计数含义已变化，且不含跨订阅（外层 us-front）的切换。
+     */
     private Integer failovers;
 
     /** 客户端实际解析到的中转入口 IP；客户端 DNS 解析失败时为 null */

@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.entity.LinkReportDaily;
@@ -60,6 +62,8 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -99,15 +103,15 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
     void setUp() {
         when(clock.instant()).thenReturn(NOW);
 
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         // entry_ip_history 不是用户维度的表，clearAll 不清它，这里单独清空以隔离各用例
         jdbc.execute("TRUNCATE TABLE entry_ip_history");
 
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
-        memberId = fixtures.createUser("logto-member", null, null);
-        userA = fixtures.createUser("u1", null, null);
-        userB = fixtures.createUser("u2", null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberId = fixtures.createUser("logto-member", null);
+        userA = fixtures.createUser("u1", null);
+        userB = fixtures.createUser("u2", null);
     }
 
     private void insertRawWindow(Long userId, String domain, String asn, Instant windowStart, int samples,

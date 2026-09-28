@@ -52,13 +52,19 @@ public class LinkReport {
      * 去掉注解，{@code p50CanBeClearedBackToNull} 照样通过；只有改坏 Mapper 里那行才会变红。
      * <p>
      * 注解仍然保留，是为了将来有人改用标准 update 调用时有一层防御（那条路径上它才真正生效，
-     * 形态同 {@link NodeGroup#getTrafficAlertedPct()}——一期就栽在那里，配额告警永久失声）。
+     * 形态同 {@link AirportSubscription#getTrafficAlertedPct()}——一期就栽在那里，配额告警永久失声）。
      * <b>新增任何写路径时，不要以为可空字段的清空已经由注解保证了，去看那条 SQL。</b>
      */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer p50LatencyMs;
 
-    /** 窗口内该故障域对应的 fallback 组 now 字段发生变化的次数，即故障转移次数 */
+    /**
+     * 窗口内该故障域对应的 fallback 组 now 字段发生变化的次数，即故障转移次数。
+     * 已知限制（机场订阅与第一跳分配四期后）：内层改为 url-test 后，该计数也会把
+     * "有更快节点出现"的择优切换计入，不再单纯是"原节点不可用才切换"；且只统计内层，
+     * 真正的跨订阅（主用/备用）切换发生在外层 us-front，目前不采集，本列反映不出来。
+     * 见设计文档 2026-09-28-机场订阅与第一跳分配-design.md 第六节。
+     */
     private Integer failovers;
 
     /** 客户端实际解析到的中转入口 IP；客户端解析失败时为 null */

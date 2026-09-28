@@ -1,12 +1,14 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.entity.UserDevice;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
@@ -49,6 +51,8 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -61,9 +65,6 @@ class LinkControllerTest extends MysqlTestBase {
 
     @Autowired
     private UserDeviceRepository userDeviceRepository;
-
-    @Autowired
-    private UserFrontNodeRepository userFrontNodeRepository;
 
     @Autowired
     private SessionTokenService sessionTokenService;
@@ -101,13 +102,18 @@ class LinkControllerTest extends MysqlTestBase {
         // 容忍范围内（那样测试会随沙箱系统时间漂移而变得不稳定）
         when(clock.instant()).thenReturn(Instant.now());
 
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        Long front = fixtures.createFrontNode("FRONT-1");
         Long land1 = fixtures.createLandNode("LAND-1", "77.47.143.6");
         Long land2 = fixtures.createLandNode("LAND-2", "8.8.8.8");
-        user1Id = fixtures.createActiveUser("logto-user-1", front, land1, "sk-ant-test-1");
-        user2Id = fixtures.createUser("logto-user-2", MEMBER, REVOKED, front, land2);
+        user1Id = fixtures.createActiveUser("logto-user-1", land1, "sk-ant-test-1");
+        user2Id = fixtures.createUser("logto-user-2", MEMBER, REVOKED, land2);
+
+        // 第一跳只能来自机场订阅：给 user1 分配一个默认订阅，下面有一个可用的美国节点
+        Long airportId = fixtures.createAirport("测试机场");
+        Long subscriptionGroupId = fixtures.createAirportSubscription(airportId, "front-sub-1", 300);
+        fixtures.createSubscriptionNode(subscriptionGroupId, "🇺🇸[US]Front-01", NodeStatus.ENABLED);
+        fixtures.assignFront(user1Id, subscriptionGroupId);
 
         // 把 user1 的席位绑到请求头所用的这台设备上，模拟「已完成绑定」的正常态——
         // 未绑定的订阅不下发凭据，见 LinkServiceImplTest 的绑定关系用例
@@ -131,7 +137,8 @@ class LinkControllerTest extends MysqlTestBase {
                         .header("X-Device-Id", DEVICE_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.front.type").value("trojan"))
+                .andExpect(jsonPath("$.data.front").doesNotExist())
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes[0].type").value("anytls"))
                 .andExpect(jsonPath("$.data.land.server").value("77.47.143.6"))
                 .andExpect(jsonPath("$.data.expectedEgressIp").value("77.47.143.6"))
                 .andExpect(jsonPath("$.data.agentCredentials[0].credential").value("sk-ant-test-1"))
@@ -141,42 +148,47 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("前置组按分配顺序下发，front 就是 front_node_id 指向的那个节点——"
-            + "取回若按 node_id 排序，客户端的首选位就会被 id 顺序覆盖掉分配器的负载排名")
-    void frontGroupKeepsAllocationOrderAndFrontMatchesPrimary() throws Exception {
-        String domain = "relay.order.example.net";
-        Long first = fixtures.createFrontNode("ORDER-1", "order-1.example.com", domain);
-        Long second = fixtures.createFrontNode("ORDER-2", "order-2.example.com", domain);
-        Long third = fixtures.createFrontNode("ORDER-3", "order-3.example.com", domain);
-        // 分配器挑出的顺序刻意与 node_id 升序不同：负载最低（＝排第一、写进 front_node_id）的
-        // 恰好是 id 最大的那个。三个节点同一个故障域，因此只有一个组
-        userFrontNodeRepository.replaceForUser(user1Id, List.of(third, first, second));
-        jdbc.update("UPDATE app_user SET front_node_id = ? WHERE id = ?", third, user1Id);
+    @DisplayName("frontGroups 按用户第一跳订阅的顺位排列，不按订阅 id 顺序——"
+            + "取回若按 id 升序排，客户端外层 fallback 的顺序就会被打乱")
+    void frontGroupsFollowAssignedSubscriptionOrder() throws Exception {
+        Long airportId = fixtures.createAirport("次序测试机场");
+        Long subA = fixtures.createAirportSubscription(airportId, "sub-a", 300);
+        Long subB = fixtures.createAirportSubscription(airportId, "sub-b", 300);
+        fixtures.createSubscriptionNode(subA, "🇺🇸[US]A-01", NodeStatus.ENABLED);
+        fixtures.createSubscriptionNode(subB, "🇺🇸[US]B-01", NodeStatus.ENABLED);
+        fixtures.createSubscriptionNode(subB, "🇺🇸[US]B-02", NodeStatus.ENABLED);
+        // 清空 setUp 里默认分配的第一跳，改成顺位与订阅 id 升序相反：节点更多的 subB 排第一
+        jdbc.update("DELETE FROM user_front_subscription WHERE user_id = ?", user1Id);
+        fixtures.assignFront(user1Id, subB, subA);
 
         mockMvc.perform(get("/api/link/config")
                         .header("Authorization", bearer(user1Id))
                         .header("X-Device-Id", DEVICE_ID))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.frontGroups").isArray())
-                .andExpect(jsonPath("$.data.frontGroups[0].failureDomain").value(domain))
-                .andExpect(jsonPath("$.data.frontGroups[0].nodes[0].server").value("order-3.example.com"))
-                .andExpect(jsonPath("$.data.frontGroups[0].nodes[1].server").value("order-1.example.com"))
-                .andExpect(jsonPath("$.data.frontGroups[0].nodes[2].server").value("order-2.example.com"))
-                // front 是老客户端唯一认得的字段，必须与 front_node_id 指向同一个节点
-                .andExpect(jsonPath("$.data.front.server").value("order-3.example.com"));
+                .andExpect(jsonPath("$.data.frontGroups.length()").value(2))
+                // subB（2 节点）排在顺位第一，subA（1 节点）排第二——
+                // 取回若按订阅 id 升序排（subA 更小），这两个组的位置会颠倒
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes.length()").value(2))
+                .andExpect(jsonPath("$.data.frontGroups[1].nodes.length()").value(1));
     }
 
     @Test
     @DisplayName("故障域未解析时 failureDomain 实打实下发成 null，而不是整个字段消失——"
             + "服务端没有全局 JsonInclude(NON_NULL)，客户端 DTO 必须按可空类型声明")
     void nullFailureDomainIsSerializedAsJsonNull() throws Exception {
-        // 夹具造的 FRONT-1 没有 failure_domain（手工新建的前置节点永远是这样），
-        // 走的正是「关联表为空时退回 front_node_id 单节点」那条路
+        // 订阅刷新还没跑第一轮时，回填出来的节点也可能全都没有故障域
+        Long airportId = fixtures.createAirport("空故障域机场");
+        Long subId = fixtures.createAirportSubscription(airportId, "null-domain-sub", 300);
+        fixtures.createMihomoNode("🇺🇸[US]Null-01", subId);
+        jdbc.update("DELETE FROM user_front_subscription WHERE user_id = ?", user1Id);
+        fixtures.assignFront(user1Id, subId);
+
         String body = mockMvc.perform(get("/api/link/config")
                         .header("Authorization", bearer(user1Id))
                         .header("X-Device-Id", DEVICE_ID))
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.frontGroups[0].nodes[0].type").value("trojan"))
+                .andExpect(jsonPath("$.data.frontGroups[0].nodes[0].type").value("anytls"))
                 .andReturn().getResponse().getContentAsString();
 
         // 用原始报文断言：jsonPath 分不清「值是 null」与「字段不存在」，而这两者对客户端

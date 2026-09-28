@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.entity.PlanOrder;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.OrderStatus;
@@ -40,6 +42,8 @@ class OrderControllerTest extends MysqlTestBase {
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private ProxyNodeRepository nodeRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private SubscriptionRepository subscriptionRepository;
@@ -69,11 +73,11 @@ class OrderControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        buyerId = fixtures.createUser("logto-buyer", null, null);
-        otherId = fixtures.createUser("logto-other", null, null);
-        suspendedId = fixtures.createUser("logto-suspended", MEMBER, SUSPENDED, null, null);
+        buyerId = fixtures.createUser("logto-buyer", null);
+        otherId = fixtures.createUser("logto-other", null);
+        suspendedId = fixtures.createUser("logto-suspended", MEMBER, SUSPENDED, null);
         monthlyPlanId = DatabaseFixtures.createPlan(planRepository, "Claude 月付", AgentType.CLAUDE, 30, "99.99", true);
         disabledPlanId = DatabaseFixtures.createPlan(planRepository, "已下架", AgentType.CLAUDE, 30, "1.00", false);
     }

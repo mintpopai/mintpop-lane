@@ -119,6 +119,14 @@ describe("路由守卫", () => {
     expect(router.currentRoute.value.path).toBe("/users/7");
   });
 
+  it("机场管理挂在 /airports 上，路由名为 AIRPORTS（侧边栏按名字跳转，名字错了会运行时报错）", async () => {
+    const router = createRouter(adminUser);
+
+    await router.push({ name: "AIRPORTS" });
+
+    expect(router.currentRoute.value.path).toBe("/airports");
+  });
+
   it("企业管理挂在 /enterprises 上，路由名为 ENTERPRISES（侧边栏按名字跳转，名字错了会运行时报错）", async () => {
     const router = createRouter(adminUser);
 

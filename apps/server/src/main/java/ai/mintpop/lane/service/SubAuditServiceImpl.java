@@ -5,13 +5,13 @@ import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.config.EntryIpWatchProperties;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.response.SubAuditResponse;
 import ai.mintpop.lane.response.SubAuditResponse.FailureDomainReport;
@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  * 现实问题：两家不同品牌的机场，节点域名可能 CNAME 到同一家中转服务商——真这样的话，
  * 花两份钱买的其实是同一个故障域，入口一挂两家一起挂，冗余是假的，而且不主动查发现不了。
  * 这个接口就是主动去查：把候选订阅解析出的节点故障域，与库里已有 FRONT 节点的故障域比对，
- * 撞了就把对应分组名列进 conflictsWith——非空即应否决这次采购。
+ * 撞了就把对应订阅名列进 conflictsWith——非空即应否决这次采购。
  */
 @Service
 public class SubAuditServiceImpl implements SubAuditService {
@@ -46,13 +46,13 @@ public class SubAuditServiceImpl implements SubAuditService {
     private final EcsDnsClient ecsDnsClient;
     private final IpAsnClient ipAsnClient;
     private final ProxyNodeRepository nodeRepository;
-    private final NodeGroupRepository groupRepository;
+    private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final EntryIpWatchProperties entryIpWatchProperties;
 
     public SubAuditServiceImpl(SubFetchClient subFetchClient, SubYamlParser subYamlParser,
                                 FailureDomainSyncer failureDomainSyncer, EcsDnsClient ecsDnsClient,
                                 IpAsnClient ipAsnClient, ProxyNodeRepository nodeRepository,
-                                NodeGroupRepository groupRepository,
+                                AirportSubscriptionRepository airportSubscriptionRepository,
                                 EntryIpWatchProperties entryIpWatchProperties) {
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
@@ -60,7 +60,7 @@ public class SubAuditServiceImpl implements SubAuditService {
         this.ecsDnsClient = ecsDnsClient;
         this.ipAsnClient = ipAsnClient;
         this.nodeRepository = nodeRepository;
-        this.groupRepository = groupRepository;
+        this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.entryIpWatchProperties = entryIpWatchProperties;
     }
 
@@ -174,7 +174,7 @@ public class SubAuditServiceImpl implements SubAuditService {
 
     /**
      * 候选故障域若命中库里已有 FRONT 节点的故障域，说明撞了同一家中转——
-     * 按撞上的已有节点所属分组，返回去重后的分组名列表；未撞返回空列表。
+     * 按撞上的已有节点所属订阅，返回去重后的订阅名列表；未撞返回空列表。
      */
     private List<String> findConflictingGroups(Set<String> candidateDomains) {
         if (candidateDomains.isEmpty()) {
@@ -183,14 +183,14 @@ public class SubAuditServiceImpl implements SubAuditService {
         Set<Long> conflictedGroupIds = nodeRepository.findAll(NodeRole.FRONT).stream()
                 .filter(node -> node.getFailureDomain() != null
                         && candidateDomains.contains(node.getFailureDomain())
-                        && node.getGroupId() != null)
-                .map(ProxyNodeDto::getGroupId)
+                        && node.getAirportSubscriptionId() != null)
+                .map(ProxyNodeDto::getAirportSubscriptionId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (conflictedGroupIds.isEmpty()) {
             return List.of();
         }
-        Map<Long, String> groupNames = groupRepository.findAll().stream()
-                .collect(Collectors.toMap(NodeGroupDto::getId, NodeGroupDto::getName, (a, b) -> a,
+        Map<Long, String> groupNames = airportSubscriptionRepository.findAll().stream()
+                .collect(Collectors.toMap(AirportSubscriptionDto::getId, AirportSubscriptionDto::getName, (a, b) -> a,
                         LinkedHashMap::new));
         return conflictedGroupIds.stream()
                 .map(groupNames::get)

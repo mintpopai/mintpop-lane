@@ -1,11 +1,12 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BizError } from "../api/http";
-import type { AdminNodeResponse, NodeGroupResponse } from "../api/types";
+import type { AdminNodeResponse, AirportSubscriptionResponse } from "../api/types";
+import AirportSubscriptionAuditModal from "../components/AirportSubscriptionAuditModal.vue";
+import AirportSubscriptionEditModal from "../components/AirportSubscriptionEditModal.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import NodeFormModal from "../components/NodeFormModal.vue";
-import NodeGroupAuditModal from "../components/NodeGroupAuditModal.vue";
 import NodeProbeModal from "../components/NodeProbeModal.vue";
 import SubImportModal from "../components/SubImportModal.vue";
 import { showToast } from "../toast";
@@ -13,18 +14,16 @@ import { formatDate, formatDateTime } from "../utils/format";
 import NodesView from "./NodesView.vue";
 
 const listNodes = vi.fn<() => Promise<AdminNodeResponse[]>>();
-const listNodeGroups = vi.fn<() => Promise<NodeGroupResponse[]>>();
+const listAirportSubscriptions = vi.fn<() => Promise<AirportSubscriptionResponse[]>>();
 const deleteNode = vi.fn<(id: number) => Promise<void>>(async () => undefined);
-const deleteNodeGroup = vi.fn<(id: number) => Promise<void>>(async () => undefined);
-const renameNodeGroup = vi.fn<(id: number, body: unknown) => Promise<void>>(async () => undefined);
+const deleteAirportSubscription = vi.fn<(id: number) => Promise<void>>(async () => undefined);
 
 vi.mock("../api", () => ({
   adminApi: () => ({
     listNodes,
-    listNodeGroups,
+    listAirportSubscriptions,
     deleteNode,
-    deleteNodeGroup,
-    renameNodeGroup,
+    deleteAirportSubscription,
   }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
@@ -45,8 +44,8 @@ function node(overrides: Partial<AdminNodeResponse> = {}): AdminNodeResponse {
     secretConfigured: true,
     capacity: 0,
     assignedUserCount: 0,
-    groupId: null,
-    groupName: null,
+    airportSubscriptionId: null,
+    airportSubscriptionName: null,
     sourceType: null,
     failureDomain: null,
     createdAt: "2026-09-01T00:00:00Z",
@@ -55,7 +54,7 @@ function node(overrides: Partial<AdminNodeResponse> = {}): AdminNodeResponse {
   };
 }
 
-function group(overrides: Partial<NodeGroupResponse> = {}): NodeGroupResponse {
+function group(overrides: Partial<AirportSubscriptionResponse> = {}): AirportSubscriptionResponse {
   return {
     id: 100,
     name: "机场 A",
@@ -63,11 +62,17 @@ function group(overrides: Partial<NodeGroupResponse> = {}): NodeGroupResponse {
     // 服务端给的是全量计数，页面刻意不用它
     nodeCount: 999,
     remark: null,
-    // 默认不给额度头，与「机场没提供」这条真实情况对齐；要测有额度的分组时逐个 override
+    airportId: 1,
+    airportName: "泰山云",
+    account: "a@x.com",
+    bandwidthMbps: 300,
+    // 默认不给额度头，与「机场没提供」这条真实情况对齐；要测有额度的订阅时逐个 override
     usedBytes: null,
     totalBytes: null,
     expiresAt: null,
     fetchedAt: null,
+    primaryUsed: 0,
+    primaryCapacity: 15,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
     ...overrides,
@@ -76,16 +81,28 @@ function group(overrides: Partial<NodeGroupResponse> = {}): NodeGroupResponse {
 
 const GROUPS = [group({ id: 100, name: "机场 A" }), group({ id: 200, name: "机场 B" })];
 const NODES = [
-  node({ id: 1, name: "FRONT-A1", role: "FRONT", groupId: 100, groupName: "机场 A" }),
+  node({
+    id: 1,
+    name: "FRONT-A1",
+    role: "FRONT",
+    airportSubscriptionId: 100,
+    airportSubscriptionName: "机场 A",
+  }),
   node({
     id: 2,
     name: "FRONT-A2",
     role: "FRONT",
-    groupId: 100,
-    groupName: "机场 A",
+    airportSubscriptionId: 100,
+    airportSubscriptionName: "机场 A",
     status: "DISABLED",
   }),
-  node({ id: 3, name: "FRONT-散", role: "FRONT", groupId: null, groupName: null }),
+  node({
+    id: 3,
+    name: "FRONT-散",
+    role: "FRONT",
+    airportSubscriptionId: null,
+    airportSubscriptionName: null,
+  }),
   node({
     id: 4,
     name: "LAND-东京",
@@ -100,7 +117,9 @@ const NODES = [
 beforeEach(() => {
   vi.clearAllMocks();
   listNodes.mockResolvedValue(NODES);
-  listNodeGroups.mockResolvedValue(GROUPS);
+  listAirportSubscriptions.mockResolvedValue(GROUPS);
+  // jsdom 不实现 scrollIntoView，AdminSelect 展开面板定位高亮项时会调它
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -129,28 +148,28 @@ async function setStatus(wrapper: Wrapper, status: "ALL" | "ENABLED" | "DISABLED
   await wrapper.vm.$nextTick();
 }
 
-/** 只关心分组额度展示时用：节点列表留空，只喂分组数据 */
-async function mountNodesViewWithGroups(groups: Partial<NodeGroupResponse>[]) {
+/** 只关心订阅额度展示时用：节点列表留空，只喂订阅数据 */
+async function mountNodesViewWithGroups(groups: Partial<AirportSubscriptionResponse>[]) {
   listNodes.mockResolvedValue([]);
-  listNodeGroups.mockResolvedValue(groups.map((g) => group(g)));
+  listAirportSubscriptions.mockResolvedValue(groups.map((g) => group(g)));
   return render();
 }
 
-async function setGroup(wrapper: Wrapper, value: "ALL" | "NONE" | number) {
+async function setGroup(wrapper: Wrapper, value: "ALL" | number) {
   wrapper.findComponent({ name: "FilterChips" }).vm.$emit("update:modelValue", value);
   await wrapper.vm.$nextTick();
 }
 
 describe("NodesView 加载", () => {
-  it("进页同时拉节点与分组，默认停在第一跳", async () => {
+  it("进页同时拉节点与订阅，默认停在第一跳", async () => {
     const wrapper = await render();
 
     expect(listNodes).toHaveBeenCalledOnce();
-    expect(listNodeGroups).toHaveBeenCalledOnce();
+    expect(listAirportSubscriptions).toHaveBeenCalledOnce();
     expect(names(wrapper)).toEqual(["FRONT-A1", "FRONT-A2", "FRONT-散"]);
   });
 
-  it("页头给整页规模：节点总数与分组数，不随筛选变", async () => {
+  it("页头给整页规模：节点总数与订阅数，不随筛选变", async () => {
     const wrapper = await render();
 
     expect(wrapper.get(".page-facts").text()).toContain("共 4 个节点");
@@ -193,15 +212,15 @@ describe("NodesView 按跳数分", () => {
     const wrapper = await render();
     const frontHeaders = wrapper.findAll("thead th").map((th) => th.text());
     expect(frontHeaders).not.toContain("出口 IP");
-    expect(frontHeaders).toContain("分组");
+    expect(frontHeaders).toContain("订阅");
 
     await switchTo(wrapper, "LAND");
     const landHeaders = wrapper.findAll("thead th").map((th) => th.text());
     expect(landHeaders).toContain("出口 IP");
     expect(landHeaders).toContain("出口时区");
     expect(landHeaders).toContain("已绑 / 容量");
-    // 分组只属于第一跳
-    expect(landHeaders).not.toContain("分组");
+    // 订阅只属于第一跳
+    expect(landHeaders).not.toContain("订阅");
   });
 
   it("检测只对落地节点开放：前置节点走加密协议，服务端没内核连不了", async () => {
@@ -223,8 +242,8 @@ describe("NodesView 按跳数分", () => {
   });
 });
 
-describe("NodesView 分组带", () => {
-  it("分组是第一跳的主视角，落地那边整条 chip 带都不出", async () => {
+describe("NodesView 订阅带", () => {
+  it("订阅是第一跳的主视角，落地那边整条 chip 带都不出", async () => {
     const wrapper = await render();
     expect(wrapper.findComponent({ name: "FilterChips" }).exists()).toBe(true);
 
@@ -232,12 +251,11 @@ describe("NodesView 分组带", () => {
     expect(wrapper.findComponent({ name: "FilterChips" }).exists()).toBe(false);
   });
 
-  it("分组计数按本地口径数，不用服务端那个全量的 nodeCount", async () => {
+  it("订阅计数按本地口径数，不用服务端那个全量的 nodeCount", async () => {
     const wrapper = await render();
 
     expect(wrapper.findComponent({ name: "FilterChips" }).props("options")).toEqual([
       { value: "ALL", label: "全部", count: 3 },
-      { value: "NONE", label: "未分组", count: 1 },
       { value: 100, label: "机场 A", count: 2 },
       { value: 200, label: "机场 B", count: 0 },
     ]);
@@ -245,17 +263,14 @@ describe("NodesView 分组带", () => {
     expect(GROUPS[0].nodeCount).toBe(999);
   });
 
-  it("选某个分组就只剩那一批，选「未分组」只剩散的", async () => {
+  it("选某个订阅就只剩那一批", async () => {
     const wrapper = await render();
 
     await setGroup(wrapper, 100);
     expect(names(wrapper)).toEqual(["FRONT-A1", "FRONT-A2"]);
-
-    await setGroup(wrapper, "NONE");
-    expect(names(wrapper)).toEqual(["FRONT-散"]);
   });
 
-  it("分组与状态两级条件叠加", async () => {
+  it("订阅与状态两级条件叠加", async () => {
     const wrapper = await render();
 
     await setGroup(wrapper, 100);
@@ -264,16 +279,16 @@ describe("NodesView 分组带", () => {
     expect(names(wrapper)).toEqual(["FRONT-A1"]);
   });
 
-  it("选中分组才露出它的操作，没选时工具条里没有这几个口子", async () => {
+  it("选中订阅才露出它的操作，没选时工具条里没有这几个口子", async () => {
     const wrapper = await render();
     const groupActions = () => wrapper.findAll(".admin-toolbar .admin-link").map((b) => b.text());
     expect(groupActions()).toEqual([]);
 
     await setGroup(wrapper, 100);
-    expect(groupActions()).toEqual(["重新拉取", "改名", "删除分组"]);
+    expect(groupActions()).toEqual(["重新拉取", "编辑", "删除订阅"]);
   });
 
-  it("切到落地 tab 后，上一次选中的分组操作不会漏进来", async () => {
+  it("切到落地 tab 后，上一次选中的订阅操作不会漏进来", async () => {
     const wrapper = await render();
     await setGroup(wrapper, 100);
     expect(wrapper.findAll(".admin-toolbar .admin-link")).toHaveLength(3);
@@ -283,13 +298,13 @@ describe("NodesView 分组带", () => {
     expect(wrapper.findAll(".admin-toolbar .admin-link")).toHaveLength(0);
   });
 
-  it("选中的分组被删掉后，筛选回落到「全部」而不是卡在一个不存在的组上", async () => {
+  it("选中的订阅被删掉后，筛选回落到「全部」而不是卡在一个不存在的订阅上", async () => {
     const wrapper = await render();
     await setGroup(wrapper, 100);
     expect(names(wrapper)).toHaveLength(2);
 
-    listNodeGroups.mockResolvedValue([group({ id: 200, name: "机场 B" })]);
-    listNodes.mockResolvedValue(NODES.filter((n) => n.groupId !== 100));
+    listAirportSubscriptions.mockResolvedValue([group({ id: 200, name: "机场 B" })]);
+    listNodes.mockResolvedValue(NODES.filter((n) => n.airportSubscriptionId !== 100));
     wrapper.findAll(".admin-toolbar .admin-link")[2].trigger("click");
     await wrapper.vm.$nextTick();
     wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
@@ -299,65 +314,64 @@ describe("NodesView 分组带", () => {
   });
 });
 
-describe("NodesView 分组操作", () => {
-  async function selectGroupAnd(wrapper: Wrapper, action: "重新拉取" | "改名" | "删除分组") {
+describe("NodesView 订阅操作", () => {
+  async function selectGroupAnd(wrapper: Wrapper, action: "重新拉取" | "编辑" | "删除订阅") {
     await setGroup(wrapper, 100);
     const button = wrapper.findAll(".admin-toolbar .admin-link").find((b) => b.text() === action)!;
     await button.trigger("click");
   }
 
-  it("改名时先把原名填进输入框，省得重打", async () => {
+  it("「编辑」打开的是订阅编辑弹窗，带着这个订阅", async () => {
     const wrapper = await render();
 
-    await selectGroupAnd(wrapper, "改名");
+    await selectGroupAnd(wrapper, "编辑");
 
-    expect(document.querySelector<HTMLInputElement>(".dialog .admin-input")?.value).toBe("机场 A");
+    expect(wrapper.findComponent(AirportSubscriptionEditModal).props("subscription")).toMatchObject(
+      {
+        id: 100,
+        name: "机场 A",
+      },
+    );
   });
 
-  it("改名不许改成空的", async () => {
+  it("订阅编辑弹窗 saved 后刷新列表", async () => {
     const wrapper = await render();
-    await selectGroupAnd(wrapper, "改名");
+    await selectGroupAnd(wrapper, "编辑");
 
-    const input = document.querySelector<HTMLInputElement>(".dialog .admin-input")!;
-    input.value = "   ";
-    input.dispatchEvent(new Event("input"));
-    await wrapper.vm.$nextTick();
-    document.querySelector<HTMLButtonElement>(".dialog .admin-btn")!.click();
+    wrapper.findComponent(AirportSubscriptionEditModal).vm.$emit("saved");
     await flushPromises();
 
-    expect(showToast).toHaveBeenCalledWith("error", "分组名不能为空");
-    expect(renameNodeGroup).not.toHaveBeenCalled();
-  });
-
-  it("改名成功后刷新列表", async () => {
-    const wrapper = await render();
-    await selectGroupAnd(wrapper, "改名");
-
-    document.querySelector<HTMLButtonElement>(".dialog .admin-btn")!.click();
-    await flushPromises();
-
-    expect(renameNodeGroup).toHaveBeenCalledWith(100, { name: "机场 A", remark: "" });
-    expect(showToast).toHaveBeenCalledWith("success", "已改名");
     expect(listNodes).toHaveBeenCalledTimes(2);
   });
 
-  it("删除分组会连带组内节点，确认文案要说清这一点", async () => {
+  it("订阅编辑弹窗关闭后不再渲染", async () => {
+    const wrapper = await render();
+    await selectGroupAnd(wrapper, "编辑");
+    expect(wrapper.findComponent(AirportSubscriptionEditModal).exists()).toBe(true);
+
+    wrapper.findComponent(AirportSubscriptionEditModal).vm.$emit("close");
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent(AirportSubscriptionEditModal).exists()).toBe(false);
+  });
+
+  it("删除订阅会连带组内节点，确认文案要说清这一点", async () => {
     const wrapper = await render();
 
-    await selectGroupAnd(wrapper, "删除分组");
+    await selectGroupAnd(wrapper, "删除订阅");
 
     expect(wrapper.findComponent(ConfirmDialog).exists()).toBe(true);
     wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
     await flushPromises();
 
-    expect(deleteNodeGroup).toHaveBeenCalledWith(100);
-    expect(showToast).toHaveBeenCalledWith("success", "已删除分组及其节点");
+    expect(deleteAirportSubscription).toHaveBeenCalledWith(100);
+    expect(showToast).toHaveBeenCalledWith("success", "已删除订阅及其节点");
   });
 
   it("组内有节点被用户绑着时删不掉，用服务端那句中文", async () => {
-    deleteNodeGroup.mockRejectedValueOnce(new BizError(410013, "组内节点仍被用户绑定"));
+    deleteAirportSubscription.mockRejectedValueOnce(new BizError(410013, "组内节点仍被用户绑定"));
     const wrapper = await render();
-    await selectGroupAnd(wrapper, "删除分组");
+    await selectGroupAnd(wrapper, "删除订阅");
 
     wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
     await flushPromises();
@@ -365,7 +379,7 @@ describe("NodesView 分组操作", () => {
     expect(showToast).toHaveBeenCalledWith("error", "组内节点仍被用户绑定");
   });
 
-  it("「重新拉取」打开的是订阅导入弹窗，带着这个分组", async () => {
+  it("「重新拉取」打开的是订阅导入弹窗，带着这个订阅", async () => {
     const wrapper = await render();
 
     await selectGroupAnd(wrapper, "重新拉取");
@@ -393,10 +407,10 @@ describe("NodesView 空态", () => {
   });
 
   it("有节点但筛没了是另一回事：空态说法按原始数量判，不按筛完的", async () => {
-    // 三个第一跳节点里没有「未分组 + 已禁用」的组合
+    // 机场 B 订阅下一个节点都没有，叠加「已禁用」依然是空
     const wrapper = await render();
 
-    await setGroup(wrapper, "NONE");
+    await setGroup(wrapper, 200);
     await setStatus(wrapper, "DISABLED");
 
     expect(wrapper.findComponent(DataCard).props("empty")).toBe(true);
@@ -405,7 +419,7 @@ describe("NodesView 空态", () => {
 
   it("筛没了时给「查看全部」，一点把两级条件都清掉", async () => {
     const wrapper = await render();
-    await setGroup(wrapper, "NONE");
+    await setGroup(wrapper, 200);
     await setStatus(wrapper, "DISABLED");
 
     const reset = wrapper.findAll(".admin-btn-ghost").find((b) => b.text() === "查看全部")!;
@@ -414,15 +428,20 @@ describe("NodesView 空态", () => {
     expect(names(wrapper)).toHaveLength(3);
   });
 
-  it("空态给的路与页头右上那对按钮一致：第一跳两条路，落地只有一条", async () => {
+  it("第一跳空态只给「从订阅导入」，不再提供手工新建的口子", async () => {
     listNodes.mockResolvedValue([]);
     const wrapper = await render();
 
-    const frontActions = wrapper.findAll(".card-state-actions button").map((b) => b.text());
-    expect(frontActions).toEqual(["从订阅导入", "新建节点"]);
+    expect(wrapper.findAll(".card-state-actions button").map((b) => b.text())).toEqual([
+      "从订阅导入",
+    ]);
+  });
 
+  it("落地空态只给「新建节点」", async () => {
+    listNodes.mockResolvedValue([]);
+    const wrapper = await render();
     await switchTo(wrapper, "LAND");
-    // 落地节点没有订阅导入这条路
+
     expect(wrapper.findAll(".card-state-actions button").map((b) => b.text())).toEqual([
       "新建节点",
     ]);
@@ -430,20 +449,33 @@ describe("NodesView 空态", () => {
 });
 
 describe("NodesView 增删改", () => {
-  it("「从订阅导入」「尽调」只在第一跳出现在页头", async () => {
+  it("「从订阅导入」「尽调」只在第一跳出现在页头，「新建节点」只在落地出现", async () => {
     const wrapper = await render();
     expect(wrapper.findAll(".page-head-actions button").map((b) => b.text())).toEqual([
       "从订阅导入",
       "尽调",
-      "新建节点",
     ]);
 
     await switchTo(wrapper, "LAND");
     expect(wrapper.findAll(".page-head-actions button").map((b) => b.text())).toEqual(["新建节点"]);
   });
 
+  it("第一跳页签不显示新建节点：第一跳只能来自机场订阅导入", async () => {
+    const wrapper = await render();
+
+    expect(
+      wrapper.findAll(".page-head-actions button").find((b) => b.text() === "新建节点"),
+    ).toBeUndefined();
+
+    await switchTo(wrapper, "LAND");
+    expect(
+      wrapper.findAll(".page-head-actions button").find((b) => b.text() === "新建节点"),
+    ).not.toBeUndefined();
+  });
+
   it("新建不带待编辑记录，编辑带上这一行", async () => {
     const wrapper = await render();
+    await switchTo(wrapper, "LAND");
 
     const createBtn = wrapper
       .findAll(".page-head-actions button")
@@ -453,6 +485,7 @@ describe("NodesView 增删改", () => {
 
     wrapper.findComponent(NodeFormModal).vm.$emit("close");
     await wrapper.vm.$nextTick();
+    await switchTo(wrapper, "FRONT");
     await wrapper.findAll("tbody tr")[0].findAll(".actions button")[0].trigger("click");
     expect(wrapper.findComponent(NodeFormModal).props("editing")).toMatchObject({
       id: 1,
@@ -555,17 +588,17 @@ describe("NodesView 表格内容", () => {
 });
 
 // 尽调弹窗自身的行为（否决态样式、美国节点名单、失败提示等）已随组件拆分迁到
-// NodeGroupAuditModal.spec.ts；这里只管「点尽调按钮真的打开/关闭了这个弹窗」，
+// AirportSubscriptionAuditModal.spec.ts；这里只管「点尽调按钮真的打开/关闭了这个弹窗」，
 // 与「重新拉取」打开 SubImportModal、检测打开 NodeProbeModal 是同一层次的浅断言。
 describe("NodesView 订阅尽调", () => {
   it("「尽调」按钮只在第一跳出现，点了就打开尽调弹窗", async () => {
     const wrapper = await render();
-    expect(wrapper.findComponent(NodeGroupAuditModal).exists()).toBe(false);
+    expect(wrapper.findComponent(AirportSubscriptionAuditModal).exists()).toBe(false);
 
     const auditBtn = wrapper.findAll(".page-head-actions button").find((b) => b.text() === "尽调")!;
     await auditBtn.trigger("click");
 
-    expect(wrapper.findComponent(NodeGroupAuditModal).exists()).toBe(true);
+    expect(wrapper.findComponent(AirportSubscriptionAuditModal).exists()).toBe(true);
 
     await switchTo(wrapper, "LAND");
     expect(
@@ -579,15 +612,15 @@ describe("NodesView 订阅尽调", () => {
     await auditBtn.trigger("click");
     listNodes.mockClear();
 
-    wrapper.findComponent(NodeGroupAuditModal).vm.$emit("close");
+    wrapper.findComponent(AirportSubscriptionAuditModal).vm.$emit("close");
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.findComponent(NodeGroupAuditModal).exists()).toBe(false);
+    expect(wrapper.findComponent(AirportSubscriptionAuditModal).exists()).toBe(false);
     expect(listNodes).not.toHaveBeenCalled();
   });
 });
 
-describe("NodesView 分组额度", () => {
+describe("NodesView 订阅额度", () => {
   it("按 usedBytes / totalBytes 算出使用百分比", async () => {
     const wrapper = await mountNodesViewWithGroups([
       {
@@ -653,5 +686,25 @@ describe("NodesView 分组额度", () => {
 
     expect(wrapper.text()).toContain(formatDate(expiresAt));
     expect(wrapper.text()).toContain(formatDateTime(fetchedAt));
+  });
+
+  it("信息条显示机场、账号、带宽与主用名额", async () => {
+    const wrapper = await mountNodesViewWithGroups([
+      {
+        id: 1,
+        name: "TaiShan Net",
+        airportName: "泰山云",
+        account: "ops@ts.example.com",
+        bandwidthMbps: 300,
+        primaryUsed: 4,
+        primaryCapacity: 15,
+      },
+    ]);
+
+    const text = wrapper.text();
+    expect(text).toContain("泰山云");
+    expect(text).toContain("ops@ts.example.com");
+    expect(text).toContain("300 Mbps");
+    expect(text).toContain("4 / 15");
   });
 });

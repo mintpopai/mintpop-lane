@@ -2,7 +2,7 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
@@ -129,8 +129,8 @@ class NodeNotifyServiceTest {
                 EgressIpChangeSource.ADMIN)).doesNotThrowAnyException();
     }
 
-    private NodeGroupDto group(long id, String name) {
-        NodeGroupDto group = new NodeGroupDto();
+    private AirportSubscriptionDto group(long id, String name) {
+        AirportSubscriptionDto group = new AirportSubscriptionDto();
         group.setId(id);
         group.setName(name);
         return group;
@@ -144,12 +144,12 @@ class NodeNotifyServiceTest {
     }
 
     @Test
-    @DisplayName("订阅节点增减：橙色卡片，分组、新增、消失节点依次展示")
+    @DisplayName("订阅节点增减：橙色卡片，订阅、新增、消失节点依次展示")
     void subNodesChangedSendsOrangeCard() {
         service.notifySubNodesChanged(group(3L, "A 家"), List.of("US-02"), List.of("US-99"));
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认")).containsExactly(
-                entry("分组", "A 家（ID 3）"),
+                entry("订阅", "A 家（ID 3）"),
                 entry("新增节点", "US-02"),
                 entry("消失节点", "US-99"));
     }
@@ -258,13 +258,13 @@ class NodeNotifyServiceTest {
     }
 
     @Test
-    @DisplayName("订阅即将到期：橙色卡片（与额度告警同一张），分组/到期时间/剩余依次展示")
+    @DisplayName("订阅即将到期：橙色卡片（与额度告警同一张），订阅/到期时间/剩余依次展示")
     void expiringSoonSendsOrangeCard() {
         service.notifySubscriptionExpiring(group(3L, "A 家"), Instant.parse("2026-09-20T00:00:00Z"),
                 Duration.ofHours(50));
 
         assertThat(sentFields(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅即将到期")).containsExactly(
-                entry("分组", "A 家（ID 3）"),
+                entry("订阅", "A 家（ID 3）"),
                 entry("到期时间", "2026-09-20T00:00:00Z"),
                 entry("剩余", "2 天 2 小时"));
     }
@@ -431,7 +431,7 @@ class NodeNotifyServiceTest {
         // 德语区的小数点是逗号：String.format 不钉 Locale.ROOT 就会输出 "1,50 GB"
         Locale.setDefault(Locale.GERMANY);
         try {
-            NodeGroupDto group = group(3L, "A 家");
+            AirportSubscriptionDto group = group(3L, "A 家");
             group.setUsedBytes(1_610_612_736L);  // 1.5 GB
             group.setTotalBytes(3_221_225_472L); // 3 GB
 

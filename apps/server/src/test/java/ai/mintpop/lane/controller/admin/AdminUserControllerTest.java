@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.DeviceRebindRequest;
@@ -13,7 +15,7 @@ import ai.mintpop.lane.repository.DeviceRebindRequestRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.util.RebindRequestNo;
 import ai.mintpop.lane.service.SessionTokenService;
@@ -59,6 +61,8 @@ class AdminUserControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -73,7 +77,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     private UserDeviceRepository userDeviceRepository;
 
     @Autowired
-    private UserFrontNodeRepository userFrontNodeRepository;
+    private UserFrontSubscriptionRepository userFrontSubscriptionRepository;
 
     @Autowired
     private DeviceRebindRequestRepository rebindRequestRepository;
@@ -99,49 +103,33 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     /**
-     * 可变 Map：部分用例要放 null 值，Map.of 不允许。接口收窄为处置态+第一跳处置+节点+备注。
-     * <p>
-     * frontAction 刻意没有默认值、每个调用点都要自己写出来：这个接口是整体保存，
-     * 「这次动没动第一跳」只能由调用方显式表态，不能由服务端拿 frontNodeId 去猜。
-     * 测试里同样不给默认值，免得「忘了传」在用例里被悄悄兜住。
+     * 可变 Map：部分用例要放 null 值，Map.of 不允许。接口收窄为处置态+节点+备注——
+     * 第一跳不在这个整体保存里，分配/取消分配走独立的 /front/allocate、/front 接口
+     * （见 {@link #allocateAndClearFront()}）。
      */
-    private Map<String, Object> updateRequest(String status, String frontAction, Long land) {
-        return updateRequest(status, frontAction, land, null);
+    private Map<String, Object> updateRequest(String status, Long land) {
+        return updateRequest(status, land, null);
     }
 
-    private Map<String, Object> updateRequest(String status, String frontAction, Long land, String remark) {
+    private Map<String, Object> updateRequest(String status, Long land, String remark) {
         Map<String, Object> body = new HashMap<>();
         body.put("status", status);
-        body.put("frontAction", frontAction);
         body.put("landNodeId", land);
         body.put("remark", remark);
         return body;
     }
 
-    /** 造一个真会被分配器选中的候选前置节点：美国落地（名字带 [US]）+ 已解析的故障域 */
-    private Long createAllocatableFrontNode(String name, String failureDomain) {
-        ProxyNodeDto node = new ProxyNodeDto();
-        node.setName(name);
-        node.setRole(NodeRole.FRONT);
-        node.setProtocol(NodeProtocol.TROJAN);
-        node.setServerAddr(name + ".example.com");
-        node.setPort(443);
-        node.setSecret(Map.of("password", "自动分配密码"));
-        node.setFailureDomain(failureDomain);
-        return nodeRepository.create(node);
-    }
-
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         frontId = fixtures.createFrontNode("FRONT-1");
         landId = fixtures.createLandNode("LAND-1", "203.0.113.10");
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, frontId, null);
-        memberWithSubId = fixtures.createUser("logto-m1", frontId, landId);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberWithSubId = fixtures.createUser("logto-m1", landId);
         fixtures.createSubscription(memberWithSubId, AgentType.CLAUDE, "Claude 席位 1",
                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS), "sk-ant-secret");
-        memberNoSubId = fixtures.createUser("logto-m2", frontId, null);
+        memberNoSubId = fixtures.createUser("logto-m2", null);
     }
 
     @Test
@@ -158,24 +146,26 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("列表页按用户各自返回前置节点组，批量取回时不会串味")
-    void listReturnsFrontNodesPerUserWithoutCrossContamination() throws Exception {
-        // 两个用户的前置组显式配成互不相同的一对一节点，用于验证批量查询（Map<userId, List<nodeId>>）
-        // 按 userId 分组正确，不会把 A 的节点混进 B 的结果、或反过来
-        Long secondFront = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberWithSubId, List.of(frontId));
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(secondFront));
+    @DisplayName("列表页按用户各自返回第一跳订阅列表，批量取回时不会串味")
+    void listReturnsFrontSubscriptionsPerUserWithoutCrossContamination() throws Exception {
+        // 两个用户的第一跳显式配成互不相同的一对一订阅，用于验证批量查询
+        // 按 userId 分组正确，不会把 A 的订阅混进 B 的结果、或反过来
+        Long airportId = fixtures.createAirport("串味测试机场");
+        Long subA = fixtures.createAirportSubscription(airportId, "sub-a", 300);
+        Long subB = fixtures.createAirportSubscription(airportId, "sub-b", 300);
+        fixtures.assignFront(memberWithSubId, subA);
+        fixtures.assignFront(memberNoSubId, subB);
 
         mockMvc.perform(get("/api/admin/users").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].frontNodes[0].name")
-                        .value("FRONT-1"))
-                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].frontNodes[?(@.name=='FRONT-2')]")
-                        .isEmpty())
-                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].frontNodes[0].name")
-                        .value("FRONT-2"))
-                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].frontNodes[?(@.name=='FRONT-1')]")
-                        .isEmpty());
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')].frontSubscriptions[0].subscriptionName")
+                        .value("sub-a"))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m1')]"
+                        + ".frontSubscriptions[?(@.subscriptionName=='sub-b')]").isEmpty())
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')].frontSubscriptions[0].subscriptionName")
+                        .value("sub-b"))
+                .andExpect(jsonPath("$.data.records[?(@.subject=='logto-m2')]"
+                        + ".frontSubscriptions[?(@.subscriptionName=='sub-a')]").isEmpty());
     }
 
     @Test
@@ -184,7 +174,6 @@ class AdminUserControllerTest extends MysqlTestBase {
         mockMvc.perform(get("/api/admin/users/" + memberWithSubId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.email").value("logto-m1@test.example"))
-                .andExpect(jsonPath("$.data.frontNodeName").value("FRONT-1"))
                 .andExpect(jsonPath("$.data.activeSubscriptions[0].agentType").value("CLAUDE"));
 
         mockMvc.perform(get("/api/admin/users/99999").header("Authorization", bearer(adminId)))
@@ -210,7 +199,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void createUserEndpointNoLongerExists() throws Exception {
         mockMvc.perform(post("/api/admin/users").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
+                        .content(json(updateRequest("ACTIVE", null))))
                 .andExpect(status().isNotFound());
     }
 
@@ -221,7 +210,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", null))))
+                        .content(json(updateRequest("SUSPENDED", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         var user = userRepository.findById(memberNoSubId).orElseThrow();
@@ -232,181 +221,19 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("KEEP：只改备注的保存不动前置组——整体保存接口的每次保存都要显式表态，"
-            + "「没动第一跳」由 frontAction 说了算，不再靠服务端拿 frontNodeId 去猜")
-    void keepLeavesFrontGroupIntactOnRemarkOnlySave() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        Long third = fixtures.createFrontNode("FRONT-3");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second, third));
-
-        // 逐字模拟管理端保存备注时的载荷：frontAction=KEEP，frontNodeId 不带（KEEP 下它无意义）
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, "老客户"))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second, third);
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(frontId);
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getRemark()).isEqualTo("老客户");
-    }
-
-    @Test
-    @DisplayName("KEEP：只改处置态的保存同样不动前置组——停用/恢复/吊销走的也是这个整体保存接口")
-    void keepLeavesFrontGroupIntactOnStatusOnlySave() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", null))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getStatus())
-                .isEqualTo(UserStatus.SUSPENDED);
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second);
-
-        // 恢复也是同一条路，一并验一次：两次处置转换下来组仍是原样
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second);
-    }
-
-    @Test
-    @DisplayName("KEEP 带着一个过期的 frontNodeId 也不动前置组：列表页快捷停用带回的是列表快照，"
-            + "打开列表之后第一跳被改过就会带回过期 id——KEEP 的可靠性不能取决于回填值的新鲜度")
-    void keepIgnoresStaleFrontNodeIdFromCallerSnapshot() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        Long third = fixtures.createFrontNode("FRONT-3");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second, third));
-
-        // third 是这位管理员打开列表之后就过时了的那个 id：既不是现在的主节点，也不是他这次想改的东西。
-        // 「与现值相同即没动」那套判定会把它读成「管理员显式指定了 third 这一个节点」，静默把组砍成一个
-        // 老版本管理端还会带上 frontNodeId；入参已无此字段，带了也被忽略
-        Map<String, Object> body = updateRequest("SUSPENDED", "KEEP", null);
-        body.put("frontNodeId", third);
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(body)))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second, third);
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(frontId);
-    }
-
-    @Test
-    @DisplayName("手工指定单个节点（PIN）已不再支持：报参数错误 110001，原有前置组不动")
-    void pinIsNoLongerAccepted() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-
-        Map<String, Object> body = updateRequest("ACTIVE", "PIN", null);
-        body.put("frontNodeId", second);
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(body)))
-                .andExpect(jsonPath("$.code").value(110001));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second);
-    }
-
-    @Test
-    @DisplayName("CLEAR：front_node_id 置空、关联表清空——这是取消分配、腾出节点以便删除的唯一入口")
-    void clearEmptiesPrimaryAndGroup() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-        // 库里存在一个可被分配器选中的候选：二期上线时 frontNodeId=null 是「自动分配」的暗号，
-        // 于是「不分配」反而会把这个节点分下去。有它在，本用例才真的守得住「不分配就是不分配」
-        createAllocatableFrontNode("🇺🇸[US]Auto-01", "relay.auto.example.net");
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "CLEAR", null))))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isNull();
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isEmpty();
-    }
-
-    @Test
-    @DisplayName("AUTO：按故障域算出的全集写入 user_front_node，主节点写入 front_node_id，"
-            + "且 frontNodeId 带回来的现值被忽略")
-    void autoRebuildsGroupByFailureDomain() throws Exception {
-        // fixtures.createFrontNode 造出的节点名字不含美国标记、failureDomain 也是 null，不会被分配器选中；
-        // 这里单独造两个真正会被选中的候选：美国落地 + 已解析的故障域
-        Long autoFirst = createAllocatableFrontNode("🇺🇸[US]Auto-01", "relay.auto.example.net");
-        Long autoSecond = createAllocatableFrontNode("🇺🇸[US]Auto-02", "relay.auto.example.net");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
-
-        // 老版本管理端还会带上 frontNodeId；入参已无此字段，带了也被忽略
-        Map<String, Object> body = updateRequest("ACTIVE", "AUTO", null);
-        body.put("frontNodeId", frontId);
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(body)))
-                .andExpect(jsonPath("$.code").value(0));
-
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(autoFirst);
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(autoFirst, autoSecond);
-    }
-
-    @Test
-    @DisplayName("AUTO 但一个候选都没有：报 410048，且原有的前置组一个不少——"
-            + "管理员显式要了自动分配，得到的不能是「把人静默下线」")
-    void autoWithoutCandidatesFailsAndLeavesGroupIntact() throws Exception {
-        // 全库只有 fixtures 造的普通 FRONT 节点：名字不含美国标记、failureDomain 为 null，分配器一个都选不出
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "AUTO", null))))
-                .andExpect(jsonPath("$.code").value(410048));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second);
-        assertThat(userRepository.findById(memberNoSubId).orElseThrow().getFrontNodeId()).isEqualTo(frontId);
-    }
-
-    @Test
-    @DisplayName("frontAction 忘了传：报参数错误 110001——整体保存的每个调用点都必须显式表态，"
-            + "缺省值会让「忘了传」悄悄落到某一种处置上，二期正是这样出的事")
-    void missingFrontActionReportsParamError() throws Exception {
-        Long second = fixtures.createFrontNode("FRONT-2");
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId, second));
-
-        Map<String, Object> body = updateRequest("ACTIVE", "KEEP", null);
-        body.remove("frontAction");
-
-        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(body)))
-                .andExpect(jsonPath("$.code").value(110001));
-
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId))
-                .containsExactly(frontId, second);
-    }
-
-    @Test
-    @DisplayName("删除已分配前置节点的用户不被外键挡住：user_front_node 对 app_user 的外键带 "
+    @DisplayName("删除已分配第一跳的用户不被外键挡住：user_front_subscription 对 app_user 的外键带 "
             + "ON DELETE CASCADE，关联行由数据库自动清掉，应用层不再重复删")
-    void deleteUserCascadesFrontNodeAssignment() throws Exception {
-        userFrontNodeRepository.replaceForUser(memberNoSubId, List.of(frontId));
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isNotEmpty();
+    void deleteUserCascadesFrontSubscriptionAssignment() throws Exception {
+        Long airportId = fixtures.createAirport("级联删除测试机场");
+        Long subId = fixtures.createAirportSubscription(airportId, "cascade-sub", 300);
+        fixtures.assignFront(memberNoSubId, subId);
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(memberNoSubId)).isNotEmpty();
 
         mockMvc.perform(delete("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.findById(memberNoSubId)).isEmpty();
-        assertThat(userFrontNodeRepository.findNodeIdsByUserId(memberNoSubId)).isEmpty();
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(memberNoSubId)).isEmpty();
     }
 
     @Test
@@ -415,7 +242,7 @@ class AdminUserControllerTest extends MysqlTestBase {
         // landId 已被 memberWithSub 绑定，容量默认 10，仍有余量
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", landId))))
+                        .content(json(updateRequest("ACTIVE", landId))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.countByLandNodeId(landId)).isEqualTo(2);
@@ -425,11 +252,11 @@ class AdminUserControllerTest extends MysqlTestBase {
     @DisplayName("容量已满的落地节点再分配报 410016")
     void fullLandNodeRejectsAssignment() throws Exception {
         Long tinyLand = fixtures.createLandNode("LAND-容量1", "203.0.113.20", 1);
-        fixtures.createUser("logto-m3", frontId, tinyLand);
+        fixtures.createUser("logto-m3", tinyLand);
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", tinyLand))))
+                        .content(json(updateRequest("ACTIVE", tinyLand))))
                 .andExpect(jsonPath("$.code").value(410016));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getLandNodeId()).isNull();
@@ -439,11 +266,11 @@ class AdminUserControllerTest extends MysqlTestBase {
     @DisplayName("重存自己已绑定的节点不占新名额，容量满也能保存")
     void resavingOwnLandNodeDoesNotConsumeCapacity() throws Exception {
         Long tinyLand = fixtures.createLandNode("LAND-容量1", "203.0.113.20", 1);
-        Long occupant = fixtures.createUser("logto-m3", frontId, tinyLand);
+        Long occupant = fixtures.createUser("logto-m3", tinyLand);
 
         mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", tinyLand))))
+                        .content(json(updateRequest("SUSPENDED", tinyLand))))
                 .andExpect(jsonPath("$.code").value(0));
     }
 
@@ -461,7 +288,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", disabledLand))))
+                        .content(json(updateRequest("ACTIVE", disabledLand))))
                 .andExpect(jsonPath("$.code").value(310004));
 
         assertThat(userRepository.findById(memberNoSubId).orElseThrow().getLandNodeId()).isNull();
@@ -471,12 +298,12 @@ class AdminUserControllerTest extends MysqlTestBase {
     @DisplayName("已绑在禁用落地节点上的用户，不换节点时仍能保存其它字段")
     void userOnDisabledLandNodeCanStillBeSaved() throws Exception {
         Long disabledLand = fixtures.createLandNode("LAND-已禁用", "203.0.113.30");
-        Long occupant = fixtures.createUser("logto-m4", frontId, disabledLand);
+        Long occupant = fixtures.createUser("logto-m4", disabledLand);
         disableNode(disabledLand);
 
         mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("SUSPENDED", "KEEP", disabledLand, "节点下线待迁移"))))
+                        .content(json(updateRequest("SUSPENDED", disabledLand, "节点下线待迁移"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         assertThat(userRepository.findById(occupant).orElseThrow().getRemark()).isEqualTo("节点下线待迁移");
@@ -486,16 +313,16 @@ class AdminUserControllerTest extends MysqlTestBase {
     @DisplayName("取消分配即回补名额，满员节点随后可以再分配")
     void unassigningRestoresCapacity() throws Exception {
         Long tinyLand = fixtures.createLandNode("LAND-容量1", "203.0.113.20", 1);
-        Long occupant = fixtures.createUser("logto-m3", frontId, tinyLand);
+        Long occupant = fixtures.createUser("logto-m3", tinyLand);
 
         mockMvc.perform(put("/api/admin/users/" + occupant).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
+                        .content(json(updateRequest("ACTIVE", null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", tinyLand))))
+                        .content(json(updateRequest("ACTIVE", tinyLand))))
                 .andExpect(jsonPath("$.code").value(0));
     }
 
@@ -504,13 +331,13 @@ class AdminUserControllerTest extends MysqlTestBase {
     void nodeValidation() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", 99999L))))
+                        .content(json(updateRequest("ACTIVE", 99999L))))
                 .andExpect(jsonPath("$.code").value(410001));
 
         // 把第一跳节点当落地用
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", frontId))))
+                        .content(json(updateRequest("ACTIVE", frontId))))
                 .andExpect(jsonPath("$.code").value(410005));
     }
 
@@ -519,7 +346,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void missingUserFails() throws Exception {
         mockMvc.perform(put("/api/admin/users/99999").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null))))
+                        .content(json(updateRequest("ACTIVE", null))))
                 .andExpect(jsonPath("$.code").value(410006));
 
         mockMvc.perform(delete("/api/admin/users/99999").header("Authorization", bearer(adminId)))
@@ -565,7 +392,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void missingRequiredFieldReportsParamError() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest(null, "KEEP", null, null))))
+                        .content(json(updateRequest(null, null, null))))
                 .andExpect(jsonPath("$.code").value(110001));
     }
 
@@ -574,7 +401,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void updateWritesRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, "老客户，续费谈过"))))
+                        .content(json(updateRequest("ACTIVE", null, "老客户，续费谈过"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
@@ -589,14 +416,14 @@ class AdminUserControllerTest extends MysqlTestBase {
     void updateClearsRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, "先写一句"))))
+                        .content(json(updateRequest("ACTIVE", null, "先写一句"))))
                 .andExpect(jsonPath("$.code").value(0));
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data.remark").value("先写一句"));
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, null))))
+                        .content(json(updateRequest("ACTIVE", null, null))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
@@ -608,7 +435,7 @@ class AdminUserControllerTest extends MysqlTestBase {
     void tooLongRemarkReportsParamError() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, "备".repeat(51)))))
+                        .content(json(updateRequest("ACTIVE", null, "备".repeat(51)))))
                 .andExpect(jsonPath("$.code").value(110001));
     }
 
@@ -619,7 +446,7 @@ class AdminUserControllerTest extends MysqlTestBase {
 
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, atLimit))))
+                        .content(json(updateRequest("ACTIVE", null, atLimit))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
@@ -627,11 +454,50 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("自动分配返回按顺位的列表，详情里 frontSubscriptions 与之一致；取消分配后为空")
+    void allocateAndClearFront() throws Exception {
+        Long airportId = fixtures.createAirport("泰山云");
+        Long subId = fixtures.createAirportSubscription(airportId, "ts-01", 300);
+        fixtures.createSubscriptionNode(subId, "🇺🇸[US]Santa Clara 01", NodeStatus.ENABLED);
+
+        mockMvc.perform(post("/api/admin/users/" + memberNoSubId + "/front/allocate")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].position").value(0))
+                .andExpect(jsonPath("$.data[0].airportName").value("泰山云"));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.frontSubscriptions[0].subscriptionName").value("ts-01"));
+
+        mockMvc.perform(delete("/api/admin/users/" + memberNoSubId + "/front")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.frontSubscriptions.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("整体保存（改处置态、备注）不动第一跳订阅列表——第一跳只由独立的分配/取消分配接口改写")
+    void saveLeavesFrontSubscriptionsIntact() throws Exception {
+        Long airportId = fixtures.createAirport("泰山云");
+        Long subA = fixtures.createAirportSubscription(airportId, "ts-01", 300);
+        Long subB = fixtures.createAirportSubscription(airportId, "ts-02", 300);
+        fixtures.assignFront(memberNoSubId, subA, subB);
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(updateRequest("SUSPENDED", null, "老客户"))))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(memberNoSubId))
+                .containsExactly(subA, subB);
+    }
+
+    @Test
     @DisplayName("关键词搜索能命中备注")
     void keywordMatchesRemark() throws Exception {
         mockMvc.perform(put("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(updateRequest("ACTIVE", "KEEP", null, "试用期"))))
+                        .content(json(updateRequest("ACTIVE", null, "试用期"))))
                 .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/api/admin/users").param("keyword", "试用")

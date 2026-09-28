@@ -38,11 +38,11 @@ public enum BizCodeEnum {
     USER_NOT_FOUND(410006, "用户不存在"),
     NODE_NAME_DUPLICATED(410007, "节点名已存在"),
     SUBSCRIPTION_NOT_FOUND(410008, "订阅不存在"),
-    NODE_GROUP_NOT_FOUND(410009, "分组不存在"),
-    NODE_GROUP_NAME_DUPLICATED(410010, "分组名已存在"),
+    AIRPORT_SUBSCRIPTION_NOT_FOUND(410009, "机场订阅不存在"),
+    AIRPORT_SUBSCRIPTION_NAME_DUPLICATED(410010, "订阅名已存在"),
     SUB_FETCH_FAILED(410011, "订阅拉取失败：链接无法访问或返回错误"),
     SUB_PARSE_FAILED(410012, "订阅解析失败：不是可识别的 Clash YAML 或没有有效节点"),
-    NODE_GROUP_IN_USE(410013, "分组内有节点被用户引用，无法删除"),
+    AIRPORT_SUBSCRIPTION_IN_USE(410013, "订阅仍被用户使用，请先为这些用户重新分配"),
     // 410014 曾是 SELECTED_NODE_MISSING（导入要逐个勾选的时代），改为自动导入美国节点后废弃。号位不复用
     NODE_TIMEZONE_INVALID(410015, "出口时区不是合法的 IANA 时区名"),
     LAND_NODE_FULL(410016, "该落地节点容量已满，无法再分配"),
@@ -77,11 +77,14 @@ public enum BizCodeEnum {
     IMAGE_TOO_LARGE(410045, "图片不能超过 5 MB"),
     IMAGE_TYPE_UNSUPPORTED(410046, "只支持 JPEG / PNG / WebP / GIF 图片"),
     IMAGE_STORAGE_ERROR(410047, "图片存储写入失败，请稍后重试"),
-    // 自动分配落空必须报错而不是清空：管理员显式要了「按故障域分配一组」，
-    // 静默清空等于把人下线、界面还不提示（二期上线定时刷新未跑首轮时全库 failure_domain 可能都是 null）
-    FRONT_NODE_UNALLOCATABLE(410048, "没有可分配的美国前置节点，无法自动分配"),
-    // 导入不再逐个勾选、自动取美国节点：一个都没有时必须报错，不建一个空分组冒充导入成功
+    // 410048 曾是 FRONT_NODE_UNALLOCATABLE（按节点自动分配失败），改为按机场订阅分配后废弃。号位不复用
+    // 导入不再逐个勾选、自动取美国节点：一个都没有时必须报错，不建一个空订阅冒充导入成功
     SUB_NO_US_NODES(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
+    AIRPORT_NOT_FOUND(410051, "机场不存在"),
+    AIRPORT_NAME_DUPLICATED(410052, "机场名已存在"),
+    AIRPORT_IN_USE(410053, "机场下还有订阅，无法删除"),
+    // planned 为空的两种成因都会报这条：所有订阅主用占满，或压根没有可用的候选订阅（没有启用中的美国节点）
+    FRONT_CAPACITY_FULL(410050, "没有可分配的第一跳订阅：主用名额已满，或没有启用中的美国节点"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

@@ -1,6 +1,9 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.enumeration.AgentType;
+import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
@@ -32,6 +35,8 @@ class PendingSubscriptionTest extends MysqlTestBase {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private ProxyNodeRepository nodeRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private SubscriptionRepository subscriptionRepository;
@@ -47,12 +52,16 @@ class PendingSubscriptionTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        Long frontId = fixtures.createFrontNode("FRONT-1");
         Long landId = fixtures.createLandNode("LAND-1", "203.0.113.10");
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, frontId, landId);
-        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, frontId, landId);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, landId);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, landId);
+        // 第一跳只能来自机场订阅：给 member 分配一个订阅，下面有一个可用的美国节点
+        Long airportId = fixtures.createAirport("泰山云");
+        Long frontSubscriptionId = fixtures.createAirportSubscription(airportId, "ts-01", 300);
+        fixtures.createSubscriptionNode(frontSubscriptionId, "🇺🇸[US]Santa Clara 01", NodeStatus.ENABLED);
+        fixtures.assignFront(memberId, frontSubscriptionId);
         // 起止都传 null 就是待开通；凭据留空
         pendingId = fixtures.createSubscription(memberId, AgentType.CLAUDE, "Claude 月付", null, null, null);
     }

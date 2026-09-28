@@ -6,6 +6,7 @@ import { useAuthStore } from "../stores/auth";
 import { loginPagePath } from "../auth/constants";
 import { clearLoginMark, isLikelyLoginLoop } from "../utils/loginLoop";
 import AppLayout from "../layouts/AppLayout.vue";
+import AirportsView from "../views/AirportsView.vue";
 import DeviceRequestsView from "../views/DeviceRequestsView.vue";
 import EnterprisesView from "../views/EnterprisesView.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
@@ -53,6 +54,7 @@ export function createAppRouter(
           },
           // 换机申请是跨用户的待办队列，不挂在某个用户下
           { path: "device-requests", name: "DEVICE_REQUESTS", component: DeviceRequestsView },
+          { path: "airports", name: "AIRPORTS", component: AirportsView },
           { path: "nodes", name: "NODES", component: NodesView },
           { path: "plans", name: "PLANS", component: PlansView },
           { path: "enterprises", name: "ENTERPRISES", component: EnterprisesView },

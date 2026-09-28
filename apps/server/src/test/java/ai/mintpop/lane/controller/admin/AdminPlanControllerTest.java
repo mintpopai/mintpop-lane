@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ai.mintpop.lane.repository.PlanRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -46,6 +48,8 @@ class AdminPlanControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -98,9 +102,9 @@ class AdminPlanControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     @Test

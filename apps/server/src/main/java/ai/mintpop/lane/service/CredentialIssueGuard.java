@@ -28,17 +28,17 @@ public class CredentialIssueGuard {
         this.egressIpVerifier = egressIpVerifier;
     }
 
-    public void check(SubscriptionDto subscription, UserDto user, ProxyNodeDto front, ProxyNodeDto land) {
+    public void check(SubscriptionDto subscription, UserDto user, boolean frontAssigned, ProxyNodeDto land) {
         if (subscription.getAgentType() != AgentType.CLAUDE) {
             throw new BizException(BizCodeEnum.CREDENTIAL_ISSUE_NOT_SUPPORTED);
         }
         if (subscription.getUserId() == null) {
             throw new BizException(BizCodeEnum.LINK_NOT_READY_FOR_ISSUE);
         }
-        if (user.getFrontNodeId() == null || user.getLandNodeId() == null || front == null || land == null) {
+        if (!frontAssigned || user.getLandNodeId() == null || land == null) {
             throw new BizException(BizCodeEnum.LINK_NOT_READY_FOR_ISSUE);
         }
-        if (front.getStatus() != NodeStatus.ENABLED || land.getStatus() != NodeStatus.ENABLED) {
+        if (land.getStatus() != NodeStatus.ENABLED) {
             throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
         if (!NodeRole.LAND.allows(land.getProtocol())) {

@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * LinkReportAlertService 的告警扫描（默认 5 分钟一轮）。
  * <p>
  * Spring Boot 默认调度器只有 1 个线程，5 个任务共享它会互相排队——跑得慢的一个
- * （如订阅刷新要拉取多个分组）会顶掉其它任务本该执行的时机。池大小（2）在
+ * （如订阅刷新要拉取多个订阅）会顶掉其它任务本该执行的时机。池大小（2）在
  * {@code application.yaml} 的 {@code spring.task.scheduling.pool.size} 配置，不在这里写死。
  * <p>
  * 单独成类而不放在 NotifyConfig：调度是通用基础设施，不属于通知模块，通知整体拿掉也不该连定时任务一起失效。

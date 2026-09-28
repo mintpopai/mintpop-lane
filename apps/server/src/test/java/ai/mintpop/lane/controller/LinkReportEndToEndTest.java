@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.IpAsnClient.AsnInfo;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -74,6 +76,8 @@ class LinkReportEndToEndTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -111,12 +115,12 @@ class LinkReportEndToEndTest extends MysqlTestBase {
     void setUp() {
         when(clock.instant()).thenReturn(NOW);
 
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         jdbc.execute("TRUNCATE TABLE entry_ip_history");
 
-        userId = fixtures.createUser("u1", null, null);
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        userId = fixtures.createUser("u1", null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     /**

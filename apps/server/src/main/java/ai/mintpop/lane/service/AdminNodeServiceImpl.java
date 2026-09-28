@@ -1,16 +1,15 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.EgressIpVerifier;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import ai.mintpop.lane.response.AdminNodeResponse;
@@ -35,32 +34,33 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
-    private final UserFrontNodeRepository userFrontNodeRepository;
-    private final NodeGroupRepository groupRepository;
+    private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final EgressIpVerifier.EgressProbe egressProbe;
     private final NodeNotifyService nodeNotifyService;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
-                                 UserFrontNodeRepository userFrontNodeRepository,
-                                 NodeGroupRepository groupRepository, EgressIpVerifier.EgressProbe egressProbe,
+                                 AirportSubscriptionRepository airportSubscriptionRepository, EgressIpVerifier.EgressProbe egressProbe,
                                  NodeNotifyService nodeNotifyService) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
-        this.userFrontNodeRepository = userFrontNodeRepository;
-        this.groupRepository = groupRepository;
+        this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.egressProbe = egressProbe;
         this.nodeNotifyService = nodeNotifyService;
     }
 
     @Override
     public List<AdminNodeResponse> list(NodeRole role) {
-        Map<Long, String> groupNames = groupRepository.findAll().stream()
-                .collect(Collectors.toMap(NodeGroupDto::getId, NodeGroupDto::getName));
+        Map<Long, String> groupNames = airportSubscriptionRepository.findAll().stream()
+                .collect(Collectors.toMap(AirportSubscriptionDto::getId, AirportSubscriptionDto::getName));
         return nodeRepository.findAll(role).stream().map(node -> toResponse(node, groupNames)).toList();
     }
 
     @Override
     public Long create(NodeSaveRequest request) {
+        // 第一跳只能来自机场订阅导入，不开放手工新建（spec 第二节）
+        if (request.getRole() == NodeRole.FRONT) {
+            throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
+        }
         // MIHOMO 是订阅导入专用形态：整份参数加密、不能手填。手工新建一律拒绝
         if (request.getProtocol() == NodeProtocol.MIHOMO) {
             throw new BizException(BizCodeEnum.PARAM_INVALID);
@@ -121,6 +121,11 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         // 会让分配它的用户在无人复查的情况下跑到一个用途不符的节点上
         if (request.getRole() != node.getRole() && isReferenced(id)) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
+        }
+        // 第一跳只能来自机场订阅导入：与 create 同理，也不许把别的角色改成 FRONT，
+        // 否则会造出一个不属于任何订阅、永远不会被下发的孤儿前置节点
+        if (request.getRole() == NodeRole.FRONT && node.getRole() != NodeRole.FRONT) {
+            throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
         }
 
         String previousEgressIp = node.getEgressIp();
@@ -187,14 +192,11 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     }
 
     /**
-     * 该节点是否正被引用：三种引用形状都要查——某人的主前置节点、某人的落地节点、
-     * 或某人前置集合里的非主成员（二期新增，只在 user_front_node 里，不体现在
-     * app_user.front_node_id 上，漏查会在真正删除时撞上外键抛出原始数据库异常）。
+     * 该节点是否正被引用：只有落地节点会被用户直接引用；前置节点属于机场订阅，用户引用的是订阅
+     * （订阅被引用的检查在删除机场订阅时做，见 UserFrontSubscriptionRepository.existsByAirportSubscriptionId）。
      */
     private boolean isReferenced(Long nodeId) {
-        return userRepository.existsByFrontNodeId(nodeId)
-                || userRepository.countByLandNodeId(nodeId) > 0
-                || userFrontNodeRepository.existsByNodeId(nodeId);
+        return userRepository.countByLandNodeId(nodeId) > 0;
     }
 
     /** 取异常链上最内层的说明：Netty 的代理失败通常裹在 ResourceAccessException 里，外层信息不可读 */
@@ -293,8 +295,8 @@ public class AdminNodeServiceImpl implements AdminNodeService {
                 node.getSecret() != null && !node.getSecret().isEmpty(),
                 isLand ? node.getCapacity() : null,
                 assignedUserCount,
-                node.getGroupId(),
-                node.getGroupId() == null ? null : groupNames.get(node.getGroupId()),
+                node.getAirportSubscriptionId(),
+                node.getAirportSubscriptionId() == null ? null : groupNames.get(node.getAirportSubscriptionId()),
                 node.getSourceType(),
                 node.getFailureDomain(),
                 node.getCreatedAt(),

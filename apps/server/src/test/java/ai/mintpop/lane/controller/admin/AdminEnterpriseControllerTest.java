@@ -1,5 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.repository.EnterpriseRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -49,6 +51,8 @@ class AdminEnterpriseControllerTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -99,9 +103,9 @@ class AdminEnterpriseControllerTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
     }
 
     @Test
@@ -308,7 +312,7 @@ class AdminEnterpriseControllerTest extends MysqlTestBase {
     @DisplayName("企业仍被订阅引用时拒绝删除，报 410025")
     void deleteRejectedWhenReferencedBySubscription() throws Exception {
         Long enterpriseId = createEnterprise(validBody());
-        Long userId = fixtures.createUser("logto-member", null, null);
+        Long userId = fixtures.createUser("logto-member", null);
         Long subscriptionId = fixtures.createSubscription(userId, AgentType.CLAUDE, "Claude 席位",
                 Instant.now(), Instant.now().plus(30, ChronoUnit.DAYS), null);
         jdbc.update("UPDATE subscription SET enterprise_id = ? WHERE id = ?", enterpriseId, subscriptionId);

@@ -6,9 +6,8 @@ import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.NodeProbeResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -31,8 +30,7 @@ class AdminNodeProbeTest {
 
     private AdminNodeServiceImpl serviceWith(EgressIpVerifier.EgressProbe probe) {
         return new AdminNodeServiceImpl(nodeRepository, mock(UserRepository.class),
-                mock(UserFrontNodeRepository.class),
-                mock(NodeGroupRepository.class), probe, mock(NodeNotifyService.class));
+                mock(AirportSubscriptionRepository.class), probe, mock(NodeNotifyService.class));
     }
 
     private ProxyNodeDto node(NodeRole role, String egressIp) {

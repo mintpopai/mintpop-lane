@@ -172,40 +172,48 @@ describe("createAdminApi", () => {
     ]);
   });
 
-  it("分组接口逐个打到正确的路径与方法", async () => {
+  it("机场订阅与机场接口逐个打到正确的路径与方法", async () => {
     const { http, request } = fakeClient();
     const api = createAdminApi(http);
 
-    await api.createNodeGroup({
-      name: "机场A",
+    await api.createAirportSubscription({
+      name: "ts-01",
       subUrl: "https://sub.example.com/c?token=t",
+      airportId: 1,
+      account: "a@x.com",
+      bandwidthMbps: 300,
       remark: "",
     });
-    await api.listNodeGroups();
-    await api.renameNodeGroup(3, { name: "机场A-新名", remark: "" });
-    await api.importNodeGroup(3);
-    await api.deleteNodeGroup(3);
+    await api.listAirportSubscriptions();
+    await api.updateAirportSubscription(3, { name: "ts-02", account: "b@x.com", remark: "" });
+    await api.importAirportSubscription(3);
+    await api.deleteAirportSubscription(3);
+    await api.listAirports();
+    await api.createAirport({ name: "泰山云", websiteUrl: "", remark: "" });
+    await api.updateAirport(1, { name: "泰山", websiteUrl: "", remark: "" });
+    await api.deleteAirport(1);
+    await api.allocateUserFront(5);
+    await api.clearUserFront(5);
 
-    expect(request).toHaveBeenNthCalledWith(1, "/admin/node-groups", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "机场A",
-        subUrl: "https://sub.example.com/c?token=t",
-        remark: "",
-      }),
-    });
-    expect(request).toHaveBeenNthCalledWith(2, "/admin/node-groups");
-    expect(request).toHaveBeenNthCalledWith(
-      3,
-      "/admin/node-groups/3",
-      expect.objectContaining({ method: "PUT" }),
-    );
-    // 重新拉取不带请求体：导入哪些节点由服务端按美国判定自动决定
-    expect(request).toHaveBeenNthCalledWith(4, "/admin/node-groups/3/import", { method: "POST" });
-    expect(request).toHaveBeenNthCalledWith(5, "/admin/node-groups/3", { method: "DELETE" });
+    // fakeClient 的 request 桩按无参声明，calls 的元素类型收窄成 []；
+    // 这里按实际调用形状断言成 [路径, RequestInit?] 后再取路径与方法
+    const calls = request.mock.calls as unknown as Array<[string, RequestInit?]>;
+    expect(calls.map(([path, init]) => [path, init?.method ?? "GET"])).toEqual([
+      ["/admin/airport-subscriptions", "POST"],
+      ["/admin/airport-subscriptions", "GET"],
+      ["/admin/airport-subscriptions/3", "PUT"],
+      ["/admin/airport-subscriptions/3/import", "POST"],
+      ["/admin/airport-subscriptions/3", "DELETE"],
+      ["/admin/airports", "GET"],
+      ["/admin/airports", "POST"],
+      ["/admin/airports/1", "PUT"],
+      ["/admin/airports/1", "DELETE"],
+      ["/admin/users/5/front/allocate", "POST"],
+      ["/admin/users/5/front", "DELETE"],
+    ]);
   });
 
-  it("尽调接口打到 /admin/node-groups/audit，报告原样透传给调用方", async () => {
+  it("尽调接口打到 /admin/airport-subscriptions/audit，报告原样透传给调用方", async () => {
     const calls: Array<{ path: string; method?: string; body?: string }> = [];
     const reportFromServer: SubAuditResponse = {
       airportName: "泰山云",
@@ -227,11 +235,11 @@ describe("createAdminApi", () => {
     };
     const client = createAdminApi(http);
 
-    const report = await client.auditNodeGroup({ subUrl: "https://example.com/sub" });
+    const report = await client.auditAirportSubscription({ subUrl: "https://example.com/sub" });
 
     expect(calls).toEqual([
       {
-        path: "/admin/node-groups/audit",
+        path: "/admin/airport-subscriptions/audit",
         method: "POST",
         body: JSON.stringify({ subUrl: "https://example.com/sub" }),
       },

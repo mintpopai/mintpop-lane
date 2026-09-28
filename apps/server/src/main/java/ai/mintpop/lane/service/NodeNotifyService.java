@@ -2,7 +2,7 @@ package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
-import ai.mintpop.lane.dto.NodeGroupDto;
+import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
@@ -79,13 +79,13 @@ public class NodeNotifyService {
      * 调用方在档位已落库之后再调本方法——通知失败不该让档位丢失。
      */
     @Async
-    public void notifyTrafficThreshold(NodeGroupDto group, int percent) {
+    public void notifyTrafficThreshold(AirportSubscriptionDto group, int percent) {
         if (!notifyProperties.isConfigured()) {
             return;
         }
         try {
             LinkedHashMap<String, String> fields = new LinkedHashMap<>();
-            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("订阅", group.getName() + "（ID " + group.getId() + "）");
             fields.put("已用占比", percent + "%");
             fields.put("已用 / 总额", formatBytes(group.getUsedBytes())
                     + " / " + formatBytes(group.getTotalBytes()));
@@ -93,7 +93,7 @@ public class NodeNotifyService {
                     ? "未提供" : group.getExpiresAt().toString());
             feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅额度告警", fields);
         } catch (Exception e) {
-            log.warn("额度告警飞书通知失败 groupId={}", group.getId(), e);
+            log.warn("额度告警飞书通知失败 airportSubscriptionId={}", group.getId(), e);
         }
     }
 
@@ -103,19 +103,19 @@ public class NodeNotifyService {
      * 本方法不写库，调用方也不记去重状态：告警窗口只有 3 天、刷新周期 24h，重复也就两三条。
      */
     @Async
-    public void notifySubscriptionExpiring(NodeGroupDto group, Instant expiresAt, Duration remaining) {
+    public void notifySubscriptionExpiring(AirportSubscriptionDto group, Instant expiresAt, Duration remaining) {
         if (!notifyProperties.isConfigured()) {
             return;
         }
         try {
             LinkedHashMap<String, String> fields = new LinkedHashMap<>();
-            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("订阅", group.getName() + "（ID " + group.getId() + "）");
             fields.put("到期时间", expiresAt.toString());
             fields.put("剩余", formatRemaining(remaining));
             feishuBotClient.sendCard(FeishuCardTemplate.ORANGE,
                     remaining.isNegative() ? "MintPop Lane 订阅已过期" : "MintPop Lane 订阅即将到期", fields);
         } catch (Exception e) {
-            log.warn("订阅到期告警飞书通知失败 groupId={}", group.getId(), e);
+            log.warn("订阅到期告警飞书通知失败 airportSubscriptionId={}", group.getId(), e);
         }
     }
 
@@ -133,7 +133,7 @@ public class NodeNotifyService {
      * 只告知，不代替人做决定——是否要把新节点拉进来、是否要清掉消失的节点，都需要人工确认。
      */
     @Async
-    public void notifySubNodesChanged(NodeGroupDto group, List<String> added, List<String> removed) {
+    public void notifySubNodesChanged(AirportSubscriptionDto group, List<String> added, List<String> removed) {
         if (!notifyProperties.isConfigured()) {
             return;
         }
@@ -142,12 +142,12 @@ public class NodeNotifyService {
         }
         try {
             LinkedHashMap<String, String> fields = new LinkedHashMap<>();
-            fields.put("分组", group.getName() + "（ID " + group.getId() + "）");
+            fields.put("订阅", group.getName() + "（ID " + group.getId() + "）");
             fields.put("新增节点", added.isEmpty() ? "无" : String.join("、", added));
             fields.put("消失节点", removed.isEmpty() ? "无" : String.join("、", removed));
             feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认", fields);
         } catch (Exception e) {
-            log.warn("订阅节点增减飞书通知失败 groupId={}", group.getId(), e);
+            log.warn("订阅节点增减飞书通知失败 airportSubscriptionId={}", group.getId(), e);
         }
     }
 

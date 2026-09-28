@@ -13,6 +13,7 @@ import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.OAuthSessionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
+import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,8 @@ class CredentialIssueServiceImplTest {
                 subscriptionRepository, userRepository, nodeRepository,
                 mock(OAuthSessionRepository.class), mock(CredentialIssueGuard.class),
                 mock(CredentialLifetimeCalculator.class), oauthClient,
-                mock(ClaudeOAuthProperties.class), mock(PkceGenerator.class), cipher, CLOCK);
+                mock(ClaudeOAuthProperties.class), mock(PkceGenerator.class), cipher,
+                mock(UserFrontSubscriptionRepository.class), CLOCK);
     }
 
     @Test
@@ -253,7 +255,8 @@ class CredentialIssueServiceImplTest {
 
         CredentialIssueServiceImpl service = new CredentialIssueServiceImpl(
                 subscriptionRepository, userRepository, nodeRepository, sessionRepository,
-                guard, lifetimeCalculator, oauthClient, properties, pkce, cipher, clock);
+                guard, lifetimeCalculator, oauthClient, properties, pkce, cipher,
+                mock(UserFrontSubscriptionRepository.class), clock);
 
         assertThatThrownBy(() -> service.completeAuthorization(subscriptionId, "sess-1", "auth-code#wrong-state"))
                 .isInstanceOf(BizException.class)

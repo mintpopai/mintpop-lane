@@ -1,5 +1,7 @@
 package ai.mintpop.lane.config;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
@@ -37,6 +39,8 @@ class AdminAuthorizationTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     @Autowired
     private ProxyNodeRepository nodeRepository;
@@ -56,11 +60,11 @@ class AdminAuthorizationTest extends MysqlTestBase {
     @BeforeEach
     void setUp() {
         DatabaseFixtures fixtures =
-                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+                new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         Long front = fixtures.createFrontNode("FRONT-1");
-        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, front, null);
-        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, front, null);
+        adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        memberId = fixtures.createUser("logto-member", MEMBER, ACTIVE, null);
     }
 
     private String bearer(Long userId) {

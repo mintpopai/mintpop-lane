@@ -5,9 +5,8 @@ import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.enumeration.NodeStatus;
-import ai.mintpop.lane.repository.NodeGroupRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
-import ai.mintpop.lane.repository.UserFrontNodeRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.NodeSaveRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,8 +46,7 @@ class AdminNodeEgressIpChangeNotifyTest {
     @BeforeEach
     void setUp() {
         service = new AdminNodeServiceImpl(nodeRepository, mock(UserRepository.class),
-                mock(UserFrontNodeRepository.class),
-                mock(NodeGroupRepository.class), land -> "unused", nodeNotifyService);
+                mock(AirportSubscriptionRepository.class), land -> "unused", nodeNotifyService);
     }
 
     private ProxyNodeDto storedLand(String egressIp, String timezone) {

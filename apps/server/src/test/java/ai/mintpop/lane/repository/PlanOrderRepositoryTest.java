@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.entity.PlanOrder;
 import ai.mintpop.lane.enumeration.AgentType;
 import ai.mintpop.lane.enumeration.Currency;
@@ -20,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PlanOrderRepositoryTest extends MysqlTestBase {
 
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private ProxyNodeRepository nodeRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private SubscriptionRepository subscriptionRepository;
@@ -29,9 +33,9 @@ class PlanOrderRepositoryTest extends MysqlTestBase {
 
     @BeforeEach
     void setUp() {
-        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository);
+        DatabaseFixtures fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        userId = fixtures.createUser("logto-buyer", null, null);
+        userId = fixtures.createUser("logto-buyer", null);
     }
 
     private PlanOrder pending(String orderNo) {

@@ -1,5 +1,7 @@
 package ai.mintpop.lane.repository;
 
+import ai.mintpop.lane.repository.AirportRepository;
+import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.NodeProtocol;
 import ai.mintpop.lane.enumeration.NodeRole;
@@ -30,12 +32,14 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
 
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired private AirportRepository airportRepository;
+    @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
 
     private DatabaseFixtures fixtures;
 
     @BeforeEach
     void setUp() {
-        fixtures = new DatabaseFixtures(jdbc, repository, userRepository, subscriptionRepository);
+        fixtures = new DatabaseFixtures(jdbc, repository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
     }
 
@@ -179,7 +183,7 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
     @Test
     @DisplayName("MIHOMO 节点整份参数加密落库，读回明文一致，来源三字段原样往返")
     void mihomoNodeFullParamsCipherRoundTrip() {
-        Long groupId = createGroup();   // 直接 jdbc 插一条 node_group，见下
+        Long airportSubscriptionId = createGroup();   // 直接 jdbc 插一条 airport_subscription，见下
         ProxyNodeDto node = new ProxyNodeDto();
         node.setName("香港 IEPL-01");
         node.setRole(NodeRole.FRONT);
@@ -188,14 +192,14 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
         node.setPort(35356);
         node.setSecret(Map.of("type", "anytls", "server", "hk02a.example.com",
                 "port", 35356, "password", "uuid-秘密"));
-        node.setGroupId(groupId);
+        node.setAirportSubscriptionId(airportSubscriptionId);
         node.setSourceName("香港 IEPL-01");
         node.setSourceType("anytls");
         Long id = repository.create(node);
 
         ProxyNodeDto loaded = repository.findById(id).orElseThrow();
         assertThat(loaded.getSecret()).containsEntry("password", "uuid-秘密").containsEntry("type", "anytls");
-        assertThat(loaded.getGroupId()).isEqualTo(groupId);
+        assertThat(loaded.getAirportSubscriptionId()).isEqualTo(airportSubscriptionId);
         assertThat(loaded.getSourceName()).isEqualTo("香港 IEPL-01");
         assertThat(loaded.getSourceType()).isEqualTo("anytls");
         // 库里存的是密文，不是明文参数
@@ -222,7 +226,9 @@ class ProxyNodeRepositoryTest extends MysqlTestBase {
     }
 
     private Long createGroup() {
-        jdbc.update("INSERT INTO node_group (name, sub_url_cipher) VALUES ('测试组', '密文占位')");
-        return jdbc.queryForObject("SELECT id FROM node_group WHERE name = '测试组'", Long.class);
+        Long airportId = fixtures.createAirport("泰山云");
+        jdbc.update("INSERT INTO airport_subscription (airport_id, name, account, bandwidth_mbps, sub_url_cipher) "
+                + "VALUES (?, '测试组', 'a@x.com', 300, '密文占位')", airportId);
+        return jdbc.queryForObject("SELECT id FROM airport_subscription WHERE name = '测试组'", Long.class);
     }
 }
