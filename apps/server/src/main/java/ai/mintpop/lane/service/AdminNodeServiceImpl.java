@@ -122,6 +122,11 @@ public class AdminNodeServiceImpl implements AdminNodeService {
         if (request.getRole() != node.getRole() && isReferenced(id)) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
+        // 第一跳只能来自机场订阅导入：与 create 同理，也不许把别的角色改成 FRONT，
+        // 否则会造出一个不属于任何订阅、永远不会被下发的孤儿前置节点
+        if (request.getRole() == NodeRole.FRONT && node.getRole() != NodeRole.FRONT) {
+            throw new BizException(BizCodeEnum.NODE_ROLE_MISMATCH);
+        }
 
         String previousEgressIp = node.getEgressIp();
         String previousEgressTimezone = node.getEgressTimezone();

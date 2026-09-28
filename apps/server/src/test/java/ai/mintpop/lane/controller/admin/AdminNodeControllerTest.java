@@ -472,7 +472,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("正被用户引用的节点改角色时报 410003，未被引用的节点可以正常改角色")
+    @DisplayName("正被用户引用的节点改角色时报 410003；空闲落地节点改成 FRONT 报 410005（第一跳只能来自机场订阅）")
     void changingRoleOfReferencedNodeFails() throws Exception {
         Long land = fixtures.createLandNode("LAND-1", "203.0.113.10");
         fixtures.createUser("logto-user-1", land);
@@ -488,7 +488,8 @@ class AdminNodeControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(410003));
         assertThat(nodeRepository.findById(land).orElseThrow().getRole()).isEqualTo(NodeRole.LAND);
 
-        // 未被引用的空闲节点仍然可以正常改角色
+        // 未被引用的空闲落地节点也不许改成 FRONT：第一跳只能来自机场订阅导入，
+        // 手工改角色会造出不属于任何订阅的孤儿前置节点。报 410005，库里角色仍是 LAND
         Long idle = fixtures.createLandNode("LAND-空闲", "203.0.113.20");
         var idleNodeChangeToFront = Map.of(
                 "name", "LAND-空闲", "role", "FRONT", "protocol", "SOCKS5",
@@ -498,7 +499,8 @@ class AdminNodeControllerTest extends MysqlTestBase {
         mockMvc.perform(put("/api/admin/nodes/" + idle).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(idleNodeChangeToFront)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.code").value(BizCodeEnum.NODE_ROLE_MISMATCH.getCode()));
+        assertThat(nodeRepository.findById(idle).orElseThrow().getRole()).isEqualTo(NodeRole.LAND);
     }
 
     @Test
