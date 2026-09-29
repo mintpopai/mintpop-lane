@@ -266,10 +266,9 @@ INSERT IGNORE INTO asn_org (asn, org_name, first_seen_at) VALUES ('AS4134', 'Chi
 | `CONSOLE_PORT` | `8084` | 控制台的宿主监听端口 |
 | `TZ` | `UTC` | 服务端容器时区，仅影响日志时间显示。业务时间全链路按 UTC 存取、按查看者本地时区显示，与本变量无关 |
 
-服务端另外两个定时任务的间隔在 `application.yml` 里调（默认值见 `apps/server/config/application.example.yml`），与是否配置飞书通知无关：
+服务端另外一个定时任务的间隔在 `application.yml` 里调（默认值见 `apps/server/config/application.example.yml`），与是否配置飞书通知无关：
 
 - `sub-refresh.interval`（默认 `5m`）：订阅定时刷新间隔——周期性把各机场订阅的节点集合整体对齐到机场当前给出的节点（新增、更新、删除）并更新订阅自身额度；拉取失败时不动节点，只在订阅上标记失败并每轮推飞书。⚠️ **升级须知**：部署机 `application.yml` 里若已有旧示例带来的 `sub-refresh.interval: 24h`，须改为 `5m`（不改则仍按 24 小时刷新，二期的 5 分钟对齐不会生效）。
-- `entry-ip-watch.interval`（默认 `5m`）：中转入口 IP 巡检间隔——服务端不带 mihomo 内核，拨不动 anytls，测不到第一跳「通不通」，但机场的中转入口域名 TTL 只有 30 秒（为「被封即换 IP」准备），服务端测得到「换没换」；入口 IP 一变，大概率意味着该入口刚被封过。同目录下 `entry-ip-watch.vantages` 是四个运营商视角各自的代表性子网（DNS EDNS Client Subnet），中转入口按运营商分线路返回不同 IP，只从一个视角解析会漏掉另外几条线的故障。
 
 ## 备份
 

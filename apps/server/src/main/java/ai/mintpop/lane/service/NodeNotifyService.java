@@ -4,7 +4,6 @@ import ai.mintpop.lane.client.FeishuBotClient;
 import ai.mintpop.lane.config.NotifyProperties;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
-import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.EgressIpChangeSource;
 import ai.mintpop.lane.enumeration.FeishuCardTemplate;
 import ai.mintpop.lane.repository.UserRepository;
@@ -142,29 +141,6 @@ public class NodeNotifyService {
             feishuBotClient.sendCard(FeishuCardTemplate.RED, "MintPop Lane 订阅拉取失败，需人工处理", fields);
         } catch (Exception e) {
             log.warn("订阅拉取失败飞书通知失败 airportSubscriptionId={}", group.getId(), e);
-        }
-    }
-
-    /**
-     * 中转入口 IP 已变更（异步）：机场的中转入口域名 TTL 只有 30 秒，是为「被封即换 IP」准备的，
-     * 入口 IP 一变，大概率意味着该入口刚被封过——用 ORANGE，这是需要人知道的封锁事件信号，不是好消息。
-     * 调用方在历史已落库之后再调本方法，通知失败不该让观测记录丢失。
-     */
-    @Async
-    public void notifyEntryIpChanged(String failureDomain, DnsVantage vantage, String previousIps, String currentIps) {
-        if (!notifyProperties.isConfigured()) {
-            return;
-        }
-        try {
-            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
-            fields.put("故障域", failureDomain);
-            fields.put("视角", vantage.name());
-            fields.put("原入口 IP", previousIps);
-            fields.put("新入口 IP", currentIps);
-            fields.put("提示", "入口 IP 变更通常意味着该入口刚被封过");
-            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 中转入口 IP 已变更", fields);
-        } catch (Exception e) {
-            log.warn("入口 IP 变更飞书通知失败 domain={} vantage={}", failureDomain, vantage, e);
         }
     }
 

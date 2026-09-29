@@ -11,12 +11,10 @@
 import { computed, onMounted, ref } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
-import { DNS_VANTAGE_LABELS } from "../api/types";
 import type { LinkHealthAsnCell, LinkHealthDomainRow, LinkHealthResponse } from "../api/types";
 import AdminSelect from "../components/AdminSelect.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
-import { formatDateTime } from "../utils/format";
 
 const health = ref<LinkHealthResponse | null>(null);
 const loading = ref(true);
@@ -74,10 +72,6 @@ function asnLabel(cell: LinkHealthAsnCell): string {
   return cell.orgName ?? cell.asn;
 }
 
-function vantageLabel(vantage: string): string {
-  return DNS_VANTAGE_LABELS[vantage] ?? vantage;
-}
-
 async function load(): Promise<void> {
   loading.value = true;
   try {
@@ -96,7 +90,6 @@ function onDaysChange(value: number): void {
 }
 
 const domains = computed(() => health.value?.domains ?? []);
-const timeline = computed(() => health.value?.entryIpTimeline ?? []);
 
 onMounted(load);
 </script>
@@ -188,33 +181,6 @@ onMounted(load);
       </li>
     </ul>
   </DataCard>
-
-  <div class="section-head">
-    <h3 class="block-title">入口 IP 变更时间线</h3>
-  </div>
-  <div class="admin-card timeline-card">
-    <p v-if="timeline.length === 0" class="card-state">暂无入口 IP 变更记录。</p>
-    <table v-else class="admin-table">
-      <thead>
-        <tr>
-          <th>故障域</th>
-          <th>视角</th>
-          <th>变更前</th>
-          <th>变更后</th>
-          <th>变更时刻</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(change, index) in timeline" :key="`${change.failureDomain}-${index}`">
-          <td>{{ change.failureDomain === "" ? "未解析" : change.failureDomain }}</td>
-          <td>{{ vantageLabel(change.vantage) }}</td>
-          <td class="fact muted">{{ change.previousIps }}</td>
-          <td class="fact">{{ change.currentIps }}</td>
-          <td class="fact muted">{{ formatDateTime(change.changedAt) }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
 </template>
 
 <style scoped>
@@ -306,15 +272,5 @@ onMounted(load);
 .cell-no-data {
   color: var(--color-ink-secondary);
   font-style: italic;
-}
-
-.timeline-card {
-  padding: 4px 0;
-}
-
-.timeline-card .card-state {
-  padding: 24px;
-  color: var(--color-ink-secondary);
-  font-size: 14px;
 }
 </style>

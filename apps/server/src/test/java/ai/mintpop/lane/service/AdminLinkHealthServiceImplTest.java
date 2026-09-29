@@ -1,16 +1,12 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.config.LinkReportProperties;
-import ai.mintpop.lane.entity.EntryIpHistory;
-import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.repository.AsnOrgRepository;
-import ai.mintpop.lane.repository.EntryIpHistoryRepository;
 import ai.mintpop.lane.repository.LinkReportDailyRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 import ai.mintpop.lane.response.LinkHealthResponse;
 import ai.mintpop.lane.response.LinkHealthResponse.DomainRow;
-import ai.mintpop.lane.response.LinkHealthResponse.EntryIpChange;
 import ai.mintpop.lane.response.LinkHealthResponse.AsnCell;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,7 +41,6 @@ class AdminLinkHealthServiceImplTest {
 
     private LinkReportRepository linkReportRepository;
     private LinkReportDailyRepository linkReportDailyRepository;
-    private EntryIpHistoryRepository entryIpHistoryRepository;
     private AsnOrgRepository asnOrgRepository;
     private LinkReportProperties properties;
     private AdminLinkHealthServiceImpl service;
@@ -54,27 +49,16 @@ class AdminLinkHealthServiceImplTest {
     void setUp() {
         linkReportRepository = mock(LinkReportRepository.class);
         linkReportDailyRepository = mock(LinkReportDailyRepository.class);
-        entryIpHistoryRepository = mock(EntryIpHistoryRepository.class);
         asnOrgRepository = mock(AsnOrgRepository.class);
         properties = new LinkReportProperties(); // 默认 rawRetentionDays=7、dailyRetentionDays=90
 
         when(linkReportRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of());
         when(linkReportDailyRepository.aggregateGlobalByDomainAndAsn(any(), any())).thenReturn(List.of());
-        when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of());
         // 默认「一个展示名都没记过」：展示名是可选的旁路数据，绝大多数用例不关心它
         when(asnOrgRepository.findAllNames()).thenReturn(Map.of());
 
         service = new AdminLinkHealthServiceImpl(linkReportRepository, linkReportDailyRepository,
-                entryIpHistoryRepository, asnOrgRepository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
-    }
-
-    private EntryIpHistory history(String domain, DnsVantage vantage, String ips, Instant observedAt) {
-        EntryIpHistory h = new EntryIpHistory();
-        h.setFailureDomain(domain);
-        h.setVantage(vantage);
-        h.setEntryIps(ips);
-        h.setObservedAt(observedAt);
-        return h;
+                asnOrgRepository, properties, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -247,68 +231,4 @@ class AdminLinkHealthServiceImplTest {
                 .containsExactly(tuple("AS4134", null, 100L));
     }
 
-    @Test
-    @DisplayName("入口 IP 变更时间线：组内第一条只是基线不算变更，第二条起才是变更，且按最近优先排序")
-    void entryIpTimelineReportsChangesAfterBaselineMostRecentFirst() {
-        when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of(
-                history(DOMAIN, DnsVantage.OVERSEAS, "1.1.1.1", NOW.minus(Duration.ofDays(6))), // 基线，落在窗口内
-                history(DOMAIN, DnsVantage.OVERSEAS, "2.2.2.2", NOW.minus(Duration.ofDays(3))),
-                history(DOMAIN, DnsVantage.OVERSEAS, "3.3.3.3", NOW.minus(Duration.ofDays(1)))));
-
-        LinkHealthResponse response = service.getLinkHealth(7);
-
-        assertThat(response.entryIpTimeline()).hasSize(2);
-        EntryIpChange latest = response.entryIpTimeline().get(0);
-        assertThat(latest.previousIps()).isEqualTo("2.2.2.2");
-        assertThat(latest.currentIps()).isEqualTo("3.3.3.3");
-        assertThat(latest.changedAt()).isEqualTo(NOW.minus(Duration.ofDays(1)));
-        assertThat(latest.vantage()).isEqualTo("OVERSEAS");
-        assertThat(latest.failureDomain()).isEqualTo(DOMAIN);
-
-        EntryIpChange earlier = response.entryIpTimeline().get(1);
-        assertThat(earlier.previousIps()).isEqualTo("1.1.1.1");
-        assertThat(earlier.currentIps()).isEqualTo("2.2.2.2");
-    }
-
-    @Test
-    @DisplayName("查询窗口之前的基线在窗口之前找不到对手，也能正确识别进入窗口后的第一次变更")
-    void entryIpTimelineComparesAgainstBaselineBeforeWindow() {
-        when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of(
-                history(DOMAIN, DnsVantage.OVERSEAS, "1.1.1.1", NOW.minus(Duration.ofDays(20))), // 窗口之前的基线
-                history(DOMAIN, DnsVantage.OVERSEAS, "2.2.2.2", NOW.minus(Duration.ofDays(2)))));  // 窗口内的变更
-
-        LinkHealthResponse response = service.getLinkHealth(7); // from = NOW - 7 天
-
-        assertThat(response.entryIpTimeline()).hasSize(1);
-        EntryIpChange change = response.entryIpTimeline().get(0);
-        assertThat(change.previousIps()).isEqualTo("1.1.1.1");
-        assertThat(change.currentIps()).isEqualTo("2.2.2.2");
-    }
-
-    @Test
-    @DisplayName("变更发生在窗口之前时不出现在时间线里")
-    void entryIpTimelineExcludesChangesBeforeWindow() {
-        when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of(
-                history(DOMAIN, DnsVantage.OVERSEAS, "1.1.1.1", NOW.minus(Duration.ofDays(20))),
-                history(DOMAIN, DnsVantage.OVERSEAS, "2.2.2.2", NOW.minus(Duration.ofDays(15)))));
-
-        LinkHealthResponse response = service.getLinkHealth(7);
-
-        assertThat(response.entryIpTimeline()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("同一故障域不同视角各自独立比较，不会跨视角误判成变更")
-    void entryIpTimelineComparesWithinSameVantageOnly() {
-        when(entryIpHistoryRepository.findAllOrderByDomainVantageAndTime()).thenReturn(List.of(
-                history(DOMAIN, DnsVantage.CHINA_TELECOM, "9.9.9.9", NOW.minus(Duration.ofDays(6))),
-                history(DOMAIN, DnsVantage.OVERSEAS, "1.1.1.1", NOW.minus(Duration.ofDays(6))),
-                history(DOMAIN, DnsVantage.OVERSEAS, "2.2.2.2", NOW.minus(Duration.ofDays(1)))));
-
-        LinkHealthResponse response = service.getLinkHealth(7);
-
-        // CHINA_TELECOM 只有一条（基线），不产生变更；OVERSEAS 两条产生一次变更
-        assertThat(response.entryIpTimeline()).hasSize(1);
-        assertThat(response.entryIpTimeline().get(0).vantage()).isEqualTo("OVERSEAS");
-    }
 }

@@ -42,7 +42,7 @@ public class DnsConfig {
      * <p>
      * 外面套一层 {@link CachingIpAsnClient}：三期的链路上报把 ASN 反查放进了心跳的同步路径，
      * 同一个来源 IP 每 5 分钟就会被重复问一次，不缓存会把免费的 ipwho.is 打到限流（理由详见该类）。
-     * 缓存装在**接口这一层**，入口 IP 巡检与采购尽调这两个老调用方也一并受益。
+     * 缓存装在**接口这一层**，采购尽调这个老调用方也一并受益。
      * TTL 与容量由 {@link IpAsnCacheProperties} 装配，可在 {@code config/application.yml} 覆盖。
      */
     @Bean

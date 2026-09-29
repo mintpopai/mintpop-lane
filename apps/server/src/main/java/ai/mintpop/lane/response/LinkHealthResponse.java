@@ -1,18 +1,15 @@
 package ai.mintpop.lane.response;
 
-import java.time.Instant;
 import java.util.List;
 
 /**
- * 管理端「链路健康」查询结果：故障域 × 运营商成功率矩阵 + 入口 IP 变更时间线（spec §8.3）。
+ * 管理端「链路健康」查询结果：故障域 × 运营商成功率矩阵（spec §8.3）。
  * 矩阵覆盖 {@code link_report}（保留期内的原始窗口）与 {@code link_report_daily}（更早的按天
  * 聚合）两张表，全库跨全部用户求和——三期的分析维度只到故障域与运营商，不按节点也不按用户。
  */
 public record LinkHealthResponse(
         /** 故障域 × 运营商的成功率矩阵，按故障域分组 */
-        List<DomainRow> domains,
-        /** 入口 IP 变更时间线，取自一期的 entry_ip_history，按变更时刻倒序（最近的在前） */
-        List<EntryIpChange> entryIpTimeline) {
+        List<DomainRow> domains) {
 
     /**
      * 一个故障域下按运营商展开的一行。{@code samples}/{@code aliveCount}/{@code failovers}
@@ -51,13 +48,4 @@ public record LinkHealthResponse(
     public record AsnCell(String asn, String orgName, long samples, long aliveCount, Double successRate) {
     }
 
-    /**
-     * 一次入口 IP 变更事件。{@code vantage} 是 {@code DnsVantage} 枚举的 {@code name()}
-     * （如 {@code CHINA_TELECOM}）。{@code previousIps}/{@code currentIps} 是变更前后的入口 IP
-     * 列表（逗号分隔，字典序），{@code changedAt} 是变更后那次观测的时刻——即
-     * {@code entry_ip_history} 里"值变化的那一条"的 {@code observed_at}，不是变更前那条的。
-     */
-    public record EntryIpChange(String failureDomain, String vantage,
-                                String previousIps, String currentIps, Instant changedAt) {
-    }
 }

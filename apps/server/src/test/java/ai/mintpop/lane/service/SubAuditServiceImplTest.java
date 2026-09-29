@@ -5,7 +5,7 @@ import ai.mintpop.lane.client.FailureDomainResolver;
 import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.config.EntryIpWatchProperties;
+import ai.mintpop.lane.config.SubAuditProperties;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
@@ -78,7 +78,7 @@ class SubAuditServiceImplTest {
         service = new SubAuditServiceImpl(subFetchClient, new SubYamlParser(),
                 // syncer 用真实实现、只替换最底层的 DNS 解析口：本类要守的正是「按 serverAddr 去重」
                 new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()),
-                ecsDnsClient, ipAsnClient, nodeRepository, airportSubscriptionRepository, new EntryIpWatchProperties(),
+                ecsDnsClient, ipAsnClient, nodeRepository, airportSubscriptionRepository, new SubAuditProperties(),
                 systemSettingService);
     }
 

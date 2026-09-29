@@ -520,7 +520,7 @@ class SchemaMigrationTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("V20 建出故障域列、订阅额度列与入口 IP 历史表")
+    @DisplayName("V20 建出故障域列与订阅额度列")
     void v20AddsFrontStabilitySchema() throws Exception {
         try (Connection conn = dataSource.getConnection()) {
             assertThat(columnExists(conn, "proxy_node", "failure_domain")).isTrue();
@@ -530,7 +530,14 @@ class SchemaMigrationTest extends MysqlTestBase {
             assertThat(columnExists(conn, "airport_subscription", "traffic_expires_at")).isTrue();
             assertThat(columnExists(conn, "airport_subscription", "traffic_alerted_pct")).isTrue();
             assertThat(columnExists(conn, "airport_subscription", "fetched_at")).isTrue();
-            assertThat(tableExists(conn, "entry_ip_history")).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("V31 删掉中转入口 IP 巡检的历史表 entry_ip_history")
+    void v31DropsEntryIpHistory() throws Exception {
+        try (Connection conn = dataSource.getConnection()) {
+            assertThat(tableExists(conn, "entry_ip_history")).isFalse();
         }
     }
 

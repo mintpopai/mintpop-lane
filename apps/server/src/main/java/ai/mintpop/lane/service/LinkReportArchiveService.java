@@ -65,7 +65,7 @@ public class LinkReportArchiveService {
 
     /**
      * fixedDelay：上一轮跑完再计时；initialDelay 同样取周期，避免每次重启都立刻扫一遍，
-     * 形态照抄 {@link EntryIpWatchService}。
+     * 形态照抄 {@link EgressCheckService}。
      */
     @Scheduled(fixedDelayString = "#{@linkReportProperties.archiveInterval.toMillis()}",
             initialDelayString = "#{@linkReportProperties.archiveInterval.toMillis()}")

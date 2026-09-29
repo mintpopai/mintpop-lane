@@ -62,7 +62,7 @@ public class LinkReportAlertService {
     /**
      * 定时扫描全部用户：按 {@link LinkReportProperties#getAlertLookback()} 回看窗口，
      * 从全库聚合（SQL 层 GROUP BY，见 {@link LinkReportRepository#aggregateAllUsersByDomainAndAsn}）
-     * 里按用户切分后逐个调用 {@link #checkAndNotify}。形态照抄 {@link EntryIpWatchService}：
+     * 里按用户切分后逐个调用 {@link #checkAndNotify}。形态照抄 {@link EgressCheckService}：
      * fixedDelay 让上一轮跑完再计时，initialDelay 同样取周期，避免每次重启都立刻扫一遍全库。
      * 单个用户处理失败（多半是去重状态落库异常）只记日志、跳过该用户，不影响其余用户被扫到。
      */

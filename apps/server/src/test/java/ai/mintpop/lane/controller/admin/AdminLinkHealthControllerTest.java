@@ -5,7 +5,6 @@ import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.config.LinkReportProperties;
 import ai.mintpop.lane.entity.LinkReport;
 import ai.mintpop.lane.entity.LinkReportDaily;
-import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.repository.LinkReportDailyRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
@@ -26,7 +25,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -105,8 +103,6 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
 
         fixtures = new DatabaseFixtures(jdbc, nodeRepository, userRepository, subscriptionRepository, airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
-        // entry_ip_history 不是用户维度的表，clearAll 不清它，这里单独清空以隔离各用例
-        jdbc.execute("TRUNCATE TABLE entry_ip_history");
 
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
         memberId = fixtures.createUser("logto-member", null);
@@ -141,12 +137,6 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         row.setNoSampleCount(0L);
         row.setFailovers(0L);
         linkReportDailyRepository.upsertDay(row);
-    }
-
-    /** 应用层永不写 observed_at（数据库默认值维护），测试要控制观测时刻只能绕开 mapper 直接插入 */
-    private void insertEntryIpHistory(String domain, DnsVantage vantage, String entryIps, Instant observedAt) {
-        jdbc.update("INSERT INTO entry_ip_history (failure_domain, vantage, entry_ips, observed_at) "
-                + "VALUES (?, ?, ?, ?)", domain, vantage.name(), entryIps, Timestamp.from(observedAt));
     }
 
     private JsonNode getLinkHealth(Long callerId, Integer days) throws Exception {
@@ -315,19 +305,4 @@ class AdminLinkHealthControllerTest extends MysqlTestBase {
         assertThat(findDomain(domains, "")).isNotNull();
     }
 
-    @Test
-    @DisplayName("入口 IP 变更时间线：只报窗口内的变更，且带上变更前后的 IP 与视角")
-    void entryIpTimelineReportsChangesWithinWindow() throws Exception {
-        insertEntryIpHistory("jp.tsdns.top", DnsVantage.OVERSEAS, "1.1.1.1", NOW.minus(Duration.ofDays(3)));
-        insertEntryIpHistory("jp.tsdns.top", DnsVantage.OVERSEAS, "2.2.2.2", NOW.minus(Duration.ofDays(1)));
-
-        JsonNode timeline = getLinkHealth(adminId, 7).at("/data/entryIpTimeline");
-
-        assertThat(timeline).hasSize(1);
-        JsonNode change = timeline.get(0);
-        assertThat(change.get("failureDomain").asText()).isEqualTo("jp.tsdns.top");
-        assertThat(change.get("vantage").asText()).isEqualTo("OVERSEAS");
-        assertThat(change.get("previousIps").asText()).isEqualTo("1.1.1.1");
-        assertThat(change.get("currentIps").asText()).isEqualTo("2.2.2.2");
-    }
 }

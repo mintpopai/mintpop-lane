@@ -27,7 +27,6 @@ function domain(overrides: Partial<LinkHealthResponse["domains"][number]> = {}) 
 function health(overrides: Partial<LinkHealthResponse> = {}): LinkHealthResponse {
   return {
     domains: [domain()],
-    entryIpTimeline: [],
     ...overrides,
   };
 }
@@ -329,34 +328,6 @@ describe("LinkHealthView 矩阵展示（spec §8.3）", () => {
     const groups = wrapper.findAll(".domain-group");
     expect(groups).toHaveLength(2);
     expect(groups[1].findAll("tbody tr")).toHaveLength(2);
-  });
-});
-
-describe("LinkHealthView 入口 IP 变更时间线", () => {
-  it("有变更记录时按倒序列出", async () => {
-    getLinkHealth.mockResolvedValue(
-      health({
-        entryIpTimeline: [
-          {
-            failureDomain: "front-a.example.com",
-            vantage: "CHINA_TELECOM",
-            previousIps: "1.1.1.1",
-            currentIps: "2.2.2.2",
-            changedAt: "2026-09-18T03:00:00Z",
-          },
-        ],
-      }),
-    );
-    const wrapper = await render();
-
-    expect(wrapper.text()).toContain("1.1.1.1");
-    expect(wrapper.text()).toContain("2.2.2.2");
-  });
-
-  it("没有变更记录时不留空表格", async () => {
-    const wrapper = await render();
-
-    expect(wrapper.text()).toContain("暂无");
   });
 });
 

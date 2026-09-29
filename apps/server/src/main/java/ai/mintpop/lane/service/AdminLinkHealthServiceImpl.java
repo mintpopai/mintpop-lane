@@ -1,17 +1,13 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.config.LinkReportProperties;
-import ai.mintpop.lane.entity.EntryIpHistory;
-import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.repository.AsnOrgRepository;
-import ai.mintpop.lane.repository.EntryIpHistoryRepository;
 import ai.mintpop.lane.repository.LinkReportDailyRepository;
 import ai.mintpop.lane.repository.LinkReportRepository;
 import ai.mintpop.lane.repository.LinkReportRepository.DomainAsnAggregate;
 import ai.mintpop.lane.response.LinkHealthResponse;
 import ai.mintpop.lane.response.LinkHealthResponse.AsnCell;
 import ai.mintpop.lane.response.LinkHealthResponse.DomainRow;
-import ai.mintpop.lane.response.LinkHealthResponse.EntryIpChange;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +18,6 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -44,19 +39,16 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
 
     private final LinkReportRepository linkReportRepository;
     private final LinkReportDailyRepository linkReportDailyRepository;
-    private final EntryIpHistoryRepository entryIpHistoryRepository;
     private final AsnOrgRepository asnOrgRepository;
     private final LinkReportProperties properties;
     private final Clock clock;
 
     public AdminLinkHealthServiceImpl(LinkReportRepository linkReportRepository,
                                       LinkReportDailyRepository linkReportDailyRepository,
-                                      EntryIpHistoryRepository entryIpHistoryRepository,
                                       AsnOrgRepository asnOrgRepository,
                                       LinkReportProperties properties, Clock clock) {
         this.linkReportRepository = linkReportRepository;
         this.linkReportDailyRepository = linkReportDailyRepository;
-        this.entryIpHistoryRepository = entryIpHistoryRepository;
         this.asnOrgRepository = asnOrgRepository;
         this.properties = properties;
         this.clock = clock;
@@ -78,7 +70,7 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
             aggregates.addAll(linkReportDailyRepository.aggregateGlobalByDomainAndAsn(dailyFrom, dailyTo));
         }
 
-        return new LinkHealthResponse(buildDomainRows(aggregates), buildEntryIpTimeline(from));
+        return new LinkHealthResponse(buildDomainRows(aggregates));
     }
 
     /** 收敛到 [MIN_DAYS, 按天聚合保留天数]——超过按天聚合保留天数的数据两张表都不会再有 */
@@ -163,38 +155,4 @@ public class AdminLinkHealthServiceImpl implements AdminLinkHealthService {
         }
     }
 
-    /**
-     * 把 {@code entry_ip_history} 里同一 (failureDomain, vantage) 分组内相邻两条记录之间的差异
-     * 变成一次"变更事件"，再按 {@code changedAt >= from} 过滤——过滤必须在算出变更列表之后做，
-     * 而不是下推到 repository 的时间范围查询，否则会看不到窗口之前的最后一条基线记录，
-     * 把"进入查询窗口后的第一次变更"误判成"没有前值、不算变更"。
-     */
-    private List<EntryIpChange> buildEntryIpTimeline(Instant from) {
-        record DomainVantageKey(String failureDomain, DnsVantage vantage) {
-        }
-
-        List<EntryIpHistory> all = entryIpHistoryRepository.findAllOrderByDomainVantageAndTime();
-        Map<DomainVantageKey, List<EntryIpHistory>> grouped = new LinkedHashMap<>();
-        for (EntryIpHistory history : all) {
-            grouped.computeIfAbsent(new DomainVantageKey(history.getFailureDomain(), history.getVantage()),
-                    key -> new ArrayList<>()).add(history);
-        }
-
-        List<EntryIpChange> changes = new ArrayList<>();
-        for (Map.Entry<DomainVantageKey, List<EntryIpHistory>> entry : grouped.entrySet()) {
-            List<EntryIpHistory> history = entry.getValue();
-            for (int i = 1; i < history.size(); i++) {
-                EntryIpHistory current = history.get(i);
-                if (current.getObservedAt().isBefore(from)) {
-                    continue;
-                }
-                EntryIpHistory previous = history.get(i - 1);
-                changes.add(new EntryIpChange(entry.getKey().failureDomain(), entry.getKey().vantage().name(),
-                        previous.getEntryIps(), current.getEntryIps(), current.getObservedAt()));
-            }
-        }
-        return changes.stream()
-                .sorted(Comparator.comparing(EntryIpChange::changedAt).reversed())
-                .toList();
-    }
 }

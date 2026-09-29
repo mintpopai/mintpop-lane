@@ -583,15 +583,13 @@ export interface ImageUploadResponse {
 }
 
 /**
- * 管理端「链路健康」查询结果（GET /admin/link-health）：故障域 × 运营商成功率矩阵 + 入口 IP
- * 变更时间线（spec §8.3）。矩阵全库跨全部用户求和——分析维度只到故障域与运营商，
+ * 管理端「链路健康」查询结果（GET /admin/link-health）：故障域 × 运营商成功率矩阵
+ * （spec §8.3）。矩阵全库跨全部用户求和——分析维度只到故障域与运营商，
  * 不按节点也不按用户，页面渲染时同样只能按这两个维度展开，不能顺手加节点明细。
  */
 export interface LinkHealthResponse {
   /** 故障域 × 运营商的成功率矩阵，按故障域分组 */
   domains: LinkHealthDomainRow[];
-  /** 入口 IP 变更时间线，取自一期的 entry_ip_history，按变更时刻倒序（最近的在前） */
-  entryIpTimeline: LinkHealthEntryIpChange[];
 }
 
 /**
@@ -629,26 +627,6 @@ export interface LinkHealthAsnCell {
   aliveCount: number;
   successRate: number | null;
 }
-
-/**
- * 一次入口 IP 变更事件。vantage 是服务端 DnsVantage 枚举的取值（如 CHINA_TELECOM），
- * 服务端可能新增本前端不认识的取值，故用 string 承载。changedAt 是变更后那次观测的时刻。
- */
-export interface LinkHealthEntryIpChange {
-  failureDomain: string;
-  vantage: string;
-  previousIps: string;
-  currentIps: string;
-  changedAt: string;
-}
-
-/** DnsVantage 枚举取值 → 中文标签，服务端新增未收录的取值时原样展示取值本身 */
-export const DNS_VANTAGE_LABELS: Record<string, string> = {
-  CHINA_TELECOM: "中国电信",
-  CHINA_UNICOM: "中国联通",
-  CHINA_MOBILE: "中国移动",
-  OVERSEAS: "海外",
-};
 
 /** 第一跳节点筛选地区，与服务端 NodeRegion 逐字对应 */
 export const NODE_REGION = {

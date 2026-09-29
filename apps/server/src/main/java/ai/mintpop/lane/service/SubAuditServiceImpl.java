@@ -4,7 +4,7 @@ import ai.mintpop.lane.client.EcsDnsClient;
 import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.config.EntryIpWatchProperties;
+import ai.mintpop.lane.config.SubAuditProperties;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.DnsVantage;
@@ -47,14 +47,14 @@ public class SubAuditServiceImpl implements SubAuditService {
     private final IpAsnClient ipAsnClient;
     private final ProxyNodeRepository nodeRepository;
     private final AirportSubscriptionRepository airportSubscriptionRepository;
-    private final EntryIpWatchProperties entryIpWatchProperties;
+    private final SubAuditProperties subAuditProperties;
     private final SystemSettingService systemSettingService;
 
     public SubAuditServiceImpl(SubFetchClient subFetchClient, SubYamlParser subYamlParser,
                                 FailureDomainSyncer failureDomainSyncer, EcsDnsClient ecsDnsClient,
                                 IpAsnClient ipAsnClient, ProxyNodeRepository nodeRepository,
                                 AirportSubscriptionRepository airportSubscriptionRepository,
-                                EntryIpWatchProperties entryIpWatchProperties,
+                                SubAuditProperties subAuditProperties,
                                 SystemSettingService systemSettingService) {
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
@@ -63,7 +63,7 @@ public class SubAuditServiceImpl implements SubAuditService {
         this.ipAsnClient = ipAsnClient;
         this.nodeRepository = nodeRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
-        this.entryIpWatchProperties = entryIpWatchProperties;
+        this.subAuditProperties = subAuditProperties;
         this.systemSettingService = systemSettingService;
     }
 
@@ -144,7 +144,7 @@ public class SubAuditServiceImpl implements SubAuditService {
 
         Map<DnsVantage, List<String>> entryIps = new LinkedHashMap<>();
         Map<DnsVantage, List<String>> asns = new LinkedHashMap<>();
-        for (Map.Entry<DnsVantage, String> vantageEntry : entryIpWatchProperties.getVantages().entrySet()) {
+        for (Map.Entry<DnsVantage, String> vantageEntry : subAuditProperties.getVantages().entrySet()) {
             DnsVantage vantage = vantageEntry.getKey();
             String clientSubnet = vantageEntry.getValue();
             List<String> ips = ecsDnsClient.resolveA(domain, clientSubnet);
@@ -165,8 +165,7 @@ public class SubAuditServiceImpl implements SubAuditService {
      *   <li>**先滤掉空列表**：某视角 DoH 失败时 {@code resolveA} 按设计返回空列表，
      *       留着它会让集合凭空多出一个元素——一次网络抖动就误报「分线路」。</li>
      *   <li>**再按字典序排**：同一组 IP 的返回顺序会抖（jp.tsdns.top 实测就是两个 AWS 东京 IP 轮询），
-     *       {@code [A,B]} 与 {@code [B,A]} 不相等，同样误报。{@code EntryIpWatchService}
-     *       早就先 sorted() 再比，这里对齐它。</li>
+     *       {@code [A,B]} 与 {@code [B,A]} 不相等，同样误报。</li>
      * </ul>
      */
     private static boolean isLineSplit(Map<DnsVantage, List<String>> entryIps) {
