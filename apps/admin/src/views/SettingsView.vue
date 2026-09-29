@@ -166,6 +166,16 @@ function askSave(): void {
   void refreshPreview("FORM");
 }
 
+/** 表单回到已保存的值；预检随 watch 自动按回退后的值重算 */
+function revert(): void {
+  if (!saved.value) {
+    return;
+  }
+  region.value = saved.value.region;
+  airportsPerUser.value = String(saved.value.airportsPerUser);
+  bandwidthPerUserMbps.value = String(saved.value.bandwidthPerUserMbps);
+}
+
 function askRebuild(): void {
   pendingAction.value = "REBUILD";
   void refreshPreview("SAVED");
@@ -237,53 +247,91 @@ onBeforeUnmount(() => {
     </template>
   </PageHead>
 
-  <DataCard :loading="loading" :error="loadError" :empty="false">
-    <div class="admin-form">
-      <div class="admin-field">
+  <!-- 设置行「左说明 · 右控件」：说明是管理员照着做决定的依据，放在控件旁边比挤在控件下方好读；
+       控件收窄到固定宽度，数字框不再横穿整张卡 -->
+  <DataCard class="settings-card" :loading="loading" :error="loadError" :empty="false">
+    <header class="card-head">
+      <h3 class="card-title">线路参数</h3>
+      <span v-if="dirty" class="pill pending">有未保存的改动</span>
+    </header>
+
+    <div class="setting-row">
+      <div class="setting-text">
         <label for="setting-region">筛选地区</label>
+        <p class="admin-note">只把落在该地区的节点作为第一跳候选。现在只有美国。</p>
+      </div>
+      <div class="setting-control">
         <Select
           id="setting-region"
           v-model="region"
           :options="regionOptions"
           aria-label="筛选地区"
         />
-        <p class="admin-note">只把落在该地区的节点作为第一跳候选。现在只有美国。</p>
       </div>
-      <div class="admin-field">
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-text">
         <label for="setting-airports">每个用户分配几家机场的订阅</label>
-        <input
-          id="setting-airports"
-          v-model="airportsPerUser"
-          class="admin-input fact"
-          type="number"
-          min="1"
-          max="10"
-        />
         <p class="admin-note">{{ airportsHint || "填 1 到 10 的整数" }}</p>
       </div>
-      <div class="admin-field">
-        <label for="setting-bandwidth">每个用户按多少带宽计名额（Mbps）</label>
-        <input
-          id="setting-bandwidth"
-          v-model="bandwidthPerUserMbps"
-          class="admin-input fact"
-          type="number"
-          min="1"
-          max="1000"
-        />
+      <div class="setting-control">
+        <div class="unit-input">
+          <input
+            id="setting-airports"
+            v-model="airportsPerUser"
+            class="admin-input fact"
+            type="number"
+            min="1"
+            max="10"
+          />
+          <span class="unit">家</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-text">
+        <label for="setting-bandwidth">每个用户按多少带宽计名额</label>
         <p class="admin-note">订阅主用名额 = 订阅带宽 ÷ 此值，向下取整。</p>
       </div>
+      <div class="setting-control">
+        <div class="unit-input">
+          <input
+            id="setting-bandwidth"
+            v-model="bandwidthPerUserMbps"
+            class="admin-input fact"
+            type="number"
+            min="1"
+            max="1000"
+          />
+          <span class="unit">Mbps</span>
+        </div>
+      </div>
+    </div>
 
-      <p class="admin-note">
-        容量预检（按上面填的值）：
-        <span v-if="preview" class="fact">{{ previewText }}</span>
+    <!-- 底栏：左边是按表单值算的容量预检（保存前就能看到够不够），右边是还原与保存 -->
+    <footer class="settings-foot">
+      <div class="capacity">
+        <span class="capacity-label">容量预检</span>
+        <template v-if="preview">
+          <span class="fact">{{ previewText }}</span>
+          <span class="state" :data-state="preview.sufficient ? 'ENABLED' : 'REVOKED'">{{
+            preview.sufficient ? "容量足够" : "名额不足"
+          }}</span>
+        </template>
         <span v-else class="muted">—</span>
-        <span v-if="preview && !preview.sufficient" class="state" data-state="DISABLED"
-          >名额不足</span
+      </div>
+      <div class="foot-actions">
+        <button
+          v-if="dirty"
+          type="button"
+          class="admin-btn-ghost revert"
+          :disabled="submitting"
+          @click="revert()"
         >
-      </p>
-
-      <div class="admin-toolbar">
+          还原
+        </button>
         <button
           type="button"
           class="admin-btn save"
@@ -293,28 +341,32 @@ onBeforeUnmount(() => {
           保存
         </button>
       </div>
-    </div>
+    </footer>
+  </DataCard>
 
-    <section class="admin-card">
-      <h4 class="block-title">最近一次重算</h4>
-      <p v-if="!status || status.phase === 'IDLE'" class="muted">服务端启动以来还没有重算过。</p>
-      <p v-else-if="status.phase === 'RUNNING'">
-        <span class="state" data-state="ENABLED">重算中</span>
-        <span class="fact muted">开始于 {{ formatDateTime(status.startedAt) }}</span>
-      </p>
-      <p v-else-if="status.phase === 'SUCCEEDED'">
-        上次重算成功：<span class="fact">{{ status.userCount }}</span> 个用户、<span class="fact">{{
+  <section v-if="!loading && !loadError" class="admin-card status-card">
+    <h3 class="card-title">最近一次重算</h3>
+    <p v-if="!status || status.phase === 'IDLE'" class="muted">服务端启动以来还没有重算过。</p>
+    <p v-else-if="status.phase === 'RUNNING'" class="status-line">
+      <span class="state" data-state="ENABLED">重算中</span>
+      <span class="fact muted">开始于 {{ formatDateTime(status.startedAt) }}</span>
+    </p>
+    <p v-else-if="status.phase === 'SUCCEEDED'" class="status-line">
+      <span class="state" data-state="ENABLED">上次重算成功</span>
+      <span
+        ><span class="fact">{{ status.userCount }}</span> 个用户、<span class="fact">{{
           status.subscriptionCount
         }}</span>
-        个订阅，完成于 <span class="fact muted">{{ formatDateTime(status.finishedAt) }}</span>
-      </p>
-      <p v-else>
-        <span class="state" data-state="DISABLED">上次重算失败</span>
-        <span>{{ status.error }}</span>
-        <span class="fact muted">（{{ formatDateTime(status.finishedAt) }}）</span>
-      </p>
-    </section>
-  </DataCard>
+        个订阅</span
+      >
+      <span class="fact muted">完成于 {{ formatDateTime(status.finishedAt) }}</span>
+    </p>
+    <p v-else class="status-line">
+      <span class="state" data-state="REVOKED">上次重算失败</span>
+      <span>{{ status.error }}</span>
+      <span class="fact muted">{{ formatDateTime(status.finishedAt) }}</span>
+    </p>
+  </section>
 
   <ConfirmDialog
     v-if="pendingAction"
@@ -327,3 +379,136 @@ onBeforeUnmount(() => {
     @cancel="cancelAction()"
   />
 </template>
+
+<style scoped>
+.settings-card {
+  padding: 4px 24px 0;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+/* 一行一个参数：左说明右控件，行与行之间一条发丝线 */
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 32px;
+  align-items: center;
+  padding: 20px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.setting-text > label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.setting-control > * {
+  width: 100%;
+}
+
+/* 单位贴在数字框内右侧：挂在框外会让数字框比地区下拉短一截，三个控件右缘对不齐。
+   单位不接收点击，点到它等于点输入框 */
+.unit-input {
+  position: relative;
+}
+
+.unit-input .admin-input {
+  width: 100%;
+  padding-right: 56px;
+}
+
+.unit {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  pointer-events: none;
+}
+
+/* 底栏铺 Cloud 底并贴满卡片左右下缘，和参数区分成两层：上面是「填什么」，下面是「会怎样」 */
+.settings-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 -24px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-cloud);
+}
+
+.capacity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.capacity-label {
+  color: var(--color-ink-secondary);
+}
+
+.foot-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.muted {
+  color: var(--color-ink-secondary);
+}
+
+.status-card {
+  margin-top: 16px;
+  padding: 20px 24px;
+}
+
+.status-card .card-title {
+  margin-bottom: 12px;
+}
+
+.status-card p {
+  font-size: 14px;
+}
+
+.status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.status-line .fact.muted {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+@media (max-width: 720px) {
+  .setting-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+</style>

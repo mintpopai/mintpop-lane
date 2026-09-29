@@ -166,6 +166,19 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("先保存或还原改动后再重算");
   });
 
+  it("有改动时出现「还原」，点了表单回到已保存的值、重算按钮恢复可点", async () => {
+    const wrapper = mount(SettingsView, { attachTo: document.body });
+    await flushPromises();
+    expect(wrapper.find("button.revert").exists()).toBe(false);
+
+    await wrapper.find("#setting-bandwidth").setValue("30");
+    await wrapper.find("button.revert").trigger("click");
+
+    expect((wrapper.find("#setting-bandwidth").element as HTMLInputElement).value).toBe("20");
+    expect(wrapper.find("button.revert").exists()).toBe(false);
+    expect(wrapper.find("button.rebuild").attributes("disabled")).toBeUndefined();
+  });
+
   it("手动重算的预检按已保存值算，不用表单值", async () => {
     const wrapper = mount(SettingsView, { attachTo: document.body });
     await flushPromises();
