@@ -37,15 +37,17 @@ public class AdminNodeServiceImpl implements AdminNodeService {
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final EgressIpVerifier.EgressProbe egressProbe;
     private final NodeNotifyService nodeNotifyService;
+    private final SubscriptionRenderCache renderCache;
 
     public AdminNodeServiceImpl(ProxyNodeRepository nodeRepository, UserRepository userRepository,
                                  AirportSubscriptionRepository airportSubscriptionRepository, EgressIpVerifier.EgressProbe egressProbe,
-                                 NodeNotifyService nodeNotifyService) {
+                                 NodeNotifyService nodeNotifyService, SubscriptionRenderCache renderCache) {
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.egressProbe = egressProbe;
         this.nodeNotifyService = nodeNotifyService;
+        this.renderCache = renderCache;
     }
 
     @Override
@@ -154,12 +156,15 @@ public class AdminNodeServiceImpl implements AdminNodeService {
 
     @Override
     public void delete(Long id) {
-        nodeRepository.findById(id).orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
+        ProxyNodeDto node = nodeRepository.findById(id).orElseThrow(() -> new BizException(BizCodeEnum.NODE_NOT_FOUND));
 
         if (isReferenced(id)) {
             throw new BizException(BizCodeEnum.NODE_IN_USE);
         }
         nodeRepository.deleteById(id);
+        if (node.getAirportSubscriptionId() != null) {
+            renderCache.evict(node.getAirportSubscriptionId());
+        }
     }
 
     @Override

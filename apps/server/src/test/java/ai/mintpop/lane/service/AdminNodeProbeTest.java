@@ -30,7 +30,7 @@ class AdminNodeProbeTest {
 
     private AdminNodeServiceImpl serviceWith(EgressIpVerifier.EgressProbe probe) {
         return new AdminNodeServiceImpl(nodeRepository, mock(UserRepository.class),
-                mock(AirportSubscriptionRepository.class), probe, mock(NodeNotifyService.class));
+                mock(AirportSubscriptionRepository.class), probe, mock(NodeNotifyService.class), mock(SubscriptionRenderCache.class));
     }
 
     private ProxyNodeDto node(NodeRole role, String egressIp) {

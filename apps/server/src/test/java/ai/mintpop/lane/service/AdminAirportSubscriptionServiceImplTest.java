@@ -82,6 +82,7 @@ class AdminAirportSubscriptionServiceImplTest {
 
         SystemSettingService systemSettingService = mock(SystemSettingService.class);
         when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
+        SubscriptionRenderCache renderCache = mock(SubscriptionRenderCache.class);
         FailureDomainSyncer failureDomainSyncer = new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC());
         service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, airportRepository, nodeRepository, userRepository,
                 userFrontSubscriptionRepository,
@@ -89,7 +90,7 @@ class AdminAirportSubscriptionServiceImplTest {
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
                 // 「按 serverAddr 去重」「跳过伪条目」这些口径正是本类要守的行为，不该被 mock 掉
                 failureDomainSyncer, trafficAlertService,
-                systemSettingService, new AirportSubscriptionNodeSyncer(nodeRepository, failureDomainSyncer), Clock.systemUTC());
+                systemSettingService, new AirportSubscriptionNodeSyncer(nodeRepository, failureDomainSyncer, renderCache), renderCache, Clock.systemUTC());
     }
 
     private AirportSubscriptionDto group(long id) {

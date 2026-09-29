@@ -24,8 +24,17 @@ public record LinkConfigResponse(
         /** 落地出口 IP 对应的 IANA 时区名；未录为 null，客户端据此给终端注入 TZ */
         String egressTimezone,
         List<AgentCredential> agentCredentials,
-        long ttlSeconds
+        long ttlSeconds,
+        /**
+         * 本份配置中「客户端会跑的部分」的哈希（见 LinkConfigVersion）。客户端记住它，
+         * 心跳返回的值不同就重拉并热加载。渲染阶段先传 null，最后用 withConfigVersion 补上。
+         */
+        String configVersion
 ) {
+
+    public LinkConfigResponse withConfigVersion(String version) {
+        return new LinkConfigResponse(frontGroups, land, expectedEgressIp, egressTimezone, agentCredentials, ttlSeconds, version);
+    }
 
     /** 一个机场订阅下的候选前置节点 */
     public record FrontGroup(

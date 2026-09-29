@@ -1,6 +1,5 @@
 package ai.mintpop.lane.service;
 
-import ai.mintpop.lane.config.FrontTuningProperties;
 import ai.mintpop.lane.config.LinkProperties;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.dto.SubscriptionDto;
@@ -10,7 +9,6 @@ import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.DeviceBinding;
 import ai.mintpop.lane.enumeration.LinkStatus;
-import ai.mintpop.lane.enumeration.NodeRegion;
 import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
@@ -32,43 +30,38 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class LinkServiceImpl implements LinkService {
 
     private final LinkProperties linkProperties;
-    private final FrontTuningProperties frontTuningProperties;
     private final UserRepository userRepository;
     private final ProxyNodeRepository nodeRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final UserDeviceRepository userDeviceRepository;
     private final DeviceRebindRequestRepository rebindRequestRepository;
     private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
-    private final SystemSettingService systemSettingService;
+    private final SubscriptionRenderCache renderCache;
     private final Clock clock;
 
     public LinkServiceImpl(LinkProperties linkProperties,
-                           FrontTuningProperties frontTuningProperties,
                            UserRepository userRepository,
                            ProxyNodeRepository nodeRepository,
                            SubscriptionRepository subscriptionRepository,
                            UserDeviceRepository userDeviceRepository,
                            DeviceRebindRequestRepository rebindRequestRepository,
                            UserFrontSubscriptionRepository userFrontSubscriptionRepository,
-                           SystemSettingService systemSettingService,
+                           SubscriptionRenderCache renderCache,
                            Clock clock) {
         this.linkProperties = linkProperties;
-        this.frontTuningProperties = frontTuningProperties;
         this.userRepository = userRepository;
         this.nodeRepository = nodeRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.userDeviceRepository = userDeviceRepository;
         this.rebindRequestRepository = rebindRequestRepository;
         this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
-        this.systemSettingService = systemSettingService;
+        this.renderCache = renderCache;
         this.clock = clock;
     }
 
@@ -83,24 +76,7 @@ public class LinkServiceImpl implements LinkService {
 
         // 链路权益只看网络配置（节点分配与状态），与套餐解耦：
         // 套餐只决定下发哪些席位凭据，没买过/全过期都不拦建链
-        if (user.getLandNodeId() == null) {
-            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
-        }
-
-        // 外键保证节点必然存在，查不到说明数据被绕过约束改坏了，按内部错误处理
-        ProxyNodeDto land = nodeRepository.findById(user.getLandNodeId())
-                .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR));
-
-        // 落地节点只此一跳，没有 fallback 组可言：禁用即刻拒绝，语义与二期前一致
-        if (land.getStatus() != NodeStatus.ENABLED) {
-            throw new BizException(BizCodeEnum.NODE_DISABLED);
-        }
-
-        if (land.getEgressIp() == null || land.getEgressIp().isBlank()) {
-            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
-        }
-
-        List<LinkConfigResponse.FrontGroup> frontGroups = resolveFrontGroups(user);
+        RoutePart route = renderRoute(user);
 
         // 已知设备与待处理申请各取一次：一个人的设备是个位数、待办更少，
         // 一次取回好过在下面逐条席位去查库
@@ -128,15 +104,39 @@ public class LinkServiceImpl implements LinkService {
                 .map(s -> toCredential(s, thisDeviceRowId, devicesById, pendingFromThisDevice))
                 .toList();
 
-        return new LinkConfigResponse(
-                frontGroups,
+        LinkConfigResponse response = new LinkConfigResponse(route.frontGroups(),
                 // 落地节点不接客户端的保活诉求，原样透传，不传覆盖表
-                land.toMihomoNode(),
-                land.getEgressIp(),
-                land.getEgressTimezone(),
-                credentials,
-                linkProperties.getTtlSeconds()
-        );
+                route.land().toMihomoNode(), route.land().getEgressIp(), route.land().getEgressTimezone(),
+                credentials, linkProperties.getTtlSeconds(), null);
+        return response.withConfigVersion(LinkConfigVersion.of(routeOnly(route)));
+    }
+
+    /** 线路部分（第一跳组 + 落地节点），不含席位凭据；下发与心跳共用，保证两处算出同一个 configVersion */
+    private record RoutePart(List<LinkConfigResponse.FrontGroup> frontGroups, ProxyNodeDto land) {
+    }
+
+    /** 抛 BizException 的情形：未分配落地/落地禁用/无出口 IP/未分配第一跳/全部订阅无节点 */
+    private RoutePart renderRoute(UserDto user) {
+        if (user.getLandNodeId() == null) {
+            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+        }
+        // 外键保证节点必然存在，查不到说明数据被绕过约束改坏了，按内部错误处理
+        ProxyNodeDto land = nodeRepository.findById(user.getLandNodeId())
+                .orElseThrow(() -> new BizException(BizCodeEnum.INTERNAL_ERROR));
+        // 落地节点只此一跳，没有 fallback 组可言：禁用即刻拒绝
+        if (land.getStatus() != NodeStatus.ENABLED) {
+            throw new BizException(BizCodeEnum.NODE_DISABLED);
+        }
+        if (land.getEgressIp() == null || land.getEgressIp().isBlank()) {
+            throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+        }
+        return new RoutePart(resolveFrontGroups(user), land);
+    }
+
+    /** 只含线路部分的配置，专供算版本；凭据给空、ttl 给 0，二者本就不进哈希 */
+    private static LinkConfigResponse routeOnly(RoutePart route) {
+        return new LinkConfigResponse(route.frontGroups(), route.land().toMihomoNode(), route.land().getEgressIp(),
+                route.land().getEgressTimezone(), List.of(), 0, null);
     }
 
     /**
@@ -151,39 +151,19 @@ public class LinkServiceImpl implements LinkService {
             throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
 
-        NodeRegion region = systemSettingService.frontSettings().region();
         List<LinkConfigResponse.FrontGroup> groups = new ArrayList<>();
         for (Long subscriptionId : subscriptionIds) {
-            List<ProxyNodeDto> usable = nodeRepository.findByAirportSubscriptionId(subscriptionId).stream()
-                    .filter(node -> region.matches(node.getSourceName()))
-                    .toList();
-            if (usable.isEmpty()) {
-                continue;
+            SubscriptionRenderCache.RenderedSubscription rendered = renderCache.get(subscriptionId);
+            if (rendered.nodes().isEmpty()) {
+                continue;   // 该订阅眼下没有节点，用户自然落到备用
             }
-            List<Map<String, Object>> nodes = usable.stream()
-                    // 保活参数覆盖对组里每个节点都要套，否则组内切换过去就退化成每请求重握手
-                    .map(node -> node.toMihomoNode(frontTuning(node)))
-                    .toList();
-            groups.add(new LinkConfigResponse.FrontGroup(mostCommonFailureDomain(usable), nodes));
+            groups.add(new LinkConfigResponse.FrontGroup(rendered.failureDomain(), rendered.nodes()));
         }
 
         if (groups.isEmpty()) {
             throw new BizException(BizCodeEnum.NODE_DISABLED);
         }
         return groups;
-    }
-
-    /** 出现次数最多的故障域；平手取字典序最小；全未解析返回 null。只作上报关联键 */
-    private static String mostCommonFailureDomain(List<ProxyNodeDto> nodes) {
-        return nodes.stream()
-                .map(ProxyNodeDto::getFailureDomain)
-                .filter(Objects::nonNull)
-                .collect(Collectors.groupingBy(Function.identity(), TreeMap::new, Collectors.counting()))
-                .entrySet().stream()
-                // TreeMap 按字典序遍历，max 遇到相等时保留先出现的那个，即字典序最小
-                .reduce((best, next) -> next.getValue() > best.getValue() ? next : best)
-                .map(Map.Entry::getKey)
-                .orElse(null);
     }
 
     @Override
@@ -193,25 +173,23 @@ public class LinkServiceImpl implements LinkService {
         return userRepository.findById(userId)
                 .map(user -> {
                     if (user.getStatus() == UserStatus.SUSPENDED) {
-                        return new HeartbeatResponse(LinkStatus.SUSPENDED);
+                        return new HeartbeatResponse(LinkStatus.SUSPENDED, null);
                     }
                     if (user.getStatus() == UserStatus.REVOKED) {
-                        return new HeartbeatResponse(LinkStatus.REVOKED);
+                        return new HeartbeatResponse(LinkStatus.REVOKED, null);
                     }
-                    return new HeartbeatResponse(LinkStatus.ACTIVE);
+                    return new HeartbeatResponse(LinkStatus.ACTIVE, currentVersionOrNull(user));
                 })
-                .orElse(new HeartbeatResponse(LinkStatus.REVOKED));
+                .orElse(new HeartbeatResponse(LinkStatus.REVOKED, null));
     }
 
-    /**
-     * 按前置节点的真实 mihomo type（sourceType，不是 protocol）查保活参数覆盖表。
-     * 手工新建的前置节点没有 sourceType（订阅导入才有），此时视同表里查不到，原样透传。
-     */
-    private Map<String, Object> frontTuning(ProxyNodeDto front) {
-        if (front.getSourceType() == null) {
-            return Map.of();
+    /** 渲染不出配置（未分配、订阅无节点、无落地）就给 null：客户端看到 null 不动作，继续跑旧配置 */
+    private String currentVersionOrNull(UserDto user) {
+        try {
+            return LinkConfigVersion.of(routeOnly(renderRoute(user)));
+        } catch (BizException e) {
+            return null;
         }
-        return frontTuningProperties.getProtocols().getOrDefault(front.getSourceType(), Map.of());
     }
 
     /**

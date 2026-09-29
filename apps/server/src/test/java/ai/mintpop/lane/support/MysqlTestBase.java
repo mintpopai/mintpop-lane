@@ -1,5 +1,8 @@
 package ai.mintpop.lane.support;
 
+import ai.mintpop.lane.service.SubscriptionRenderCache;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
@@ -27,6 +30,18 @@ public abstract class MysqlTestBase {
 
     @ServiceConnection
     protected static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4");
+
+    @Autowired
+    private SubscriptionRenderCache renderCache;
+
+    /**
+     * 测试夹具直接写库、绕过服务层，各用例又会复用同样的自增 id；进程内渲染缓存在
+     * 上下文缓存下跨用例存活，不清会读到上一个用例留下的节点。
+     */
+    @BeforeEach
+    void evictRenderCache() {
+        renderCache.evictAll();
+    }
 
     static {
         // 与生产 JDBC URL 的时区参数一致：编解码与会话时区都钉 UTC

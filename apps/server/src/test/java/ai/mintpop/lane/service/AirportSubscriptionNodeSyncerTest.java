@@ -26,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,7 +45,7 @@ class AirportSubscriptionNodeSyncerTest {
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
         when(failureDomainResolver.resolve(anyString())).thenReturn("jp.tsdns.top");
         syncer = new AirportSubscriptionNodeSyncer(nodeRepository,
-                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()));
+                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), mock(SubscriptionRenderCache.class));
     }
 
     private static SubNode sub(String name, int port) {

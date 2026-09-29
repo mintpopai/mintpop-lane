@@ -73,7 +73,7 @@ class SubRefreshServiceTest {
         }).when(tx).executeWithoutResult(any());
         FailureDomainSyncer failureDomainSyncer = new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC());
         service = new SubRefreshService(airportSubscriptionRepository, subFetchClient, new SubYamlParser(),
-                failureDomainSyncer, new AirportSubscriptionNodeSyncer(nodeRepository, failureDomainSyncer),
+                failureDomainSyncer, new AirportSubscriptionNodeSyncer(nodeRepository, failureDomainSyncer, mock(SubscriptionRenderCache.class)),
                 nodeNotifyService, trafficAlertService, systemSettingService, tx, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

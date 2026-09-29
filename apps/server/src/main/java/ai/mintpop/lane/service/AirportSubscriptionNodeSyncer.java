@@ -27,10 +27,13 @@ public class AirportSubscriptionNodeSyncer {
 
     private final ProxyNodeRepository nodeRepository;
     private final FailureDomainSyncer failureDomainSyncer;
+    private final SubscriptionRenderCache renderCache;
 
-    public AirportSubscriptionNodeSyncer(ProxyNodeRepository nodeRepository, FailureDomainSyncer failureDomainSyncer) {
+    public AirportSubscriptionNodeSyncer(ProxyNodeRepository nodeRepository, FailureDomainSyncer failureDomainSyncer,
+                                         SubscriptionRenderCache renderCache) {
         this.nodeRepository = nodeRepository;
         this.failureDomainSyncer = failureDomainSyncer;
+        this.renderCache = renderCache;
     }
 
     public record SyncResult(List<String> added, List<String> removed, int updated) {
@@ -83,6 +86,8 @@ public class AirportSubscriptionNodeSyncer {
             nodeRepository.deleteById(vanished.getId());
             removed.add(vanished.getSourceName());
         }
+        // 节点集合已变，逐出该订阅的渲染缓存，下次心跳/下发按新节点重算
+        renderCache.evict(airportSubscriptionId);
         return new SyncResult(added, removed, updated);
     }
 

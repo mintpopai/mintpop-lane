@@ -46,7 +46,7 @@ class AdminNodeEgressIpChangeNotifyTest {
     @BeforeEach
     void setUp() {
         service = new AdminNodeServiceImpl(nodeRepository, mock(UserRepository.class),
-                mock(AirportSubscriptionRepository.class), land -> "unused", nodeNotifyService);
+                mock(AirportSubscriptionRepository.class), land -> "unused", nodeNotifyService, mock(SubscriptionRenderCache.class));
     }
 
     private ProxyNodeDto storedLand(String egressIp, String timezone) {

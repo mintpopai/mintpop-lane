@@ -45,6 +45,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private final TrafficAlertService trafficAlertService;
     private final SystemSettingService systemSettingService;
     private final AirportSubscriptionNodeSyncer nodeSyncer;
+    private final SubscriptionRenderCache renderCache;
     private final Clock clock;
 
     public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository,
@@ -56,7 +57,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                                      FailureDomainSyncer failureDomainSyncer,
                                      TrafficAlertService trafficAlertService,
                                      SystemSettingService systemSettingService,
-                                     AirportSubscriptionNodeSyncer nodeSyncer, Clock clock) {
+                                     AirportSubscriptionNodeSyncer nodeSyncer, SubscriptionRenderCache renderCache,
+                                     Clock clock) {
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.airportRepository = airportRepository;
         this.nodeRepository = nodeRepository;
@@ -68,6 +70,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         this.failureDomainSyncer = failureDomainSyncer;
         this.trafficAlertService = trafficAlertService;
         this.systemSettingService = systemSettingService;
+        this.renderCache = renderCache;
         this.nodeSyncer = nodeSyncer;
         this.clock = clock;
     }
@@ -201,6 +204,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         }
         nodes.forEach(node -> nodeRepository.deleteById(node.getId()));
         airportSubscriptionRepository.deleteById(id);
+        renderCache.evict(id);
     }
 
     /**

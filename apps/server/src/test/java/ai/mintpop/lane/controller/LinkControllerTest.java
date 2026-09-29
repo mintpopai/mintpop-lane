@@ -279,11 +279,12 @@ class LinkControllerTest extends MysqlTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.configVersion").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
 
         // 只断言 200/code=0 没有判别力：这条要连同「响应体逐字未变」与「没写库」一起断言，
         // 否则悄悄多出一个字段、或悄悄写了一行观测数据，这个测试都发现不了
-        assertThat(body).isEqualTo("{\"code\":0,\"data\":{\"status\":\"ACTIVE\"},\"msg\":null,\"success\":true}");
+        assertThat(body).matches("\\{\"code\":0,\"data\":\\{\"status\":\"ACTIVE\",\"configVersion\":\"[0-9a-f]{64}\"},\"msg\":null,\"success\":true}");
         assertThat(countLinkReportRows(user1Id)).isZero();
     }
 

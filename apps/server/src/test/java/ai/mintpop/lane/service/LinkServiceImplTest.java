@@ -23,6 +23,7 @@ import ai.mintpop.lane.repository.SubscriptionRepository;
 import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
+import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
 import ai.mintpop.lane.dto.FrontSettings;
 import ai.mintpop.lane.enumeration.NodeRegion;
@@ -168,9 +169,10 @@ class LinkServiceImplTest {
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
         frontTuningProperties = new FrontTuningProperties();
-        service = new LinkServiceImpl(props, frontTuningProperties, userRepository, nodeRepository,
+        service = new LinkServiceImpl(props, userRepository, nodeRepository,
                 subscriptionRepository, userDeviceRepository, rebindRequestRepository,
-                userFrontSubscriptionRepository, systemSettingService, Clock.fixed(NOW, ZoneOffset.UTC));
+                userFrontSubscriptionRepository,
+                new InMemorySubscriptionRenderCache(nodeRepository, frontTuningProperties, systemSettingService), Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
         when(nodeRepository.findById(20L))
@@ -699,5 +701,40 @@ class LinkServiceImplTest {
         when(rebindRequestRepository.findPendingByUserId(USER_ID)).thenReturn(List.of());
 
         assertThat(service.resolveLink(USER_ID, THIS_DEVICE).agentCredentials()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("resolveLink 返回的 configVersion 与 heartbeat 现算的一致")
+    void heartbeatVersionEqualsResolveLinkVersion() {
+        givenUser(user(UserStatus.ACTIVE));
+        LinkConfigResponse config = service.resolveLink(USER_ID, THIS_DEVICE);
+        HeartbeatResponse beat = service.heartbeat(USER_ID);
+
+        assertThat(config.configVersion()).hasSize(64);
+        assertThat(beat.status()).isEqualTo(LinkStatus.ACTIVE);
+        assertThat(beat.configVersion()).isEqualTo(config.configVersion());
+    }
+
+    @Test
+    @DisplayName("未分配第一跳：resolveLink 报 EGRESS_NOT_ASSIGNED，heartbeat 仍 ACTIVE 但 configVersion 为 null")
+    void heartbeatVersionNullWhenUnrenderable() {
+        givenUser(user(UserStatus.ACTIVE));
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode()).isEqualTo(BizCodeEnum.EGRESS_NOT_ASSIGNED);
+        HeartbeatResponse beat = service.heartbeat(USER_ID);
+        assertThat(beat.status()).isEqualTo(LinkStatus.ACTIVE);
+        assertThat(beat.configVersion()).isNull();
+    }
+
+    @Test
+    @DisplayName("SUSPENDED 用户：心跳只返回状态，不渲染配置")
+    void suspendedHeartbeatHasNoVersion() {
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user(UserStatus.SUSPENDED)));
+        HeartbeatResponse beat = service.heartbeat(USER_ID);
+        assertThat(beat.status()).isEqualTo(LinkStatus.SUSPENDED);
+        assertThat(beat.configVersion()).isNull();
     }
 }
