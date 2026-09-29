@@ -217,3 +217,32 @@ describe("SubImportModal", () => {
     expect(wrapper.emitted("saved")).toBeTruthy();
   });
 });
+
+describe("SubImportModal 预选机场", () => {
+  it("带 airportId 打开时，所属机场直接选中它", async () => {
+    listAirports.mockResolvedValue([
+      airport({ id: 1, name: "泰山云" }),
+      airport({ id: 2, name: "某机场B" }),
+    ]);
+    mount(SubImportModal, { attachTo: document.body, props: { group: null, airportId: 2 } });
+    await flushPromises();
+
+    expect(query('button[aria-label="所属机场"]').text()).toContain("某机场B");
+  });
+
+  it("airportId 在列表里找不到时不预选，留给人自己挑", async () => {
+    listAirports.mockResolvedValue([airport({ id: 1, name: "泰山云" })]);
+    mount(SubImportModal, { attachTo: document.body, props: { group: null, airportId: 99 } });
+    await flushPromises();
+
+    expect(query('button[aria-label="所属机场"]').text()).not.toContain("泰山云");
+  });
+
+  it("一家机场都没有时，引导去「机场订阅」页新建机场", async () => {
+    listAirports.mockResolvedValue([]);
+    mount(SubImportModal, { attachTo: document.body, props: { group: null } });
+    await flushPromises();
+
+    expect(document.body.textContent).toContain("先在「机场订阅」页新建机场");
+  });
+});
