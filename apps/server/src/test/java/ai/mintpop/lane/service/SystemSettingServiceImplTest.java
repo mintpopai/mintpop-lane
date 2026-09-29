@@ -102,4 +102,34 @@ class SystemSettingServiceImplTest {
                     .isEqualTo(BizCodeEnum.SETTING_INVALID);
         }
     }
+
+    @Test
+    @DisplayName("库里地区取值不认识（MARS）回退 US")
+    void unknownRegionFallsBack() {
+        when(repository.findAll()).thenReturn(Map.of(SettingKey.FRONT_REGION, "MARS"));
+        assertThat(service.frontSettings().region()).isEqualTo(NodeRegion.US);
+    }
+
+    @Test
+    @DisplayName("库里机场数不是整数回退 3")
+    void nonNumericAirportsFallsBack() {
+        when(repository.findAll()).thenReturn(Map.of(SettingKey.FRONT_AIRPORTS_PER_USER, "abc"));
+        assertThat(service.frontSettings().airportsPerUser()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("库里每人带宽为 0 回退 20，主用容量不会除零")
+    void zeroBandwidthFallsBack() {
+        when(repository.findAll()).thenReturn(Map.of(SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS, "0"));
+        FrontSettings settings = service.frontSettings();
+        assertThat(settings.bandwidthPerUserMbps()).isEqualTo(20);
+        assertThat(settings.primaryCapacity(300)).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("库里机场数越界（11）回退 3")
+    void outOfRangeAirportsFallsBack() {
+        when(repository.findAll()).thenReturn(Map.of(SettingKey.FRONT_AIRPORTS_PER_USER, "11"));
+        assertThat(service.frontSettings().airportsPerUser()).isEqualTo(3);
+    }
 }

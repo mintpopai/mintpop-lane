@@ -28,8 +28,10 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         Map<SettingKey, String> stored = repository.findAll();
         return new FrontSettings(
                 parseRegion(valueOf(stored, SettingKey.FRONT_REGION)),
-                parseInt(valueOf(stored, SettingKey.FRONT_AIRPORTS_PER_USER), SettingKey.FRONT_AIRPORTS_PER_USER),
-                parseInt(valueOf(stored, SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS), SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS));
+                parseInt(valueOf(stored, SettingKey.FRONT_AIRPORTS_PER_USER),
+                        SettingKey.FRONT_AIRPORTS_PER_USER, FrontSettings.MIN_AIRPORTS_PER_USER, FrontSettings.MAX_AIRPORTS_PER_USER),
+                parseInt(valueOf(stored, SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS),
+                        SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS, FrontSettings.MIN_BANDWIDTH_PER_USER_MBPS, FrontSettings.MAX_BANDWIDTH_PER_USER_MBPS));
     }
 
     @Override
@@ -68,12 +70,16 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         }
     }
 
-    private static int parseInt(String raw, SettingKey key) {
+    private static int parseInt(String raw, SettingKey key, int min, int max) {
         try {
-            return Integer.parseInt(raw);
+            int value = Integer.parseInt(raw);
+            if (value >= min && value <= max) {
+                return value;
+            }
+            log.warn("{} 取值 {} 超出范围 [{}, {}]，按默认值 {}", key, raw, min, max, key.getDefaultValue());
         } catch (NumberFormatException e) {
             log.warn("{} 取值 {} 不是整数，按默认值 {}", key, raw, key.getDefaultValue());
-            return Integer.parseInt(key.getDefaultValue());
         }
+        return Integer.parseInt(key.getDefaultValue());
     }
 }
