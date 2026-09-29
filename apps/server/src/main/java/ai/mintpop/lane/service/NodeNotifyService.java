@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 
 /**
@@ -128,46 +127,21 @@ public class NodeNotifyService {
         return hours >= 24 ? (hours / 24) + " 天 " + (hours % 24) + " 小时" : hours + " 小时";
     }
 
-    /**
-     * 订阅节点增减（异步）：订阅定时刷新发现节点集合与库里不一致时推送，两个列表都空则不推。
-     * 只告知，不代替人做决定——是否要把新节点拉进来、是否要清掉消失的节点，都需要人工确认。
-     */
+    /** 订阅拉取失败（经重试仍失败或无当前地区节点）：每 5 分钟一轮照推，不去重，直到人处理 */
     @Async
-    public void notifySubNodesChanged(AirportSubscriptionDto group, List<String> added, List<String> removed) {
+    public void notifySubFetchFailed(AirportSubscriptionDto group, String error, Instant failedSince) {
         if (!notifyProperties.isConfigured()) {
-            return;
-        }
-        if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
         try {
             LinkedHashMap<String, String> fields = new LinkedHashMap<>();
             fields.put("订阅", group.getName() + "（ID " + group.getId() + "）");
-            fields.put("新增节点", added.isEmpty() ? "无" : String.join("、", added));
-            fields.put("消失节点", removed.isEmpty() ? "无" : String.join("、", removed));
-            feishuBotClient.sendCard(FeishuCardTemplate.ORANGE, "MintPop Lane 订阅节点增减，需人工确认", fields);
+            fields.put("错误", error);
+            fields.put("持续自", failedSince == null ? "本轮" : failedSince.toString());
+            fields.put("影响", "该订阅节点保持上次成功拉取的结果，未被删除；请检查订阅链接是否失效");
+            feishuBotClient.sendCard(FeishuCardTemplate.RED, "MintPop Lane 订阅拉取失败，需人工处理", fields);
         } catch (Exception e) {
-            log.warn("订阅节点增减飞书通知失败 airportSubscriptionId={}", group.getId(), e);
-        }
-    }
-
-    /**
-     * 节点端点（地址:端口）已变更（异步）：意味着此前下发给用户的配置已经失效，是需要人知道的事件，
-     * 与「节点增删」性质不同、单独推一条。用 RED——这是最紧急的一类，用户可能已经连不上了。
-     */
-    @Async
-    public void notifyNodeEndpointChanged(ProxyNodeDto node, String previousEndpoint, String currentEndpoint) {
-        if (!notifyProperties.isConfigured()) {
-            return;
-        }
-        try {
-            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
-            fields.put("节点", node.getName() + "（ID " + node.getId() + "）");
-            fields.put("原端点", previousEndpoint);
-            fields.put("新端点", currentEndpoint);
-            feishuBotClient.sendCard(FeishuCardTemplate.RED, "MintPop Lane 节点端点已变更，此前下发配置已失效", fields);
-        } catch (Exception e) {
-            log.warn("节点端点变更飞书通知失败 nodeId={}", node.getId(), e);
+            log.warn("订阅拉取失败飞书通知失败 airportSubscriptionId={}", group.getId(), e);
         }
     }
 

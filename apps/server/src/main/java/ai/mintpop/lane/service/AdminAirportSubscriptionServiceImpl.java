@@ -6,9 +6,6 @@ import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
-import ai.mintpop.lane.enumeration.NodeProtocol;
-import ai.mintpop.lane.enumeration.NodeRegion;
-import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
@@ -27,19 +24,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URI;
-import java.time.Instant;
-import java.util.LinkedHashMap;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
 public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscriptionService {
-
-    /** proxy_node.name 列的长度上限，撞名加后缀时的截断依据 */
-    private static final int NODE_NAME_MAX_CODE_POINTS = 64;
 
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final AirportRepository airportRepository;
@@ -52,6 +44,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private final FailureDomainSyncer failureDomainSyncer;
     private final TrafficAlertService trafficAlertService;
     private final SystemSettingService systemSettingService;
+    private final AirportSubscriptionNodeSyncer nodeSyncer;
+    private final Clock clock;
 
     public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository,
                                      AirportRepository airportRepository, ProxyNodeRepository nodeRepository,
@@ -61,7 +55,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
                                      FailureDomainSyncer failureDomainSyncer,
                                      TrafficAlertService trafficAlertService,
-                                     SystemSettingService systemSettingService) {
+                                     SystemSettingService systemSettingService,
+                                     AirportSubscriptionNodeSyncer nodeSyncer, Clock clock) {
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.airportRepository = airportRepository;
         this.nodeRepository = nodeRepository;
@@ -73,6 +68,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         this.failureDomainSyncer = failureDomainSyncer;
         this.trafficAlertService = trafficAlertService;
         this.systemSettingService = systemSettingService;
+        this.nodeSyncer = nodeSyncer;
+        this.clock = clock;
     }
 
     @Override
@@ -86,7 +83,10 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建订阅 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
         FetchResult fetched = fetchAndParse(request.getSubUrl());
-        List<SubNode> usNodes = regionNodes(fetched.nodes(), systemSettingService.frontSettings().region());
+        List<SubNode> usNodes = nodeSyncer.selectRegionNodes(fetched.nodes(), systemSettingService.frontSettings().region());
+        if (usNodes.isEmpty()) {
+            throw new BizException(BizCodeEnum.SUB_NO_REGION_NODES);
+        }
         Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
 
         AirportSubscriptionDto group = new AirportSubscriptionDto();
@@ -100,7 +100,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
 
         Long airportSubscriptionId = transactionTemplate.execute(status -> {
             Long id = wrapUniqueViolation(() -> airportSubscriptionRepository.create(group));
-            importNodes(id, usNodes, failureDomains);
+            nodeSyncer.sync(id, usNodes, failureDomains);
             return id;
         });
         // airportSubscriptionRepository.create 不会把自增主键回写到传入的 group 上，这里补上，
@@ -134,6 +134,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                         group.getTotalBytes(),
                         group.getExpiresAt(),
                         group.getFetchedAt(),
+                        group.getFetchFailedSince(),
+                        group.getLastFetchError(),
                         group.getCreatedAt(),
                         group.getUpdatedAt()))
                 .toList();
@@ -161,12 +163,15 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         // 只有真正落库的「更新订阅额度信息 + 导入节点」交给 transactionTemplate 包事务
         AirportSubscriptionDto group = getGroup(id);
         FetchResult fetched = fetchAndParse(group.getSubUrl());
-        List<SubNode> usNodes = regionNodes(fetched.nodes(), systemSettingService.frontSettings().region());
+        List<SubNode> usNodes = nodeSyncer.selectRegionNodes(fetched.nodes(), systemSettingService.frontSettings().region());
+        if (usNodes.isEmpty()) {
+            throw new BizException(BizCodeEnum.SUB_NO_REGION_NODES);
+        }
         Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
         applyTrafficInfo(group, fetched.subFetchResult());
         transactionTemplate.executeWithoutResult(status -> {
             airportSubscriptionRepository.update(group);
-            importNodes(id, usNodes, failureDomains);
+            nodeSyncer.sync(id, usNodes, failureDomains);
         });
         // 放在事务外：它自己会视情况 update 落档位，且含飞书通知提交，不应牵连节点导入的事务
         trafficAlertService.checkAndNotify(group, fetched.subFetchResult());
@@ -233,81 +238,10 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         group.setUsedBytes(subFetchResult.usedBytes());
         group.setTotalBytes(subFetchResult.totalBytes());
         group.setExpiresAt(subFetchResult.expiresAt());
-        group.setFetchedAt(Instant.now());
-    }
-
-    /**
-     * 从订阅里挑出要导入的节点：落在当前地区（见 {@link NodeRegion}）的真节点，按原始节点名去重。
-     * 不再让管理员逐个勾选——LAND 只接受美国来源，不在当前地区的节点入池也用不上；机场可枚举、
-     * 命名规则写死，判定结果就是导入结果。一个都没有时报错，不建空订阅。
-     */
-    private List<SubNode> regionNodes(List<SubNode> nodes, NodeRegion region) {
-        Map<String, SubNode> byName = new LinkedHashMap<>();
-        nodes.stream()
-                .filter(node -> !node.suspectedInfo() && region.matches(node.sourceName()))
-                .forEach(node -> byName.putIfAbsent(node.sourceName(), node));
-        if (byName.isEmpty()) {
-            throw new BizException(BizCodeEnum.SUB_NO_REGION_NODES);
-        }
-        return List.copyOf(byName.values());
-    }
-
-    /**
-     * 把订阅节点写进订阅：同订阅内 sourceName 已存在的原地更新参数
-     * （名称/状态/备注是管理员的手工痕迹，不动），不存在的新建入库。
-     */
-    private void importNodes(Long airportSubscriptionId, List<SubNode> nodes, Map<String, String> failureDomains) {
-        for (SubNode sub : nodes) {
-            String selected = sub.sourceName();
-            Optional<ProxyNodeDto> existing = nodeRepository.findByAirportSubscriptionIdAndSourceName(airportSubscriptionId, selected);
-            if (existing.isPresent()) {
-                ProxyNodeDto node = existing.get();
-                node.setServerAddr(sub.serverAddr());
-                node.setPort(sub.port());
-                node.setSourceType(sub.sourceType());
-                node.setSecret(sub.params());
-                failureDomainSyncer.apply(node, sub.serverAddr(), failureDomains);
-                nodeRepository.update(node);
-            } else {
-                ProxyNodeDto node = new ProxyNodeDto();
-                node.setName(uniqueNodeName(selected));
-                // 订阅导入的节点一律是前置节点：机场几乎不提供 HTTP 代理，
-                // 且落地节点需要独占的干净出口 IP，共享节点不合适
-                node.setRole(NodeRole.FRONT);
-                node.setProtocol(NodeProtocol.MIHOMO);
-                node.setServerAddr(sub.serverAddr());
-                node.setPort(sub.port());
-                node.setExtraConfig(Map.of());
-                node.setSecret(sub.params());
-                node.setAirportSubscriptionId(airportSubscriptionId);
-                node.setSourceName(selected);
-                node.setSourceType(sub.sourceType());
-                failureDomainSyncer.apply(node, sub.serverAddr(), failureDomains);
-                nodeRepository.create(node);
-            }
-        }
-    }
-
-    /** 撞全局唯一名时加「 (2)」「 (3)」后缀；按码点截断，不把 emoji 劈成半个代理对 */
-    private String uniqueNodeName(String sourceName) {
-        String base = truncateByCodePoints(sourceName, NODE_NAME_MAX_CODE_POINTS);
-        if (!nodeRepository.existsByName(base)) {
-            return base;
-        }
-        for (int i = 2; ; i++) {
-            String suffix = " (" + i + ")";
-            String candidate = truncateByCodePoints(base, NODE_NAME_MAX_CODE_POINTS - suffix.length()) + suffix;
-            if (!nodeRepository.existsByName(candidate)) {
-                return candidate;
-            }
-        }
-    }
-
-    private String truncateByCodePoints(String s, int maxCodePoints) {
-        if (s.codePointCount(0, s.length()) <= maxCodePoints) {
-            return s;
-        }
-        return s.substring(0, s.offsetByCodePoints(0, maxCodePoints));
+        group.setFetchedAt(clock.instant());
+        // 手动导入成功也算一次成功拉取，清掉失败标记
+        group.setFetchFailedSince(null);
+        group.setLastFetchError(null);
     }
 
     /** 回显用的打码链接：只留 scheme 与 host，token 一律不回传 */

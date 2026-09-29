@@ -3,149 +3,128 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
-import ai.mintpop.lane.dto.ProxyNodeDto;
+import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.NodeRegion;
+import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
-import ai.mintpop.lane.repository.ProxyNodeRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 订阅定时刷新：周期性对齐各订阅已有节点的参数、端口、故障域，以及订阅自身的额度信息。
- * 此前订阅刷新只能管理员在管理端手动点，机场随时可能改端口/域名，一改库里就是过期配置，
- * 用户下发的配置连不上也没人知道，直到有人报障——本任务补一个定时任务持续对齐。
+ * 订阅定时刷新（默认每 5 分钟）：把每个订阅的 FRONT 节点集合整体对齐到机场当前给出的节点，
+ * 同时更新额度信息。二期起 FRONT 节点没有状态，拉到哪些当前地区的节点就用哪些，不再需要人决定启用谁。
  * <p>
- * 一条刻意的克制：只更新**已存在**的节点（按订阅原始节点名 sourceName 匹配），订阅里新增
- * 或消失的节点都只推飞书告知、绝不自动新增或删除——启用哪些节点是运营决策，自动拉入会绕过
- * 人的判断，自动删除更危险，可能删掉正在被用户引用的节点。
- * 节点的地址或端口一旦变化，还会单独推一条飞书：这意味着此前下发给用户的配置已经失效，
- * 与「节点增删」是不同性质的事件，不能混在一条通知里。
- * <p>
- * 额度告警复用 Task 8 的 {@link TrafficAlertService}，不另写判档逻辑。
+ * 失败处理是刻意保守的：某个订阅拉不到（经 {@link SubFetchClient} 的重试装饰器仍失败），
+ * 或解析出来当前地区一个节点都没有，**都不动它的节点**——拉不到不等于节点没了；只在订阅上记
+ * fetchFailedSince / lastFetchError，并每轮推一条飞书（不去重，让人一直看到它没好）。
+ * 其它订阅照常继续。全体重算会调用 {@link #refreshAllNow()} 并据失败名单决定是否中止。
  */
 @Slf4j
 @Service
 public class SubRefreshService {
 
     private final AirportSubscriptionRepository airportSubscriptionRepository;
-    private final ProxyNodeRepository nodeRepository;
-    private final SubFetchClient subFetchClient;
+        private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
     private final FailureDomainSyncer failureDomainSyncer;
+    private final AirportSubscriptionNodeSyncer nodeSyncer;
     private final NodeNotifyService nodeNotifyService;
     private final TrafficAlertService trafficAlertService;
+    private final SystemSettingService systemSettingService;
+    private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
 
-    public SubRefreshService(AirportSubscriptionRepository airportSubscriptionRepository, ProxyNodeRepository nodeRepository,
+    public SubRefreshService(AirportSubscriptionRepository airportSubscriptionRepository,
                              SubFetchClient subFetchClient, SubYamlParser subYamlParser,
-                             FailureDomainSyncer failureDomainSyncer, NodeNotifyService nodeNotifyService,
-                             TrafficAlertService trafficAlertService) {
+                             FailureDomainSyncer failureDomainSyncer, AirportSubscriptionNodeSyncer nodeSyncer,
+                             NodeNotifyService nodeNotifyService, TrafficAlertService trafficAlertService,
+                             SystemSettingService systemSettingService, TransactionTemplate transactionTemplate, Clock clock) {
         this.airportSubscriptionRepository = airportSubscriptionRepository;
-        this.nodeRepository = nodeRepository;
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
         this.failureDomainSyncer = failureDomainSyncer;
+        this.nodeSyncer = nodeSyncer;
         this.nodeNotifyService = nodeNotifyService;
         this.trafficAlertService = trafficAlertService;
+        this.systemSettingService = systemSettingService;
+        this.transactionTemplate = transactionTemplate;
+        this.clock = clock;
     }
 
-    /**
-     * fixedDelay：上一轮跑完再计时，订阅多、拉取慢也不会两轮叠在一起。
-     * initialDelay 同样取 interval：启动后先等一轮，避免每次重启都立刻对全部订阅重新拉取一遍订阅。
-     */
+    /** 一轮刷新的结果：拉取失败（或无当前地区节点）的订阅名，按遍历顺序 */
+    public record RefreshOutcome(List<String> failedSubscriptionNames) {
+    }
+
+    /** fixedDelay：上一轮跑完再计时，订阅多、拉取慢也不会两轮叠在一起；启动后先等一轮 */
     @Scheduled(fixedDelayString = "#{@subRefreshProperties.interval.toMillis()}",
             initialDelayString = "#{@subRefreshProperties.interval.toMillis()}")
     public void refreshAll() {
-        for (AirportSubscriptionDto group : airportSubscriptionRepository.findAll()) {
-            try {
-                refreshOne(group);
-            } catch (Exception e) {
-                log.warn("订阅刷新处理失败，跳过 airportSubscriptionId={} name={}", group.getId(), group.getName(), e);
-            }
-        }
+        refreshAllNow();
     }
 
-    private void refreshOne(AirportSubscriptionDto group) {
-        // 订阅拉取（HTTP）与故障域解析（DNS）都是外呼，必须在任何数据库写入之前完成，
-        // 不能包进事务——与 AdminAirportSubscriptionServiceImpl 对同类操作的处理一致
+    /** 同步刷新全部订阅并返回失败名单；全体重算在拉取阶段调它 */
+    public RefreshOutcome refreshAllNow() {
+        NodeRegion region = systemSettingService.frontSettings().region();
+        List<String> failed = new ArrayList<>();
+        for (AirportSubscriptionDto group : airportSubscriptionRepository.findAll()) {
+            try {
+                refreshOne(group, region);
+            } catch (BizException e) {
+                markFailed(group, e.getMessage());
+                failed.add(group.getName());
+            } catch (RuntimeException e) {
+                log.warn("订阅刷新出现未预期异常 airportSubscriptionId={} name={}", group.getId(), group.getName(), e);
+                markFailed(group, "刷新异常：" + e.getClass().getSimpleName());
+                failed.add(group.getName());
+            }
+        }
+        return new RefreshOutcome(List.copyOf(failed));
+    }
+
+    private void refreshOne(AirportSubscriptionDto group, NodeRegion region) {
+        // 拉取（HTTP）与故障域解析（DNS）都是外呼，必须在任何数据库写入之前完成，不能包进事务
         SubFetchResult result = subFetchClient.fetch(group.getSubUrl());
-        List<SubNode> subNodes = subYamlParser.parse(result.body());
-        Map<String, String> failureDomains = failureDomainSyncer.resolve(subNodes);
+        List<SubNode> selected = nodeSyncer.selectRegionNodes(subYamlParser.parse(result.body()), region);
+        if (selected.isEmpty()) {
+            throw new BizException(BizCodeEnum.SUB_NO_REGION_NODES);
+        }
+        Map<String, String> failureDomains = failureDomainSyncer.resolve(selected);
 
-        applyTrafficInfo(group, result);
-        airportSubscriptionRepository.update(group);
+        group.setUsedBytes(result.usedBytes());
+        group.setTotalBytes(result.totalBytes());
+        group.setExpiresAt(result.expiresAt());
+        group.setFetchedAt(clock.instant());
+        group.setFetchFailedSince(null);
+        group.setLastFetchError(null);
 
-        diffAndUpdateNodes(group, subNodes, failureDomains);
+        transactionTemplate.executeWithoutResult(status -> {
+            airportSubscriptionRepository.update(group);
+            nodeSyncer.sync(group.getId(), selected, failureDomains);
+        });
 
         trafficAlertService.checkAndNotify(group, result);
     }
 
-    /**
-     * 按订阅原始节点名（sourceName）对齐已有节点：匹配上的原地更新参数/端口/故障域；
-     * 订阅里多出来的、或库里有但订阅里已经没有的，都只收集起来推一条飞书，不建也不删。
-     */
-    private void diffAndUpdateNodes(AirportSubscriptionDto group, List<SubNode> subNodes, Map<String, String> failureDomains) {
-        Map<String, SubNode> subByName = new LinkedHashMap<>();
-        subNodes.forEach(node -> subByName.putIfAbsent(node.sourceName(), node));
-
-        List<ProxyNodeDto> existingNodes = nodeRepository.findByAirportSubscriptionId(group.getId());
-        Map<String, ProxyNodeDto> existingByName = new LinkedHashMap<>();
-        existingNodes.forEach(node -> existingByName.putIfAbsent(node.getSourceName(), node));
-
-        // 遍历去重后的 subByName 而不是原始 subNodes：订阅里同名节点出现两次时，
-        // added 那一侧本来就按名字去了重，existing 那一侧却会把同一个节点更新两遍——两侧口径要一致
-        List<String> added = new ArrayList<>();
-        for (SubNode sub : subByName.values()) {
-            ProxyNodeDto existing = existingByName.get(sub.sourceName());
-            if (existing == null) {
-                added.add(sub.sourceName());
-                continue;
-            }
-            updateExisting(existing, sub, failureDomains);
+    /** 首次失败记起始时间，连续失败保留首次；错误说明截到列宽；每轮都推飞书 */
+    private void markFailed(AirportSubscriptionDto group, String error) {
+        Instant now = clock.instant();
+        if (group.getFetchFailedSince() == null) {
+            group.setFetchFailedSince(now);
         }
-
-        List<String> removed = existingNodes.stream()
-                .map(ProxyNodeDto::getSourceName)
-                .filter(name -> !subByName.containsKey(name))
-                .toList();
-
-        if (!added.isEmpty() || !removed.isEmpty()) {
-            nodeNotifyService.notifySubNodesChanged(group, added, removed);
-        }
-    }
-
-    /** 原地更新已有节点的参数/端口/故障域；端点（地址:端口）一旦变化单独推飞书——此前下发的配置已失效 */
-    private void updateExisting(ProxyNodeDto node, SubNode sub, Map<String, String> failureDomains) {
-        String previousEndpoint = endpointOf(node.getServerAddr(), node.getPort());
-        node.setServerAddr(sub.serverAddr());
-        node.setPort(sub.port());
-        node.setSourceType(sub.sourceType());
-        node.setSecret(sub.params());
-        failureDomainSyncer.apply(node, sub.serverAddr(), failureDomains);
-        nodeRepository.update(node);
-
-        String currentEndpoint = endpointOf(node.getServerAddr(), node.getPort());
-        if (!previousEndpoint.equals(currentEndpoint)) {
-            nodeNotifyService.notifyNodeEndpointChanged(node, previousEndpoint, currentEndpoint);
-        }
-    }
-
-    private static String endpointOf(String serverAddr, Integer port) {
-        return serverAddr + ":" + port;
-    }
-
-    /** 把本次拉取带回的额度信息写进订阅 DTO；三个额度字段可能都是 null（机场未返回额度头） */
-    private void applyTrafficInfo(AirportSubscriptionDto group, SubFetchResult result) {
-        group.setUsedBytes(result.usedBytes());
-        group.setTotalBytes(result.totalBytes());
-        group.setExpiresAt(result.expiresAt());
-        group.setFetchedAt(Instant.now());
+        group.setLastFetchError(error.length() > 255 ? error.substring(0, 255) : error);
+        airportSubscriptionRepository.update(group);
+        log.warn("订阅拉取失败 airportSubscriptionId={} name={} since={} error={}",
+                group.getId(), group.getName(), group.getFetchFailedSince(), error);
+        nodeNotifyService.notifySubFetchFailed(group, error, group.getFetchFailedSince());
     }
 }

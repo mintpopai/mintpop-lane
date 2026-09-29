@@ -29,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -81,13 +82,14 @@ class AdminAirportSubscriptionServiceImplTest {
 
         SystemSettingService systemSettingService = mock(SystemSettingService.class);
         when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
+        FailureDomainSyncer failureDomainSyncer = new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC());
         service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, airportRepository, nodeRepository, userRepository,
                 userFrontSubscriptionRepository,
                 subFetchClient, new SubYamlParser(), transactionTemplate,
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
                 // 「按 serverAddr 去重」「跳过伪条目」这些口径正是本类要守的行为，不该被 mock 掉
-                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), trafficAlertService,
-                systemSettingService);
+                failureDomainSyncer, trafficAlertService,
+                systemSettingService, new AirportSubscriptionNodeSyncer(nodeRepository, failureDomainSyncer), Clock.systemUTC());
     }
 
     private AirportSubscriptionDto group(long id) {
@@ -123,7 +125,7 @@ class AdminAirportSubscriptionServiceImplTest {
         existing.setFailureDomainCheckedAt(Instant.parse("2026-09-01T00:00:00Z"));
 
         when(airportSubscriptionRepository.findById(1L)).thenReturn(Optional.of(group(1L)));
-        when(nodeRepository.findByAirportSubscriptionIdAndSourceName(1L, "🇺🇸[US]01")).thenReturn(Optional.of(existing));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(existing));
         when(failureDomainResolver.resolve(anyString())).thenReturn(null);
 
         assertThatCode(() -> service.importNodes(1L)).doesNotThrowAnyException();

@@ -33,6 +33,10 @@ public record AirportSubscriptionResponse(
         Instant expiresAt,
         /** 最近一次成功拉取订阅的时间；从未拉取成功过则为 null */
         Instant fetchedAt,
+        /** 拉取开始连续失败的时间；当前拉取正常则为 null */
+        Instant fetchFailedSince,
+        /** 最近一次拉取失败的原因；当前拉取正常则为 null */
+        String lastFetchError,
         Instant createdAt,
         Instant updatedAt
 ) {
