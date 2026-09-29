@@ -47,8 +47,15 @@ public class AirportSubscriptionNodeSyncer {
 
     public SyncResult sync(Long airportSubscriptionId, List<SubNode> regionNodes, Map<String, String> failureDomains) {
         Map<String, ProxyNodeDto> existingByName = new LinkedHashMap<>();
-        nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)
-                .forEach(node -> existingByName.putIfAbsent(node.getSourceName(), node));
+        // 同订阅下 sourceName 重复的历史脏行（并发导入所致，库里没有唯一约束）：留第一行，其余直接删，下次对齐即自愈
+        List<ProxyNodeDto> duplicates = new ArrayList<>();
+        for (ProxyNodeDto node : nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)) {
+            ProxyNodeDto previous = existingByName.putIfAbsent(node.getSourceName(), node);
+            if (previous == null) {
+                continue;
+            }
+            duplicates.add(node);
+        }
 
         List<String> added = new ArrayList<>();
         int updated = 0;
@@ -69,6 +76,9 @@ public class AirportSubscriptionNodeSyncer {
         }
         // 剩下没被匹配到的就是订阅里已经消失的节点
         List<String> removed = new ArrayList<>();
+        for (ProxyNodeDto dup : duplicates) {
+            nodeRepository.deleteById(dup.getId());
+        }
         for (ProxyNodeDto vanished : existingByName.values()) {
             nodeRepository.deleteById(vanished.getId());
             removed.add(vanished.getSourceName());

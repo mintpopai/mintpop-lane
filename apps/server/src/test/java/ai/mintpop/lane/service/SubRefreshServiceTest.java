@@ -169,7 +169,10 @@ class SubRefreshServiceTest {
 
         assertThat(outcome.failedSubscriptionNames()).containsExactly("A 家");
         verify(nodeRepository, never()).deleteById(any());
+        verify(nodeRepository, never()).update(any());
+        verify(nodeRepository, never()).create(any());
         assertThat(g.getLastFetchError()).isEqualTo(BizCodeEnum.SUB_NO_REGION_NODES.getMessage());
+        verify(nodeNotifyService).notifySubFetchFailed(eq(g), eq(BizCodeEnum.SUB_NO_REGION_NODES.getMessage()), eq(NOW));
     }
 
     @Test
@@ -182,6 +185,74 @@ class SubRefreshServiceTest {
         when(subFetchClient.fetch("https://example.com/sub?token=x")).thenThrow(new BizException(BizCodeEnum.SUB_FETCH_FAILED));
         when(subFetchClient.fetch("https://example.com/good")).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
         when(nodeRepository.findByAirportSubscriptionId(2L)).thenReturn(List.of());
+
+        RefreshOutcome outcome = service.refreshAllNow();
+
+        assertThat(outcome.failedSubscriptionNames()).containsExactly("坏");
+        verify(nodeRepository).create(any());
+    }
+
+    @Test
+    @DisplayName("事务内对齐抛异常：首次失败时间保留旧值，fetchedAt 不被记成成功")
+    void syncFailureDoesNotResetFirstFailureOrFakeFetchedAt() {
+        AirportSubscriptionDto g = group(1L, "A 家");
+        Instant first = Instant.parse("2026-09-29T01:00:00Z");
+        Instant oldFetchedAt = Instant.parse("2026-09-28T00:00:00Z");
+        g.setFetchFailedSince(first);
+        g.setFetchedAt(oldFetchedAt);
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(g));
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenThrow(new RuntimeException("db"));
+
+        RefreshOutcome outcome = service.refreshAllNow();
+
+        assertThat(outcome.failedSubscriptionNames()).containsExactly("A 家");
+        assertThat(g.getFetchFailedSince()).isEqualTo(first);
+        assertThat(g.getFetchedAt()).isEqualTo(oldFetchedAt);
+        assertThat(g.getLastFetchError()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("事务内对齐抛异常且此前无失败记录：首次失败时间记为本轮")
+    void syncFailureSetsFirstFailureWhenNoneBefore() {
+        AirportSubscriptionDto g = group(1L, "A 家");
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(g));
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenThrow(new RuntimeException("db"));
+
+        service.refreshAllNow();
+
+        assertThat(g.getFetchFailedSince()).isEqualTo(NOW);
+        assertThat(g.getFetchedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("额度告警检查抛异常：不算拉取失败，不标记订阅")
+    void trafficAlertFailureIsNotFetchFailure() {
+        AirportSubscriptionDto g = group(1L, "A 家");
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(g));
+        when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new RuntimeException("notify")).when(trafficAlertService).checkAndNotify(any(), any());
+
+        RefreshOutcome outcome = service.refreshAllNow();
+
+        assertThat(outcome.failedSubscriptionNames()).isEmpty();
+        assertThat(g.getFetchFailedSince()).isNull();
+        verify(nodeNotifyService, never()).notifySubFetchFailed(any(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("标记失败本身抛异常：仍进失败名单，且后面的订阅照常刷新")
+    void markFailedThrowingDoesNotStopLoop() {
+        AirportSubscriptionDto bad = group(1L, "坏");
+        AirportSubscriptionDto good = group(2L, "好");
+        good.setSubUrl("https://example.com/good");
+        when(airportSubscriptionRepository.findAll()).thenReturn(List.of(bad, good));
+        when(subFetchClient.fetch("https://example.com/sub?token=x")).thenThrow(new BizException(BizCodeEnum.SUB_FETCH_FAILED));
+        when(subFetchClient.fetch("https://example.com/good")).thenReturn(new SubFetchResult(YAML_ONE_NODE, null, null, null, null));
+        when(nodeRepository.findByAirportSubscriptionId(2L)).thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new RuntimeException("db")).when(airportSubscriptionRepository).update(bad);
 
         RefreshOutcome outcome = service.refreshAllNow();
 

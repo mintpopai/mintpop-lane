@@ -134,4 +134,20 @@ class AirportSubscriptionNodeSyncerTest {
         verify(nodeRepository).create(created.capture());
         assertThat(created.getValue().getName()).isEqualTo("🇺🇸[US]C (2)");
     }
+
+    @Test
+    @DisplayName("库里同订阅下 sourceName 重复的脏行：留第一行更新，其余直接删")
+    void removesDuplicateSourceNameRows() {
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(
+                existing(21L, "🇺🇸[US]B", 2000), existing(22L, "🇺🇸[US]B", 2000)));
+
+        SyncResult result = syncer.sync(1L, List.of(sub("🇺🇸[US]B", 2001)), Map.of());
+
+        assertThat(result.updated()).isEqualTo(1);
+        ArgumentCaptor<ProxyNodeDto> updated = ArgumentCaptor.forClass(ProxyNodeDto.class);
+        verify(nodeRepository).update(updated.capture());
+        assertThat(updated.getValue().getId()).isEqualTo(21L);
+        verify(nodeRepository).deleteById(22L);
+        verify(nodeRepository, never()).deleteById(21L);
+    }
 }

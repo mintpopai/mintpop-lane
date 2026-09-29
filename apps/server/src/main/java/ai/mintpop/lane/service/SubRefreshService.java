@@ -80,12 +80,12 @@ public class SubRefreshService {
             try {
                 refreshOne(group, region);
             } catch (BizException e) {
-                markFailed(group, e.getMessage());
                 failed.add(group.getName());
+                markFailedSafely(group, e.getMessage());
             } catch (RuntimeException e) {
                 log.warn("订阅刷新出现未预期异常 airportSubscriptionId={} name={}", group.getId(), group.getName(), e);
-                markFailed(group, "刷新异常：" + e.getClass().getSimpleName());
                 failed.add(group.getName());
+                markFailedSafely(group, "刷新异常：" + e.getClass().getSimpleName());
             }
         }
         return new RefreshOutcome(List.copyOf(failed));
@@ -100,19 +100,51 @@ public class SubRefreshService {
         }
         Map<String, String> failureDomains = failureDomainSyncer.resolve(selected);
 
-        group.setUsedBytes(result.usedBytes());
-        group.setTotalBytes(result.totalBytes());
-        group.setExpiresAt(result.expiresAt());
-        group.setFetchedAt(clock.instant());
-        group.setFetchFailedSince(null);
-        group.setLastFetchError(null);
+        // 事务失败会回滚库，但内存里的 DTO 不会：先快照，失败时还原，
+        // 否则 markFailed 会把首次失败时间重置成本轮、并把 fetchedAt 记成「成功拉取」
+        Instant oldFetchFailedSince = group.getFetchFailedSince();
+        String oldLastFetchError = group.getLastFetchError();
+        Instant oldFetchedAt = group.getFetchedAt();
+        Long oldUsed = group.getUsedBytes();
+        Long oldTotal = group.getTotalBytes();
+        Instant oldExpires = group.getExpiresAt();
+        try {
+            group.setUsedBytes(result.usedBytes());
+            group.setTotalBytes(result.totalBytes());
+            group.setExpiresAt(result.expiresAt());
+            group.setFetchedAt(clock.instant());
+            group.setFetchFailedSince(null);
+            group.setLastFetchError(null);
 
-        transactionTemplate.executeWithoutResult(status -> {
-            airportSubscriptionRepository.update(group);
-            nodeSyncer.sync(group.getId(), selected, failureDomains);
-        });
+            transactionTemplate.executeWithoutResult(status -> {
+                airportSubscriptionRepository.update(group);
+                nodeSyncer.sync(group.getId(), selected, failureDomains);
+            });
+        } catch (RuntimeException e) {
+            group.setUsedBytes(oldUsed);
+            group.setTotalBytes(oldTotal);
+            group.setExpiresAt(oldExpires);
+            group.setFetchedAt(oldFetchedAt);
+            group.setFetchFailedSince(oldFetchFailedSince);
+            group.setLastFetchError(oldLastFetchError);
+            throw e;
+        }
 
-        trafficAlertService.checkAndNotify(group, result);
+        // 额度告警是附带通知，失败不等于拉取失败，只记日志
+        try {
+            trafficAlertService.checkAndNotify(group, result);
+        } catch (RuntimeException e) {
+            log.warn("订阅额度告警检查失败（不影响本轮刷新）airportSubscriptionId={}", group.getId(), e);
+        }
+    }
+
+    /** 标记失败本身也可能出错（如库抖动）：只记日志，保证循环继续刷新其它订阅 */
+    private void markFailedSafely(AirportSubscriptionDto group, String error) {
+        try {
+            markFailed(group, error);
+        } catch (RuntimeException e) {
+            log.warn("订阅失败标记写入异常 airportSubscriptionId={}", group.getId(), e);
+        }
     }
 
     /** 首次失败记起始时间，连续失败保留首次；错误说明截到列宽；每轮都推飞书 */
