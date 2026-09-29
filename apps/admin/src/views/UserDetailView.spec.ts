@@ -631,19 +631,19 @@ describe("UserDetailView · 第一跳", () => {
   it("未分配时明确说未分配", async () => {
     getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配第一跳"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配机场订阅"));
   });
 
   it("点「自动分配」直接调接口并刷新", async () => {
     getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
     allocateUserFront.mockResolvedValue(assigned);
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配第一跳"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配机场订阅"));
 
     await buttonInCard(".front-card", "自动分配").trigger("click");
 
     await vi.waitFor(() => expect(allocateUserFront).toHaveBeenCalledWith(3));
-    expect(showToast).toHaveBeenCalledWith("success", "已分配第一跳，用户下次建立链路时生效");
+    expect(showToast).toHaveBeenCalledWith("success", "已分配机场订阅，用户下次建立链路时生效");
   });
 
   it("没有可分配的第一跳订阅时把服务端的说法原样提示出来", async () => {
@@ -652,7 +652,7 @@ describe("UserDetailView · 第一跳", () => {
       new BizError(410050, "没有可分配的第一跳订阅：主用名额已满，或没有启用中的美国节点"),
     );
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配第一跳"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配机场订阅"));
 
     await buttonInCard(".front-card", "自动分配").trigger("click");
 
@@ -671,7 +671,7 @@ describe("UserDetailView · 第一跳", () => {
 
     await buttonInCard(".front-card", "取消分配").trigger("click");
     expect(clearUserFront).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain("用户下次建立链路时将没有第一跳");
+    expect(document.body.textContent).toContain("用户下次建立链路时将没有机场订阅线路");
 
     const confirm = Array.from(document.querySelectorAll("button")).find(
       (b) => b.textContent?.trim() === "确认",

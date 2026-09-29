@@ -210,7 +210,7 @@ onMounted(loadList);
           <th>Logto user id</th>
           <th>角色</th>
           <th>状态</th>
-          <th>第一跳</th>
+          <th>机场订阅</th>
           <th>落地节点</th>
           <th>出口 IP</th>
           <th>在期订阅</th>

@@ -37,8 +37,8 @@ describe("ViewTabs", () => {
       props: {
         modelValue: "FRONT",
         options: [
-          { value: "FRONT", label: "第一跳（出国）" },
-          { value: "LAND", label: "第二跳（落地）" },
+          { value: "FRONT", label: "机场订阅" },
+          { value: "LAND", label: "落地节点" },
         ],
         label: "按跳数分",
       },

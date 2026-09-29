@@ -140,7 +140,7 @@ describe("NodeFormModal 角色下拉不提供第一跳", () => {
 
     await query('button[aria-label="角色"]').trigger("click");
 
-    expect(hasRoleOption("第一跳（出国）")).toBe(false);
+    expect(hasRoleOption("机场订阅")).toBe(false);
   });
 
   it("编辑落地节点时角色下拉也没有「第一跳」——不许把节点改成第一跳", async () => {
@@ -148,7 +148,7 @@ describe("NodeFormModal 角色下拉不提供第一跳", () => {
 
     await query('button[aria-label="角色"]').trigger("click");
 
-    expect(hasRoleOption("第一跳（出国）")).toBe(false);
+    expect(hasRoleOption("机场订阅")).toBe(false);
   });
 });
 

@@ -49,8 +49,8 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
 };
 
 export const NODE_ROLE_LABELS: Record<NodeRole, string> = {
-  FRONT: "第一跳（出国）",
-  LAND: "第二跳（落地）",
+  FRONT: "机场订阅",
+  LAND: "落地节点",
 };
 
 export const NODE_STATUS_LABELS: Record<NodeStatus, string> = {

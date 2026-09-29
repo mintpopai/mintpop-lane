@@ -72,7 +72,7 @@ async function allocateFront(): Promise<void> {
   allocatingFront.value = true;
   try {
     await adminApi().allocateUserFront(userId);
-    showToast("success", "已分配第一跳，用户下次建立链路时生效");
+    showToast("success", "已分配机场订阅，用户下次建立链路时生效");
     await loadUser();
   } catch (error) {
     // 410050 没有可分配的第一跳订阅等业务错误，服务端给的中文提示直接用
@@ -86,7 +86,7 @@ async function confirmClearFront(): Promise<void> {
   clearingFront.value = true;
   try {
     await adminApi().clearUserFront(userId);
-    showToast("success", "已取消第一跳分配");
+    showToast("success", "已取消机场订阅分配");
     pendingClearFront.value = false;
     await loadUser();
   } catch (error) {
@@ -523,7 +523,7 @@ async function confirmUnbind(): Promise<void> {
            「取消分配」清空。第一跳不再开放手工指定节点，只能来自机场订阅 -->
       <section class="admin-card front-card">
         <div class="front-card-head">
-          <h4 class="block-title">第一跳（机场订阅）</h4>
+          <h4 class="block-title">机场订阅</h4>
           <div class="front-card-actions">
             <button
               type="button"
@@ -544,7 +544,7 @@ async function confirmUnbind(): Promise<void> {
           </div>
         </div>
         <p v-if="user && user.frontSubscriptions.length === 0" class="muted">
-          未分配第一跳。点「自动分配」按各机场订阅的负载排出主用与备用。
+          未分配机场订阅。点「自动分配」按各机场订阅的负载排出主用与备用。
         </p>
         <ul v-else-if="user" class="front-sub-list">
           <li v-for="item in user.frontSubscriptions" :key="item.position" class="front-sub-row">
@@ -916,8 +916,8 @@ async function confirmUnbind(): Promise<void> {
 
     <ConfirmDialog
       v-if="pendingClearFront"
-      title="取消第一跳分配"
-      message="取消后，用户下次建立链路时将没有第一跳，直到重新分配。确认取消？"
+      title="取消机场订阅分配"
+      message="取消后，用户下次建立链路时将没有机场订阅线路，直到重新分配。确认取消？"
       confirm-text="确认"
       :busy="clearingFront"
       @confirm="confirmClearFront()"

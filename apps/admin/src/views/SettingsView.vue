@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
 <template>
   <PageHead title="全局配置">
     <template #facts>
-      第一跳线路的全局参数。任一项改动都会重新拉取全部订阅并为所有用户重新分配线路。
+      机场订阅线路的全局参数。任一项改动都会重新拉取全部订阅并为所有用户重新分配线路。
     </template>
     <template #actions>
       <button
@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
     <div class="setting-row">
       <div class="setting-text">
         <label for="setting-region">筛选地区</label>
-        <p class="admin-note">只把落在该地区的节点作为第一跳候选。现在只有美国。</p>
+        <p class="admin-note">只把落在该地区的节点作为分配候选。现在只有美国。</p>
       </div>
       <div class="setting-control">
         <Select
