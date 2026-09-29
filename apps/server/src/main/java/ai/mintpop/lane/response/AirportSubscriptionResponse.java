@@ -19,7 +19,7 @@ public record AirportSubscriptionResponse(
         Integer bandwidthMbps,
         /** 当前主用人数 */
         int primaryUsed,
-        /** 主用容量：bandwidthMbps / 20 向下取整 */
+        /** 主用容量：bandwidthMbps ÷ 每人带宽（全局配置）向下取整 */
         int primaryCapacity,
         /** 打码后的订阅链接，只留 scheme 与 host */
         String subUrlMasked,

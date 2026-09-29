@@ -3,6 +3,7 @@ package ai.mintpop.lane.service;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
+import ai.mintpop.lane.dto.FrontSettings;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
@@ -117,6 +118,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
 
     @Override
     public List<AirportSubscriptionResponse> list() {
+        FrontSettings settings = systemSettingService.frontSettings();
         Map<Long, String> airportNames = airportRepository.findAll().stream()
                 .collect(Collectors.toMap(Airport::getId, Airport::getName));
         Map<Long, Long> primaryUsedBySubscription = userFrontSubscriptionRepository.countPrimaryByAirportSubscription();
@@ -129,7 +131,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                         group.getAccount(),
                         group.getBandwidthMbps(),
                         primaryUsedBySubscription.getOrDefault(group.getId(), 0L).intValue(),
-                        FrontAllocationPlanner.primaryCapacity(group.getBandwidthMbps()),
+                        settings.primaryCapacity(group.getBandwidthMbps()),
                         maskUrl(group.getSubUrl()),
                         nodeRepository.countByAirportSubscriptionId(group.getId()),
                         group.getRemark(),

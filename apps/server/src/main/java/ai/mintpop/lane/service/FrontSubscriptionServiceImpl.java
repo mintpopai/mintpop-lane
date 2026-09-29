@@ -79,7 +79,7 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
                         .toList()))
                 .toList();
 
-        List<Slot> planned = FrontAllocationPlanner.plan(others, candidates);
+        List<Slot> planned = FrontAllocationPlanner.plan(others, candidates, systemSettingService.frontSettings());
         if (planned.isEmpty()) {
             throw new BizException(BizCodeEnum.FRONT_CAPACITY_FULL);
         }

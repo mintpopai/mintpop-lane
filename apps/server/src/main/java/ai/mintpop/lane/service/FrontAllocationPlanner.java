@@ -1,9 +1,11 @@
 package ai.mintpop.lane.service;
 
+import ai.mintpop.lane.dto.FrontSettings;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,12 +19,6 @@ import java.util.Set;
  */
 public final class FrontAllocationPlanner {
 
-    /** 每个用户按多少带宽计主用容量（Mbps），写死 */
-    public static final int BANDWIDTH_PER_USER_MBPS = 20;
-
-    /** 每个用户的列表里最多几家机场，写死 */
-    public static final int MAX_AIRPORTS_PER_USER = 3;
-
     private FrontAllocationPlanner() {
     }
 
@@ -34,17 +30,17 @@ public final class FrontAllocationPlanner {
     public record Assignment(long userId, List<Slot> slots) {
     }
 
-    /** 可分配的订阅（调用方已滤掉没有可用美国节点的订阅） */
+    /** 可分配的订阅（调用方已滤掉当前地区没有节点的订阅） */
     public record Candidate(long airportSubscriptionId, long airportId, int bandwidthMbps) {
 
-        public int primaryCapacity() {
-            return FrontAllocationPlanner.primaryCapacity(bandwidthMbps);
+        public int primaryCapacity(int bandwidthPerUserMbps) {
+            return FrontAllocationPlanner.primaryCapacity(bandwidthMbps, bandwidthPerUserMbps);
         }
     }
 
-    /** 订阅的主用容量：带宽 / 20 向下取整 */
-    public static int primaryCapacity(int bandwidthMbps) {
-        return bandwidthMbps / BANDWIDTH_PER_USER_MBPS;
+    /** 订阅的主用容量：订阅带宽 / 每人带宽（全局配置）向下取整 */
+    public static int primaryCapacity(int bandwidthMbps, int bandwidthPerUserMbps) {
+        return bandwidthMbps / bandwidthPerUserMbps;
     }
 
     /** 场景 F（这些机场都挂了）下，所有用户最终落在各订阅上的人数；key 为订阅 id */
@@ -64,19 +60,19 @@ public final class FrontAllocationPlanner {
 
     /**
      * 给一个用户算出有序列表。others 必须排除该用户自己（重算时他的旧列表不能挡住自己）。
-     * 返回空列表表示主用名额全满；可用机场不足 M 家时列表短于 M。
+     * 返回空列表表示主用名额全满；可用机场不足 settings.airportsPerUser() 家时列表短于它。
      */
-    public static List<Slot> plan(List<Assignment> others, List<Candidate> candidates) {
+    public static List<Slot> plan(List<Assignment> others, List<Candidate> candidates, FrontSettings settings) {
         List<Slot> order = new ArrayList<>();
         Set<Long> failed = new HashSet<>();
 
-        for (int position = 0; position < MAX_AIRPORTS_PER_USER; position++) {
+        for (int position = 0; position < settings.airportsPerUser(); position++) {
             Map<Long, Integer> load = scenarioLoad(failed, others);
             boolean primary = position == 0;
             Candidate best = candidates.stream()
                     .filter(c -> !failed.contains(c.airportId()))
                     // 只有主用占容量：此时 failed 为空，load 就是主用人数
-                    .filter(c -> !primary || load.getOrDefault(c.airportSubscriptionId(), 0) < c.primaryCapacity())
+                    .filter(c -> !primary || load.getOrDefault(c.airportSubscriptionId(), 0) < c.primaryCapacity(settings.bandwidthPerUserMbps()))
                     .min(Comparator
                             .comparingDouble((Candidate c) ->
                                     (load.getOrDefault(c.airportSubscriptionId(), 0) + 1.0) / c.bandwidthMbps())
@@ -90,5 +86,24 @@ public final class FrontAllocationPlanner {
             failed.add(best.airportId());
         }
         return order;
+    }
+
+    /**
+     * 全体重算：按给定顺序（调用方按用户 id 升序传入）从零开始逐个分配，前面的结果作为后面的 others。
+     * 从零重排而不是在旧列表上增量，结果只取决于输入，同样的输入得到同样的输出。
+     * 某用户得到空列表表示主用名额已耗尽，调用方应整体中止；这里不抛异常，让调用方拿到完整画面。
+     * 复杂度 O(M·N²)，1 万用户约 3 亿次简单比较，秒级。
+     */
+    public static LinkedHashMap<Long, List<Slot>> planAll(List<Long> userIdsInOrder, List<Candidate> candidates, FrontSettings settings) {
+        LinkedHashMap<Long, List<Slot>> result = new LinkedHashMap<>();
+        List<Assignment> assigned = new ArrayList<>();
+        for (Long userId : userIdsInOrder) {
+            List<Slot> slots = plan(assigned, candidates, settings);
+            result.put(userId, slots);
+            if (!slots.isEmpty()) {
+                assigned.add(new Assignment(userId, slots));
+            }
+        }
+        return result;
     }
 }

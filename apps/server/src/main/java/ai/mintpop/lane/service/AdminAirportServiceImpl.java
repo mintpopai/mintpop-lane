@@ -1,6 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
+import ai.mintpop.lane.dto.FrontSettings;
 import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.exception.BizException;
@@ -23,23 +24,27 @@ public class AdminAirportServiceImpl implements AdminAirportService {
     private final AirportRepository airportRepository;
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
+    private final SystemSettingService systemSettingService;
 
     public AdminAirportServiceImpl(AirportRepository airportRepository,
                                    AirportSubscriptionRepository airportSubscriptionRepository,
-                                   UserFrontSubscriptionRepository userFrontSubscriptionRepository) {
+                                   UserFrontSubscriptionRepository userFrontSubscriptionRepository,
+                                   SystemSettingService systemSettingService) {
         this.airportRepository = airportRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
+        this.systemSettingService = systemSettingService;
     }
 
     @Override
     public List<AirportResponse> list() {
+        FrontSettings settings = systemSettingService.frontSettings();
         Map<Long, List<AirportSubscriptionDto>> subsByAirport = airportSubscriptionRepository.findAll().stream()
                 .collect(Collectors.groupingBy(AirportSubscriptionDto::getAirportId));
         Map<Long, Long> primaryUsedBySubscription = userFrontSubscriptionRepository.countPrimaryByAirportSubscription();
         return airportRepository.findAll().stream()
                 .map(airport -> toResponse(airport, subsByAirport.getOrDefault(airport.getId(), List.of()),
-                        primaryUsedBySubscription))
+                        primaryUsedBySubscription, settings))
                 .toList();
     }
 
@@ -97,9 +102,9 @@ public class AdminAirportServiceImpl implements AdminAirportService {
     }
 
     private AirportResponse toResponse(Airport airport, List<AirportSubscriptionDto> subscriptions,
-                                       Map<Long, Long> primaryUsedBySubscription) {
+                                       Map<Long, Long> primaryUsedBySubscription, FrontSettings settings) {
         int capacity = subscriptions.stream()
-                .mapToInt(s -> FrontAllocationPlanner.primaryCapacity(s.getBandwidthMbps()))
+                .mapToInt(s -> settings.primaryCapacity(s.getBandwidthMbps()))
                 .sum();
         int used = subscriptions.stream()
                 .mapToInt(s -> primaryUsedBySubscription.getOrDefault(s.getId(), 0L).intValue())
