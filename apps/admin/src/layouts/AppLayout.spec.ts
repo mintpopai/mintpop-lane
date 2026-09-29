@@ -1,10 +1,10 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent } from "vue";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { createMemoryHistory, type Router } from "vue-router";
 import AppLayout from "./AppLayout.vue";
 import { useRebindStore } from "../stores/rebind";
+import { createAppRouter } from "../router";
 
 vi.mock("../api", () => ({ adminApi: () => ({ listDeviceRebindRequests: async () => [] }) }));
 
@@ -68,6 +68,21 @@ describe("AppLayout", () => {
 describe("AppLayout 线路分组", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
+  /** 生产路由表 + 管理员身份：高亮规则取决于路由怎么嵌套，手抄一份路由表测不出回归 */
+  function adminRouter() {
+    return createAppRouter(
+      { me: async () => ({ id: 1, email: "a@b.c", role: "ADMIN", subscriptions: [] }) },
+      createMemoryHistory(),
+    );
+  }
+
+  /** 工作区是具体页面的事，桩掉，只看侧栏 */
+  function mountWithRouter(router: Router) {
+    return mount(AppLayout, {
+      global: { plugins: [router], stubs: { RouterView: { template: "<div />" } } },
+    });
+  }
+
   it("「线路」是分组标题，下面是机场订阅、落地节点；不再有独立的「机场」「节点池」", () => {
     const wrapper = mount(AppLayout, {
       global: {
@@ -85,33 +100,23 @@ describe("AppLayout 线路分组", () => {
     expect(links).not.toContain("节点池");
   });
 
-  it("在订阅详情页时，侧栏仍高亮「机场订阅」（真路由，验证嵌套路由的激活规则）", async () => {
-    const Blank = defineComponent({ template: "<div />" });
-    // 与 router/index.ts 同构的最小路由表：详情是机场订阅的子路由，列表是空路径子路由
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: "/users", name: "USERS", component: Blank },
-        { path: "/device-requests", name: "DEVICE_REQUESTS", component: Blank },
-        {
-          path: "/lines/airports",
-          children: [
-            { path: "", name: "AIRPORT_SUBSCRIPTIONS", component: Blank },
-            { path: "subscriptions/:id", name: "SUBSCRIPTION_DETAIL", component: Blank },
-          ],
-        },
-        { path: "/lines/land-nodes", name: "LAND_NODES", component: Blank },
-        { path: "/plans", name: "PLANS", component: Blank },
-        { path: "/enterprises", name: "ENTERPRISES", component: Blank },
-        { path: "/link-health", name: "LINK_HEALTH", component: Blank },
-        { path: "/settings", name: "SETTINGS", component: Blank },
-      ],
-    });
+  it("在订阅详情页时，侧栏仍高亮「机场订阅」（用生产路由表，防止详情路由又被拆成平级）", async () => {
+    const router = adminRouter();
     await router.push("/lines/airports/subscriptions/100");
-    const wrapper = mount(AppLayout, { global: { plugins: [router] } });
+    const wrapper = mountWithRouter(router);
     await flushPromises();
 
     const active = wrapper.findAll(".rail-link.router-link-active").map((el) => el.text());
     expect(active).toEqual(["机场订阅"]);
+  });
+
+  it("在用户详情页时，侧栏仍高亮「用户」（用生产路由表，防止详情路由又被拆成平级）", async () => {
+    const router = adminRouter();
+    await router.push("/users/7");
+    const wrapper = mountWithRouter(router);
+    await flushPromises();
+
+    const active = wrapper.findAll(".rail-link.router-link-active").map((el) => el.text());
+    expect(active).toEqual(["用户"]);
   });
 });

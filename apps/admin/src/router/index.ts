@@ -47,12 +47,14 @@ export function createAppRouter(
         component: AppLayout,
         children: [
           { path: "", redirect: { name: "USERS" } },
-          { path: "users", name: "USERS", component: UsersView },
-          // 单个用户的管理独立成页（链路资源分配 + 订阅管理）：弹窗里再叠弹窗的套娃体验太差
+          // 单个用户的管理独立成页（链路资源分配 + 订阅管理）：弹窗里再叠弹窗的套娃体验太差。
+          // 详情挂成用户列表的子路由，侧栏「用户」在详情页也保持激活（同机场订阅）
           {
-            path: "users/:id",
-            name: "USER_DETAIL",
-            component: UserDetailView,
+            path: "users",
+            children: [
+              { path: "", name: "USERS", component: UsersView },
+              { path: ":id", name: "USER_DETAIL", component: UserDetailView },
+            ],
           },
           // 换机申请是跨用户的待办队列，不挂在某个用户下
           { path: "device-requests", name: "DEVICE_REQUESTS", component: DeviceRequestsView },
