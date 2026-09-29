@@ -60,6 +60,7 @@ class AdminAirportSubscriptionServiceImplTest {
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private TrafficAlertService trafficAlertService;
 
+    private final SubscriptionRenderCache renderCache = mock(SubscriptionRenderCache.class);
     private AdminAirportSubscriptionServiceImpl service;
 
     private static final String SUB_YAML = """
@@ -82,7 +83,6 @@ class AdminAirportSubscriptionServiceImplTest {
 
         SystemSettingService systemSettingService = mock(SystemSettingService.class);
         when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
-        SubscriptionRenderCache renderCache = mock(SubscriptionRenderCache.class);
         FailureDomainSyncer failureDomainSyncer = new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC());
         service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, airportRepository, nodeRepository, userRepository,
                 userFrontSubscriptionRepository,
@@ -220,5 +220,28 @@ class AdminAirportSubscriptionServiceImplTest {
         verify(failureDomainResolver, never()).resolve("info.t11-a.app");
         verify(failureDomainResolver).resolve("us01a.t11-a.app");
         verify(nodeRepository, times(1)).create(any());
+    }
+
+    @Test
+    @DisplayName("删订阅：删完逐出该订阅的渲染缓存；被引用拒绝时不逐出")
+    void deleteEvictsRenderCache() {
+        when(airportSubscriptionRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(group(1L)));
+        when(userFrontSubscriptionRepository.existsByAirportSubscriptionId(1L)).thenReturn(false);
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of());
+
+        service.delete(1L);
+
+        verify(renderCache).evict(1L);
+    }
+
+    @Test
+    @DisplayName("订阅被用户引用而删不掉：不逐出缓存")
+    void deleteRejectedDoesNotEvict() {
+        when(airportSubscriptionRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(group(2L)));
+        when(userFrontSubscriptionRepository.existsByAirportSubscriptionId(2L)).thenReturn(true);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.delete(2L)).isInstanceOf(ai.mintpop.lane.exception.BizException.class);
+
+        verify(renderCache, never()).evict(anyLong());
     }
 }

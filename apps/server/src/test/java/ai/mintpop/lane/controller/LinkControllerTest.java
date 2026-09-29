@@ -272,7 +272,7 @@ class LinkControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("不带请求体的心跳与从前行为逐字一致，老客户端不受影响")
+    @DisplayName("不带请求体的心跳除新增 configVersion 外与从前一致，老客户端不受影响")
     void heartbeatWithoutBodyBehavesExactlyAsBefore() throws Exception {
         String body = mockMvc.perform(post("/api/link/heartbeat")
                         .header("Authorization", bearer(user1Id)))

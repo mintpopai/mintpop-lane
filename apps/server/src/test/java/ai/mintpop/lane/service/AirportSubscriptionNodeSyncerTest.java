@@ -38,6 +38,7 @@ class AirportSubscriptionNodeSyncerTest {
 
     @Mock private ProxyNodeRepository nodeRepository;
     @Mock private FailureDomainResolver failureDomainResolver;
+    private final SubscriptionRenderCache renderCache = mock(SubscriptionRenderCache.class);
     private AirportSubscriptionNodeSyncer syncer;
 
     @BeforeEach
@@ -45,7 +46,7 @@ class AirportSubscriptionNodeSyncerTest {
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
         when(failureDomainResolver.resolve(anyString())).thenReturn("jp.tsdns.top");
         syncer = new AirportSubscriptionNodeSyncer(nodeRepository,
-                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), mock(SubscriptionRenderCache.class));
+                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), renderCache);
     }
 
     private static SubNode sub(String name, int port) {
@@ -90,6 +91,7 @@ class AirportSubscriptionNodeSyncerTest {
         SyncResult result = syncer.sync(1L, List.of(sub("🇺🇸[US]B", 2001), sub("🇺🇸[US]C", 3000)),
                 Map.of("us01a.example.com", "jp.tsdns.top"));
 
+        verify(renderCache).evict(1L);
         assertThat(result.removed()).containsExactly("🇺🇸[US]A");
         assertThat(result.added()).containsExactly("🇺🇸[US]C");
         assertThat(result.updated()).isEqualTo(1);

@@ -17,6 +17,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import java.util.List;
 import java.util.Map;
 
@@ -92,5 +95,28 @@ class InMemorySubscriptionRenderCacheTest {
         RenderedSubscription rendered = cache.get(2L);
         assertThat(rendered.nodes()).isEmpty();
         assertThat(rendered.failureDomain()).isNull();
+    }
+
+    @Test
+    @DisplayName("事务内 evict：提交前空档里重新缓存的旧渲染，提交后被再次逐出")
+    void evictAgainAfterCommit() {
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node(1, "🇺🇸[US]A", null)));
+        cache.get(1L);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            cache.evict(1L);
+            cache.get(1L);   // 提交前空档：读到旧数据并缓存
+            verify(nodeRepository, times(2)).findByAirportSubscriptionId(1L);
+
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        cache.get(1L);
+        verify(nodeRepository, times(3)).findByAirportSubscriptionId(1L);
     }
 }
