@@ -35,9 +35,12 @@ const importModalOpen = ref(false);
 const auditModalOpen = ref(false);
 
 /* 当前机场以 URL 为准：?airport 对得上现存机场就选它，否则（没带、非法、已被删）回落第一家。
-   做成 computed 而不是本地状态，删除机场、刷新页面、从详情页返回都自动落对地方 */
+   做成 computed 而不是本地状态，删除机场、刷新页面、从详情页返回都自动落对地方。
+   唯一的例外是点页签到导航落地之间：每次导航守卫都要实探一次 /api/me，网络远时要等一个往返，
+   这段时间先按点中的机场画（pendingAirportId），导航结束（成功或被拒）后交还给 URL */
+const pendingAirportId = ref<number | null>(null);
 const currentAirport = computed<AirportResponse | null>(() => {
-  const wanted = Number(route.query.airport);
+  const wanted = pendingAirportId.value ?? Number(route.query.airport);
   return airports.value.find((a) => a.id === wanted) ?? airports.value[0] ?? null;
 });
 
@@ -45,7 +48,14 @@ const currentAirport = computed<AirportResponse | null>(() => {
 const currentAirportId = computed<number>({
   get: () => currentAirport.value?.id ?? 0,
   set: (id) => {
-    void router.replace({ query: { ...route.query, airport: String(id) } });
+    pendingAirportId.value = id;
+    // 被拒（如守卫把人送去登录）时 URL 没变，清掉 pending 即回到 URL 所指的机场
+    void router
+      .replace({ query: { ...route.query, airport: String(id) } })
+      .catch(() => undefined)
+      .finally(() => {
+        pendingAirportId.value = null;
+      });
   },
 });
 
@@ -153,7 +163,7 @@ onMounted(load);
     <ViewTabs v-model="currentAirportId" :options="tabOptions" label="按机场分" />
 
     <!-- 当前机场自己的事实与操作：随页签切换，所以不上提到页头 -->
-    <div class="airport-bar">
+    <div class="admin-toolbar airport-bar">
       <span class="airport-bar-facts">
         <a
           v-if="currentAirport.websiteUrl"
@@ -278,31 +288,22 @@ onMounted(load);
 </template>
 
 <style scoped>
+/* 布局（换行、spacer 撑开、下边距）沿用全局 .admin-toolbar，这里只调字号与间距 */
 .airport-bar {
-  display: flex;
-  align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
   font-size: 13px;
-}
-
-/* 全局 .spacer 只挂在 .admin-toolbar 下，这里自己撑开，让机场操作靠右 */
-.airport-bar .spacer {
-  flex: 1;
 }
 
 .airport-bar-facts {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
+/* 悬停底色用全局 .admin-table tbody tr:hover，这里只补手型 */
 .clickable-row {
   cursor: pointer;
-}
-
-.clickable-row:hover td {
-  background: var(--color-bg-cloud);
 }
 </style>

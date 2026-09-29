@@ -19,7 +19,9 @@ const router = useRouter();
 
 const subscriptions = ref<AirportSubscriptionResponse[]>([]);
 const allNodes = ref<AdminNodeResponse[]>([]);
-const loading = ref(true);
+/* 只有首次加载才整页显示「加载中…」。弹窗保存后的重拉保留已画出的内容——
+   否则每编辑一个节点页面就闪一下、滚动位置也丢了 */
+const loaded = ref(false);
 const loadError = ref("");
 
 const refetching = ref(false);
@@ -50,7 +52,6 @@ const backTo = computed(() =>
 );
 
 async function load(): Promise<void> {
-  loading.value = true;
   try {
     const [subscriptionList, nodeList] = await Promise.all([
       adminApi().listAirportSubscriptions(),
@@ -60,9 +61,15 @@ async function load(): Promise<void> {
     allNodes.value = nodeList;
     loadError.value = "";
   } catch (error) {
-    loadError.value = error instanceof BizError ? error.message : (error as Error).message;
+    const message = error instanceof BizError ? error.message : (error as Error).message;
+    // 已经画出过内容时，刷新失败不该把整页换成错误态，提示一下、保留旧内容即可
+    if (loaded.value) {
+      showToast("error", `刷新失败：${message}`);
+    } else {
+      loadError.value = message;
+    }
   } finally {
-    loading.value = false;
+    loaded.value = true;
   }
 }
 
@@ -98,10 +105,13 @@ onMounted(load);
     </RouterLink>
   </nav>
 
-  <p v-if="loading" class="muted">加载中…</p>
+  <p v-if="!loaded" class="muted">加载中…</p>
   <!-- 接口失败与「订阅不存在」要分开说：前者是故障，后者是数据事实 -->
   <p v-else-if="loadError" class="admin-hint error">{{ loadError }}</p>
-  <p v-else-if="!subscription" class="admin-hint">订阅不存在或已被删除。</p>
+  <p v-else-if="!subscription" class="admin-hint not-found">
+    订阅不存在或已被删除。
+    <RouterLink class="admin-link" :to="{ name: 'AIRPORT_SUBSCRIPTIONS' }">返回机场订阅</RouterLink>
+  </p>
 
   <template v-else>
     <header class="detail-head">
@@ -219,8 +229,10 @@ onMounted(load);
   margin-bottom: 12px;
 }
 
+/* 订阅名很长或窄屏时，操作整组折到下一行，不挤压标题 */
 .detail-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;

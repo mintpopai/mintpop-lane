@@ -353,3 +353,27 @@ describe("AirportSubscriptionsView 空态", () => {
     expect(wrapper.findComponent(DataCard).props("error")).toBe("服务开小差");
   });
 });
+
+describe("AirportSubscriptionsView 切页签手感", () => {
+  it("点页签立刻切表格，不等路由导航（守卫要探一次 /api/me）完成", async () => {
+    const wrapper = await render();
+    // 导航挂起不落地：URL 还没变，但页签与表格要先跟上
+    replace.mockReturnValueOnce(new Promise(() => {}));
+
+    wrapper.findComponent({ name: "ViewTabs" }).vm.$emit("update:modelValue", 2);
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent({ name: "ViewTabs" }).props("modelValue")).toBe(2);
+    expect(subNames(wrapper)).toEqual(["b-main"]);
+  });
+
+  it("导航被拒（如守卫把人送去登录）时，页签回到 URL 所指的机场", async () => {
+    const wrapper = await render();
+    replace.mockRejectedValueOnce(new Error("navigation aborted"));
+
+    wrapper.findComponent({ name: "ViewTabs" }).vm.$emit("update:modelValue", 2);
+    await flushPromises();
+
+    expect(subNames(wrapper)).toEqual(["taishan", "xxx"]);
+  });
+});

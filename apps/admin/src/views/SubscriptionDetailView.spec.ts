@@ -270,3 +270,38 @@ describe("SubscriptionDetailView 订阅操作", () => {
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+describe("SubscriptionDetailView 刷新不闪", () => {
+  it("弹窗保存后重拉期间保留原内容，不整页换成「加载中…」", async () => {
+    const wrapper = await render();
+    await headButton(wrapper, "编辑").trigger("click");
+    // 第二次拉取挂起，模拟慢网络下的刷新过程
+    listAirportSubscriptions.mockReturnValueOnce(new Promise(() => {}));
+
+    wrapper.findComponent(AirportSubscriptionEditModal).vm.$emit("saved");
+    await flushPromises();
+
+    expect(wrapper.find(".detail-info").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("加载中");
+  });
+
+  it("刷新失败时用提示条报错，已画出的内容保留", async () => {
+    const wrapper = await render();
+    await headButton(wrapper, "编辑").trigger("click");
+    listAirportSubscriptions.mockRejectedValueOnce(new BizError(110001, "服务开小差"));
+
+    wrapper.findComponent(AirportSubscriptionEditModal).vm.$emit("saved");
+    await flushPromises();
+
+    expect(showToast).toHaveBeenCalledWith("error", "刷新失败：服务开小差");
+    expect(wrapper.find(".detail-info").exists()).toBe(true);
+  });
+
+  it("订阅不存在时，提示旁紧跟一个返回机场订阅页的链接", async () => {
+    route.params = { id: "999" };
+    const wrapper = await render();
+
+    const back = wrapper.get(".not-found").getComponent({ name: "RouterLink" });
+    expect(back.props("to")).toEqual({ name: "AIRPORT_SUBSCRIPTIONS" });
+  });
+});
