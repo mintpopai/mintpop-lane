@@ -6,11 +6,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class RestClientSubFetchClientTest {
@@ -172,5 +175,17 @@ class RestClientSubFetchClientTest {
                         .header("subscription-userinfo", "upload=1; download=2; total=100; expire=-1"));
 
         assertThat(client.fetch("https://sub.example.com/c?token=t").expiresAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("429 抛 SubFetchRateLimitedException 并带上 Retry-After 秒数")
+    void tooManyRequestsCarriesRetryAfter() {
+        server.expect(requestTo("https://sub.example.com/c?token=x"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header(HttpHeaders.RETRY_AFTER, "12"));
+
+        assertThatThrownBy(() -> client.fetch("https://sub.example.com/c?token=x"))
+                .isInstanceOf(SubFetchRateLimitedException.class)
+                .extracting(e -> ((SubFetchRateLimitedException) e).getRetryAfter())
+                .isEqualTo(Duration.ofSeconds(12));
     }
 }

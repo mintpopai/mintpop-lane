@@ -6,18 +6,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
 /** 订阅拉取的 RestClient 实现。 */
 @Slf4j
-@Component
 public class RestClientSubFetchClient implements SubFetchClient {
 
     /** mihomo 系 UA：订阅端据此返回 Clash YAML 而非 base64 URI 列表，解析器只认前者 */
@@ -47,6 +47,10 @@ public class RestClientSubFetchClient implements SubFetchClient {
                     .header(HttpHeaders.USER_AGENT, CLASH_UA)
                     .retrieve()
                     .toEntity(String.class);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            Duration retryAfter = parseRetryAfter(e.getResponseHeaders());
+            log.warn("订阅拉取被限流 429，url={}，Retry-After={}", maskUrl(subUrl), retryAfter);
+            throw new SubFetchRateLimitedException(retryAfter);
         } catch (RestClientException | IllegalArgumentException e) {
             // 异常原因不能吞，但 e.getMessage() 不能打：Spring 的 ResourceAccessException
             // （超时/DNS 失败/连接拒绝——恰恰是最常见的失败路径）message 形如
@@ -124,6 +128,22 @@ public class RestClientSubFetchClient implements SubFetchClient {
         }
         try {
             return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 只认秒数形式的 Retry-After；HTTP 日期形式或缺失一律 null，交给重试层用固定退避 */
+    private static Duration parseRetryAfter(HttpHeaders headers) {
+        if (headers == null) {
+            return null;
+        }
+        String raw = headers.getFirst(HttpHeaders.RETRY_AFTER);
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Duration.ofSeconds(Long.parseLong(raw.trim()));
         } catch (NumberFormatException e) {
             return null;
         }
