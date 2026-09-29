@@ -519,69 +519,76 @@ async function confirmUnbind(): Promise<void> {
 
     <!-- 列表与表单二选一整屏切换，不再堆叠在同一屏里 -->
     <template v-if="formMode === 'hidden'">
-      <!-- 第一跳（机场订阅）：分配只由管理员手动触发——「自动分配」整份重算主用与备用，
+      <!-- 机场订阅与落地节点两张卡并排一行：都是给这个用户分配线路，放一起读 -->
+      <div class="line-row">
+        <!-- 第一跳（机场订阅）：分配只由管理员手动触发——「自动分配」整份重算主用与备用，
            「取消分配」清空。第一跳不再开放手工指定节点，只能来自机场订阅 -->
-      <section class="admin-card front-card">
-        <div class="front-card-head">
+        <section class="admin-card front-card">
           <h4 class="block-title">机场订阅</h4>
-          <div class="front-card-actions">
+          <!-- 与落地节点卡同一种读法：标题下一行，内容在左、动作在右，与下拉 + 保存钮上下对齐 -->
+          <div class="front-card-body">
+            <p v-if="user && user.frontSubscriptions.length === 0" class="front-empty">
+              未分配，点「自动分配」按负载分配
+            </p>
+            <ul v-else-if="user" class="front-sub-list">
+              <li
+                v-for="item in user.frontSubscriptions"
+                :key="item.position"
+                class="front-sub-row"
+              >
+                <span class="pill">{{ positionLabel(item.position) }}</span>
+                <span>{{ item.airportName }} · {{ item.subscriptionName }}</span>
+                <span class="front-sub-account">（账号 {{ item.account }}）</span>
+              </li>
+            </ul>
+            <div class="front-card-actions">
+              <button
+                type="button"
+                class="admin-btn"
+                :disabled="allocatingFront || !user"
+                @click="allocateFront()"
+              >
+                {{ allocatingFront ? "分配中…" : "自动分配" }}
+              </button>
+              <button
+                type="button"
+                class="admin-btn-ghost"
+                :disabled="!user || user.frontSubscriptions.length === 0"
+                @click="pendingClearFront = true"
+              >
+                取消分配
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 落地节点：卡标题就是「落地节点」，不再另起 label 把同一件事说第二遍，a11y 由 aria-label 承担。
+           下拉与保存钮排成一行——保存只在有改动时可点，没改动就没有可保存的东西 -->
+        <section class="admin-card link-card">
+          <h4 class="block-title">落地节点</h4>
+          <div class="link-grid">
+            <div class="admin-field">
+              <Select
+                id="user-land"
+                v-model="landNodeId"
+                :options="landOptions"
+                aria-label="落地节点"
+              />
+            </div>
             <button
               type="button"
               class="admin-btn"
-              :disabled="allocatingFront || !user"
-              @click="allocateFront()"
+              :disabled="savingNodes || !linkDirty"
+              @click="saveNodes()"
             >
-              {{ allocatingFront ? "分配中…" : "自动分配" }}
-            </button>
-            <button
-              type="button"
-              class="admin-btn-ghost"
-              :disabled="!user || user.frontSubscriptions.length === 0"
-              @click="pendingClearFront = true"
-            >
-              取消分配
+              {{ savingNodes ? "保存中…" : "保存" }}
             </button>
           </div>
-        </div>
-        <p v-if="user && user.frontSubscriptions.length === 0" class="muted">
-          未分配机场订阅。点「自动分配」按各机场订阅的负载排出主用与备用。
-        </p>
-        <ul v-else-if="user" class="front-sub-list">
-          <li v-for="item in user.frontSubscriptions" :key="item.position" class="front-sub-row">
-            <span class="pill">{{ positionLabel(item.position) }}</span>
-            <span>{{ item.airportName }} · {{ item.subscriptionName }}</span>
-            <span class="muted">（账号 {{ item.account }}）</span>
-          </li>
-        </ul>
-      </section>
-
-      <!-- 链路资源：从前在用户列表的编辑弹窗里，随订阅一起收进本页统一管理。
-           下拉与保存钮排成一行、底对齐——保存只在有改动时可点，没改动就没有可保存的东西 -->
-      <section class="admin-card link-card">
-        <h4 class="block-title">链路资源</h4>
-        <div class="link-grid">
-          <div class="admin-field">
-            <label for="user-land">落地节点</label>
-            <Select
-              id="user-land"
-              v-model="landNodeId"
-              :options="landOptions"
-              aria-label="落地节点"
-            />
-          </div>
-          <button
-            type="button"
-            class="admin-btn"
-            :disabled="savingNodes || !linkDirty"
-            @click="saveNodes()"
-          >
-            {{ savingNodes ? "保存中…" : "保存" }}
-          </button>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <!-- 备注：管理员自用说明，只在管理端可见，不下发给用户。
-           与链路资源分成两张卡各自保存——两件事互不相干，混在一张卡里保存
+           与落地节点分成两张卡各自保存——两件事互不相干，混在一张卡里保存
            会让人分不清这一下动了什么 -->
       <section class="admin-card remark-card">
         <h4 class="block-title">备注</h4>
@@ -994,7 +1001,7 @@ async function confirmUnbind(): Promise<void> {
   overflow-wrap: anywhere;
 }
 
-/* 链路资源卡与订阅区共用的小节标题 */
+/* 各卡与订阅区共用的小节标题 */
 .block-title {
   margin-bottom: 16px;
   font-size: 14px;
@@ -1002,9 +1009,15 @@ async function confirmUnbind(): Promise<void> {
   color: var(--color-ink);
 }
 
+/* 机场订阅 + 落地节点两卡并排、等高；窄屏退回上下堆叠 */
+.line-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
 .link-card {
   padding: 20px 24px;
-  margin-top: 16px;
 }
 
 /* 落地节点下拉 + 保存钮一行排开、底对齐：36px 的按钮正好与控件同高 */
@@ -1019,11 +1032,13 @@ async function confirmUnbind(): Promise<void> {
   padding: 20px 24px;
 }
 
-.front-card-head {
-  display: flex;
+/* 内容 + 动作一行：内容占满剩余宽度，按钮靠右；最小高度与下拉框同为 36px，两卡内容行对齐 */
+.front-card-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  min-height: 36px;
 }
 
 .front-card-actions {
@@ -1031,12 +1046,24 @@ async function confirmUnbind(): Promise<void> {
   gap: 8px;
 }
 
+/* 未分配的说明：与页面其它说明文字同一档（14px 次级色），不抢标题 */
+.front-empty {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+}
+
 .front-sub-list {
   list-style: none;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
   gap: 8px;
+}
+
+.front-sub-account {
+  color: var(--color-ink-secondary);
 }
 
 .front-sub-row {
@@ -1061,7 +1088,7 @@ async function confirmUnbind(): Promise<void> {
   font-variant-numeric: tabular-nums;
 }
 
-/* 一个输入框 + 保存钮一行排开、底对齐，与链路资源卡同一种读法 */
+/* 一个输入框 + 保存钮一行排开、底对齐，与落地节点卡同一种读法 */
 .remark-grid {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1082,7 +1109,21 @@ async function confirmUnbind(): Promise<void> {
   margin-bottom: 0;
 }
 
+@media (max-width: 900px) {
+  .line-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 640px) {
+  .front-card-body {
+    grid-template-columns: 1fr;
+  }
+
+  .front-card-actions {
+    justify-self: end;
+  }
+
   .link-grid {
     grid-template-columns: 1fr;
     align-items: stretch;

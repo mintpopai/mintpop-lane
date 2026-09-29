@@ -631,14 +631,14 @@ describe("UserDetailView · 第一跳", () => {
   it("未分配时明确说未分配", async () => {
     getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配机场订阅"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配，点「自动分配」"));
   });
 
   it("点「自动分配」直接调接口并刷新", async () => {
     getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
     allocateUserFront.mockResolvedValue(assigned);
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配机场订阅"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配，点「自动分配」"));
 
     await buttonInCard(".front-card", "自动分配").trigger("click");
 
@@ -652,7 +652,7 @@ describe("UserDetailView · 第一跳", () => {
       new BizError(410050, "没有可分配的第一跳订阅：主用名额已满，或没有启用中的美国节点"),
     );
     await mountView([]);
-    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配机场订阅"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("未分配，点「自动分配」"));
 
     await buttonInCard(".front-card", "自动分配").trigger("click");
 
