@@ -1,0 +1,303 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { adminApi } from "../api";
+import { BizError } from "../api/http";
+import type {
+  FrontRebuildPreview,
+  FrontRebuildStatus,
+  FrontSettingsResponse,
+  NodeRegion,
+} from "../api/types";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
+import DataCard from "../components/DataCard.vue";
+import PageHead from "../components/PageHead.vue";
+import Select from "../components/AdminSelect.vue";
+import { showToast } from "../toast";
+import { formatDateTime } from "../utils/format";
+
+/** 轮询重算状态的间隔；只在 RUNNING 时轮询 */
+const STATUS_POLL_MS = 3000;
+
+const loading = ref(true);
+const loadError = ref("");
+const saved = ref<FrontSettingsResponse | null>(null);
+
+const region = ref<NodeRegion>("US");
+const airportsPerUser = ref("3");
+const bandwidthPerUserMbps = ref("20");
+
+const status = ref<FrontRebuildStatus | null>(null);
+const preview = ref<FrontRebuildPreview | null>(null);
+
+/** 待确认的动作：保存设置 或 手动重算 */
+const pendingAction = ref<"SAVE" | "REBUILD" | null>(null);
+const submitting = ref(false);
+
+let pollTimer: ReturnType<typeof setInterval> | undefined;
+
+const regionOptions = computed(() =>
+  (saved.value?.regionOptions ?? []).map((o) => ({ value: o.value, label: o.label })),
+);
+
+const airportsNumber = computed(() => Number(airportsPerUser.value));
+const bandwidthNumber = computed(() => Number(bandwidthPerUserMbps.value));
+
+/** 「1 条主线路，n-1 条备用线路」随输入实时变；非法输入不显示 */
+const airportsHint = computed(() => {
+  const n = airportsNumber.value;
+  if (!Number.isInteger(n) || n < 1) {
+    return "";
+  }
+  return `1 条主线路，${n - 1} 条备用线路`;
+});
+
+const dirty = computed(
+  () =>
+    !!saved.value &&
+    (region.value !== saved.value.region ||
+      airportsNumber.value !== saved.value.airportsPerUser ||
+      bandwidthNumber.value !== saved.value.bandwidthPerUserMbps),
+);
+
+const running = computed(() => status.value?.phase === "RUNNING");
+
+const previewText = computed(() =>
+  preview.value
+    ? `需要 ${preview.value.requiredPrimary} 个主用名额，现有 ${preview.value.availablePrimary}`
+    : "",
+);
+
+const confirmMessage = computed(() => {
+  const head =
+    pendingAction.value === "SAVE"
+      ? "保存后将重新拉取全部订阅并为所有用户重新分配线路，客户端会自动热更新。"
+      : "将重新拉取全部订阅并为所有用户重新分配线路，客户端会自动热更新。";
+  if (!preview.value) {
+    return `${head} 正在预检容量…`;
+  }
+  return preview.value.sufficient
+    ? `${head} ${previewText.value}，容量足够。确认继续？`
+    : `${head} ${previewText.value}，主用名额不足，无法继续。请先补充订阅。`;
+});
+
+async function load(): Promise<void> {
+  loading.value = true;
+  try {
+    const [s, st] = await Promise.all([
+      adminApi().getFrontSettings(),
+      adminApi().frontRebuildStatus(),
+    ]);
+    saved.value = s;
+    region.value = s.region;
+    airportsPerUser.value = String(s.airportsPerUser);
+    bandwidthPerUserMbps.value = String(s.bandwidthPerUserMbps);
+    status.value = st;
+    loadError.value = "";
+    await refreshPreview();
+    syncPolling();
+  } catch (error) {
+    loadError.value = error instanceof BizError ? error.message : (error as Error).message;
+  } finally {
+    loading.value = false;
+  }
+}
+
+/** 预检按表单里的当前值算：地区与每人带宽改了就重新算 */
+async function refreshPreview(): Promise<void> {
+  if (!Number.isInteger(bandwidthNumber.value) || bandwidthNumber.value < 1) {
+    preview.value = null;
+    return;
+  }
+  try {
+    preview.value = await adminApi().previewFrontRebuild(region.value, bandwidthNumber.value);
+  } catch (error) {
+    preview.value = null;
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `预检失败：${(error as Error).message}`,
+    );
+  }
+}
+
+watch([region, bandwidthPerUserMbps], () => {
+  void refreshPreview();
+});
+
+async function pollStatus(): Promise<void> {
+  try {
+    status.value = await adminApi().frontRebuildStatus();
+    syncPolling();
+  } catch {
+    // 轮询失败不打扰，下一次再试
+  }
+}
+
+/** RUNNING 才开轮询，结束就停：别让一个空闲页面每 3 秒打服务端 */
+function syncPolling(): void {
+  if (running.value && pollTimer === undefined) {
+    pollTimer = setInterval(() => void pollStatus(), STATUS_POLL_MS);
+  } else if (!running.value && pollTimer !== undefined) {
+    clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
+}
+
+function askSave(): void {
+  const n = airportsNumber.value;
+  const b = bandwidthNumber.value;
+  if (!Number.isInteger(n) || n < 1 || n > 10 || !Number.isInteger(b) || b < 1 || b > 1000) {
+    showToast("error", "每人机场数 1 到 10，每人带宽 1 到 1000 Mbps");
+    return;
+  }
+  pendingAction.value = "SAVE";
+  void refreshPreview();
+}
+
+function askRebuild(): void {
+  pendingAction.value = "REBUILD";
+  void refreshPreview();
+}
+
+async function confirmAction(): Promise<void> {
+  if (!pendingAction.value || !preview.value?.sufficient) {
+    return;
+  }
+  submitting.value = true;
+  try {
+    if (pendingAction.value === "SAVE") {
+      const changed = dirty.value;
+      saved.value = await adminApi().updateFrontSettings({
+        region: region.value,
+        airportsPerUser: airportsNumber.value,
+        bandwidthPerUserMbps: bandwidthNumber.value,
+      });
+      showToast("success", changed ? "已保存，正在为全部用户重算线路" : "已保存");
+    } else {
+      await adminApi().startFrontRebuild();
+      showToast("success", "已开始为全部用户重算线路");
+    }
+    pendingAction.value = null;
+    await pollStatus();
+  } catch (error) {
+    // 410054 取值非法、410055 正在重算，服务端给的中文提示直接用
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `操作失败：${(error as Error).message}`,
+    );
+  } finally {
+    submitting.value = false;
+  }
+}
+
+onMounted(load);
+onBeforeUnmount(() => {
+  clearInterval(pollTimer);
+});
+</script>
+
+<template>
+  <PageHead title="全局配置">
+    <template #facts>
+      第一跳线路的全局参数。任一项改动都会重新拉取全部订阅并为所有用户重新分配线路。
+    </template>
+    <template #actions>
+      <button
+        type="button"
+        class="admin-btn-ghost rebuild"
+        :disabled="running"
+        @click="askRebuild()"
+      >
+        {{ running ? "重算中…" : "重算全部线路" }}
+      </button>
+    </template>
+  </PageHead>
+
+  <DataCard :loading="loading" :error="loadError" :empty="false">
+    <div class="admin-form">
+      <div class="admin-field">
+        <label for="setting-region">筛选地区</label>
+        <Select
+          id="setting-region"
+          v-model="region"
+          :options="regionOptions"
+          aria-label="筛选地区"
+        />
+        <p class="admin-note">只把落在该地区的节点作为第一跳候选。现在只有美国。</p>
+      </div>
+      <div class="admin-field">
+        <label for="setting-airports">每个用户分配几家机场的订阅</label>
+        <input
+          id="setting-airports"
+          v-model="airportsPerUser"
+          class="admin-input fact"
+          type="number"
+          min="1"
+          max="10"
+        />
+        <p class="admin-note">{{ airportsHint || "填 1 到 10 的整数" }}</p>
+      </div>
+      <div class="admin-field">
+        <label for="setting-bandwidth">每个用户按多少带宽计名额（Mbps）</label>
+        <input
+          id="setting-bandwidth"
+          v-model="bandwidthPerUserMbps"
+          class="admin-input fact"
+          type="number"
+          min="1"
+          max="1000"
+        />
+        <p class="admin-note">订阅主用名额 = 订阅带宽 ÷ 此值，向下取整。</p>
+      </div>
+
+      <p class="admin-note">
+        容量预检（按上面填的值）：
+        <span v-if="preview" class="fact">{{ previewText }}</span>
+        <span v-else class="muted">—</span>
+        <span v-if="preview && !preview.sufficient" class="state" data-state="DISABLED"
+          >名额不足</span
+        >
+      </p>
+
+      <div class="admin-toolbar">
+        <button
+          type="button"
+          class="admin-btn save"
+          :disabled="!dirty || running || submitting"
+          @click="askSave()"
+        >
+          保存
+        </button>
+      </div>
+    </div>
+
+    <section class="admin-card">
+      <h4 class="block-title">最近一次重算</h4>
+      <p v-if="!status || status.phase === 'IDLE'" class="muted">服务端启动以来还没有重算过。</p>
+      <p v-else-if="status.phase === 'RUNNING'">
+        <span class="state" data-state="ENABLED">重算中</span>
+        <span class="fact muted">开始于 {{ formatDateTime(status.startedAt) }}</span>
+      </p>
+      <p v-else-if="status.phase === 'SUCCEEDED'">
+        上次重算成功：<span class="fact">{{ status.userCount }}</span> 个用户、<span class="fact">{{
+          status.subscriptionCount
+        }}</span>
+        个订阅，完成于 <span class="fact muted">{{ formatDateTime(status.finishedAt) }}</span>
+      </p>
+      <p v-else>
+        <span class="state" data-state="DISABLED">上次重算失败</span>
+        <span>{{ status.error }}</span>
+        <span class="fact muted">（{{ formatDateTime(status.finishedAt) }}）</span>
+      </p>
+    </section>
+  </DataCard>
+
+  <ConfirmDialog
+    v-if="pendingAction"
+    :title="pendingAction === 'SAVE' ? '保存并重算全部线路' : '重算全部线路'"
+    :message="confirmMessage"
+    confirm-text="确认"
+    :busy="submitting || !preview || !preview.sufficient"
+    @confirm="confirmAction()"
+    @cancel="pendingAction = null"
+  />
+</template>

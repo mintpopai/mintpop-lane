@@ -71,6 +71,8 @@ function group(overrides: Partial<AirportSubscriptionResponse> = {}): AirportSub
     totalBytes: null,
     expiresAt: null,
     fetchedAt: null,
+    fetchFailedSince: null,
+    lastFetchError: null,
     primaryUsed: 0,
     primaryCapacity: 15,
     createdAt: "2026-09-01T00:00:00Z",

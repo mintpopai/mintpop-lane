@@ -31,6 +31,11 @@ import type {
   EnterpriseSaveRequest,
   ImageUploadResponse,
   LinkHealthResponse,
+  FrontSettingsResponse,
+  FrontSettingsUpdateRequest,
+  FrontRebuildStatus,
+  FrontRebuildPreview,
+  NodeRegion,
 } from "./types";
 
 export interface AdminApi {
@@ -90,6 +95,18 @@ export interface AdminApi {
   deleteEnterprise(id: number): Promise<void>;
   /** 故障域 × 运营商成功率矩阵 + 入口 IP 变更时间线；不传天数时服务端按 7 天算 */
   getLinkHealth(days?: number): Promise<LinkHealthResponse>;
+  /** 全局配置：第一跳地区、每人机场数、每人带宽 */
+  getFrontSettings(): Promise<FrontSettingsResponse>;
+  /** 保存全局配置；任一项变化服务端会启动全体重算，正在重算时报 410055 */
+  updateFrontSettings(body: FrontSettingsUpdateRequest): Promise<FrontSettingsResponse>;
+  frontRebuildStatus(): Promise<FrontRebuildStatus>;
+  /** 手动触发全体重算；正在跑时报 410055 */
+  startFrontRebuild(): Promise<void>;
+  /** 按表单里的新值预检容量：地区决定候选订阅，每人带宽决定名额 */
+  previewFrontRebuild(
+    region: NodeRegion,
+    bandwidthPerUserMbps: number,
+  ): Promise<FrontRebuildPreview>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -304,6 +321,30 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     getLinkHealth(days) {
       return http.request(`/admin/link-health?days=${days ?? 7}`);
+    },
+
+    getFrontSettings() {
+      return http.request("/admin/settings");
+    },
+
+    updateFrontSettings(body) {
+      return http.request("/admin/settings", { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    frontRebuildStatus() {
+      return http.request("/admin/front/rebuild");
+    },
+
+    startFrontRebuild() {
+      return http.request("/admin/front/rebuild", { method: "POST" });
+    },
+
+    previewFrontRebuild(region, bandwidthPerUserMbps) {
+      const query = new URLSearchParams({
+        region,
+        bandwidthPerUserMbps: String(bandwidthPerUserMbps),
+      });
+      return http.request(`/admin/front/rebuild/preview?${query.toString()}`);
     },
   };
 }

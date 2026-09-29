@@ -142,4 +142,12 @@ describe("路由守卫", () => {
 
     expect(router.currentRoute.value.path).toBe("/link-health");
   });
+
+  it("全局配置挂在 /settings 上，路由名为 SETTINGS", async () => {
+    const router = createRouter(adminUser);
+
+    await router.push({ name: "SETTINGS" });
+
+    expect(router.currentRoute.value.path).toBe("/settings");
+  });
 });

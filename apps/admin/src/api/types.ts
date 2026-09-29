@@ -399,7 +399,7 @@ export interface AirportResponse {
   subscriptionCount: number;
   /** 各订阅主用人数之和 */
   primaryUsed: number;
-  /** 各订阅 带宽/20（向下取整）之和 */
+  /** 各订阅主用名额之和：带宽 ÷ 每人带宽（全局配置）向下取整 */
   primaryCapacity: number;
   createdAt: string;
   updatedAt: string;
@@ -423,7 +423,7 @@ export interface AirportSubscriptionResponse {
   airportName: string;
   /** 机场账号（邮箱等），用于登录机场官网续费/查流量 */
   account: string;
-  /** 带宽（Mbps），创建后不可改；主用容量 = 本值 / 20 向下取整 */
+  /** 带宽（Mbps），创建后不可改；主用容量 = 本值 ÷ 每人带宽（全局配置）向下取整 */
   bandwidthMbps: number;
   /** 已用流量字节数；机场未返回额度头则为 null */
   usedBytes: number | null;
@@ -433,9 +433,13 @@ export interface AirportSubscriptionResponse {
   expiresAt: string | null;
   /** 最近一次成功拉取订阅的时间；从未拉取成功过则为 null */
   fetchedAt: string | null;
+  /** 订阅拉取连续失败的起始时间；最近一次拉取成功则为 null */
+  fetchFailedSince: string | null;
+  /** 最近一次拉取失败的错误说明；拉取成功后为 null */
+  lastFetchError: string | null;
   /** 本订阅当前占用的主用名额数（第一跳顺位 0 引用本订阅的用户数） */
   primaryUsed: number;
-  /** 本订阅的主用名额总容量：bandwidthMbps / 20 向下取整 */
+  /** 本订阅的主用名额总容量：bandwidthMbps ÷ 每人带宽（全局配置）向下取整 */
   primaryCapacity: number;
   createdAt: string;
   updatedAt: string;
@@ -645,3 +649,55 @@ export const DNS_VANTAGE_LABELS: Record<string, string> = {
   CHINA_MOBILE: "中国移动",
   OVERSEAS: "海外",
 };
+
+/** 第一跳节点筛选地区，与服务端 NodeRegion 逐字对应 */
+export const NODE_REGION = {
+  US: "US",
+} as const;
+export type NodeRegion = (typeof NODE_REGION)[keyof typeof NODE_REGION];
+
+export interface RegionOption {
+  value: NodeRegion;
+  label: string;
+}
+
+/** 全局配置页读视图 */
+export interface FrontSettingsResponse {
+  region: NodeRegion;
+  regionOptions: RegionOption[];
+  /** 每个用户分配几家机场的订阅：1 主用 + n-1 备用 */
+  airportsPerUser: number;
+  /** 每个用户按多少带宽（Mbps）计主用名额 */
+  bandwidthPerUserMbps: number;
+}
+
+export interface FrontSettingsUpdateRequest {
+  region: NodeRegion;
+  airportsPerUser: number;
+  bandwidthPerUserMbps: number;
+}
+
+export const FRONT_REBUILD_PHASE = {
+  IDLE: "IDLE",
+  RUNNING: "RUNNING",
+  SUCCEEDED: "SUCCEEDED",
+  FAILED: "FAILED",
+} as const;
+export type FrontRebuildPhase = (typeof FRONT_REBUILD_PHASE)[keyof typeof FRONT_REBUILD_PHASE];
+
+/** 最近一次全体重算的状态；服务端进程内保存，重启后回到 IDLE */
+export interface FrontRebuildStatus {
+  phase: FrontRebuildPhase;
+  startedAt: string | null;
+  finishedAt: string | null;
+  userCount: number | null;
+  subscriptionCount: number | null;
+  error: string | null;
+}
+
+/** 容量预检：需要 = 有激活席位的用户数，现有 = 有节点的订阅主用名额之和 */
+export interface FrontRebuildPreview {
+  requiredPrimary: number;
+  availablePrimary: number;
+  sufficient: boolean;
+}

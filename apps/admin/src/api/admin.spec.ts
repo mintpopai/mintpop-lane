@@ -377,4 +377,24 @@ describe("createAdminApi 换机申请", () => {
       method: "POST",
     });
   });
+
+  it("全局配置与全体重算走 /admin/settings 与 /admin/front/rebuild", async () => {
+    const { http, request } = fakeClient();
+    const api = createAdminApi(http);
+
+    const body = { region: "US" as const, airportsPerUser: 2, bandwidthPerUserMbps: 20 };
+    await api.updateFrontSettings(body);
+    expect(request).toHaveBeenLastCalledWith("/admin/settings", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+
+    await api.startFrontRebuild();
+    expect(request).toHaveBeenLastCalledWith("/admin/front/rebuild", { method: "POST" });
+
+    await api.previewFrontRebuild("US", 25);
+    expect(request).toHaveBeenLastCalledWith(
+      "/admin/front/rebuild/preview?region=US&bandwidthPerUserMbps=25",
+    );
+  });
 });

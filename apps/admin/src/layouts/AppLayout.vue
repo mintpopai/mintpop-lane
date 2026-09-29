@@ -45,6 +45,7 @@ onMounted(() => rebind.refresh());
       <RouterLink :to="{ name: 'PLANS' }" class="rail-link">套餐</RouterLink>
       <RouterLink :to="{ name: 'ENTERPRISES' }" class="rail-link">企业</RouterLink>
       <RouterLink :to="{ name: 'LINK_HEALTH' }" class="rail-link">链路健康</RouterLink>
+      <RouterLink :to="{ name: 'SETTINGS' }" class="rail-link">全局配置</RouterLink>
     </div>
 
     <div class="rail-foot">

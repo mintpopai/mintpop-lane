@@ -15,6 +15,7 @@ import LoginErrorView from "../views/LoginErrorView.vue";
 import LoginView from "../views/LoginView.vue";
 import NodesView from "../views/NodesView.vue";
 import PlansView from "../views/PlansView.vue";
+import SettingsView from "../views/SettingsView.vue";
 import UsersView from "../views/UsersView.vue";
 import UserDetailView from "../views/UserDetailView.vue";
 
@@ -60,6 +61,7 @@ export function createAppRouter(
           { path: "enterprises", name: "ENTERPRISES", component: EnterprisesView },
           // 三期新增：故障域 × 运营商成功率矩阵 + 入口 IP 变更时间线，跨用户的整体链路视角
           { path: "link-health", name: "LINK_HEALTH", component: LinkHealthView },
+          { path: "settings", name: "SETTINGS", component: SettingsView },
         ],
       },
       { path: "/:pathMatch(.*)*", redirect: { name: "USERS" } },
