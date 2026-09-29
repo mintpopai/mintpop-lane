@@ -286,6 +286,11 @@ onMounted(load);
   font-size: 13px;
 }
 
+/* 全局 .spacer 只挂在 .admin-toolbar 下，这里自己撑开，让机场操作靠右 */
+.airport-bar .spacer {
+  flex: 1;
+}
+
 .airport-bar-facts {
   display: flex;
   align-items: center;

@@ -232,7 +232,9 @@ onMounted(load);
   gap: 12px;
 }
 
+/* .admin-card 本身不带内边距（表格卡要贴边），信息卡自己撑开，与用户详情页的卡片同尺度 */
 .detail-info {
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
