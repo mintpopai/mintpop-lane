@@ -69,17 +69,6 @@ sub-refresh:
   # 刷新间隔（上一轮结束到下一轮开始），Spring Boot 时长写法；启动后先等这么久再跑首轮
   interval: 5m
 
-# —— 订阅尽调 ——管理端给候选机场出采购报告时，按运营商视角解析入口 IP 与 ASN，判断是否分线路——
-sub-audit:
-  # 各视角用的代表性子网（DNS EDNS Client Subnet）。中转入口按运营商分线路返回不同 IP，
-  # 只从一个视角解析会漏掉另外几条线。默认值经实测：同一域名电信解析到一个 IP，
-  # 联通/移动/海外解析到另一个。
-  vantages:
-    CHINA_TELECOM: 202.96.209.0/24
-    CHINA_UNICOM: 123.125.114.0/24
-    CHINA_MOBILE: 120.196.212.0/24
-    OVERSEAS: 104.16.0.0/24
-
 # —— ASN 反查缓存 ——每个来源 IP 一天只反查一次，免费服务不被高频心跳打到限流
 ip-asn-cache:
   ttl: 24h

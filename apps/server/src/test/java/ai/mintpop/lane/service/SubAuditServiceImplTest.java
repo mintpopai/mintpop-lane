@@ -1,15 +1,11 @@
 package ai.mintpop.lane.service;
 
-import ai.mintpop.lane.client.EcsDnsClient;
 import ai.mintpop.lane.client.FailureDomainResolver;
-import ai.mintpop.lane.client.IpAsnClient;
 import ai.mintpop.lane.client.SubFetchClient;
 import ai.mintpop.lane.client.SubFetchResult;
-import ai.mintpop.lane.config.SubAuditProperties;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
-import ai.mintpop.lane.enumeration.DnsVantage;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubYamlParser;
@@ -35,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -57,8 +52,6 @@ class SubAuditServiceImplTest {
 
     @Mock private SubFetchClient subFetchClient;
     @Mock private FailureDomainResolver failureDomainResolver;
-    @Mock private EcsDnsClient ecsDnsClient;
-    @Mock private IpAsnClient ipAsnClient;
     @Mock private ProxyNodeRepository nodeRepository;
     @Mock private AirportSubscriptionRepository airportSubscriptionRepository;
 
@@ -70,16 +63,13 @@ class SubAuditServiceImplTest {
                 .thenReturn(new SubFetchResult(SUB_YAML, "TaiShan Net", 1L, 100L,
                         Instant.parse("2027-05-02T08:04:00Z")));
         when(failureDomainResolver.resolve(anyString())).thenReturn("candidate.example.net");
-        when(ecsDnsClient.resolveA(anyString(), anyString())).thenReturn(List.of("203.0.113.1"));
-        when(ipAsnClient.lookupAsn(anyString())).thenReturn(java.util.Optional.of("AS16509"));
         when(nodeRepository.findAll(NodeRole.FRONT)).thenReturn(List.of());
         SystemSettingService systemSettingService = mock(SystemSettingService.class);
         when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
         service = new SubAuditServiceImpl(subFetchClient, new SubYamlParser(),
                 // syncer 用真实实现、只替换最底层的 DNS 解析口：本类要守的正是「按 serverAddr 去重」
                 new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()),
-                ecsDnsClient, ipAsnClient, nodeRepository, airportSubscriptionRepository, new SubAuditProperties(),
-                systemSettingService);
+                nodeRepository, airportSubscriptionRepository, systemSettingService);
     }
 
     /** 造一个库里已存在、且属于指定订阅的前置节点 */
@@ -148,71 +138,7 @@ class SubAuditServiceImplTest {
                 .isEqualTo(BizCodeEnum.SUB_FETCH_FAILED);
     }
 
-    // —— 入口 IP / ASN / lineSplit：这三个字段此前在测试里一条断言都没有 ——
-
-    @Test
-    @DisplayName("四视角解析到同一组 IP：不算分线路，并按视角原样列出入口 IP 与 ASN")
-    void reportsEntryIpsAndAsnsWithoutLineSplit() {
-        SubAuditResponse.FailureDomainReport report = service.audit(SUB_URL).failureDomains().getFirst();
-
-        assertThat(report.lineSplit()).isFalse();
-        assertThat(report.entryIps()).containsOnlyKeys(DnsVantage.values());
-        assertThat(report.entryIps().get(DnsVantage.CHINA_TELECOM)).containsExactly("203.0.113.1");
-        assertThat(report.asns().get(DnsVantage.CHINA_TELECOM)).containsExactly("AS16509");
-    }
-
-    @Test
-    @DisplayName("两个视角解析到不同 IP：判为分线路")
-    void reportsLineSplitWhenVantagesDiffer() {
-        when(ecsDnsClient.resolveA(anyString(), eq("202.96.209.0/24"))).thenReturn(List.of("34.84.255.241"));
-
-        assertThat(service.audit(SUB_URL).failureDomains().getFirst().lineSplit()).isTrue();
-    }
-
-    @Test
-    @DisplayName("某视角解析失败（空列表）不算分线路——一次网络抖动不该被读成机场做了分线路")
-    void emptyVantageDoesNotCountAsLineSplit() {
-        when(ecsDnsClient.resolveA(anyString(), eq("202.96.209.0/24"))).thenReturn(List.of());
-
-        assertThat(service.audit(SUB_URL).failureDomains().getFirst().lineSplit()).isFalse();
-    }
-
-    @Test
-    @DisplayName("同一组 IP 顺序不同不算分线路——DNS 轮询会让返回顺序来回抖")
-    void ipOrderJitterDoesNotCountAsLineSplit() {
-        when(ecsDnsClient.resolveA(anyString(), anyString()))
-                .thenReturn(List.of("13.192.233.178", "13.196.205.245"));
-        when(ecsDnsClient.resolveA(anyString(), eq("202.96.209.0/24")))
-                .thenReturn(List.of("13.196.205.245", "13.192.233.178"));
-
-        assertThat(service.audit(SUB_URL).failureDomains().getFirst().lineSplit()).isFalse();
-    }
-
     // —— 外呼扇出的上限 ——
-
-    @Test
-    @DisplayName("非美国落地的故障域不查入口 IP：三个字段留 null 表示「未查询」，不是空表/false")
-    void skipsEntryIpLookupForNonUsDomains() {
-        // 港节点与美节点各自成一个故障域
-        when(failureDomainResolver.resolve("hk01a.example.com")).thenReturn("hk.tsdns.top");
-        when(failureDomainResolver.resolve("us07a.example.com")).thenReturn("jp.tsdns.top");
-        when(failureDomainResolver.resolve("us03a.example.com")).thenReturn("jp.tsdns.top");
-
-        SubAuditResponse report = service.audit(SUB_URL);
-
-        SubAuditResponse.FailureDomainReport hk = report.failureDomains().stream()
-                .filter(fd -> fd.domain().equals("hk.tsdns.top")).findFirst().orElseThrow();
-        assertThat(hk.usNodeCount()).isZero();
-        assertThat(hk.entryIps()).isNull();
-        assertThat(hk.asns()).isNull();
-        assertThat(hk.lineSplit()).isNull();
-        verify(ecsDnsClient, never()).resolveA(eq("hk.tsdns.top"), anyString());
-
-        SubAuditResponse.FailureDomainReport us = report.failureDomains().stream()
-                .filter(fd -> fd.domain().equals("jp.tsdns.top")).findFirst().orElseThrow();
-        assertThat(us.entryIps()).isNotNull();
-        verify(ecsDnsClient, times(DnsVantage.values().length)).resolveA(eq("jp.tsdns.top"), anyString());
-    }
 
     @Test
     @DisplayName("同一 serverAddr 只查一次 CNAME：81 个节点 2 个故障域时不该查 81 次")
@@ -230,14 +156,6 @@ class SubAuditServiceImplTest {
         verify(failureDomainResolver, times(1)).resolve("us07a.example.com");
         assertThat(report.failureDomains()).singleElement()
                 .extracting(SubAuditResponse.FailureDomainReport::nodeCount).isEqualTo(3);
-    }
-
-    @Test
-    @DisplayName("同一个入口 IP 的 ASN 只反查一次，不按视角重复查")
-    void looksUpEachEntryIpAsnOnce() {
-        service.audit(SUB_URL);
-
-        verify(ipAsnClient, times(1)).lookupAsn("203.0.113.1");
     }
 
     @Test

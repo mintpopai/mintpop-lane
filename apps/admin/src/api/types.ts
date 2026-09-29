@@ -450,27 +450,12 @@ export interface SubAuditRequest {
   subUrl: string;
 }
 
-/**
- * 尽调报告里的一个故障域条目；镜像服务端 SubAuditResponse.FailureDomainReport。
- * entryIps / asns 的 key 是服务端 DnsVantage 枚举取值（如 CHINA_TELECOM），前端不做展示分支，
- * 原样按 key 罗列即可，故不额外镜像该枚举。
- *
- * entryIps / asns / lineSplit **三个一起为 null 表示服务端本次未查询该故障域**：
- * 入口 IP 只对判定为美国落地的故障域查（港日故障域用不上，查了只是放大外呼扇出）。
- * 页面必须把这种情况显式标成「未查询」——空表会被读成「查了但没结果」，
- * false 会被读成「查了，没分线路」，都是误导。
- */
+/** 尽调报告里的一个故障域条目；镜像服务端 SubAuditResponse.FailureDomainReport */
 export interface SubAuditFailureDomainReport {
   domain: string;
   nodeCount: number;
   /** 按名称启发式判定为美国落地的节点数 */
   usNodeCount: number;
-  /** 各视角解析到的入口 IP；null 表示本次未查询 */
-  entryIps: Record<string, string[]> | null;
-  /** 入口 IP 对应的 ASN，反查失败为空；null 表示本次未查询 */
-  asns: Record<string, string[]> | null;
-  /** 各视角是否解析到不同 IP——有分线路者国内优化更好；null 表示本次未查询 */
-  lineSplit: boolean | null;
 }
 
 /**
