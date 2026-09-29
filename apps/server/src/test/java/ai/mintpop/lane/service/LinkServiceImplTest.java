@@ -24,6 +24,8 @@ import ai.mintpop.lane.repository.UserDeviceRepository;
 import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.LinkConfigResponse;
+import ai.mintpop.lane.dto.FrontSettings;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -160,12 +162,15 @@ class LinkServiceImplTest {
         rebindRequestRepository = mock(DeviceRebindRequestRepository.class);
         userFrontSubscriptionRepository = mock(UserFrontSubscriptionRepository.class);
 
+        SystemSettingService systemSettingService = mock(SystemSettingService.class);
+        when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
+
         LinkProperties props = new LinkProperties();
         props.setTtlSeconds(1800);
         frontTuningProperties = new FrontTuningProperties();
         service = new LinkServiceImpl(props, frontTuningProperties, userRepository, nodeRepository,
                 subscriptionRepository, userDeviceRepository, rebindRequestRepository,
-                userFrontSubscriptionRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+                userFrontSubscriptionRepository, systemSettingService, Clock.fixed(NOW, ZoneOffset.UTC));
 
         when(userRepository.findById(any())).thenReturn(Optional.empty());
         when(nodeRepository.findById(20L))
@@ -257,7 +262,7 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("frontGroups 按用户订阅顺位排列，每个订阅一组，只含启用的美国节点")
+    @DisplayName("frontGroups 按用户订阅顺位排列，每个订阅一组，只含落在当前地区的节点")
     void frontGroupsFollowSubscriptionOrder() {
         givenUser(user(UserStatus.ACTIVE));
         when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(21L, 11L));
@@ -265,7 +270,6 @@ class LinkServiceImplTest {
                 subscriptionNode(1L, "🇺🇸[US]B-01", NodeStatus.ENABLED, "relay.b.net")));
         when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
                 subscriptionNode(2L, "🇺🇸[US]A-01", NodeStatus.ENABLED, "jp.tsdns.top"),
-                subscriptionNode(3L, "🇺🇸[US]A-02", NodeStatus.DISABLED, "jp.tsdns.top"),
                 subscriptionNode(4L, "🇭🇰[HK]A-03", NodeStatus.ENABLED, "jp.tsdns.top")));
 
         LinkConfigResponse link = service.resolveLink(USER_ID, THIS_DEVICE);
@@ -276,12 +280,11 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("某个订阅没有可用节点时跳过该组，用户落到备用")
-    void skipsSubscriptionWithoutEnabledNodes() {
+    @DisplayName("某个订阅没有节点时跳过该组，用户落到备用")
+    void skipsSubscriptionWithoutNodes() {
         givenUser(user(UserStatus.ACTIVE));
         when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(21L, 11L));
-        when(nodeRepository.findByAirportSubscriptionId(21L)).thenReturn(List.of(
-                subscriptionNode(1L, "🇺🇸[US]B-01", NodeStatus.DISABLED, "relay.b.net")));
+        when(nodeRepository.findByAirportSubscriptionId(21L)).thenReturn(List.of());
         when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
                 subscriptionNode(2L, "🇺🇸[US]A-01", NodeStatus.ENABLED, "jp.tsdns.top")));
 
@@ -290,12 +293,25 @@ class LinkServiceImplTest {
     }
 
     @Test
-    @DisplayName("全部订阅都没有可用节点报 NODE_DISABLED")
+    @DisplayName("FRONT 节点的 status 不参与下发：DISABLED 的节点照样进组")
+    void disabledFrontNodeIsStillDelivered() {
+        givenUser(user(UserStatus.ACTIVE));
+        ProxyNodeDto node = subscriptionNode(11L, "🇺🇸[US]A-01", NodeStatus.DISABLED, "jp.tsdns.top");
+        when(nodeRepository.findByAirportSubscriptionId(1L)).thenReturn(List.of(node));
+        when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(1L));
+
+        LinkConfigResponse response = service.resolveLink(USER_ID, THIS_DEVICE);
+
+        assertThat(response.frontGroups()).hasSize(1);
+        assertThat(response.frontGroups().get(0).nodes()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("全部订阅都没有节点报 NODE_DISABLED")
     void allSubscriptionsEmptyReportsNodeDisabled() {
         givenUser(user(UserStatus.ACTIVE));
         when(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(USER_ID)).thenReturn(List.of(11L));
-        when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of(
-                subscriptionNode(2L, "🇺🇸[US]A-01", NodeStatus.DISABLED, "jp.tsdns.top")));
+        when(nodeRepository.findByAirportSubscriptionId(11L)).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.resolveLink(USER_ID, THIS_DEVICE))
                 .isInstanceOfSatisfying(BizException.class,

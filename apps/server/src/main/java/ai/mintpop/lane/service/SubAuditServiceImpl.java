@@ -8,6 +8,7 @@ import ai.mintpop.lane.config.EntryIpWatchProperties;
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.enumeration.DnsVantage;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.parser.SubNode;
 import ai.mintpop.lane.parser.SubYamlParser;
@@ -15,7 +16,6 @@ import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.response.SubAuditResponse;
 import ai.mintpop.lane.response.SubAuditResponse.FailureDomainReport;
-import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -48,12 +48,14 @@ public class SubAuditServiceImpl implements SubAuditService {
     private final ProxyNodeRepository nodeRepository;
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final EntryIpWatchProperties entryIpWatchProperties;
+    private final SystemSettingService systemSettingService;
 
     public SubAuditServiceImpl(SubFetchClient subFetchClient, SubYamlParser subYamlParser,
                                 FailureDomainSyncer failureDomainSyncer, EcsDnsClient ecsDnsClient,
                                 IpAsnClient ipAsnClient, ProxyNodeRepository nodeRepository,
                                 AirportSubscriptionRepository airportSubscriptionRepository,
-                                EntryIpWatchProperties entryIpWatchProperties) {
+                                EntryIpWatchProperties entryIpWatchProperties,
+                                SystemSettingService systemSettingService) {
         this.subFetchClient = subFetchClient;
         this.subYamlParser = subYamlParser;
         this.failureDomainSyncer = failureDomainSyncer;
@@ -62,6 +64,7 @@ public class SubAuditServiceImpl implements SubAuditService {
         this.nodeRepository = nodeRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.entryIpWatchProperties = entryIpWatchProperties;
+        this.systemSettingService = systemSettingService;
     }
 
     @Override
@@ -75,9 +78,10 @@ public class SubAuditServiceImpl implements SubAuditService {
                 .filter(node -> !node.suspectedInfo())
                 .toList();
 
+        NodeRegion region = systemSettingService.frontSettings().region();
         List<String> usNodeNames = nodes.stream()
                 .map(SubNode::sourceName)
-                .filter(UsLandingNodes::isUsLanding)
+                .filter(region::matches)
                 .toList();
 
         List<String> protocols = nodes.stream()
@@ -101,7 +105,7 @@ public class SubAuditServiceImpl implements SubAuditService {
         // ASN 反查按 IP 记忆：同一个入口 IP 常在多个视角、多个故障域重复出现，查一次就够
         Map<String, Optional<String>> asnCache = new HashMap<>();
         List<FailureDomainReport> failureDomains = nodesByDomain.entrySet().stream()
-                .map(entry -> buildFailureDomainReport(entry.getKey(), entry.getValue(), asnCache))
+                .map(entry -> buildFailureDomainReport(entry.getKey(), entry.getValue(), asnCache, region))
                 .toList();
 
         List<String> conflictsWith = findConflictingGroups(nodesByDomain.keySet());
@@ -122,15 +126,16 @@ public class SubAuditServiceImpl implements SubAuditService {
     /**
      * 逐个视角查入口 IP 与对应 ASN，并判断是否分线路（各视角解析到不同 IP）。
      * <p>
-     * **只对判定为美国落地的故障域查**：LAND 做了国家级 GeoIP 限制，前置只能选落在美国的节点，
+     * **只对落在当前地区的故障域查**：LAND 做了国家级 GeoIP 限制，前置只能选落在美国的节点，
      * 港日故障域的入口查了也用不上，而 §9 采购标准里「入口 ASN ≠ AS16509」卡的本来就是美国节点的入口。
      * 这同时是外呼扇出的上限——换一家没用 CNAME 中转、每个节点自成一域的候选机场，不设限就是
      * N 个故障域 × 4 次 DoH（连接/读超时各 5s）+ 最多 4N 次 ASN 反查，全部串行、全在一个同步
      * HTTP 请求的线程里，最坏情况远超任何反代超时，管理员看到的会是 502 而不是报告。
      */
     private FailureDomainReport buildFailureDomainReport(String domain, List<SubNode> domainNodes,
-                                                          Map<String, Optional<String>> asnCache) {
-        int usCount = (int) domainNodes.stream().filter(node -> UsLandingNodes.isUsLanding(node.sourceName())).count();
+                                                          Map<String, Optional<String>> asnCache,
+                                                          NodeRegion region) {
+        int usCount = (int) domainNodes.stream().filter(node -> region.matches(node.sourceName())).count();
         if (usCount == 0) {
             // 三个字段一律留 null 表示「本次未查询」。不能给空表或 false——
             // 那会被读成「查了但没结果」「查了，没分线路」，是比不给更糟的误导

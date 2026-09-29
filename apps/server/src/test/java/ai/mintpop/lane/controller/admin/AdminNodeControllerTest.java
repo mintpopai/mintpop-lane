@@ -529,7 +529,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("编辑 MIHOMO 节点只有名称/状态/备注生效，地址端口等参数改不动")
+    @DisplayName("订阅导入的节点只改名称与备注，状态字段被忽略，地址端口等参数改不动")
     void editingMihomoNodeAllowsOnlyThreeFields() throws Exception {
         Long id = fixtures.createMihomoNode("香港-01", null);
         var body = Map.of(
@@ -549,7 +549,7 @@ class AdminNodeControllerTest extends MysqlTestBase {
 
         var node = nodeRepository.findById(id).orElseThrow();
         assertThat(node.getName()).isEqualTo("香港-01-改名");
-        assertThat(node.getStatus()).isEqualTo(NodeStatus.DISABLED);
+        assertThat(node.getStatus()).isEqualTo(NodeStatus.ENABLED);
         assertThat(node.getRemark()).isEqualTo("改了备注");
         // 参数纹丝不动：展示列与加密参数都还是原值
         assertThat(node.getServerAddr()).isEqualTo("hk01.example.com");

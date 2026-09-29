@@ -91,14 +91,13 @@ public class AdminNodeServiceImpl implements AdminNodeService {
             throw new BizException(BizCodeEnum.NODE_NAME_DUPLICATED);
         }
 
-        // 订阅导入的节点参数由「重新拉取」统一更新，编辑接口只放行名称/状态/备注；
+        // 订阅导入的节点参数由「重新拉取」统一更新，编辑接口只放行名称/备注（FRONT 节点没有状态，订阅刷新整体对齐节点集合）；
         // 协议也不许改——它的参数形态（整份加密）与其它协议（分键加密）互不兼容
         if (node.getProtocol() == NodeProtocol.MIHOMO) {
             if (request.getProtocol() != NodeProtocol.MIHOMO) {
                 throw new BizException(BizCodeEnum.PARAM_INVALID);
             }
             node.setName(request.getName());
-            node.setStatus(request.getStatus());
             node.setRemark(request.getRemark());
             wrapUniqueViolation(() -> {
                 nodeRepository.update(node);

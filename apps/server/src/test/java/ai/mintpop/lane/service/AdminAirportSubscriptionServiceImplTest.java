@@ -15,6 +15,8 @@ import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import ai.mintpop.lane.dto.FrontSettings;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -76,12 +79,15 @@ class AdminAirportSubscriptionServiceImplTest {
         when(subFetchClient.fetch(anyString())).thenReturn(new SubFetchResult(SUB_YAML, null, null, null, null));
         when(nodeRepository.existsByName(anyString())).thenReturn(false);
 
+        SystemSettingService systemSettingService = mock(SystemSettingService.class);
+        when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
         service = new AdminAirportSubscriptionServiceImpl(airportSubscriptionRepository, airportRepository, nodeRepository, userRepository,
                 userFrontSubscriptionRepository,
                 subFetchClient, new SubYamlParser(), transactionTemplate,
                 // syncer 用真实实现、只把最底层的 DNS 解析口替换成假的：
                 // 「按 serverAddr 去重」「跳过伪条目」这些口径正是本类要守的行为，不该被 mock 掉
-                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), trafficAlertService);
+                new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()), trafficAlertService,
+                systemSettingService);
     }
 
     private AirportSubscriptionDto group(long id) {

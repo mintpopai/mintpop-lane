@@ -18,6 +18,8 @@ import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.response.SubAuditResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import ai.mintpop.lane.dto.FrontSettings;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -34,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -70,10 +73,13 @@ class SubAuditServiceImplTest {
         when(ecsDnsClient.resolveA(anyString(), anyString())).thenReturn(List.of("203.0.113.1"));
         when(ipAsnClient.lookupAsn(anyString())).thenReturn(java.util.Optional.of("AS16509"));
         when(nodeRepository.findAll(NodeRole.FRONT)).thenReturn(List.of());
+        SystemSettingService systemSettingService = mock(SystemSettingService.class);
+        when(systemSettingService.frontSettings()).thenReturn(new FrontSettings(NodeRegion.US, 3, 20));
         service = new SubAuditServiceImpl(subFetchClient, new SubYamlParser(),
                 // syncer 用真实实现、只替换最底层的 DNS 解析口：本类要守的正是「按 serverAddr 去重」
                 new FailureDomainSyncer(failureDomainResolver, Clock.systemUTC()),
-                ecsDnsClient, ipAsnClient, nodeRepository, airportSubscriptionRepository, new EntryIpWatchProperties());
+                ecsDnsClient, ipAsnClient, nodeRepository, airportSubscriptionRepository, new EntryIpWatchProperties(),
+                systemSettingService);
     }
 
     /** 造一个库里已存在、且属于指定订阅的前置节点 */

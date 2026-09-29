@@ -10,6 +10,7 @@ import ai.mintpop.lane.entity.UserDevice;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.DeviceBinding;
 import ai.mintpop.lane.enumeration.LinkStatus;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import ai.mintpop.lane.enumeration.NodeStatus;
 import ai.mintpop.lane.enumeration.UserStatus;
 import ai.mintpop.lane.exception.BizException;
@@ -21,7 +22,6 @@ import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
 import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.response.HeartbeatResponse;
 import ai.mintpop.lane.response.LinkConfigResponse;
-import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -47,6 +47,7 @@ public class LinkServiceImpl implements LinkService {
     private final UserDeviceRepository userDeviceRepository;
     private final DeviceRebindRequestRepository rebindRequestRepository;
     private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
+    private final SystemSettingService systemSettingService;
     private final Clock clock;
 
     public LinkServiceImpl(LinkProperties linkProperties,
@@ -57,6 +58,7 @@ public class LinkServiceImpl implements LinkService {
                            UserDeviceRepository userDeviceRepository,
                            DeviceRebindRequestRepository rebindRequestRepository,
                            UserFrontSubscriptionRepository userFrontSubscriptionRepository,
+                           SystemSettingService systemSettingService,
                            Clock clock) {
         this.linkProperties = linkProperties;
         this.frontTuningProperties = frontTuningProperties;
@@ -66,6 +68,7 @@ public class LinkServiceImpl implements LinkService {
         this.userDeviceRepository = userDeviceRepository;
         this.rebindRequestRepository = rebindRequestRepository;
         this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
+        this.systemSettingService = systemSettingService;
         this.clock = clock;
     }
 
@@ -137,9 +140,9 @@ public class LinkServiceImpl implements LinkService {
     }
 
     /**
-     * 按用户第一跳订阅的顺位，每个订阅生成一组：组内只放启用中、按订阅原始名判定为美国的节点。
+     * 按用户第一跳订阅的顺位，每个订阅生成一组：组内只放落在当前地区的节点（FRONT 节点没有状态，不看 status）。
      * 某个订阅一个可用节点都没有就跳过（用户自然落到备用）；全部为空报 NODE_DISABLED——
-     * 用户分配过，只是眼下没有一个能用，要做的是启用节点或重新分配，而不是「去分配一个」。
+     * 用户分配过，只是眼下所有订阅都没有节点，要做的是等订阅刷新或重新分配，而不是「去分配一个」。
      * 没有分配过报 EGRESS_NOT_ASSIGNED。
      */
     private List<LinkConfigResponse.FrontGroup> resolveFrontGroups(UserDto user) {
@@ -148,11 +151,11 @@ public class LinkServiceImpl implements LinkService {
             throw new BizException(BizCodeEnum.EGRESS_NOT_ASSIGNED);
         }
 
+        NodeRegion region = systemSettingService.frontSettings().region();
         List<LinkConfigResponse.FrontGroup> groups = new ArrayList<>();
         for (Long subscriptionId : subscriptionIds) {
             List<ProxyNodeDto> usable = nodeRepository.findByAirportSubscriptionId(subscriptionId).stream()
-                    .filter(node -> node.getStatus() == NodeStatus.ENABLED)
-                    .filter(node -> UsLandingNodes.isUsLanding(node.getSourceName()))
+                    .filter(node -> region.matches(node.getSourceName()))
                     .toList();
             if (usable.isEmpty()) {
                 continue;

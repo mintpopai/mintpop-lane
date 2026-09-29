@@ -5,7 +5,7 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeRole;
-import ai.mintpop.lane.enumeration.NodeStatus;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
@@ -16,7 +16,6 @@ import ai.mintpop.lane.response.FrontSubscriptionBrief;
 import ai.mintpop.lane.service.FrontAllocationPlanner.Assignment;
 import ai.mintpop.lane.service.FrontAllocationPlanner.Candidate;
 import ai.mintpop.lane.service.FrontAllocationPlanner.Slot;
-import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,16 +37,19 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final ProxyNodeRepository nodeRepository;
     private final UserFrontSubscriptionRepository userFrontSubscriptionRepository;
+    private final SystemSettingService systemSettingService;
 
     public FrontSubscriptionServiceImpl(UserRepository userRepository, AirportRepository airportRepository,
                                         AirportSubscriptionRepository airportSubscriptionRepository,
                                         ProxyNodeRepository nodeRepository,
-                                        UserFrontSubscriptionRepository userFrontSubscriptionRepository) {
+                                        UserFrontSubscriptionRepository userFrontSubscriptionRepository,
+                                        SystemSettingService systemSettingService) {
         this.userRepository = userRepository;
         this.airportRepository = airportRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.nodeRepository = nodeRepository;
         this.userFrontSubscriptionRepository = userFrontSubscriptionRepository;
+        this.systemSettingService = systemSettingService;
     }
 
     /**
@@ -115,11 +117,11 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
         }));
     }
 
-    /** 至少有一个启用中、按订阅原始名判定为美国的节点的订阅 */
+    /** 至少有一个落在当前地区的节点的订阅。FRONT 节点没有状态，不看 status */
     private Set<Long> usableSubscriptionIds() {
+        NodeRegion region = systemSettingService.frontSettings().region();
         return nodeRepository.findAll(NodeRole.FRONT).stream()
-                .filter(node -> node.getStatus() == NodeStatus.ENABLED)
-                .filter(node -> UsLandingNodes.isUsLanding(node.getSourceName()))
+                .filter(node -> region.matches(node.getSourceName()))
                 .map(ProxyNodeDto::getAirportSubscriptionId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());

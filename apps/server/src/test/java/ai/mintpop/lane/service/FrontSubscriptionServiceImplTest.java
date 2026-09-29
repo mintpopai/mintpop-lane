@@ -97,20 +97,21 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("没有可用美国节点的订阅不参与分配：节点全禁用、或只有非美国节点")
-    void skipsSubscriptionsWithoutUsableNodes() {
+    @DisplayName("FRONT 节点没有状态：节点被标成 DISABLED 的订阅照样是候选；真正没有节点的订阅才跳过")
+    void disabledFrontNodesStillUsableButEmptySubscriptionSkipped() {
         Long airportA = fixtures.createAirport("A");
-        Long disabledOnly = fixtures.createAirportSubscription(airportA, "A-01", 300);
-        fixtures.createSubscriptionNode(disabledOnly, "🇺🇸[US]A-01", NodeStatus.DISABLED);
+        Long subA = fixtures.createAirportSubscription(airportA, "A-01", 300);
+        fixtures.createSubscriptionNode(subA, "🇺🇸[US]A-01", NodeStatus.DISABLED);
         Long airportB = fixtures.createAirport("B");
-        Long hkOnly = fixtures.createAirportSubscription(airportB, "B-01", 300);
-        fixtures.createSubscriptionNode(hkOnly, "🇭🇰[HK]B-01", NodeStatus.ENABLED);
-        Long usable = usableSubscription("C", 300);
+        fixtures.createAirportSubscription(airportB, "B-01", 300);   // 没有节点
+        Long airportC = fixtures.createAirport("C");
+        Long hkOnly = fixtures.createAirportSubscription(airportC, "C-01", 300);
+        fixtures.createSubscriptionNode(hkOnly, "🇭🇰[HK]C-01", NodeStatus.ENABLED);
         Long user = fixtures.createUser("u1", null);
 
         frontSubscriptionService.allocate(user);
 
-        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(user)).containsExactly(usable);
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(user)).containsExactly(subA);
     }
 
     @Test

@@ -7,6 +7,7 @@ import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeProtocol;
+import ai.mintpop.lane.enumeration.NodeRegion;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.parser.SubNode;
@@ -19,7 +20,6 @@ import ai.mintpop.lane.repository.UserRepository;
 import ai.mintpop.lane.request.AirportSubscriptionCreateRequest;
 import ai.mintpop.lane.request.AirportSubscriptionUpdateRequest;
 import ai.mintpop.lane.response.AirportSubscriptionResponse;
-import ai.mintpop.lane.util.UsLandingNodes;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -51,6 +51,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     private final TransactionTemplate transactionTemplate;
     private final FailureDomainSyncer failureDomainSyncer;
     private final TrafficAlertService trafficAlertService;
+    private final SystemSettingService systemSettingService;
 
     public AdminAirportSubscriptionServiceImpl(AirportSubscriptionRepository airportSubscriptionRepository,
                                      AirportRepository airportRepository, ProxyNodeRepository nodeRepository,
@@ -59,7 +60,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                                      SubFetchClient subFetchClient,
                                      SubYamlParser subYamlParser, TransactionTemplate transactionTemplate,
                                      FailureDomainSyncer failureDomainSyncer,
-                                     TrafficAlertService trafficAlertService) {
+                                     TrafficAlertService trafficAlertService,
+                                     SystemSettingService systemSettingService) {
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.airportRepository = airportRepository;
         this.nodeRepository = nodeRepository;
@@ -70,6 +72,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         this.transactionTemplate = transactionTemplate;
         this.failureDomainSyncer = failureDomainSyncer;
         this.trafficAlertService = trafficAlertService;
+        this.systemSettingService = systemSettingService;
     }
 
     @Override
@@ -83,7 +86,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
         // 故只把「建订阅 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
         FetchResult fetched = fetchAndParse(request.getSubUrl());
-        List<SubNode> usNodes = usLandingNodes(fetched.nodes());
+        List<SubNode> usNodes = regionNodes(fetched.nodes(), systemSettingService.frontSettings().region());
         Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
 
         AirportSubscriptionDto group = new AirportSubscriptionDto();
@@ -158,7 +161,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         // 只有真正落库的「更新订阅额度信息 + 导入节点」交给 transactionTemplate 包事务
         AirportSubscriptionDto group = getGroup(id);
         FetchResult fetched = fetchAndParse(group.getSubUrl());
-        List<SubNode> usNodes = usLandingNodes(fetched.nodes());
+        List<SubNode> usNodes = regionNodes(fetched.nodes(), systemSettingService.frontSettings().region());
         Map<String, String> failureDomains = failureDomainSyncer.resolve(usNodes);
         applyTrafficInfo(group, fetched.subFetchResult());
         transactionTemplate.executeWithoutResult(status -> {
@@ -234,17 +237,17 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
     }
 
     /**
-     * 从订阅里挑出要导入的节点：判定为美国落地（见 {@link UsLandingNodes}）的真节点，按原始节点名去重。
-     * 不再让管理员逐个勾选——LAND 只接受美国来源，非美国节点入池也分配不出去；机场可枚举、
+     * 从订阅里挑出要导入的节点：落在当前地区（见 {@link NodeRegion}）的真节点，按原始节点名去重。
+     * 不再让管理员逐个勾选——LAND 只接受美国来源，不在当前地区的节点入池也用不上；机场可枚举、
      * 命名规则写死，判定结果就是导入结果。一个都没有时报错，不建空订阅。
      */
-    private List<SubNode> usLandingNodes(List<SubNode> nodes) {
+    private List<SubNode> regionNodes(List<SubNode> nodes, NodeRegion region) {
         Map<String, SubNode> byName = new LinkedHashMap<>();
         nodes.stream()
-                .filter(node -> !node.suspectedInfo() && UsLandingNodes.isUsLanding(node.sourceName()))
+                .filter(node -> !node.suspectedInfo() && region.matches(node.sourceName()))
                 .forEach(node -> byName.putIfAbsent(node.sourceName(), node));
         if (byName.isEmpty()) {
-            throw new BizException(BizCodeEnum.SUB_NO_US_NODES);
+            throw new BizException(BizCodeEnum.SUB_NO_REGION_NODES);
         }
         return List.copyOf(byName.values());
     }

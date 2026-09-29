@@ -79,7 +79,7 @@ public enum BizCodeEnum {
     IMAGE_STORAGE_ERROR(410047, "图片存储写入失败，请稍后重试"),
     // 410048 曾是 FRONT_NODE_UNALLOCATABLE（按节点自动分配失败），改为按机场订阅分配后废弃。号位不复用
     // 导入不再逐个勾选、自动取美国节点：一个都没有时必须报错，不建一个空订阅冒充导入成功
-    SUB_NO_US_NODES(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
+    SUB_NO_REGION_NODES(410049, "订阅里没有当前筛选地区的节点，未导入"),
     AIRPORT_NOT_FOUND(410051, "机场不存在"),
     AIRPORT_NAME_DUPLICATED(410052, "机场名已存在"),
     AIRPORT_IN_USE(410053, "机场下还有订阅，无法删除"),
