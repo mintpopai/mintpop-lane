@@ -24,7 +24,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BizException.class)
     public ApiResponse<Void> handleBiz(BizException e) {
         log.warn("业务异常：{}", e.getMessage());
-        return ApiResponse.fail(e.getBizCode());
+        return new ApiResponse<>(e.getBizCode().getCode(), null, e.getMessage());
     }
 
     /**

@@ -9,6 +9,12 @@ import ai.mintpop.lane.entity.User;
 import ai.mintpop.lane.mapper.UserMapper;
 import org.springframework.stereotype.Repository;
 
+import ai.mintpop.lane.enumeration.UserStatus;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 /** 用户的 MySQL 实现。 */
@@ -118,5 +124,17 @@ public class MybatisUserRepository implements UserRepository {
     @Override
     public void deleteById(Long id) {
         mapper.deleteById(id);
+    }
+
+    @Override
+    public List<Long> findIdsWithActiveSubscription(Instant now) {
+        // 库里时间列是 UTC；转成 UTC 的 LocalDateTime 作为绑定参数，避免 Instant 被当字符串拼接
+        LocalDateTime utcNow = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
+        return mapper.selectList(Wrappers.<User>lambdaQuery()
+                        .select(User::getId)
+                        .ne(User::getStatus, UserStatus.REVOKED)
+                        .exists("SELECT 1 FROM subscription s WHERE s.user_id = app_user.id AND s.starts_at <= {0} AND s.ends_at > {0}", utcNow)
+                        .orderByAsc(User::getId))
+                .stream().map(User::getId).toList();
     }
 }

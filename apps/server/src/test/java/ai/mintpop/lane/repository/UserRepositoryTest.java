@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -167,5 +168,23 @@ class UserRepositoryTest extends MysqlTestBase {
 
         assertThat(repository.findById(id)).isEmpty();
         assertThat(repository.countByLandNodeId(landId)).isZero();
+    }
+
+    @Test
+    @DisplayName("findIdsWithActiveSubscription：有在期席位且未吊销的用户，按 id 升序；过期/待开通/吊销的不算")
+    void findsUsersWithActiveSeat() {
+        Instant now = Instant.parse("2026-09-29T00:00:00Z");
+        Long active = fixtures.createUser("u-active", null);
+        fixtures.createSubscription(active, AgentType.CLAUDE, "月付", now.minus(Duration.ofDays(1)), now.plus(Duration.ofDays(29)), null);
+        Long expired = fixtures.createUser("u-expired", null);
+        fixtures.createSubscription(expired, AgentType.CLAUDE, "月付", now.minus(Duration.ofDays(40)), now.minus(Duration.ofDays(10)), null);
+        Long pending = fixtures.createUser("u-pending", null);
+        fixtures.createSubscription(pending, AgentType.CLAUDE, "月付", null, null, null);
+        Long revoked = fixtures.createUser("u-revoked", UserRole.MEMBER, UserStatus.REVOKED, null);
+        fixtures.createSubscription(revoked, AgentType.CLAUDE, "月付", now.minus(Duration.ofDays(1)), now.plus(Duration.ofDays(29)), null);
+        Long suspended = fixtures.createUser("u-suspended", UserRole.MEMBER, UserStatus.SUSPENDED, null);
+        fixtures.createSubscription(suspended, AgentType.CLAUDE, "月付", now.minus(Duration.ofDays(1)), now.plus(Duration.ofDays(29)), null);
+
+        assertThat(repository.findIdsWithActiveSubscription(now)).containsExactly(active, suspended);
     }
 }

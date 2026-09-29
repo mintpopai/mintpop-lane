@@ -1,6 +1,8 @@
 package ai.mintpop.lane.controller.admin;
 
 import ai.mintpop.lane.repository.*;
+import ai.mintpop.lane.response.FrontRebuildStatus;
+import ai.mintpop.lane.service.FrontRebuildService;
 import ai.mintpop.lane.service.SessionTokenService;
 import ai.mintpop.lane.support.DatabaseFixtures;
 import ai.mintpop.lane.support.MysqlTestBase;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
@@ -35,6 +38,8 @@ class AdminSettingControllerTest extends MysqlTestBase {
     @Autowired private AirportRepository airportRepository;
     @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private SessionTokenService sessionTokenService;
+    // 保存设置会触发全体重算；这里只测设置读写，重算由专门的测试覆盖
+    @MockitoBean private FrontRebuildService frontRebuildService;
     private Long adminId;
 
     private String bearer(Long userId) {
@@ -47,6 +52,7 @@ class AdminSettingControllerTest extends MysqlTestBase {
                 airportRepository, airportSubscriptionRepository);
         fixtures.clearAll();
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
+        org.mockito.Mockito.when(frontRebuildService.status()).thenReturn(FrontRebuildStatus.idle());
     }
 
     @Test

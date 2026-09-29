@@ -237,6 +237,39 @@ public class NodeNotifyService {
         return orgName == null || orgName.isBlank() ? orUnknown(asn) : orgName;
     }
 
+    /** 全体重算完成 */
+    @Async
+    public void notifyFrontRebuildFinished(int userCount, int subscriptionCount) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("分配用户数", Integer.toString(userCount));
+            fields.put("参与订阅数", Integer.toString(subscriptionCount));
+            fields.put("后续", "客户端将在下一次心跳（≤ 60 秒）内自动热更新配置");
+            feishuBotClient.sendCard(FeishuCardTemplate.GREEN, "MintPop Lane 全体线路重算完成", fields);
+        } catch (Exception e) {
+            log.warn("全体重算完成飞书通知失败", e);
+        }
+    }
+
+    /** 全体重算中止（订阅拉取失败 / 主用名额不足）：用户保留旧列表，需要人处理后再按一次 */
+    @Async
+    public void notifyFrontRebuildAborted(String reason) {
+        if (!notifyProperties.isConfigured()) {
+            return;
+        }
+        try {
+            LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+            fields.put("原因", reason);
+            fields.put("影响", "所有用户保留原有线路分配；处理后到管理端「全局配置」页重新点「重算全部线路」");
+            feishuBotClient.sendCard(FeishuCardTemplate.RED, "MintPop Lane 全体线路重算已中止，需人工处理", fields);
+        } catch (Exception e) {
+            log.warn("全体重算中止飞书通知失败", e);
+        }
+    }
+
     private static String orUnknown(String value) {
         return value == null || value.isBlank() ? "未知" : value;
     }

@@ -3,6 +3,8 @@ package ai.mintpop.lane.repository;
 import ai.mintpop.lane.dto.PageResult;
 import ai.mintpop.lane.dto.UserDto;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -49,4 +51,7 @@ public interface UserRepository {
     void update(UserDto user);
 
     void deleteById(Long id);
+
+    /** 至少有一个席位在期（起含止不含）且状态不是 REVOKED 的用户 id，按 id 升序；全体重算的分配范围 */
+    List<Long> findIdsWithActiveSubscription(Instant now);
 }

@@ -18,6 +18,9 @@ public interface UserFrontSubscriptionRepository {
     /** 整份替换：传入的订阅 id 按顺位排列，下标即 position */
     void replaceForUser(Long userId, List<Long> airportSubscriptionIdsInOrder);
 
+    /** 全体重算写回：删光全表，再按 map 顺序批量插入（下标即 position）。必须在事务内调用 */
+    void replaceAll(Map<Long, List<Long>> subscriptionIdsByUser);
+
     void deleteByUserId(Long userId);
 
     boolean existsByAirportSubscriptionId(Long airportSubscriptionId);

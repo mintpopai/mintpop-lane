@@ -12,7 +12,7 @@ public record AirportResponse(
         int subscriptionCount,
         /** 该机场全部订阅当前主用人数之和 */
         int primaryUsed,
-        /** 该机场全部订阅的主用总容量：各订阅 带宽/20（向下取整）之和 */
+        /** 该机场全部订阅的主用总容量：各订阅 带宽 ÷ 每人带宽（全局配置，向下取整）之和 */
         int primaryCapacity,
         Instant createdAt,
         Instant updatedAt

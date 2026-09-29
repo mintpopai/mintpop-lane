@@ -5,6 +5,7 @@ import ai.mintpop.lane.mapper.UserFrontSubscriptionMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +15,8 @@ import java.util.stream.Collectors;
 /** 用户第一跳机场订阅列表的 MySQL 实现 */
 @Repository
 public class MybatisUserFrontSubscriptionRepository implements UserFrontSubscriptionRepository {
+
+    private static final int INSERT_BATCH_SIZE = 1000;
 
     private final UserFrontSubscriptionMapper mapper;
 
@@ -54,6 +57,25 @@ public class MybatisUserFrontSubscriptionRepository implements UserFrontSubscrip
             row.setPosition(position);
             row.setAirportSubscriptionId(airportSubscriptionIdsInOrder.get(position));
             mapper.insert(row);
+        }
+    }
+
+    @Override
+    public void replaceAll(Map<Long, List<Long>> subscriptionIdsByUser) {
+        mapper.delete(Wrappers.<UserFrontSubscription>lambdaQuery().isNotNull(UserFrontSubscription::getId));
+        List<UserFrontSubscription> rows = new ArrayList<>();
+        subscriptionIdsByUser.forEach((userId, subIds) -> {
+            for (int position = 0; position < subIds.size(); position++) {
+                UserFrontSubscription row = new UserFrontSubscription();
+                row.setUserId(userId);
+                row.setPosition(position);
+                row.setAirportSubscriptionId(subIds.get(position));
+                rows.add(row);
+            }
+        });
+        if (!rows.isEmpty()) {
+            // MyBatis-Plus 3.5.7+ 的批量插入：按 1000 行一批，1 万用户约 3 万行分 30 批
+            mapper.insert(rows, INSERT_BATCH_SIZE);
         }
     }
 

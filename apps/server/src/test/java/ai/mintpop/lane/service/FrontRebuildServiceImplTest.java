@@ -1,0 +1,110 @@
+package ai.mintpop.lane.service;
+
+import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.FrontRebuildPhase;
+import ai.mintpop.lane.exception.BizException;
+import ai.mintpop.lane.service.FrontRebuildRunner.RebuildResult;
+import ai.mintpop.lane.service.SubRefreshService.RefreshOutcome;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.concurrent.Executor;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+@DisplayName("全体重算编排：互斥、先拉订阅、失败中止、状态与通知")
+class FrontRebuildServiceImplTest {
+
+    private static final Instant NOW = Instant.parse("2026-09-29T03:00:00Z");
+
+    @Mock private SubRefreshService subRefreshService;
+    @Mock private FrontRebuildRunner runner;
+    @Mock private NodeNotifyService nodeNotifyService;
+    private FrontRebuildServiceImpl service;
+
+    @BeforeEach
+    void setUp() {
+        // 同步执行器：测试里 start() 返回时任务已跑完，便于断言
+        Executor inline = Runnable::run;
+        service = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService, inline, Clock.fixed(NOW, ZoneOffset.UTC));
+        when(subRefreshService.refreshAllNow()).thenReturn(new RefreshOutcome(List.of()));
+        when(runner.applyAll()).thenReturn(new RebuildResult(120, 9));
+    }
+
+    @Test
+    @DisplayName("成功：先刷新订阅再重排，状态 SUCCEEDED 带人数，推完成通知")
+    void succeeds() {
+        service.start();
+
+        var status = service.status();
+        assertThat(status.phase()).isEqualTo(FrontRebuildPhase.SUCCEEDED);
+        assertThat(status.userCount()).isEqualTo(120);
+        assertThat(status.subscriptionCount()).isEqualTo(9);
+        assertThat(status.startedAt()).isEqualTo(NOW);
+        assertThat(status.finishedAt()).isEqualTo(NOW);
+        verify(nodeNotifyService).notifyFrontRebuildFinished(120, 9);
+    }
+
+    @Test
+    @DisplayName("任一订阅拉取失败：不碰分配，状态 FAILED 带订阅名，推中止通知")
+    void fetchFailureAbortsRebuildBeforeTouchingLists() {
+        when(subRefreshService.refreshAllNow()).thenReturn(new RefreshOutcome(List.of("泰山-01", "B-02")));
+
+        service.start();
+
+        verify(runner, never()).applyAll();
+        assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
+        assertThat(service.status().error()).contains("泰山-01").contains("B-02");
+        verify(nodeNotifyService).notifyFrontRebuildAborted(anyString());
+    }
+
+    @Test
+    @DisplayName("容量不足：状态 FAILED 带服务端明细文案")
+    void capacityFailureRecorded() {
+        when(runner.applyAll()).thenThrow(new BizException(BizCodeEnum.FRONT_CAPACITY_INSUFFICIENT, "需要 3 个主用名额，现有 2"));
+
+        service.start();
+
+        assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
+        assertThat(service.status().error()).contains("需要 3 个主用名额，现有 2");
+        verify(nodeNotifyService, never()).notifyFrontRebuildFinished(anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("正在跑时再 start 报 410055，不排队")
+    void rejectsConcurrentStart() {
+        // 用「挂起」的执行器：任务提交了但不跑，模拟 RUNNING 中
+        service = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService, task -> { }, Clock.fixed(NOW, ZoneOffset.UTC));
+        service.start();
+        assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.RUNNING);
+
+        assertThatThrownBy(service::start)
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode()).isEqualTo(BizCodeEnum.FRONT_REBUILD_RUNNING);
+    }
+
+    @Test
+    @DisplayName("初始状态 IDLE")
+    void initiallyIdle() {
+        assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.IDLE);
+    }
+}

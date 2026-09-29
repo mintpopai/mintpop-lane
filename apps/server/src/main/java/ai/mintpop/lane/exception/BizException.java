@@ -13,4 +13,10 @@ public class BizException extends RuntimeException {
         super(bizCode.getMessage());
         this.bizCode = bizCode;
     }
+
+    /** 带明细的业务异常：文案 = 枚举文案 + "：" + 明细（如「需要 120 个主用名额，现有 90」） */
+    public BizException(BizCodeEnum bizCode, String detail) {
+        super(bizCode.getMessage() + "：" + detail);
+        this.bizCode = bizCode;
+    }
 }

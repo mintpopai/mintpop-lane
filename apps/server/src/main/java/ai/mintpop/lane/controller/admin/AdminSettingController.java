@@ -1,10 +1,14 @@
 package ai.mintpop.lane.controller.admin;
 
 import ai.mintpop.lane.dto.FrontSettings;
+import ai.mintpop.lane.enumeration.BizCodeEnum;
+import ai.mintpop.lane.enumeration.FrontRebuildPhase;
 import ai.mintpop.lane.enumeration.NodeRegion;
+import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.request.FrontSettingsUpdateRequest;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.response.FrontSettingsResponse;
+import ai.mintpop.lane.service.FrontRebuildService;
 import ai.mintpop.lane.service.SubscriptionRenderCache;
 import ai.mintpop.lane.service.SystemSettingService;
 import jakarta.validation.Valid;
@@ -23,10 +27,13 @@ public class AdminSettingController {
 
     private final SystemSettingService systemSettingService;
     private final SubscriptionRenderCache renderCache;
+    private final FrontRebuildService frontRebuildService;
 
-    public AdminSettingController(SystemSettingService systemSettingService, SubscriptionRenderCache renderCache) {
+    public AdminSettingController(SystemSettingService systemSettingService, SubscriptionRenderCache renderCache,
+                                  FrontRebuildService frontRebuildService) {
         this.systemSettingService = systemSettingService;
         this.renderCache = renderCache;
+        this.frontRebuildService = frontRebuildService;
     }
 
     @GetMapping
@@ -34,11 +41,17 @@ public class AdminSettingController {
         return ApiResponse.success(toResponse(systemSettingService.frontSettings()));
     }
 
-    /** 保存后清空订阅渲染缓存（地区会影响渲染）。触发全体重算在 Task 7 接上 */
+    /** 正在重算时拒绝改设置（改了也不会被这次重算用到，反而让人误以为生效了）；值变了才触发重算 */
     @PutMapping
     public ApiResponse<FrontSettingsResponse> update(@Valid @RequestBody FrontSettingsUpdateRequest request) {
+        if (frontRebuildService.status().phase() == FrontRebuildPhase.RUNNING) {
+            throw new BizException(BizCodeEnum.FRONT_REBUILD_RUNNING);
+        }
         SystemSettingService.FrontSettingsChange change = systemSettingService.updateFrontSettings(request);
         renderCache.evictAll();
+        if (change.changed()) {
+            frontRebuildService.start();
+        }
         return ApiResponse.success(toResponse(change.current()));
     }
 
