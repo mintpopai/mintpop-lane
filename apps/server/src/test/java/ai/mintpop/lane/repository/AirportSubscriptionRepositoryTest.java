@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AirportSubscriptionRepositoryTest extends MysqlTestBase {
@@ -104,5 +106,26 @@ class AirportSubscriptionRepositoryTest extends MysqlTestBase {
         assertThat(nodeRepository.findByAirportSubscriptionId(airportSubscriptionId)).hasSize(2);
         assertThat(nodeRepository.findByAirportSubscriptionIdAndSourceName(airportSubscriptionId, "香港-01")).isPresent();
         assertThat(nodeRepository.findByAirportSubscriptionIdAndSourceName(airportSubscriptionId, "不存在")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("拉取失败状态写入后能清回 NULL（updateStrategy = ALWAYS，否则 MyBatis-Plus 会跳过 null）")
+    void clearingFetchFailurePersistsNull() {
+        Long id = fixtures.createAirportSubscription(airportId, "泰山-01", 300);
+
+        AirportSubscriptionDto dto = airportSubscriptionRepository.findById(id).orElseThrow();
+        dto.setFetchFailedSince(Instant.parse("2026-09-29T01:00:00Z"));
+        dto.setLastFetchError("订阅拉取失败：链接无法访问或返回错误");
+        airportSubscriptionRepository.update(dto);
+        assertThat(airportSubscriptionRepository.findById(id).orElseThrow().getFetchFailedSince()).isEqualTo(Instant.parse("2026-09-29T01:00:00Z"));
+
+        dto = airportSubscriptionRepository.findById(id).orElseThrow();
+        dto.setFetchFailedSince(null);
+        dto.setLastFetchError(null);
+        airportSubscriptionRepository.update(dto);
+
+        AirportSubscriptionDto cleared = airportSubscriptionRepository.findById(id).orElseThrow();
+        assertThat(cleared.getFetchFailedSince()).isNull();
+        assertThat(cleared.getLastFetchError()).isNull();
     }
 }

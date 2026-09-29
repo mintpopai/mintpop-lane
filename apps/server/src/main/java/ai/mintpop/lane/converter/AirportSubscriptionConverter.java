@@ -29,6 +29,8 @@ public class AirportSubscriptionConverter {
         dto.setExpiresAt(entity.getTrafficExpiresAt());
         dto.setTrafficAlertedPct(entity.getTrafficAlertedPct());
         dto.setFetchedAt(entity.getFetchedAt());
+        dto.setFetchFailedSince(entity.getFetchFailedSince());
+        dto.setLastFetchError(entity.getLastFetchError());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
@@ -48,6 +50,8 @@ public class AirportSubscriptionConverter {
         entity.setTrafficExpiresAt(dto.getExpiresAt());
         entity.setTrafficAlertedPct(dto.getTrafficAlertedPct());
         entity.setFetchedAt(dto.getFetchedAt());
+        entity.setFetchFailedSince(dto.getFetchFailedSince());
+        entity.setLastFetchError(dto.getLastFetchError());
         return entity;
     }
 }

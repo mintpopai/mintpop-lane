@@ -58,6 +58,14 @@ public class AirportSubscription {
     /** 最近一次成功拉取订阅的时间 */
     private Instant fetchedAt;
 
+    /** 订阅拉取连续失败的起始时间（UTC）；NULL 表示最近一次拉取成功。ALWAYS：清空时必须真写 NULL */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Instant fetchFailedSince;
+
+    /** 最近一次拉取失败的错误说明；拉取成功后清空。ALWAYS 同上 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String lastFetchError;
+
     /** 由数据库默认值维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant createdAt;

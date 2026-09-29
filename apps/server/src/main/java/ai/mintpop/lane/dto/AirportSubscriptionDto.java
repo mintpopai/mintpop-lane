@@ -43,6 +43,12 @@ public class AirportSubscriptionDto {
     /** 最近一次成功拉取订阅的时间 */
     private Instant fetchedAt;
 
+    /** 订阅拉取连续失败的起始时间（UTC）；null 表示最近一次拉取成功 */
+    private Instant fetchFailedSince;
+
+    /** 最近一次拉取失败的错误说明；拉取成功后清空 */
+    private String lastFetchError;
+
     private Instant createdAt;
 
     private Instant updatedAt;
