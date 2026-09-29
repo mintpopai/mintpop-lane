@@ -73,7 +73,7 @@ class FrontRebuildServiceImplTest {
 
         verify(runner, never()).applyAll();
         assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
-        assertThat(service.status().error()).contains("泰山-01").contains("B-02");
+        assertThat(service.status().error()).contains("泰山-01、B-02").doesNotContain("以下订阅");
         verify(nodeNotifyService).notifyFrontRebuildAborted(anyString());
     }
 
@@ -106,5 +106,24 @@ class FrontRebuildServiceImplTest {
     @DisplayName("初始状态 IDLE")
     void initiallyIdle() {
         assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.IDLE);
+    }
+
+    @Test
+    @DisplayName("执行器拒绝提交：start 抛出、状态 FAILED、互斥已释放，之后换可用执行器能再启动")
+    void executorRejectionReleasesLock() {
+        Executor rejecting = task -> { throw new java.util.concurrent.RejectedExecutionException("满了"); };
+        service = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService, rejecting, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        assertThatThrownBy(service::start).isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
+        assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
+        assertThat(service.status().error()).contains("RejectedExecutionException");
+
+        // 互斥必须已释放：同一实例上再 start 不能报 410055（仍是拒绝执行器，抛的应是 Rejected 而非 BizException）
+        assertThatThrownBy(service::start).isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
+
+        FrontRebuildServiceImpl working = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService,
+                Runnable::run, Clock.fixed(NOW, ZoneOffset.UTC));
+        working.start();
+        assertThat(working.status().phase()).isEqualTo(FrontRebuildPhase.SUCCEEDED);
     }
 }

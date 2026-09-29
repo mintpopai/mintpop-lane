@@ -99,7 +99,7 @@ public class NodeNotifyService {
     /**
      * 订阅即将到期 / 已过期（异步）。与额度告警共用 ORANGE 卡片：到期与额度跑满的后果一模一样——
      * 整组节点同时失效，只是到期是确定性事件、比额度更可预测，所以更该提前说。
-     * 本方法不写库，调用方也不记去重状态：告警窗口只有 3 天、刷新周期 24h，重复也就两三条。
+     * 本方法不写库、不去重；去重由调用方 TrafficAlertService 负责（同一订阅 24h 内最多一张，刷新周期 5 分钟）。
      */
     @Async
     public void notifySubscriptionExpiring(AirportSubscriptionDto group, Instant expiresAt, Duration remaining) {

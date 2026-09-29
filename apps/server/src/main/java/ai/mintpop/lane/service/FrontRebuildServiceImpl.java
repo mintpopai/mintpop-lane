@@ -61,15 +61,24 @@ public class FrontRebuildServiceImpl implements FrontRebuildService {
         }
         Instant startedAt = clock.instant();
         status.set(new FrontRebuildStatus(FrontRebuildPhase.RUNNING, startedAt, null, null, null, null));
-        executor.execute(() -> run(startedAt));
+        try {
+            executor.execute(() -> run(startedAt));
+        } catch (RuntimeException e) {
+            // 提交失败（如线程池拒绝）：任务没跑起来，必须释放互斥并把状态落成 FAILED，否则永远卡在 RUNNING
+            log.error("全体重算任务提交失败", e);
+            status.set(new FrontRebuildStatus(FrontRebuildPhase.FAILED, startedAt, clock.instant(), null, null,
+                    "内部错误：" + e.getClass().getSimpleName()));
+            running.set(false);
+            throw e;
+        }
     }
 
     private void run(Instant startedAt) {
         try {
             RefreshOutcome refresh = subRefreshService.refreshAllNow();
             if (!refresh.failedSubscriptionNames().isEmpty()) {
-                throw new BizException(BizCodeEnum.SUB_FETCH_FAILED,
-                        "以下订阅拉取失败，本次重算已中止：" + String.join("、", refresh.failedSubscriptionNames()));
+                throw new BizException(BizCodeEnum.FRONT_REBUILD_FETCH_FAILED,
+                        String.join("、", refresh.failedSubscriptionNames()));
             }
             RebuildResult result = runner.applyAll();
             status.set(new FrontRebuildStatus(FrontRebuildPhase.SUCCEEDED, startedAt, clock.instant(),
@@ -81,6 +90,11 @@ public class FrontRebuildServiceImpl implements FrontRebuildService {
             log.error("全体重算出现未预期异常", e);
             fail(startedAt, "内部错误：" + e.getClass().getSimpleName());
         } finally {
+            // Error 之类逃出上面 catch 时状态还停在 RUNNING，兜底落成 FAILED，避免前端永远转圈
+            if (status.get().phase() == FrontRebuildPhase.RUNNING) {
+                status.set(new FrontRebuildStatus(FrontRebuildPhase.FAILED, startedAt, clock.instant(), null, null,
+                        "内部错误：任务异常终止"));
+            }
             running.set(false);
         }
     }

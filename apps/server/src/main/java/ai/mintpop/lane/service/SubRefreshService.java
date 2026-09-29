@@ -34,7 +34,7 @@ import java.util.Map;
 public class SubRefreshService {
 
     private final AirportSubscriptionRepository airportSubscriptionRepository;
-        private final SubFetchClient subFetchClient;
+    private final SubFetchClient subFetchClient;
     private final SubYamlParser subYamlParser;
     private final FailureDomainSyncer failureDomainSyncer;
     private final AirportSubscriptionNodeSyncer nodeSyncer;

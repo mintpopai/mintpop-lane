@@ -205,4 +205,68 @@ class TrafficAlertServiceTest {
         verify(airportSubscriptionRepository).update(group);
         assertThat(group.getTrafficAlertedPct()).isEqualTo(80);
     }
+
+    /** 可手动拨动时间的时钟 */
+    private static final class MutableClock extends Clock {
+        private Instant now;
+        MutableClock(Instant now) { this.now = now; }
+        void advance(Duration d) { now = now.plus(d); }
+        @Override public ZoneOffset getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+        @Override public Instant instant() { return now; }
+    }
+
+    private SubFetchResult expiringAt(Instant expiresAt) {
+        return new SubFetchResult("proxies: []", null, null, null, expiresAt);
+    }
+
+    @Test
+    @DisplayName("同一订阅 5 分钟后再刷新不重复推，25 小时后再推一次")
+    void suppressesExpiryAlertWithin24Hours() {
+        MutableClock clock = new MutableClock(NOW);
+        TrafficAlertService svc = new TrafficAlertService(airportSubscriptionRepository, nodeNotifyService, clock);
+        AirportSubscriptionDto group = group(null);
+        Instant expiresAt = NOW.plus(Duration.ofDays(2));
+
+        svc.checkAndNotify(group, expiringAt(expiresAt));
+        clock.advance(Duration.ofMinutes(5));
+        svc.checkAndNotify(group, expiringAt(expiresAt));
+        verify(nodeNotifyService, org.mockito.Mockito.times(1)).notifySubscriptionExpiring(any(), any(), any());
+
+        clock.advance(Duration.ofHours(25));
+        svc.checkAndNotify(group, expiringAt(expiresAt));
+        verify(nodeNotifyService, org.mockito.Mockito.times(2)).notifySubscriptionExpiring(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("不同订阅的到期抑制互相独立")
+    void expirySuppressionIsPerSubscription() {
+        MutableClock clock = new MutableClock(NOW);
+        TrafficAlertService svc = new TrafficAlertService(airportSubscriptionRepository, nodeNotifyService, clock);
+        AirportSubscriptionDto first = group(null);
+        AirportSubscriptionDto second = group(null);
+        second.setId(2L);
+        SubFetchResult result = expiringAt(NOW.plus(Duration.ofDays(1)));
+
+        svc.checkAndNotify(first, result);
+        svc.checkAndNotify(second, result);
+
+        verify(nodeNotifyService, org.mockito.Mockito.times(2)).notifySubscriptionExpiring(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("续期离开窗口后清记录，再次进入窗口立即能推")
+    void renewalClearsSuppression() {
+        MutableClock clock = new MutableClock(NOW);
+        TrafficAlertService svc = new TrafficAlertService(airportSubscriptionRepository, nodeNotifyService, clock);
+        AirportSubscriptionDto group = group(null);
+
+        svc.checkAndNotify(group, expiringAt(NOW.plus(Duration.ofDays(1))));
+        clock.advance(Duration.ofMinutes(5));
+        svc.checkAndNotify(group, expiringAt(NOW.plus(Duration.ofDays(30))));
+        clock.advance(Duration.ofMinutes(5));
+        svc.checkAndNotify(group, expiringAt(NOW.plus(Duration.ofDays(1))));
+
+        verify(nodeNotifyService, org.mockito.Mockito.times(2)).notifySubscriptionExpiring(any(), any(), any());
+    }
 }

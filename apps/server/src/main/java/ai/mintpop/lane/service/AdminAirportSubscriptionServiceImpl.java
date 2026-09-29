@@ -84,7 +84,7 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         airportRepository.findById(request.getAirportId())
                 .orElseThrow(() -> new BizException(BizCodeEnum.AIRPORT_NOT_FOUND));
         // 先拉订阅再建订阅：拉取失败时不留下空订阅；
-        // 拉取解析是外呼 HTTP（最坏耗时可达约 25s），不能放进事务里独占数据库连接，
+        // 拉取解析是外呼 HTTP（最坏约 82 秒（3 次重试）），不能放进事务里独占数据库连接，
         // 故只把「建订阅 + 导入」这段真正落库的操作交给 transactionTemplate 包一个事务
         FetchResult fetched = fetchAndParse(request.getSubUrl());
         List<SubNode> usNodes = nodeSyncer.selectRegionNodes(fetched.nodes(), systemSettingService.frontSettings().region());

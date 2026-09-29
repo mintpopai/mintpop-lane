@@ -88,6 +88,7 @@ public enum BizCodeEnum {
     SETTING_INVALID(410054, "全局配置取值非法：每人机场数 1 到 10，每人带宽 1 到 1000 Mbps"),
     FRONT_REBUILD_RUNNING(410055, "正在为全部用户重算线路，请等本次完成后再试"),
     FRONT_CAPACITY_INSUFFICIENT(410056, "主用名额不足，无法为全部用户分配线路"),
+    FRONT_REBUILD_FETCH_FAILED(410057, "订阅拉取失败，本次重算已中止"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

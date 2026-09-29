@@ -268,7 +268,7 @@ INSERT IGNORE INTO asn_org (asn, org_name, first_seen_at) VALUES ('AS4134', 'Chi
 
 服务端另外两个定时任务的间隔在 `application.yml` 里调（默认值见 `apps/server/config/application.example.yml`），与是否配置飞书通知无关：
 
-- `sub-refresh.interval`（默认 `5m`）：订阅定时刷新间隔——周期性把各机场订阅的节点集合整体对齐到机场当前给出的节点（新增、更新、删除）并更新订阅自身额度；拉取失败时不动节点，只在订阅上标记失败并每轮推飞书。
+- `sub-refresh.interval`（默认 `5m`）：订阅定时刷新间隔——周期性把各机场订阅的节点集合整体对齐到机场当前给出的节点（新增、更新、删除）并更新订阅自身额度；拉取失败时不动节点，只在订阅上标记失败并每轮推飞书。⚠️ **升级须知**：部署机 `application.yml` 里若已有旧示例带来的 `sub-refresh.interval: 24h`，须改为 `5m`（不改则仍按 24 小时刷新，二期的 5 分钟对齐不会生效）。
 - `entry-ip-watch.interval`（默认 `5m`）：中转入口 IP 巡检间隔——服务端不带 mihomo 内核，拨不动 anytls，测不到第一跳「通不通」，但机场的中转入口域名 TTL 只有 30 秒（为「被封即换 IP」准备），服务端测得到「换没换」；入口 IP 一变，大概率意味着该入口刚被封过。同目录下 `entry-ip-watch.vantages` 是四个运营商视角各自的代表性子网（DNS EDNS Client Subnet），中转入口按运营商分线路返回不同 IP，只从一个视角解析会漏掉另外几条线的故障。
 
 ## 备份
@@ -283,6 +283,8 @@ INSERT IGNORE INTO asn_org (asn, org_name, first_seen_at) VALUES ('AS4134', 'Chi
 > `lane.auth.session-secret` 不属于上面这两样、也不需要备份：它只签自签会话 token，丢失或更换的后果是**全员下线**（无数据损失，重新登录一次即可拿到新会话），与 `lane.crypto.key` 丢失会让密文永久解不开是两种截然不同的后果，不要混为一谈。
 
 ## 对外暴露
+
+管理端导入/重拉订阅、订阅尽调是同步接口，拉取最坏约 82 秒（重试 3 次），反代到服务端的超时需 ≥ 90 秒。
 
 前端容器端口**都只绑 `127.0.0.1`**，公网访问不到；server **不映射宿主端口**，只经容器网络被管理端、官网与控制台反代访问。对外入口是宿主机上**已有的反代**（OpenResty/nginx，与本机其它站点共用），它**只按 Host 分流**、每个站点一条 `location /`——API 的路径拆分不在这一层做：管理端、官网与控制台容器内的 nginx 各自把 `/api`、`/auth`、`/oauth2` 反代到 server（compose 服务名 `server:8080`），因此各域名上的 API 调用天然同源，前端不需要 CORS。
 

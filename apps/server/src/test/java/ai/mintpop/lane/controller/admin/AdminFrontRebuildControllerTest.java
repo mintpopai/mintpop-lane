@@ -81,6 +81,14 @@ class AdminFrontRebuildControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("preview 带宽越界（0）报 410054，不进入服务层")
+    void previewRejectsOutOfRangeBandwidth() throws Exception {
+        mockMvc.perform(get("/api/admin/front/rebuild/preview").header("Authorization", bearer(adminId))
+                        .param("region", "US").param("bandwidthPerUserMbps", "0"))
+                .andExpect(jsonPath("$.code").value(410054));
+    }
+
+    @Test
     @DisplayName("保存设置：值变了触发 start；值没变不触发；正在跑时 PUT 报 410055 且不保存")
     void settingsUpdateTriggersRebuildOnlyWhenChanged() throws Exception {
         mockMvc.perform(put("/api/admin/settings").header("Authorization", bearer(adminId))

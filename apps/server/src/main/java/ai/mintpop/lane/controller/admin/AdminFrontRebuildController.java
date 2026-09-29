@@ -1,7 +1,9 @@
 package ai.mintpop.lane.controller.admin;
 
 import ai.mintpop.lane.dto.FrontSettings;
+import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeRegion;
+import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.response.ApiResponse;
 import ai.mintpop.lane.response.FrontRebuildPreview;
 import ai.mintpop.lane.response.FrontRebuildStatus;
@@ -41,6 +43,10 @@ public class AdminFrontRebuildController {
     @GetMapping("/preview")
     public ApiResponse<FrontRebuildPreview> preview(@RequestParam NodeRegion region,
                                                     @RequestParam int bandwidthPerUserMbps) {
+        if (bandwidthPerUserMbps < FrontSettings.MIN_BANDWIDTH_PER_USER_MBPS
+                || bandwidthPerUserMbps > FrontSettings.MAX_BANDWIDTH_PER_USER_MBPS) {
+            throw new BizException(BizCodeEnum.SETTING_INVALID);
+        }
         FrontSettings current = systemSettingService.frontSettings();
         return ApiResponse.success(frontRebuildService.preview(
                 new FrontSettings(region, current.airportsPerUser(), bandwidthPerUserMbps)));

@@ -143,7 +143,8 @@ public class RestClientSubFetchClient implements SubFetchClient {
             return null;
         }
         try {
-            return Duration.ofSeconds(Long.parseLong(raw.trim()));
+            long seconds = Long.parseLong(raw.trim());
+            return seconds < 0 ? null : Duration.ofSeconds(seconds);
         } catch (NumberFormatException e) {
             return null;
         }
