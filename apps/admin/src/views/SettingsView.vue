@@ -34,6 +34,8 @@ const pendingAction = ref<"SAVE" | "REBUILD" | null>(null);
 const submitting = ref(false);
 
 let pollTimer: ReturnType<typeof setInterval> | undefined;
+/** 卸载后异步返回的 load/poll 不许再起定时器 */
+let unmounted = false;
 
 const regionOptions = computed(() =>
   (saved.value?.regionOptions ?? []).map((o) => ({ value: o.value, label: o.label })),
@@ -93,7 +95,7 @@ async function load(): Promise<void> {
     bandwidthPerUserMbps.value = String(s.bandwidthPerUserMbps);
     status.value = st;
     loadError.value = "";
-    await refreshPreview();
+    await refreshPreview("FORM");
     syncPolling();
   } catch (error) {
     loadError.value = error instanceof BizError ? error.message : (error as Error).message;
@@ -102,14 +104,22 @@ async function load(): Promise<void> {
   }
 }
 
-/** 预检按表单里的当前值算：地区与每人带宽改了就重新算 */
-async function refreshPreview(): Promise<void> {
-  if (!Number.isInteger(bandwidthNumber.value) || bandwidthNumber.value < 1) {
+/**
+ * 容量预检。来源二选一：
+ * - FORM：按表单里的当前值算（页面常显、保存前确认）
+ * - SAVED：按已保存的配置算（手动重算跑的是已保存值，不是表单里没保存的改动）
+ */
+async function refreshPreview(source: "FORM" | "SAVED"): Promise<void> {
+  const target =
+    source === "SAVED" && saved.value
+      ? { region: saved.value.region, bandwidth: saved.value.bandwidthPerUserMbps }
+      : { region: region.value, bandwidth: bandwidthNumber.value };
+  if (!Number.isInteger(target.bandwidth) || target.bandwidth < 1) {
     preview.value = null;
     return;
   }
   try {
-    preview.value = await adminApi().previewFrontRebuild(region.value, bandwidthNumber.value);
+    preview.value = await adminApi().previewFrontRebuild(target.region, target.bandwidth);
   } catch (error) {
     preview.value = null;
     showToast(
@@ -120,7 +130,7 @@ async function refreshPreview(): Promise<void> {
 }
 
 watch([region, bandwidthPerUserMbps], () => {
-  void refreshPreview();
+  void refreshPreview("FORM");
 });
 
 async function pollStatus(): Promise<void> {
@@ -134,6 +144,9 @@ async function pollStatus(): Promise<void> {
 
 /** RUNNING 才开轮询，结束就停：别让一个空闲页面每 3 秒打服务端 */
 function syncPolling(): void {
+  if (unmounted) {
+    return;
+  }
   if (running.value && pollTimer === undefined) {
     pollTimer = setInterval(() => void pollStatus(), STATUS_POLL_MS);
   } else if (!running.value && pollTimer !== undefined) {
@@ -150,12 +163,21 @@ function askSave(): void {
     return;
   }
   pendingAction.value = "SAVE";
-  void refreshPreview();
+  void refreshPreview("FORM");
 }
 
 function askRebuild(): void {
   pendingAction.value = "REBUILD";
-  void refreshPreview();
+  void refreshPreview("SAVED");
+}
+
+/** 关弹窗；常显的预检回到按表单值算 */
+function cancelAction(): void {
+  const wasRebuild = pendingAction.value === "REBUILD";
+  pendingAction.value = null;
+  if (wasRebuild) {
+    void refreshPreview("FORM");
+  }
 }
 
 async function confirmAction(): Promise<void> {
@@ -191,7 +213,9 @@ async function confirmAction(): Promise<void> {
 
 onMounted(load);
 onBeforeUnmount(() => {
+  unmounted = true;
   clearInterval(pollTimer);
+  pollTimer = undefined;
 });
 </script>
 
@@ -204,11 +228,12 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="admin-btn-ghost rebuild"
-        :disabled="running"
+        :disabled="running || dirty"
         @click="askRebuild()"
       >
         {{ running ? "重算中…" : "重算全部线路" }}
       </button>
+      <p v-if="dirty" class="admin-note">先保存或还原改动后再重算</p>
     </template>
   </PageHead>
 
@@ -296,8 +321,9 @@ onBeforeUnmount(() => {
     :title="pendingAction === 'SAVE' ? '保存并重算全部线路' : '重算全部线路'"
     :message="confirmMessage"
     confirm-text="确认"
-    :busy="submitting || !preview || !preview.sufficient"
+    :busy="submitting"
+    :confirm-disabled="!preview || !preview.sufficient"
     @confirm="confirmAction()"
-    @cancel="pendingAction = null"
+    @cancel="cancelAction()"
   />
 </template>

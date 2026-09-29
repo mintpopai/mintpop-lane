@@ -57,6 +57,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.innerHTML = "";
 });
 
@@ -121,7 +122,9 @@ describe("SettingsView", () => {
     await wrapper.find("button.admin-btn.save").trigger("click");
     await flushPromises();
 
-    expect(wrapper.findComponent(ConfirmDialog).props("busy")).toBe(true);
+    const dialog = wrapper.findComponent(ConfirmDialog);
+    expect(dialog.props("confirmDisabled")).toBe(true);
+    expect(dialog.props("busy")).toBe(false);
     expect(wrapper.text()).toContain("需要 120 个主用名额，现有 90");
   });
 
@@ -150,5 +153,77 @@ describe("SettingsView", () => {
 
     expect(wrapper.text()).toContain("上次重算失败");
     expect(wrapper.text()).toContain("需要 3 个主用名额，现有 2");
+  });
+
+  it("表单有未保存改动时「重算全部线路」禁用并给出提示", async () => {
+    const wrapper = mount(SettingsView, { attachTo: document.body });
+    await flushPromises();
+    expect(wrapper.find("button.rebuild").attributes("disabled")).toBeUndefined();
+
+    await wrapper.find("#setting-bandwidth").setValue("30");
+
+    expect(wrapper.find("button.rebuild").attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("先保存或还原改动后再重算");
+  });
+
+  it("手动重算的预检按已保存值算，不用表单值", async () => {
+    const wrapper = mount(SettingsView, { attachTo: document.body });
+    await flushPromises();
+    previewFrontRebuild.mockClear();
+    await wrapper.find("button.rebuild").trigger("click");
+    await flushPromises();
+
+    expect(previewFrontRebuild).toHaveBeenCalledWith("US", 20);
+  });
+
+  describe("状态轮询", () => {
+    function running(): FrontRebuildStatus {
+      return { ...idle(), phase: "RUNNING", startedAt: "2026-09-29T03:00:00Z" };
+    }
+
+    it("载入时 RUNNING 则每 3 秒轮询；变为 SUCCEEDED 后停止", async () => {
+      vi.useFakeTimers();
+      frontRebuildStatus.mockResolvedValue(running());
+      const wrapper = mount(SettingsView, { attachTo: document.body });
+      await flushPromises();
+      expect(frontRebuildStatus).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(frontRebuildStatus).toHaveBeenCalledTimes(2);
+
+      frontRebuildStatus.mockResolvedValue({
+        ...idle(),
+        phase: "SUCCEEDED",
+        userCount: 1,
+        subscriptionCount: 1,
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(frontRebuildStatus).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(frontRebuildStatus).toHaveBeenCalledTimes(3);
+      wrapper.unmount();
+    });
+
+    it("空闲时不轮询", async () => {
+      vi.useFakeTimers();
+      const wrapper = mount(SettingsView, { attachTo: document.body });
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(9000);
+
+      expect(frontRebuildStatus).toHaveBeenCalledTimes(1);
+      wrapper.unmount();
+    });
+
+    it("卸载后不再轮询", async () => {
+      vi.useFakeTimers();
+      frontRebuildStatus.mockResolvedValue(running());
+      const wrapper = mount(SettingsView, { attachTo: document.body });
+      await flushPromises();
+      wrapper.unmount();
+      await vi.advanceTimersByTimeAsync(9000);
+
+      expect(frontRebuildStatus).toHaveBeenCalledTimes(1);
+    });
   });
 });

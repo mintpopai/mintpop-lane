@@ -9,6 +9,8 @@ defineProps<{
   confirmText?: string;
   /** 提交中禁用按钮，防止连点重复删除 */
   busy?: boolean;
+  /** 只禁用确认按钮（取消仍可点），用于前置条件不满足、不允许继续的场景 */
+  confirmDisabled?: boolean;
 }>();
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 </script>
@@ -20,7 +22,12 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
       <button type="button" class="admin-btn-ghost" :disabled="busy" @click="emit('cancel')">
         取消
       </button>
-      <button type="button" class="admin-btn danger" :disabled="busy" @click="emit('confirm')">
+      <button
+        type="button"
+        class="admin-btn danger"
+        :disabled="busy || confirmDisabled"
+        @click="emit('confirm')"
+      >
         {{ confirmText ?? "删除" }}
       </button>
     </template>

@@ -69,4 +69,17 @@ describe("ConfirmDialog", () => {
     expect(document.body.querySelectorAll(".danger")).toHaveLength(1);
     wrapper.unmount();
   });
+
+  it("confirmDisabled 只禁确认按钮，取消仍可用并发出 cancel", async () => {
+    const wrapper = render({ confirmDisabled: true });
+    await wrapper.vm.$nextTick();
+
+    const confirm = document.body.querySelector<HTMLButtonElement>(".admin-btn.danger")!;
+    const cancel = document.body.querySelector<HTMLButtonElement>(".admin-btn-ghost")!;
+    expect(confirm.disabled).toBe(true);
+    expect(cancel.disabled).toBe(false);
+    cancel.click();
+    expect(wrapper.emitted("cancel")).toHaveLength(1);
+    wrapper.unmount();
+  });
 });
