@@ -151,3 +151,17 @@ describe("NodeFormModal 角色下拉不提供第一跳", () => {
     expect(hasRoleOption("第一跳（出国）")).toBe(false);
   });
 });
+
+describe("NodeFormModal 订阅导入节点", () => {
+  it("订阅导入的节点：表单没有状态下拉，只有名称与备注", async () => {
+    mount(NodeFormModal, {
+      attachTo: document.body,
+      props: {
+        role: "FRONT",
+        editing: { ...landNode(), role: "FRONT", protocol: "MIHOMO", airportSubscriptionId: 1 },
+      },
+    });
+    expect(document.querySelector("#node-status")).toBeNull();
+    expect(document.querySelector("#node-name")).not.toBeNull();
+  });
+});

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { adminApi } from "../api";
 import { BizError } from "../api/http";
 import { NODE_ROLE_LABELS, NODE_STATUS_LABELS } from "../api/types";
@@ -43,8 +43,12 @@ const deletingGroup = ref(false);
 // 弹窗自身的状态与逻辑都在 AirportSubscriptionAuditModal 组件里，这里只管开关 ——
 const auditModalOpen = ref(false);
 
-/** 启用状态筛选，两跳共用：ALL=不筛 */
+/** 启用状态筛选，仅落地页签使用：ALL=不筛 */
 const currentStatus = ref<"ALL" | "ENABLED" | "DISABLED">("ALL");
+// 切到第一跳时状态筛选不再可见，复位避免残留筛选影响计数
+watch(currentRole, (role) => {
+  if (role === "FRONT") currentStatus.value = "ALL";
+});
 
 /* 计数的唯一口径：「选它之后表格里会有多少行」。所以 tab 与 chip 的计数都从这批
    「已经过了状态下拉」的节点里数——否则会出现 chip 写着 12、表格却空着，看着像 bug。
@@ -53,7 +57,10 @@ const allFront = computed(() => allNodes.value.filter((node) => node.role === "F
 const allLand = computed(() => allNodes.value.filter((node) => node.role === "LAND"));
 
 function keepStatus(node: AdminNodeResponse): boolean {
-  return currentStatus.value === "ALL" || node.status === currentStatus.value;
+  // 第一跳节点没有状态，不按状态过滤
+  return (
+    node.role === "FRONT" || currentStatus.value === "ALL" || node.status === currentStatus.value
+  );
 }
 
 const frontNodes = computed(() => allFront.value.filter(keepStatus));
@@ -277,6 +284,9 @@ onMounted(load);
       <span v-else class="muted group-quota-pct">机场未提供额度信息</span>
       <span class="fact muted">到期：{{ formatDate(g.expiresAt) }}</span>
       <span class="fact muted">最近拉取：{{ formatDateTime(g.fetchedAt) }}</span>
+      <span v-if="g.fetchFailedSince" class="state" data-state="DISABLED">
+        拉取失败，自 {{ formatDateTime(g.fetchFailedSince) }} 起：{{ g.lastFetchError }}
+      </span>
     </div>
   </div>
 
@@ -288,6 +298,8 @@ onMounted(load);
       label="按订阅筛选"
     />
     <Select
+      v-if="currentRole === 'LAND'"
+      id="node-status-filter"
       v-model="currentStatus"
       class="filter-select"
       prefix="状态"
@@ -348,7 +360,7 @@ onMounted(load);
             <th>已绑 / 容量</th>
           </template>
           <th>密码</th>
-          <th>状态</th>
+          <th v-if="currentRole === 'LAND'" class="status-col">状态</th>
           <th>更新时间</th>
           <th>操作</th>
         </tr>
@@ -386,7 +398,7 @@ onMounted(load);
               {{ booleanLabel(row.secretConfigured, "已配置", "未配置") }}
             </span>
           </td>
-          <td>
+          <td v-if="currentRole === 'LAND'">
             <span class="state" :data-state="row.status">{{ NODE_STATUS_LABELS[row.status] }}</span>
           </td>
           <td class="fact muted">{{ formatDateTime(row.updatedAt) }}</td>
@@ -401,7 +413,13 @@ onMounted(load);
               检测
             </button>
             <button type="button" class="admin-link" @click="edit(row)">编辑</button>
-            <button type="button" class="admin-link danger" @click="pendingDelete = row">
+            <!-- 第一跳节点由订阅刷新整体对齐，手删下一轮又会回来，不给入口 -->
+            <button
+              v-if="currentRole === 'LAND'"
+              type="button"
+              class="admin-link danger"
+              @click="pendingDelete = row"
+            >
               删除
             </button>
           </td>

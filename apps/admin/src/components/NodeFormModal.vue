@@ -100,7 +100,7 @@ const title = computed(() => (props.editing ? `编辑节点：${props.editing.na
 const roleOptions = Object.entries(NODE_ROLE_LABELS)
   .filter(([value]) => value !== "FRONT")
   .map(([value, label]) => ({ value, label }));
-// 订阅导入的节点：参数由「重新拉取」统一更新，表单只放行名称/状态/备注
+// 订阅导入的节点：参数由「重新拉取」统一更新，表单只放行名称/备注；FRONT 节点没有状态
 const isSubscriptionNode = computed(() => props.editing?.protocol === "MIHOMO");
 // MIHOMO 只能经订阅导入产生，协议下拉不提供
 const protocolOptions = Object.values(NODE_PROTOCOL)
@@ -291,7 +291,7 @@ async function submit(): Promise<void> {
       </div>
 
       <div class="admin-form-row">
-        <div class="admin-field">
+        <div v-if="!isSubscriptionNode" class="admin-field">
           <label for="node-status">状态</label>
           <Select
             id="node-status"

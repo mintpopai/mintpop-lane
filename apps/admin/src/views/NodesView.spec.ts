@@ -177,6 +177,7 @@ describe("NodesView 加载", () => {
     expect(wrapper.get(".page-facts").text()).toContain("共 4 个节点");
     expect(wrapper.get(".page-facts").text()).toContain("2");
 
+    await switchTo(wrapper, "LAND");
     await setStatus(wrapper, "DISABLED");
     expect(wrapper.get(".page-facts").text()).toContain("共 4 个节点");
   });
@@ -202,10 +203,12 @@ describe("NodesView 按跳数分", () => {
   it("tab 计数先过状态下拉，口径是「选它之后表格里有几行」", async () => {
     const wrapper = await render();
 
+    await switchTo(wrapper, "LAND");
     await setStatus(wrapper, "DISABLED");
 
+    // 第一跳没有状态，不受状态筛选影响
     expect(wrapper.findComponent({ name: "ViewTabs" }).props("options")).toEqual([
-      { value: "FRONT", label: "第一跳（出国）", count: 1 },
+      { value: "FRONT", label: "第一跳（出国）", count: 3 },
       { value: "LAND", label: "第二跳（落地）", count: 0 },
     ]);
   });
@@ -232,7 +235,7 @@ describe("NodesView 按跳数分", () => {
         .findAll("tbody tr")[0]
         .findAll(".actions button")
         .map((b) => b.text()),
-    ).toEqual(["编辑", "删除"]);
+    ).toEqual(["编辑"]);
 
     await switchTo(wrapper, "LAND");
     expect(
@@ -272,13 +275,15 @@ describe("NodesView 订阅带", () => {
     expect(names(wrapper)).toEqual(["FRONT-A1", "FRONT-A2"]);
   });
 
-  it("订阅与状态两级条件叠加", async () => {
+  it("第一跳不按状态过滤：落地页签设过的状态筛选，切回第一跳后复位", async () => {
     const wrapper = await render();
 
+    await switchTo(wrapper, "LAND");
+    await setStatus(wrapper, "DISABLED");
+    await switchTo(wrapper, "FRONT");
     await setGroup(wrapper, 100);
-    await setStatus(wrapper, "ENABLED");
 
-    expect(names(wrapper)).toEqual(["FRONT-A1"]);
+    expect(names(wrapper)).toEqual(["FRONT-A1", "FRONT-A2"]);
   });
 
   it("选中订阅才露出它的操作，没选时工具条里没有这几个口子", async () => {
@@ -409,25 +414,25 @@ describe("NodesView 空态", () => {
   });
 
   it("有节点但筛没了是另一回事：空态说法按原始数量判，不按筛完的", async () => {
-    // 机场 B 订阅下一个节点都没有，叠加「已禁用」依然是空
+    // 落地只有一个启用节点，筛「已禁用」为空，但这一跳并非没有节点
     const wrapper = await render();
 
-    await setGroup(wrapper, 200);
+    await switchTo(wrapper, "LAND");
     await setStatus(wrapper, "DISABLED");
 
     expect(wrapper.findComponent(DataCard).props("empty")).toBe(true);
     expect(String(wrapper.findComponent(DataCard).props("emptyText"))).toBe("这一批里没有节点。");
   });
 
-  it("筛没了时给「查看全部」，一点把两级条件都清掉", async () => {
+  it("筛没了时给「查看全部」，一点把条件清掉", async () => {
     const wrapper = await render();
-    await setGroup(wrapper, 200);
+    await switchTo(wrapper, "LAND");
     await setStatus(wrapper, "DISABLED");
 
     const reset = wrapper.findAll(".admin-btn-ghost").find((b) => b.text() === "查看全部")!;
     await reset.trigger("click");
 
-    expect(names(wrapper)).toHaveLength(3);
+    expect(names(wrapper)).toHaveLength(1);
   });
 
   it("第一跳空态只给「从订阅导入」，不再提供手工新建的口子", async () => {
@@ -506,16 +511,18 @@ describe("NodesView 增删改", () => {
 
   it("删除节点前点名要删的是哪个", async () => {
     const wrapper = await render();
+    await switchTo(wrapper, "LAND");
 
-    await wrapper.findAll("tbody tr")[0].findAll(".actions button")[1].trigger("click");
+    await wrapper.findAll("tbody tr")[0].findAll(".actions button")[2].trigger("click");
 
-    expect(String(wrapper.findComponent(ConfirmDialog).props("message"))).toContain("FRONT-A1");
+    expect(String(wrapper.findComponent(ConfirmDialog).props("message"))).toContain("LAND-东京");
   });
 
   it("节点仍被用户引用而删不掉时，用服务端那句中文", async () => {
     deleteNode.mockRejectedValueOnce(new BizError(410003, "节点仍被用户引用"));
     const wrapper = await render();
-    await wrapper.findAll("tbody tr")[0].findAll(".actions button")[1].trigger("click");
+    await switchTo(wrapper, "LAND");
+    await wrapper.findAll("tbody tr")[0].findAll(".actions button")[2].trigger("click");
 
     wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
     await flushPromises();
@@ -708,5 +715,47 @@ describe("NodesView 订阅额度", () => {
     expect(text).toContain("ops@ts.example.com");
     expect(text).toContain("300 Mbps");
     expect(text).toContain("4 / 15");
+  });
+});
+
+describe("NodesView 第一跳页签去状态", () => {
+  it("第一跳页签：没有状态列、没有状态筛选、没有删除按钮；落地页签仍有", async () => {
+    listNodes.mockResolvedValue([
+      node({ id: 1, role: "FRONT", protocol: "MIHOMO", airportSubscriptionId: 1 }),
+      node({ id: 2, role: "LAND", protocol: "SOCKS5" }),
+    ]);
+    listAirportSubscriptions.mockResolvedValue([group()]);
+    const wrapper = mount(NodesView, { attachTo: document.body });
+    await flushPromises();
+
+    wrapper.findComponent({ name: "ViewTabs" }).vm.$emit("update:modelValue", "FRONT");
+    await flushPromises();
+    expect(wrapper.find("th.status-col").exists()).toBe(false);
+    expect(wrapper.find("#node-status-filter").exists()).toBe(false);
+    expect(
+      wrapper.findAll("button.admin-link.danger").filter((b) => b.text() === "删除"),
+    ).toHaveLength(0);
+
+    wrapper.findComponent({ name: "ViewTabs" }).vm.$emit("update:modelValue", "LAND");
+    await flushPromises();
+    expect(wrapper.find("th.status-col").exists()).toBe(true);
+    expect(
+      wrapper.findAll("button.admin-link.danger").filter((b) => b.text() === "删除").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("订阅信息条：拉取失败的订阅显示失败起始时间与错误", async () => {
+    listNodes.mockResolvedValue([]);
+    listAirportSubscriptions.mockResolvedValue([
+      group({
+        fetchFailedSince: "2026-09-29T01:00:00Z",
+        lastFetchError: "订阅拉取失败：链接无法访问或返回错误",
+      }),
+    ]);
+    const wrapper = mount(NodesView, { attachTo: document.body });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("拉取失败");
+    expect(wrapper.text()).toContain("链接无法访问");
   });
 });
