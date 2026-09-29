@@ -194,7 +194,7 @@ describe("AirportSubscriptionsView 页头与机场信息条", () => {
 
     expect(wrapper.findComponent(SubImportModal).props()).toMatchObject({
       group: null,
-      airportId: 2,
+      defaultAirportId: 2,
     });
   });
 
@@ -340,9 +340,7 @@ describe("AirportSubscriptionsView 空态", () => {
     listAirportSubscriptions.mockResolvedValue(SUBS.filter((s) => s.airportId === 1));
     const wrapper = await render();
 
-    expect(String(wrapper.findComponent(DataCard).props("emptyText"))).toBe(
-      "这家机场还没有订阅。",
-    );
+    expect(String(wrapper.findComponent(DataCard).props("emptyText"))).toBe("这家机场还没有订阅。");
     expect(wrapper.findAll(".card-state-actions button").map((b) => b.text())).toEqual([
       "导入订阅",
     ]);

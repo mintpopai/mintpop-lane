@@ -85,9 +85,7 @@ describe("LandNodesView 列表", () => {
     const wrapper = await render();
     const headers = wrapper.findAll("thead th").map((th) => th.text());
 
-    expect(headers).toEqual(
-      expect.arrayContaining(["出口 IP", "出口时区", "已绑 / 容量", "状态"]),
-    );
+    expect(headers).toEqual(expect.arrayContaining(["出口 IP", "出口时区", "已绑 / 容量", "状态"]));
     expect(headers).not.toContain("订阅");
   });
 

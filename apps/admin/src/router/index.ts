@@ -6,16 +6,17 @@ import { useAuthStore } from "../stores/auth";
 import { loginPagePath } from "../auth/constants";
 import { clearLoginMark, isLikelyLoginLoop } from "../utils/loginLoop";
 import AppLayout from "../layouts/AppLayout.vue";
-import AirportsView from "../views/AirportsView.vue";
+import AirportSubscriptionsView from "../views/AirportSubscriptionsView.vue";
 import DeviceRequestsView from "../views/DeviceRequestsView.vue";
 import EnterprisesView from "../views/EnterprisesView.vue";
 import ForbiddenView from "../views/ForbiddenView.vue";
+import LandNodesView from "../views/LandNodesView.vue";
 import LinkHealthView from "../views/LinkHealthView.vue";
 import LoginErrorView from "../views/LoginErrorView.vue";
 import LoginView from "../views/LoginView.vue";
-import NodesView from "../views/NodesView.vue";
 import PlansView from "../views/PlansView.vue";
 import SettingsView from "../views/SettingsView.vue";
+import SubscriptionDetailView from "../views/SubscriptionDetailView.vue";
 import UsersView from "../views/UsersView.vue";
 import UserDetailView from "../views/UserDetailView.vue";
 
@@ -55,8 +56,23 @@ export function createAppRouter(
           },
           // 换机申请是跨用户的待办队列，不挂在某个用户下
           { path: "device-requests", name: "DEVICE_REQUESTS", component: DeviceRequestsView },
-          { path: "airports", name: "AIRPORTS", component: AirportsView },
-          { path: "nodes", name: "NODES", component: NodesView },
+          // 线路：机场订阅（第一段）+ 落地节点（第二段）。订阅详情挂成机场订阅的子路由——
+          // 列表是空路径子路由，vue-router 据此让侧栏的「机场订阅」在详情页也保持激活
+          {
+            path: "lines/airports",
+            children: [
+              { path: "", name: "AIRPORT_SUBSCRIPTIONS", component: AirportSubscriptionsView },
+              {
+                path: "subscriptions/:id",
+                name: "SUBSCRIPTION_DETAIL",
+                component: SubscriptionDetailView,
+              },
+            ],
+          },
+          { path: "lines/land-nodes", name: "LAND_NODES", component: LandNodesView },
+          // 旧地址：节点池与机场已并入「线路」，老书签落到机场订阅页
+          { path: "nodes", redirect: { name: "AIRPORT_SUBSCRIPTIONS" } },
+          { path: "airports", redirect: { name: "AIRPORT_SUBSCRIPTIONS" } },
           { path: "plans", name: "PLANS", component: PlansView },
           { path: "enterprises", name: "ENTERPRISES", component: EnterprisesView },
           // 三期新增：故障域 × 运营商成功率矩阵 + 入口 IP 变更时间线，跨用户的整体链路视角

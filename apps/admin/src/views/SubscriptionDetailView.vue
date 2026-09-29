@@ -124,12 +124,18 @@ onMounted(load);
       </p>
       <p class="detail-facts">
         主用名额
-        <span class="fact">{{ subscription.primaryUsed }} / {{ subscription.primaryCapacity }}</span>
+        <span class="fact"
+          >{{ subscription.primaryUsed }} / {{ subscription.primaryCapacity }}</span
+        >
         · 流量 <SubscriptionQuota :subscription="subscription" /> · 到期
         <span class="fact">{{ formatDate(subscription.expiresAt) }}</span> · 最近拉取
         <span class="fact">{{ formatDateTime(subscription.fetchedAt) }}</span>
       </p>
-      <p v-if="subscription.fetchFailedSince" class="state fetch-failed-banner" data-state="DISABLED">
+      <p
+        v-if="subscription.fetchFailedSince"
+        class="state fetch-failed-banner"
+        data-state="DISABLED"
+      >
         拉取失败，自 {{ formatDateTime(subscription.fetchFailedSince) }} 起：{{
           subscription.lastFetchError ?? "原因未知"
         }}

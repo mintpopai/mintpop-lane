@@ -97,7 +97,9 @@ onMounted(load);
 <template>
   <PageHead title="落地节点">
     <template #facts>
-      共 <span class="fact">{{ landNodes.length }}</span> 个落地节点。按容量分配，已绑人数在表里直接可见。
+      共
+      <span class="fact">{{ landNodes.length }}</span>
+      个落地节点。按容量分配，已绑人数在表里直接可见。
     </template>
     <template #actions>
       <button type="button" class="admin-btn" @click="create()">新建节点</button>

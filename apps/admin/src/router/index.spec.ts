@@ -119,12 +119,38 @@ describe("路由守卫", () => {
     expect(router.currentRoute.value.path).toBe("/users/7");
   });
 
-  it("机场管理挂在 /airports 上，路由名为 AIRPORTS（侧边栏按名字跳转，名字错了会运行时报错）", async () => {
+  it("机场订阅挂在 /lines/airports，路由名 AIRPORT_SUBSCRIPTIONS（侧边栏按名字跳转）", async () => {
     const router = createRouter(adminUser);
 
-    await router.push({ name: "AIRPORTS" });
+    await router.push({ name: "AIRPORT_SUBSCRIPTIONS" });
 
-    expect(router.currentRoute.value.path).toBe("/airports");
+    expect(router.currentRoute.value.path).toBe("/lines/airports");
+  });
+
+  it("订阅详情挂在 /lines/airports/subscriptions/:id，路由名 SUBSCRIPTION_DETAIL", async () => {
+    const router = createRouter(adminUser);
+
+    await router.push({ name: "SUBSCRIPTION_DETAIL", params: { id: 100 } });
+
+    expect(router.currentRoute.value.path).toBe("/lines/airports/subscriptions/100");
+  });
+
+  it("落地节点挂在 /lines/land-nodes，路由名 LAND_NODES", async () => {
+    const router = createRouter(adminUser);
+
+    await router.push({ name: "LAND_NODES" });
+
+    expect(router.currentRoute.value.path).toBe("/lines/land-nodes");
+  });
+
+  it("旧地址 /nodes 与 /airports 重定向到机场订阅页，老书签不失效", async () => {
+    const router = createRouter(adminUser);
+
+    await router.push("/nodes");
+    expect(router.currentRoute.value.name).toBe("AIRPORT_SUBSCRIPTIONS");
+
+    await router.push("/airports");
+    expect(router.currentRoute.value.name).toBe("AIRPORT_SUBSCRIPTIONS");
   });
 
   it("企业管理挂在 /enterprises 上，路由名为 ENTERPRISES（侧边栏按名字跳转，名字错了会运行时报错）", async () => {

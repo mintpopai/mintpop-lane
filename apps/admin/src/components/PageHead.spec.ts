@@ -22,11 +22,11 @@ describe("PageHead", () => {
 
   it("标题与规模事实各就各位", () => {
     const wrapper = mount(PageHead, {
-      props: { title: "节点池" },
+      props: { title: "机场订阅" },
       slots: { facts: "共 12 个节点" },
     });
 
-    expect(wrapper.get(".page-title").text()).toBe("节点池");
+    expect(wrapper.get(".page-title").text()).toBe("机场订阅");
     expect(wrapper.get(".page-facts").text()).toBe("共 12 个节点");
   });
 });

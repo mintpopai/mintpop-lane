@@ -1,6 +1,8 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { defineComponent } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 import AppLayout from "./AppLayout.vue";
 import { useRebindStore } from "../stores/rebind";
 
@@ -60,5 +62,56 @@ describe("AppLayout", () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.get(".rail-badge").text()).toBe("3");
+  });
+});
+
+describe("AppLayout 线路分组", () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it("「线路」是分组标题，下面是机场订阅、落地节点；不再有独立的「机场」「节点池」", () => {
+    const wrapper = mount(AppLayout, {
+      global: {
+        stubs: { RouterLink: { template: "<a><slot /></a>" }, RouterView: { template: "<div />" } },
+      },
+    });
+
+    expect(wrapper.get(".rail-group-title").text()).toBe("线路");
+    expect(wrapper.findAll(".rail-group .rail-link").map((el) => el.text())).toEqual([
+      "机场订阅",
+      "落地节点",
+    ]);
+    const links = wrapper.findAll(".rail-link").map((el) => el.text());
+    expect(links).not.toContain("机场");
+    expect(links).not.toContain("节点池");
+  });
+
+  it("在订阅详情页时，侧栏仍高亮「机场订阅」（真路由，验证嵌套路由的激活规则）", async () => {
+    const Blank = defineComponent({ template: "<div />" });
+    // 与 router/index.ts 同构的最小路由表：详情是机场订阅的子路由，列表是空路径子路由
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/users", name: "USERS", component: Blank },
+        { path: "/device-requests", name: "DEVICE_REQUESTS", component: Blank },
+        {
+          path: "/lines/airports",
+          children: [
+            { path: "", name: "AIRPORT_SUBSCRIPTIONS", component: Blank },
+            { path: "subscriptions/:id", name: "SUBSCRIPTION_DETAIL", component: Blank },
+          ],
+        },
+        { path: "/lines/land-nodes", name: "LAND_NODES", component: Blank },
+        { path: "/plans", name: "PLANS", component: Blank },
+        { path: "/enterprises", name: "ENTERPRISES", component: Blank },
+        { path: "/link-health", name: "LINK_HEALTH", component: Blank },
+        { path: "/settings", name: "SETTINGS", component: Blank },
+      ],
+    });
+    await router.push("/lines/airports/subscriptions/100");
+    const wrapper = mount(AppLayout, { global: { plugins: [router] } });
+    await flushPromises();
+
+    const active = wrapper.findAll(".rail-link.router-link-active").map((el) => el.text());
+    expect(active).toEqual(["机场订阅"]);
   });
 });

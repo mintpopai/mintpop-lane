@@ -40,8 +40,16 @@ onMounted(() => rebind.refresh());
         换机申请
         <span v-if="rebind.pendingCount > 0" class="rail-badge">{{ rebind.pendingCount }}</span>
       </RouterLink>
-      <RouterLink :to="{ name: 'AIRPORTS' }" class="rail-link">机场</RouterLink>
-      <RouterLink :to="{ name: 'NODES' }" class="rail-link">节点池</RouterLink>
+      <!-- 线路分组：标题只是归类，不可点、不折叠——后台一共才八项，折叠只会多一次点击 -->
+      <div class="rail-group" role="group" aria-labelledby="rail-group-lines">
+        <p id="rail-group-lines" class="rail-group-title">线路</p>
+        <RouterLink :to="{ name: 'AIRPORT_SUBSCRIPTIONS' }" class="rail-link rail-sublink">
+          机场订阅
+        </RouterLink>
+        <RouterLink :to="{ name: 'LAND_NODES' }" class="rail-link rail-sublink">
+          落地节点
+        </RouterLink>
+      </div>
       <RouterLink :to="{ name: 'PLANS' }" class="rail-link">套餐</RouterLink>
       <RouterLink :to="{ name: 'ENTERPRISES' }" class="rail-link">企业</RouterLink>
       <RouterLink :to="{ name: 'LINK_HEALTH' }" class="rail-link">链路健康</RouterLink>

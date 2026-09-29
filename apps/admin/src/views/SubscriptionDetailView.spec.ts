@@ -95,7 +95,9 @@ afterEach(() => {
 async function render() {
   const wrapper = mount(SubscriptionDetailView, {
     attachTo: document.body,
-    global: { stubs: { RouterLink: { name: "RouterLink", props: ["to"], template: "<a><slot /></a>" } } },
+    global: {
+      stubs: { RouterLink: { name: "RouterLink", props: ["to"], template: "<a><slot /></a>" } },
+    },
   });
   await flushPromises();
   return wrapper;
@@ -257,9 +259,7 @@ describe("SubscriptionDetailView 订阅操作", () => {
   });
 
   it("订阅仍被用户引用删不掉时，用服务端那句中文，且不跳走", async () => {
-    deleteAirportSubscription.mockRejectedValueOnce(
-      new BizError(410013, "订阅仍被用户的线路引用"),
-    );
+    deleteAirportSubscription.mockRejectedValueOnce(new BizError(410013, "订阅仍被用户的线路引用"));
     const wrapper = await render();
     await headButton(wrapper, "删除订阅").trigger("click");
 

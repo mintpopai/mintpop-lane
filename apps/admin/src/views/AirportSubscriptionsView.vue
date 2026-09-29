@@ -68,9 +68,7 @@ const totalPrimaryCapacity = computed(() =>
 );
 
 const emptyText = computed(() =>
-  airports.value.length === 0
-    ? "还没有机场。先新建机场，再导入它的订阅。"
-    : "这家机场还没有订阅。",
+  airports.value.length === 0 ? "还没有机场。先新建机场，再导入它的订阅。" : "这家机场还没有订阅。",
 );
 
 function fetchFailedTitle(sub: AirportSubscriptionResponse): string {
@@ -200,12 +198,7 @@ onMounted(load);
     :empty-text="emptyText"
   >
     <template #empty-action>
-      <button
-        v-if="airports.length === 0"
-        type="button"
-        class="admin-btn"
-        @click="createAirport()"
-      >
+      <button v-if="airports.length === 0" type="button" class="admin-btn" @click="createAirport()">
         新建机场
       </button>
       <button v-else type="button" class="admin-btn-ghost" @click="importModalOpen = true">
@@ -277,7 +270,7 @@ onMounted(load);
   <SubImportModal
     v-if="importModalOpen"
     :group="null"
-    :airport-id="currentAirport?.id"
+    :default-airport-id="currentAirport?.id"
     @saved="load()"
     @close="importModalOpen = false"
   />

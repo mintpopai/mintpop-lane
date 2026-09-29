@@ -219,20 +219,23 @@ describe("SubImportModal", () => {
 });
 
 describe("SubImportModal 预选机场", () => {
-  it("带 airportId 打开时，所属机场直接选中它", async () => {
+  it("带 defaultAirportId 打开时，所属机场直接选中它", async () => {
     listAirports.mockResolvedValue([
       airport({ id: 1, name: "泰山云" }),
       airport({ id: 2, name: "某机场B" }),
     ]);
-    mount(SubImportModal, { attachTo: document.body, props: { group: null, airportId: 2 } });
+    mount(SubImportModal, { attachTo: document.body, props: { group: null, defaultAirportId: 2 } });
     await flushPromises();
 
     expect(query('button[aria-label="所属机场"]').text()).toContain("某机场B");
   });
 
-  it("airportId 在列表里找不到时不预选，留给人自己挑", async () => {
+  it("defaultAirportId 在列表里找不到时不预选，留给人自己挑", async () => {
     listAirports.mockResolvedValue([airport({ id: 1, name: "泰山云" })]);
-    mount(SubImportModal, { attachTo: document.body, props: { group: null, airportId: 99 } });
+    mount(SubImportModal, {
+      attachTo: document.body,
+      props: { group: null, defaultAirportId: 99 },
+    });
     await flushPromises();
 
     expect(query('button[aria-label="所属机场"]').text()).not.toContain("泰山云");

@@ -166,6 +166,30 @@ body {
   background: var(--color-brand-deep);
 }
 
+/* —— 导航分组：标题只归类不可点；子项缩进一档表达从属 —— */
+.rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-group-title {
+  padding: 8px 12px 2px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-secondary);
+}
+
+/* 当前页在组内时，组标题跟着加深一档，一眼看出身在哪一组 */
+.rail-group:has(.router-link-active) .rail-group-title {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.rail-sublink {
+  padding-left: 24px;
+}
+
 .rail-foot {
   margin-top: auto;
   padding-top: 16px;
@@ -245,8 +269,8 @@ body {
    四条规矩把漂移堵死：
    1. 页面级操作（新建、导入）只落页头右上；「当前所选批次」的操作（改名、删组）留在二级带右侧。
    2. 筛选分层不同形：**一级用 tab，二级用 chip**。两层都是药丸时读不出谁管辖谁。
-      一级要不要「全部」一档，看这一级切开的几堆能不能合看：节点池两跳的表格列都不同，
-      合不到一起，故没有「全部」；套餐与企业按 Agent 分，列相同，保留「全部」总览。
+      一级要不要「全部」一档，看这一级切开的几堆能不能合看：机场订阅按机场分，
+      每家带自己的信息条与操作，故没有「全部」；套餐与企业按 Agent 分，列相同，保留「全部」总览。
    3. 计数只有一条规则，因为只有这一条不会说谎：**控件上的计数 = 选它之后表格里会有多少行**
       （即已应用除它自己那一维之外的全部条件）。所以 tab 与 chip 的计数都受下拉影响——
       不这么做就会出现「chip 写着 12、表格却是空的」，看着像 bug。
@@ -281,7 +305,7 @@ body {
    chip 与下拉并排不打架：chip 是互斥的主视角（一次一个、值全摊开），
    下拉是可叠加的附加条件（值收起来、数量无上限）。语义不同、形态不同，主次读得出来。
 
-   各页一级格的去向（占了就有主了，别再抢）：节点池给跳数（两跳表格列都不同，必须一级）、
+   各页一级格的去向（占了就有主了，别再抢）：机场订阅给机场、
    套餐与企业给 Agent、用户页空着（它的主入口是搜索）。
 
    骨架由 PageHead / ViewTabs / FilterChips / DataCard 四个组件承载，各自文件头有更细的说明。 */
@@ -1618,6 +1642,20 @@ body {
   .rail-nav {
     flex-direction: row;
     gap: 4px;
+  }
+
+  /* 窄屏导航放平成一行：分组标题收起，子项回到与其他项同级 */
+  .rail-group {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .rail-group-title {
+    display: none;
+  }
+
+  .rail-sublink {
+    padding-left: 12px;
   }
 
   .rail-link.router-link-active::before {

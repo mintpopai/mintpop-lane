@@ -10,8 +10,11 @@ import Select from "./AdminSelect.vue";
 // group 为 null 表示「贴新链接建订阅」；非 null 表示对已有订阅「重新拉取」。
 // 两种模式都不再逐个勾选：服务端拉取订阅后自动导入其中的美国节点（名称带 🇺🇸 或 [US]），
 // 非美国节点与「剩余流量」这类信息条目一律略过
-// airportId：从某家机场的页签上点「导入订阅」时带过来，创建模式下作为所属机场的初值
-const props = defineProps<{ group: AirportSubscriptionResponse | null; airportId?: number }>();
+// defaultAirportId：从某家机场的页签上点「导入订阅」时带过来，创建模式下作为所属机场的初值
+const props = defineProps<{
+  group: AirportSubscriptionResponse | null;
+  defaultAirportId?: number;
+}>();
 const emit = defineEmits<{ close: []; saved: [] }>();
 
 const subUrl = ref("");
@@ -35,8 +38,11 @@ onMounted(async () => {
   try {
     airports.value = await adminApi().listAirports();
     // 只认列表里真实存在的机场，传了个不存在的 id 就当没传
-    if (props.airportId !== undefined && airports.value.some((a) => a.id === props.airportId)) {
-      airportId.value = props.airportId;
+    if (
+      props.defaultAirportId !== undefined &&
+      airports.value.some((a) => a.id === props.defaultAirportId)
+    ) {
+      airportId.value = props.defaultAirportId;
     }
   } catch (error) {
     airportsLoadFailed.value = true;
