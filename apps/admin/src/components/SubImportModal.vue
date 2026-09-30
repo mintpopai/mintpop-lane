@@ -123,7 +123,9 @@ async function submit(): Promise<void> {
 <template>
   <Modal :title="title" @close="emit('close')">
     <div class="admin-form">
-      <p class="admin-note">自动导入订阅里的美国节点（名称带 🇺🇸、[US] 或「美国」），其余节点不导入。</p>
+      <p class="admin-note">
+        自动导入订阅里的美国节点（名称带 🇺🇸、[US] 或「美国」），其余节点不导入。
+      </p>
       <template v-if="!props.group">
         <div class="admin-field">
           <label for="sub-url">订阅链接</label>
