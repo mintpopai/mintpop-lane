@@ -8,7 +8,7 @@ import Modal from "./AdminModal.vue";
 import Select from "./AdminSelect.vue";
 
 // group 为 null 表示「贴新链接建订阅」；非 null 表示对已有订阅「重新拉取」。
-// 两种模式都不再逐个勾选：服务端拉取订阅后自动导入其中的美国节点（名称带 🇺🇸 或 [US]），
+// 两种模式都不再逐个勾选：服务端拉取订阅后自动导入其中的美国节点（名称带 🇺🇸、[US] 或「美国」），
 // 非美国节点与「剩余流量」这类信息条目一律略过
 // defaultAirportId：从某家机场的页签上点「导入订阅」时带过来，创建模式下作为所属机场的初值
 const props = defineProps<{
@@ -123,7 +123,7 @@ async function submit(): Promise<void> {
 <template>
   <Modal :title="title" @close="emit('close')">
     <div class="admin-form">
-      <p class="admin-note">自动导入订阅里的美国节点（名称带 🇺🇸 或 [US]），其余节点不导入。</p>
+      <p class="admin-note">自动导入订阅里的美国节点（名称带 🇺🇸、[US] 或「美国」），其余节点不导入。</p>
       <template v-if="!props.group">
         <div class="admin-field">
           <label for="sub-url">订阅链接</label>

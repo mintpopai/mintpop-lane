@@ -73,7 +73,7 @@ async function submit(): Promise<void> {
 
         <div class="admin-field">
           <p class="admin-note">
-            按节点名匹配 🇺🇸 / [US] / 【US】 等关键词，判定为启发式，请核对——机场命名不规范时会误判，
+            按节点名匹配 🇺🇸 / [US] / 【US】 / 美国 等关键词，判定为启发式，请核对——机场命名不规范时会误判，
             不是确定结论。以下
             {{ report.usNodeCount }} 个节点被判定为美国落地：
           </p>

@@ -185,7 +185,7 @@ describe("SubImportModal", () => {
 
   it("订阅里没有美国节点时把服务端的说法原样提示，弹窗不关", async () => {
     createAirportSubscription.mockRejectedValueOnce(
-      new BizError(410049, "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入"),
+      new BizError(410049, "订阅里没有美国节点（节点名带 🇺🇸、[US] 或「美国」），未导入"),
     );
     const wrapper = mountModal(null);
     await flushPromises();
@@ -199,7 +199,7 @@ describe("SubImportModal", () => {
     await vi.waitFor(() =>
       expect(showToast).toHaveBeenCalledWith(
         "error",
-        "订阅里没有美国节点（节点名带 🇺🇸 或 [US]），未导入",
+        "订阅里没有美国节点（节点名带 🇺🇸、[US] 或「美国」），未导入",
       ),
     );
     expect(wrapper.emitted("close")).toBeFalsy();
