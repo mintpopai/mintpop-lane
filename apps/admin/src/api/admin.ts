@@ -31,6 +31,7 @@ import type {
   EnterpriseSaveRequest,
   ImageUploadResponse,
   LinkHealthResponse,
+  ClientVersionStatus,
   FrontSettingsResponse,
   FrontSettingsUpdateRequest,
   FrontRebuildStatus,
@@ -107,6 +108,10 @@ export interface AdminApi {
     region: NodeRegion,
     bandwidthPerUserMbps: number,
   ): Promise<FrontRebuildPreview>;
+  /** 服务端当前认定的桌面端最新版本（每分钟自动从更新清单拉取） */
+  getClientVersion(): Promise<ClientVersionStatus>;
+  /** 立即重新拉取一次更新清单；拉取失败不报错，看返回的 lastAttemptFailed */
+  refreshClientVersion(): Promise<ClientVersionStatus>;
 }
 
 /** 管理接口的薄封装。http 由外部传入，测试里换成假的即可 */
@@ -333,6 +338,14 @@ export function createAdminApi(http: HttpClient): AdminApi {
 
     frontRebuildStatus() {
       return http.request("/admin/front/rebuild");
+    },
+
+    getClientVersion() {
+      return http.request("/admin/client-version");
+    },
+
+    refreshClientVersion() {
+      return http.request("/admin/client-version/refresh", { method: "POST" });
     },
 
     startFrontRebuild() {

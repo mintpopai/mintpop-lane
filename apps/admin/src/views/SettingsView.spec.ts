@@ -20,6 +20,13 @@ vi.mock("../api", () => ({
     frontRebuildStatus,
     startFrontRebuild,
     previewFrontRebuild,
+    getClientVersion: vi.fn(async () => ({
+      latest: "1.2.0",
+      fetchedAt: null,
+      lastAttemptAt: null,
+      lastAttemptFailed: false,
+      manifestUrl: "https://dl.example.com/lane/latest.json",
+    })),
   }),
 }));
 vi.mock("../toast", () => ({ showToast: (...args: unknown[]) => showToast(...args) }));

@@ -664,3 +664,17 @@ export interface FrontRebuildPreview {
   availablePrimary: number;
   sufficient: boolean;
 }
+
+/** 桌面端最新版本的拉取状态：服务端据此强制落后的桌面端更新；进程内保存，重启后重新拉取 */
+export interface ClientVersionStatus {
+  /** 当前认定的最新版本，如 1.2.0；从未拉到过为 null（此时只拦不带版本号的旧客户端） */
+  latest: string | null;
+  /** 最近一次拉取成功的时刻 */
+  fetchedAt: string | null;
+  /** 最近一次尝试拉取的时刻 */
+  lastAttemptAt: string | null;
+  /** 最近一次尝试是否失败；失败时 latest 沿用上一次拉到的值 */
+  lastAttemptFailed: boolean;
+  /** 读取的更新清单地址 */
+  manifestUrl: string;
+}

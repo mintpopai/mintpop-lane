@@ -8,6 +8,7 @@ import type {
   FrontSettingsResponse,
   NodeRegion,
 } from "../api/types";
+import ClientVersionCard from "../components/ClientVersionCard.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import DataCard from "../components/DataCard.vue";
 import PageHead from "../components/PageHead.vue";
@@ -367,6 +368,9 @@ onBeforeUnmount(() => {
       <span class="fact muted">{{ formatDateTime(status.finishedAt) }}</span>
     </p>
   </section>
+
+  <!-- 与线路参数无关的独立一块：桌面端强制更新所依据的最新版本，自己加载、自己报错 -->
+  <ClientVersionCard />
 
   <ConfirmDialog
     v-if="pendingAction"

@@ -397,4 +397,15 @@ describe("createAdminApi 换机申请", () => {
       "/admin/front/rebuild/preview?region=US&bandwidthPerUserMbps=25",
     );
   });
+
+  it("桌面端版本走 /admin/client-version，手动拉取 POST /refresh", async () => {
+    const { http, request } = fakeClient();
+    const api = createAdminApi(http);
+
+    await api.getClientVersion();
+    expect(request).toHaveBeenLastCalledWith("/admin/client-version");
+
+    await api.refreshClientVersion();
+    expect(request).toHaveBeenLastCalledWith("/admin/client-version/refresh", { method: "POST" });
+  });
 });
