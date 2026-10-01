@@ -19,6 +19,10 @@ link-report:
   # 本仓 LinkReportAlertServiceTest 等用例一律 `new LinkReportProperties()` 手工构造、不走
   # Spring 绑定，改这个值不会影响它们
   alert-dedup-ttl: 36h
+client-version:
+  # 测试不许联网拉真实更新清单：指向必定拒连的本机端口，拉取失败只记日志、最新版保持未知。
+  # 要测「已知最新版」的用例自己 mock LatestClientVersionClient
+  manifest-url: "http://127.0.0.1:9/latest.json"
 spring:
   security:
     oauth2:

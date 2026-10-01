@@ -29,6 +29,7 @@ public enum BizCodeEnum {
     // 310005 曾是 SERVICE_NOT_PURCHASED、310006 曾是 SERVICE_EXPIRED（套餐拦建链），
     // 已解耦：套餐只影响席位凭据，不再拦链路。号位不复用
     DEVICE_ID_MISSING(310007, "请求缺少本机标识，请升级客户端后重试"),
+    CLIENT_VERSION_OUTDATED(310008, "客户端版本过低，请更新到最新版本"),
 
     /* 管理端 */
     NODE_NOT_FOUND(410001, "节点不存在"),

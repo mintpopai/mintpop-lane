@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.mysql.MySQLContainer;
 
@@ -26,6 +27,8 @@ import org.testcontainers.mysql.MySQLContainer;
 // 会以更高优先级盖过 application-test.yaml，测试值被真实配置污染、甚至触发联网的 OIDC 发现
 @SpringBootTest(properties = "spring.config.location=classpath:/")
 @ActiveProfiles("test")
+// 桌面端接口挂着版本闸门，MockMvc 请求默认带上「最新版」版本头，见 CurrentDesktopClientHeader
+@Import(CurrentDesktopClientHeader.class)
 public abstract class MysqlTestBase {
 
     @ServiceConnection
