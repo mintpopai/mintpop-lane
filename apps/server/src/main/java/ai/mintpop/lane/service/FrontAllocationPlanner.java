@@ -30,11 +30,20 @@ public final class FrontAllocationPlanner {
     public record Assignment(long userId, List<Slot> slots) {
     }
 
-    /** 可分配的订阅（调用方已滤掉当前地区没有节点的订阅） */
-    public record Candidate(long airportSubscriptionId, long airportId, int bandwidthMbps) {
+    /**
+     * 可分配的订阅（调用方已滤掉当前地区没有节点的订阅）。
+     * primaryEnabled 取自所属机场的「主用机场」标记：为 false 时主用容量记 0，只能落在备用位。
+     */
+    public record Candidate(long airportSubscriptionId, long airportId, int bandwidthMbps, boolean primaryEnabled) {
 
+        /** 默认主用机场，与 airport.primary_enabled 的表默认值一致 */
+        public Candidate(long airportSubscriptionId, long airportId, int bandwidthMbps) {
+            this(airportSubscriptionId, airportId, bandwidthMbps, true);
+        }
+
+        /** 主用容量；非主用机场恒为 0，plan() 的主用过滤与重算预检的名额累加因此走同一条规则 */
         public int primaryCapacity(int bandwidthPerUserMbps) {
-            return FrontAllocationPlanner.primaryCapacity(bandwidthMbps, bandwidthPerUserMbps);
+            return primaryEnabled ? FrontAllocationPlanner.primaryCapacity(bandwidthMbps, bandwidthPerUserMbps) : 0;
         }
     }
 
@@ -60,7 +69,8 @@ public final class FrontAllocationPlanner {
 
     /**
      * 给一个用户算出有序列表。others 必须排除该用户自己（重算时他的旧列表不能挡住自己）。
-     * 返回空列表表示主用名额全满；可用机场不足 settings.airportsPerUser() 家时列表短于它。
+     * 第 0 位只从主用机场的订阅里挑，备用位从全部候选里挑。
+     * 返回空列表表示主用名额全满（或没有主用机场）；可用机场不足 settings.airportsPerUser() 家时列表短于它。
      */
     public static List<Slot> plan(List<Assignment> others, List<Candidate> candidates, FrontSettings settings) {
         List<Slot> order = new ArrayList<>();

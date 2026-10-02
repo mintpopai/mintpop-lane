@@ -113,4 +113,21 @@ class FrontRebuildRunnerTest extends MysqlTestBase {
         assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 200)))
                 .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 1, false));
     }
+
+    @Test
+    @DisplayName("非主用机场不计主用名额：预检只算主用机场；重算后它只出现在备用位")
+    void nonPrimaryAirportOnlyBackup() {
+        Long a = usableSubscription("A", 300);
+        Long b = usableSubscription("B", 3000);
+        fixtures.setAirportPrimaryEnabled(airportSubscriptionRepository.findById(b).orElseThrow().getAirportId(), false);
+        List<Long> users = List.of(activeUser("u1"), activeUser("u2"));
+
+        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 20)))
+                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true));
+
+        runner.applyAll();
+        for (Long u : users) {
+            assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(u)).containsExactly(a, b);
+        }
+    }
 }

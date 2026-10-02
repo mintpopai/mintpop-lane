@@ -62,7 +62,7 @@ const currentAirportId = computed<number>({
 const tabOptions = computed(() =>
   airports.value.map((a) => ({
     value: a.id,
-    label: a.name,
+    label: a.primaryEnabled ? a.name : `${a.name}（仅备用）`,
     // 计数用本地分组的结果，与切过去之后表里的行数同一口径
     count: subscriptions.value.filter((s) => s.airportId === a.id).length,
   })),
@@ -177,11 +177,19 @@ onMounted(load);
         <span v-if="currentAirport.remark" class="muted">
           · <TruncatedText :text="currentAirport.remark" />
         </span>
-        <span class="muted">
+        <span v-if="currentAirport.primaryEnabled" class="muted">
           · 主用名额
           <span class="fact">
             {{ currentAirport.primaryUsed }} / {{ currentAirport.primaryCapacity }}
           </span>
+        </span>
+        <span v-else class="muted">
+          · 仅备用，不分配主用
+          <template v-if="currentAirport.primaryUsed > 0">
+            · 仍有
+            <span class="fact">{{ currentAirport.primaryUsed }}</span>
+            人主用在此，下次分配或全体重算时挪走
+          </template>
         </span>
       </span>
       <span class="spacer" />

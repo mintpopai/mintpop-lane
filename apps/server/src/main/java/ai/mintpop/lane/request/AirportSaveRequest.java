@@ -1,6 +1,7 @@
 package ai.mintpop.lane.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -18,4 +19,8 @@ public class AirportSaveRequest {
 
     @Size(max = 255)
     private String remark;
+
+    /** 是否主用机场：false 时其订阅只当备用，不会被分配为主用 */
+    @NotNull
+    private Boolean primaryEnabled;
 }

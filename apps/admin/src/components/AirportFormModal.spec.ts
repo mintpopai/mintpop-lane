@@ -23,6 +23,8 @@ function submitButton(): DOMWrapper<Element> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom 不实现 scrollIntoView，AdminSelect 展开面板定位高亮项时会调它
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -41,6 +43,7 @@ describe("AirportFormModal", () => {
         name: "泰山云",
         websiteUrl: "https://taishan.example.com",
         remark: "",
+        primaryEnabled: true,
       }),
     );
     expect(wrapper.emitted("saved")).toBeTruthy();
@@ -52,5 +55,42 @@ describe("AirportFormModal", () => {
 
     expect(showToast).toHaveBeenCalledWith("error", "填写机场名称");
     expect(createAirport).not.toHaveBeenCalled();
+  });
+
+  it("编辑：回显「仅备用」，改为主用机场后提交 primaryEnabled=true", async () => {
+    mount(AirportFormModal, {
+      attachTo: document.body,
+      props: {
+        editing: {
+          id: 7,
+          name: "备用云",
+          websiteUrl: null,
+          remark: null,
+          primaryEnabled: false,
+          subscriptionCount: 1,
+          primaryUsed: 0,
+          primaryCapacity: 0,
+          createdAt: "2026-10-01T00:00:00Z",
+          updatedAt: "2026-10-01T00:00:00Z",
+        },
+      },
+    });
+    expect(query("#airport-primary").text()).toContain("仅备用");
+
+    await query("#airport-primary").trigger("click");
+    const option = Array.from(document.querySelectorAll('[role="option"]')).find((el) =>
+      el.textContent?.includes("主用机场"),
+    );
+    await new DOMWrapper(option!).trigger("click");
+    await submitButton().trigger("click");
+
+    await vi.waitFor(() =>
+      expect(updateAirport).toHaveBeenCalledWith(7, {
+        name: "备用云",
+        websiteUrl: "",
+        remark: "",
+        primaryEnabled: true,
+      }),
+    );
   });
 });

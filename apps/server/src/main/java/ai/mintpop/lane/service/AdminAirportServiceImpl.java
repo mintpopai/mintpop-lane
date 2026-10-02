@@ -95,6 +95,7 @@ public class AdminAirportServiceImpl implements AdminAirportService {
         airport.setName(request.getName());
         airport.setWebsiteUrl(blankToNull(request.getWebsiteUrl()));
         airport.setRemark(blankToNull(request.getRemark()));
+        airport.setPrimaryEnabled(request.getPrimaryEnabled());
     }
 
     private static String blankToNull(String value) {
@@ -103,13 +104,15 @@ public class AdminAirportServiceImpl implements AdminAirportService {
 
     private AirportResponse toResponse(Airport airport, List<AirportSubscriptionDto> subscriptions,
                                        Map<Long, Long> primaryUsedBySubscription, FrontSettings settings) {
-        int capacity = subscriptions.stream()
-                .mapToInt(s -> settings.primaryCapacity(s.getBandwidthMbps()))
-                .sum();
+        boolean primaryEnabled = Boolean.TRUE.equals(airport.getPrimaryEnabled());
+        // 非主用机场不承接主用，名额记 0；取消主用前已分配上来的人仍计入 used，显示为超额提示待重算
+        int capacity = primaryEnabled
+                ? subscriptions.stream().mapToInt(s -> settings.primaryCapacity(s.getBandwidthMbps())).sum()
+                : 0;
         int used = subscriptions.stream()
                 .mapToInt(s -> primaryUsedBySubscription.getOrDefault(s.getId(), 0L).intValue())
                 .sum();
         return new AirportResponse(airport.getId(), airport.getName(), airport.getWebsiteUrl(), airport.getRemark(),
-                subscriptions.size(), used, capacity, airport.getCreatedAt(), airport.getUpdatedAt());
+                primaryEnabled, subscriptions.size(), used, capacity, airport.getCreatedAt(), airport.getUpdatedAt());
     }
 }

@@ -7,6 +7,7 @@ import ai.mintpop.lane.enumeration.BizCodeEnum;
 import ai.mintpop.lane.enumeration.NodeRegion;
 import ai.mintpop.lane.enumeration.NodeRole;
 import ai.mintpop.lane.exception.BizException;
+import ai.mintpop.lane.repository.AirportRepository;
 import ai.mintpop.lane.repository.AirportSubscriptionRepository;
 import ai.mintpop.lane.repository.ProxyNodeRepository;
 import ai.mintpop.lane.repository.UserFrontSubscriptionRepository;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
 @Service
 public class FrontRebuildRunner {
 
+    private final AirportRepository airportRepository;
     private final AirportSubscriptionRepository airportSubscriptionRepository;
     private final ProxyNodeRepository nodeRepository;
     private final UserRepository userRepository;
@@ -43,9 +45,11 @@ public class FrontRebuildRunner {
     private final SystemSettingService systemSettingService;
     private final Clock clock;
 
-    public FrontRebuildRunner(AirportSubscriptionRepository airportSubscriptionRepository, ProxyNodeRepository nodeRepository,
+    public FrontRebuildRunner(AirportRepository airportRepository,
+                              AirportSubscriptionRepository airportSubscriptionRepository, ProxyNodeRepository nodeRepository,
                               UserRepository userRepository, UserFrontSubscriptionRepository userFrontSubscriptionRepository,
                               SystemSettingService systemSettingService, Clock clock) {
+        this.airportRepository = airportRepository;
         this.airportSubscriptionRepository = airportSubscriptionRepository;
         this.nodeRepository = nodeRepository;
         this.userRepository = userRepository;
@@ -91,8 +95,9 @@ public class FrontRebuildRunner {
         return new FrontRebuildPreview(required, available, available >= required);
     }
 
-    /** 候选 = 当前地区至少有一个节点的订阅 */
+    /** 候选 = 当前地区至少有一个节点的订阅；带上所属机场的主用标记，非主用机场的订阅不计主用名额 */
     private List<Candidate> candidates(List<AirportSubscriptionDto> subscriptions, NodeRegion region) {
+        Set<Long> primaryAirports = airportRepository.findPrimaryEnabledIds();
         Set<Long> withNodes = nodeRepository.findAll(NodeRole.FRONT).stream()
                 .filter(node -> region.matches(node.getSourceName()))
                 .map(ProxyNodeDto::getAirportSubscriptionId)
@@ -100,7 +105,8 @@ public class FrontRebuildRunner {
                 .collect(Collectors.toSet());
         return subscriptions.stream()
                 .filter(s -> withNodes.contains(s.getId()))
-                .map(s -> new Candidate(s.getId(), s.getAirportId(), s.getBandwidthMbps()))
+                .map(s -> new Candidate(s.getId(), s.getAirportId(), s.getBandwidthMbps(),
+                        primaryAirports.contains(s.getAirportId())))
                 .toList();
     }
 }

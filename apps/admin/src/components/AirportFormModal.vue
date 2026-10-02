@@ -5,6 +5,7 @@ import { BizError } from "../api/http";
 import type { AirportResponse } from "../api/types";
 import { showToast } from "../toast";
 import Modal from "./AdminModal.vue";
+import Select from "./AdminSelect.vue";
 
 const props = defineProps<{ editing: AirportResponse | null }>();
 // 弹窗由父组件 v-if 挂载/卸载，打开即初始化表单
@@ -13,6 +14,12 @@ const emit = defineEmits<{ close: []; saved: [] }>();
 const name = ref(props.editing?.name ?? "");
 const websiteUrl = ref(props.editing?.websiteUrl ?? "");
 const remark = ref(props.editing?.remark ?? "");
+// 新建默认主用机场，与库表默认值一致
+const primaryEnabled = ref(props.editing?.primaryEnabled ?? true);
+const primaryOptions = [
+  { value: true, label: "主用机场" },
+  { value: false, label: "仅备用" },
+];
 const submitting = ref(false);
 
 const title = computed(() => (props.editing ? `编辑机场：${props.editing.name}` : "新建机场"));
@@ -28,6 +35,7 @@ async function submit(): Promise<void> {
       name: name.value.trim(),
       websiteUrl: websiteUrl.value.trim(),
       remark: remark.value.trim(),
+      primaryEnabled: primaryEnabled.value,
     };
     if (props.editing) {
       await adminApi().updateAirport(props.editing.id, payload);
@@ -63,6 +71,19 @@ async function submit(): Promise<void> {
           class="admin-input fact"
           placeholder="官网或用户中心地址，可空"
         />
+      </div>
+      <div class="admin-field">
+        <label for="airport-primary">用途</label>
+        <Select
+          id="airport-primary"
+          v-model="primaryEnabled"
+          :options="primaryOptions"
+          aria-label="用途"
+        />
+        <p class="admin-note">
+          只有主用机场的订阅会被分配为用户的主用；仅备用的机场只出现在备用位。改为仅备用后，
+          已在其上的主用用户不会自动迁走，下次分配或全体重算时才挪。
+        </p>
       </div>
       <div class="admin-field">
         <label for="airport-remark">备注</label>

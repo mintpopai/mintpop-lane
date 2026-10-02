@@ -189,8 +189,8 @@ describe("createAdminApi", () => {
     await api.importAirportSubscription(3);
     await api.deleteAirportSubscription(3);
     await api.listAirports();
-    await api.createAirport({ name: "泰山云", websiteUrl: "", remark: "" });
-    await api.updateAirport(1, { name: "泰山", websiteUrl: "", remark: "" });
+    await api.createAirport({ name: "泰山云", websiteUrl: "", remark: "", primaryEnabled: true });
+    await api.updateAirport(1, { name: "泰山", websiteUrl: "", remark: "", primaryEnabled: false });
     await api.deleteAirport(1);
     await api.allocateUserFront(5);
     await api.clearUserFront(5);

@@ -97,6 +97,23 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("非主用机场不会被分配为主用：带宽更大也只排在备用位；只剩它时报 410050")
+    void nonPrimaryAirportNeverPrimary() {
+        Long a = usableSubscription("A", 20);           // 容量 1
+        Long b = usableSubscription("B", 3000);
+        fixtures.setAirportPrimaryEnabled(airportSubscriptionRepository.findById(b).orElseThrow().getAirportId(), false);
+        Long first = fixtures.createUser("u1", null);
+        Long second = fixtures.createUser("u2", null);
+
+        assertThat(frontSubscriptionService.allocate(first))
+                .extracting(FrontSubscriptionBrief::airportSubscriptionId).containsExactly(a, b);
+        // A 满了，B 虽有余量但不是主用机场
+        assertThatThrownBy(() -> frontSubscriptionService.allocate(second))
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getBizCode().getCode()).isEqualTo(410050));
+    }
+
+    @Test
     @DisplayName("FRONT 节点没有状态：节点被标成 DISABLED 的订阅照样是候选；真正没有节点的订阅才跳过")
     void disabledFrontNodesStillUsableButEmptySubscriptionSkipped() {
         Long airportA = fixtures.createAirport("A");

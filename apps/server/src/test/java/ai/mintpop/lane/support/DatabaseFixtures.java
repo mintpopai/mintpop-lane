@@ -196,6 +196,11 @@ public class DatabaseFixtures {
         return airportRepository.create(airport);
     }
 
+    /** 设置机场的「主用机场」标记（建机场时取表默认值：主用） */
+    public void setAirportPrimaryEnabled(Long airportId, boolean primaryEnabled) {
+        jdbc.update("UPDATE airport SET primary_enabled = ? WHERE id = ?", primaryEnabled, airportId);
+    }
+
     /** 在指定机场下建一个机场订阅（订阅链接为占位值），返回 id */
     public Long createAirportSubscription(Long airportId, String name, int bandwidthMbps) {
         AirportSubscriptionDto subscription = new AirportSubscriptionDto();

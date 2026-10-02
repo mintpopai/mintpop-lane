@@ -67,9 +67,11 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
                 .collect(Collectors.toMap(AirportSubscriptionDto::getId, AirportSubscriptionDto::getAirportId));
 
         Set<Long> usable = usableSubscriptionIds();
+        Set<Long> primaryAirports = airportRepository.findPrimaryEnabledIds();
         List<Candidate> candidates = subscriptions.stream()
                 .filter(s -> usable.contains(s.getId()))
-                .map(s -> new Candidate(s.getId(), s.getAirportId(), s.getBandwidthMbps()))
+                .map(s -> new Candidate(s.getId(), s.getAirportId(), s.getBandwidthMbps(),
+                        primaryAirports.contains(s.getAirportId())))
                 .toList();
 
         List<Assignment> others = userFrontSubscriptionRepository.findAllGroupedByUser().entrySet().stream()

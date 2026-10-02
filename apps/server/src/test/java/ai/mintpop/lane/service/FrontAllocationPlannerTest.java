@@ -178,4 +178,28 @@ class FrontAllocationPlannerTest {
         assertThat(planned.get(2L)).hasSize(1);
         assertThat(planned.get(3L)).isEmpty();
     }
+
+    @Test
+    @DisplayName("非主用机场：主用位跳过它（哪怕它负载最低），备用位仍可选它")
+    void nonPrimaryAirportOnlyServesAsBackup() {
+        // A 是唯一的主用机场且已有 10 人主用；B、C 空着但不是主用机场
+        List<Assignment> others = java.util.stream.LongStream.rangeClosed(1, 10)
+                .mapToObj(id -> user(id, a1())).toList();
+        List<Candidate> candidates = List.of(
+                new Candidate(A1, A, 300, true), new Candidate(B1, B, 300, false), new Candidate(C1, C, 300, false));
+
+        List<Slot> planned = FrontAllocationPlanner.plan(others, candidates, SETTINGS);
+
+        assertThat(planned).hasSize(3);
+        assertThat(planned.get(0)).isEqualTo(a1());
+        assertThat(planned.subList(1, 3)).containsExactlyInAnyOrder(b1(), c1());
+    }
+
+    @Test
+    @DisplayName("只有非主用机场时选不出主用，返回空列表；其主用容量记 0")
+    void noPrimaryAirportYieldsEmpty() {
+        Candidate backupOnly = new Candidate(A1, A, 300, false);
+        assertThat(backupOnly.primaryCapacity(20)).isZero();
+        assertThat(FrontAllocationPlanner.plan(List.of(), List.of(backupOnly), SETTINGS)).isEmpty();
+    }
 }

@@ -32,6 +32,9 @@ public class Airport {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String remark;
 
+    /** 是否主用机场：true 其订阅可被分配为用户的主用（第 0 位），false 只当备用 */
+    private Boolean primaryEnabled;
+
     /** 由数据库默认值维护，应用永不写入 */
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant createdAt;

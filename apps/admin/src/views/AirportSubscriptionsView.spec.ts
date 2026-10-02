@@ -34,6 +34,7 @@ function airport(overrides: Partial<AirportResponse> = {}): AirportResponse {
     name: "泰山云",
     websiteUrl: "https://taishan.example.com",
     remark: "老牌机场",
+    primaryEnabled: true,
     subscriptionCount: 2,
     primaryUsed: 7,
     primaryCapacity: 30,
@@ -184,6 +185,31 @@ describe("AirportSubscriptionsView 页头与机场信息条", () => {
     expect(bar.find('a[href="https://taishan.example.com"]').exists()).toBe(true);
     expect(bar.text()).toContain("老牌机场");
     expect(bar.text()).toContain("7 / 30");
+  });
+
+  it("非主用机场：tab 标「仅备用」，信息条不给名额、提示仍在此的主用人数", async () => {
+    listAirports.mockResolvedValue([
+      AIRPORTS[0],
+      airport({
+        id: 2,
+        name: "某机场B",
+        primaryEnabled: false,
+        primaryUsed: 3,
+        primaryCapacity: 0,
+      }),
+    ]);
+    route.query = { airport: "2" };
+    const wrapper = await render();
+
+    expect(wrapper.findComponent({ name: "ViewTabs" }).props("options")[1]).toEqual({
+      value: 2,
+      label: "某机场B（仅备用）",
+      count: 1,
+    });
+    const bar = wrapper.get(".airport-bar").text().replace(/\s+/g, " ");
+    expect(bar).toContain("仅备用，不分配主用");
+    expect(bar).toContain("仍有 3 人主用在此");
+    expect(bar).not.toContain("主用名额");
   });
 
   it("「导入订阅」打开导入弹窗并预选当前机场", async () => {

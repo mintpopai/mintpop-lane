@@ -396,10 +396,12 @@ export interface AirportResponse {
   name: string;
   websiteUrl: string | null;
   remark: string | null;
+  /** 是否主用机场：false 时其订阅只当备用，不会被分配为主用 */
+  primaryEnabled: boolean;
   subscriptionCount: number;
   /** 各订阅主用人数之和 */
   primaryUsed: number;
-  /** 各订阅主用名额之和：带宽 ÷ 每人带宽（全局配置）向下取整 */
+  /** 各订阅主用名额之和：带宽 ÷ 每人带宽（全局配置）向下取整；非主用机场恒为 0 */
   primaryCapacity: number;
   createdAt: string;
   updatedAt: string;
@@ -409,6 +411,7 @@ export interface AirportSaveRequest {
   name: string;
   websiteUrl: string;
   remark: string;
+  primaryEnabled: boolean;
 }
 
 /** 管理端的机场订阅视图。订阅链接只回显打码形态，token 不出现 */

@@ -20,6 +20,7 @@ function airport(overrides: Partial<AirportResponse> = {}): AirportResponse {
     name: "泰山云",
     websiteUrl: null,
     remark: null,
+    primaryEnabled: true,
     subscriptionCount: 1,
     primaryUsed: 0,
     primaryCapacity: 0,

@@ -28,6 +28,7 @@ import java.net.URI;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -121,6 +122,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
         FrontSettings settings = systemSettingService.frontSettings();
         Map<Long, String> airportNames = airportRepository.findAll().stream()
                 .collect(Collectors.toMap(Airport::getId, Airport::getName));
+        // 非主用机场的订阅不承接主用，名额记 0，与分配器口径一致
+        Set<Long> primaryAirports = airportRepository.findPrimaryEnabledIds();
         Map<Long, Long> primaryUsedBySubscription = userFrontSubscriptionRepository.countPrimaryByAirportSubscription();
         return airportSubscriptionRepository.findAll().stream()
                 .map(group -> new AirportSubscriptionResponse(
@@ -131,7 +134,8 @@ public class AdminAirportSubscriptionServiceImpl implements AdminAirportSubscrip
                         group.getAccount(),
                         group.getBandwidthMbps(),
                         primaryUsedBySubscription.getOrDefault(group.getId(), 0L).intValue(),
-                        settings.primaryCapacity(group.getBandwidthMbps()),
+                        primaryAirports.contains(group.getAirportId())
+                                ? settings.primaryCapacity(group.getBandwidthMbps()) : 0,
                         maskUrl(group.getSubUrl()),
                         nodeRepository.countByAirportSubscriptionId(group.getId()),
                         group.getRemark(),

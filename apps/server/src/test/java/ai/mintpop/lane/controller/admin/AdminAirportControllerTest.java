@@ -73,6 +73,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
         body.put("name", name);
         body.put("websiteUrl", "https://taishan.example.com");
         body.put("remark", "主力");
+        body.put("primaryEnabled", true);
         return body;
     }
 
@@ -91,6 +92,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
         mockMvc.perform(get("/api/admin/airports").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data[0].name").value("泰山云"))
                 .andExpect(jsonPath("$.data[0].websiteUrl").value("https://taishan.example.com"))
+                .andExpect(jsonPath("$.data[0].primaryEnabled").value(true))
                 .andExpect(jsonPath("$.data[0].subscriptionCount").value(2))
                 .andExpect(jsonPath("$.data[0].primaryUsed").value(1))
                 // 300/20=15，110/20=5（向下取整）
@@ -123,6 +125,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
         clearBody.put("name", "泰山云");
         clearBody.put("websiteUrl", null);
         clearBody.put("remark", null);
+        clearBody.put("primaryEnabled", true);
         mockMvc.perform(put("/api/admin/airports/" + id).header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON).content(json(clearBody)))
                 .andExpect(jsonPath("$.code").value(0));
@@ -149,5 +152,41 @@ class AdminAirportControllerTest extends MysqlTestBase {
                 .andExpect(jsonPath("$.code").value(0));
         mockMvc.perform(delete("/api/admin/airports/" + id).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410051));
+    }
+
+    @Test
+    @DisplayName("取消主用机场：库里落 false，机场与订阅的主用容量都记 0，已分配的主用人数照常计入")
+    void togglePrimaryEnabled() throws Exception {
+        Long id = fixtures.createAirport("泰山云");
+        Long subId = fixtures.createAirportSubscription(id, "ts-01", 300);
+        Long userId = fixtures.createUser("logto-front-user", null);
+        userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId));
+
+        Map<String, Object> body = body("泰山云");
+        body.put("primaryEnabled", false);
+        mockMvc.perform(put("/api/admin/airports/" + id).header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(0));
+
+        assertThat(airportRepository.findById(id).orElseThrow().getPrimaryEnabled()).isFalse();
+        mockMvc.perform(get("/api/admin/airports").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].primaryEnabled").value(false))
+                .andExpect(jsonPath("$.data[0].primaryUsed").value(1))
+                .andExpect(jsonPath("$.data[0].primaryCapacity").value(0));
+        // 订阅级名额同口径记 0
+        mockMvc.perform(get("/api/admin/airport-subscriptions").header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data[0].primaryUsed").value(1))
+                .andExpect(jsonPath("$.data[0].primaryCapacity").value(0));
+    }
+
+    @Test
+    @DisplayName("新建机场未传 primaryEnabled 报参数错误")
+    void primaryEnabledRequired() throws Exception {
+        Map<String, Object> body = body("泰山云");
+        body.remove("primaryEnabled");
+        mockMvc.perform(post("/api/admin/airports").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON).content(json(body)))
+                .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.not(0)));
+        assertThat(airportRepository.findAll()).isEmpty();
     }
 }
