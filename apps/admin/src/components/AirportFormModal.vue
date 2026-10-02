@@ -5,7 +5,7 @@ import { BizError } from "../api/http";
 import type { AirportResponse } from "../api/types";
 import { showToast } from "../toast";
 import Modal from "./AdminModal.vue";
-import Select from "./AdminSelect.vue";
+import AdminSwitch from "./AdminSwitch.vue";
 
 const props = defineProps<{ editing: AirportResponse | null }>();
 // 弹窗由父组件 v-if 挂载/卸载，打开即初始化表单
@@ -16,10 +16,13 @@ const websiteUrl = ref(props.editing?.websiteUrl ?? "");
 const remark = ref(props.editing?.remark ?? "");
 // 新建默认主用机场，与库表默认值一致
 const primaryEnabled = ref(props.editing?.primaryEnabled ?? true);
-const primaryOptions = [
-  { value: true, label: "主用机场" },
-  { value: false, label: "仅备用" },
-];
+const primaryNote = computed(
+  () =>
+    (primaryEnabled.value
+      ? "开启：订阅可被分配为用户的主用，也可当备用。"
+      : "关闭：备用机场，订阅只出现在备用位，不分配主用。") +
+    "关闭后已在其上的主用用户不会自动迁走，下次分配或全体重算时才挪。",
+);
 const submitting = ref(false);
 
 const title = computed(() => (props.editing ? `编辑机场：${props.editing.name}` : "新建机场"));
@@ -72,18 +75,13 @@ async function submit(): Promise<void> {
           placeholder="官网或用户中心地址，可空"
         />
       </div>
+      <!-- 主用/备用只有两态，用开关：一眼看出开没开，比下拉少一次点开 -->
       <div class="admin-field">
-        <label for="airport-primary">用途</label>
-        <Select
-          id="airport-primary"
-          v-model="primaryEnabled"
-          :options="primaryOptions"
-          aria-label="用途"
-        />
-        <p class="admin-note">
-          只有主用机场的订阅会被分配为用户的主用；仅备用的机场只出现在备用位。改为仅备用后，
-          已在其上的主用用户不会自动迁走，下次分配或全体重算时才挪。
-        </p>
+        <div class="switch-row">
+          <label for="airport-primary">主用机场</label>
+          <AdminSwitch id="airport-primary" v-model="primaryEnabled" />
+        </div>
+        <p class="admin-note">{{ primaryNote }}</p>
       </div>
       <div class="admin-field">
         <label for="airport-remark">备注</label>
@@ -104,3 +102,12 @@ async function submit(): Promise<void> {
     </template>
   </Modal>
 </template>
+
+<style scoped>
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+</style>

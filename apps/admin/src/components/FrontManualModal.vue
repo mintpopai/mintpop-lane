@@ -78,7 +78,7 @@ const primaryOverflow = computed(() => {
   return `「${sub.airportName} · ${sub.name}」主用名额已满（${usedByOthers(sub)}/${sub.primaryCapacity}），手动分配仍会占用，名额将超额。`;
 });
 
-/** 主用行原先选的机场被改成仅备用、或订阅已无节点时，下拉里没有它，提示重选 */
+/** 主用行原先选的机场被改成备用机场、或订阅已无节点时，下拉里没有它，提示重选 */
 const staleRows = computed(() =>
   rows.value
     .map((id, i) => ({ id, i }))
@@ -196,7 +196,7 @@ onMounted(load);
       <p v-if="staleRows.length > 0" class="admin-note warn">
         {{
           staleRows.join("、")
-        }}原先的订阅已不可选（所属机场改为仅备用、订阅没有节点或与其它行同一机场），请重选。
+        }}原先的订阅已不可选（所属机场改为备用机场、订阅没有节点或与其它行同一机场），请重选。
       </p>
     </div>
 

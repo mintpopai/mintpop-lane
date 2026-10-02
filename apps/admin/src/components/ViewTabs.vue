@@ -14,6 +14,8 @@ interface Option {
   value: T;
   label: string;
   count?: number;
+  /** 名字旁的小标签，标出这一类的属性（如「备用」机场）；不进名字本身，免得括号挤在名字里 */
+  tag?: string;
 }
 
 defineProps<{
@@ -38,7 +40,16 @@ const emit = defineEmits<{ "update:modelValue": [value: T] }>();
       @click="emit('update:modelValue', option.value)"
     >
       {{ option.label }}
+      <span v-if="option.tag" class="pill outline tab-tag">{{ option.tag }}</span>
       <span v-if="option.count !== undefined" class="fact">{{ option.count }}</span>
     </button>
   </nav>
 </template>
+
+<style scoped>
+/* 页签里的标签收小一号，不抢名字 */
+.tab-tag {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+</style>

@@ -57,7 +57,7 @@ describe("AirportFormModal", () => {
     expect(createAirport).not.toHaveBeenCalled();
   });
 
-  it("编辑：回显「仅备用」，改为主用机场后提交 primaryEnabled=true", async () => {
+  it("编辑：备用机场的开关回显为关，打开后提交 primaryEnabled=true", async () => {
     mount(AirportFormModal, {
       attachTo: document.body,
       props: {
@@ -75,13 +75,11 @@ describe("AirportFormModal", () => {
         },
       },
     });
-    expect(query("#airport-primary").text()).toContain("仅备用");
+    expect(query("#airport-primary").attributes("aria-checked")).toBe("false");
+    expect(document.body.textContent).toContain("关闭：备用机场");
 
     await query("#airport-primary").trigger("click");
-    const option = Array.from(document.querySelectorAll('[role="option"]')).find((el) =>
-      el.textContent?.includes("主用机场"),
-    );
-    await new DOMWrapper(option!).trigger("click");
+    expect(query("#airport-primary").attributes("aria-checked")).toBe("true");
     await submitButton().trigger("click");
 
     await vi.waitFor(() =>

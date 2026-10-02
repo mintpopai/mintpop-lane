@@ -187,7 +187,7 @@ describe("AirportSubscriptionsView 页头与机场信息条", () => {
     expect(bar.text()).toContain("7 / 30");
   });
 
-  it("非主用机场：tab 标「仅备用」，信息条不给名额、提示仍在此的主用人数", async () => {
+  it("备用机场：tab 带「备用」标签，信息条标「备用机场」、不给名额、提示仍在此的主用人数", async () => {
     listAirports.mockResolvedValue([
       AIRPORTS[0],
       airport({
@@ -203,11 +203,12 @@ describe("AirportSubscriptionsView 页头与机场信息条", () => {
 
     expect(wrapper.findComponent({ name: "ViewTabs" }).props("options")[1]).toEqual({
       value: 2,
-      label: "某机场B（仅备用）",
+      label: "某机场B",
+      tag: "备用",
       count: 1,
     });
+    expect(wrapper.get(".airport-bar .pill").text()).toBe("备用机场");
     const bar = wrapper.get(".airport-bar").text().replace(/\s+/g, " ");
-    expect(bar).toContain("仅备用，不分配主用");
     expect(bar).toContain("仍有 3 人主用在此");
     expect(bar).not.toContain("主用名额");
   });

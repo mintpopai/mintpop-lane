@@ -121,7 +121,7 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
         }
         AirportSubscriptionDto primary = subs.get(ids.get(0));
         if (!airportRepository.findPrimaryEnabledIds().contains(primary.getAirportId())) {
-            throw new BizException(BizCodeEnum.FRONT_MANUAL_INVALID, "主用所在机场是「仅备用」，不能当主用");
+            throw new BizException(BizCodeEnum.FRONT_MANUAL_INVALID, "主用所在机场是备用机场，不能当主用");
         }
 
         userFrontSubscriptionRepository.replaceForUser(userId, ids, true);
