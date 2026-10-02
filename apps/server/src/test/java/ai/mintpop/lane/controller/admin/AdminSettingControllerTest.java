@@ -38,7 +38,7 @@ class AdminSettingControllerTest extends MysqlTestBase {
     @Autowired private AirportRepository airportRepository;
     @Autowired private AirportSubscriptionRepository airportSubscriptionRepository;
     @Autowired private SessionTokenService sessionTokenService;
-    // 保存设置会触发全体重算；这里只测设置读写，重算由专门的测试覆盖
+    // 只测设置读写；保存与重算的关系、重算本身由 AdminFrontRebuildControllerTest 等覆盖
     @MockitoBean private FrontRebuildService frontRebuildService;
     private Long adminId;
 

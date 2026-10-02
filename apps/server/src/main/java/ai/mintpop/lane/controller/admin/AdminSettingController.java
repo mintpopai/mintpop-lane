@@ -41,18 +41,18 @@ public class AdminSettingController {
         return ApiResponse.success(toResponse(systemSettingService.frontSettings()));
     }
 
-    /** 正在重算时拒绝改设置（改了也不会被这次重算用到，反而让人误以为生效了）；值变了才触发重算 */
+    /**
+     * 只保存配置，不触发全体重算：存量用户的线路只在管理员手动点「重算全部线路」时整体重排，
+     * 新值在那之前只影响之后的单人分配。正在重算时拒绝改设置，免得这次重算读到一半新一半旧的值
+     */
     @PutMapping
     public ApiResponse<FrontSettingsResponse> update(@Valid @RequestBody FrontSettingsUpdateRequest request) {
         if (frontRebuildService.status().phase() == FrontRebuildPhase.RUNNING) {
             throw new BizException(BizCodeEnum.FRONT_REBUILD_RUNNING);
         }
-        SystemSettingService.FrontSettingsChange change = systemSettingService.updateFrontSettings(request);
+        FrontSettings current = systemSettingService.updateFrontSettings(request);
         renderCache.evictAll();
-        if (change.changed()) {
-            frontRebuildService.start();
-        }
-        return ApiResponse.success(toResponse(change.current()));
+        return ApiResponse.success(toResponse(current));
     }
 
     static FrontSettingsResponse toResponse(FrontSettings s) {

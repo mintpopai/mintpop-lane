@@ -89,8 +89,8 @@ class AdminFrontRebuildControllerTest extends MysqlTestBase {
     }
 
     @Test
-    @DisplayName("保存设置：值变了触发 start；值没变不触发；正在跑时 PUT 报 410055 且不保存")
-    void settingsUpdateTriggersRebuildOnlyWhenChanged() throws Exception {
+    @DisplayName("保存设置：值变没变都不触发 start（整体重分配只走手动按钮）；正在跑时 PUT 报 410055 且不保存")
+    void settingsUpdateNeverTriggersRebuild() throws Exception {
         mockMvc.perform(put("/api/admin/settings").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("region", "US", "airportsPerUser", 3, "bandwidthPerUserMbps", 20))))
@@ -101,7 +101,7 @@ class AdminFrontRebuildControllerTest extends MysqlTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("region", "US", "airportsPerUser", 2, "bandwidthPerUserMbps", 20))))
                 .andExpect(jsonPath("$.code").value(0));
-        verify(frontRebuildService).start();
+        verify(frontRebuildService, never()).start();
 
         org.mockito.Mockito.when(frontRebuildService.status()).thenReturn(new ai.mintpop.lane.response.FrontRebuildStatus(
                 ai.mintpop.lane.enumeration.FrontRebuildPhase.RUNNING, Instant.now(), null, null, null, null));

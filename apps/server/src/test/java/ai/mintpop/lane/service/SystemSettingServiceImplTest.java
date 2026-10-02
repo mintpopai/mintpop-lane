@@ -7,7 +7,6 @@ import ai.mintpop.lane.enumeration.SettingKey;
 import ai.mintpop.lane.exception.BizException;
 import ai.mintpop.lane.repository.SystemSettingRepository;
 import ai.mintpop.lane.request.FrontSettingsUpdateRequest;
-import ai.mintpop.lane.service.SystemSettingService.FrontSettingsChange;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,31 +60,17 @@ class SystemSettingServiceImplTest {
     }
 
     @Test
-    @DisplayName("更新：三项都写库，返回旧新两份，changed 反映是否真变了")
-    void updateWritesAllThreeAndReportsChange() {
+    @DisplayName("更新：三项都写库并返回新值")
+    void updateWritesAllThree() {
         FrontSettingsUpdateRequest request = new FrontSettingsUpdateRequest();
         request.setRegion(NodeRegion.US);
         request.setAirportsPerUser(2);
         request.setBandwidthPerUserMbps(20);
 
-        FrontSettingsChange change = service.updateFrontSettings(request);
-
-        assertThat(change.previous()).isEqualTo(new FrontSettings(NodeRegion.US, 3, 20));
-        assertThat(change.current()).isEqualTo(new FrontSettings(NodeRegion.US, 2, 20));
-        assertThat(change.changed()).isTrue();
+        assertThat(service.updateFrontSettings(request)).isEqualTo(new FrontSettings(NodeRegion.US, 2, 20));
         verify(repository).save(SettingKey.FRONT_REGION, "US");
         verify(repository).save(SettingKey.FRONT_AIRPORTS_PER_USER, "2");
         verify(repository).save(SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS, "20");
-    }
-
-    @Test
-    @DisplayName("与现值相同时 changed 为 false")
-    void unchangedWhenSameValues() {
-        FrontSettingsUpdateRequest request = new FrontSettingsUpdateRequest();
-        request.setRegion(NodeRegion.US);
-        request.setAirportsPerUser(3);
-        request.setBandwidthPerUserMbps(20);
-        assertThat(service.updateFrontSettings(request).changed()).isFalse();
     }
 
     @Test

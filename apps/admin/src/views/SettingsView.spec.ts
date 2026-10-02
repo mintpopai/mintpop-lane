@@ -88,36 +88,28 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("1 条主线路，0 条备用线路");
   });
 
-  it("保存：先弹确认（带预检数字），确认后 PUT 并开始轮询状态", async () => {
+  it("保存：不弹确认、直接 PUT，不触发全体重算", async () => {
     const wrapper = mount(SettingsView, { attachTo: document.body });
     await flushPromises();
     await wrapper.find("#setting-airports").setValue("2");
     await wrapper.find("button.admin-btn.save").trigger("click");
     await flushPromises();
 
-    const dialog = wrapper.findComponent(ConfirmDialog);
-    expect(dialog.exists()).toBe(true);
-    expect(dialog.props("message")).toContain("需要 120 个主用名额，现有 150");
-    expect(updateFrontSettings).not.toHaveBeenCalled();
-
-    frontRebuildStatus.mockResolvedValue({
-      ...idle(),
-      phase: "RUNNING",
-      startedAt: "2026-09-29T03:00:00Z",
-    });
-    dialog.vm.$emit("confirm");
-    await flushPromises();
-
+    expect(wrapper.findComponent(ConfirmDialog).exists()).toBe(false);
     expect(updateFrontSettings).toHaveBeenCalledWith({
       region: "US",
       airportsPerUser: 2,
       bandwidthPerUserMbps: 20,
     });
-    expect(showToast).toHaveBeenCalledWith("success", "已保存，正在为全部用户重算线路");
-    expect(wrapper.text()).toContain("重算中");
+    expect(startFrontRebuild).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(
+      "success",
+      "已保存。存量用户的线路不变，需要时点「重算全部线路」",
+    );
+    expect(wrapper.text()).not.toContain("有未保存的改动");
   });
 
-  it("预检不足时确认按钮禁用", async () => {
+  it("手动重算预检不足时确认按钮禁用", async () => {
     previewFrontRebuild.mockResolvedValue({
       requiredPrimary: 120,
       availablePrimary: 90,
@@ -125,14 +117,13 @@ describe("SettingsView", () => {
     });
     const wrapper = mount(SettingsView, { attachTo: document.body });
     await flushPromises();
-    await wrapper.find("#setting-bandwidth").setValue("30");
-    await wrapper.find("button.admin-btn.save").trigger("click");
+    await wrapper.find("button.rebuild").trigger("click");
     await flushPromises();
 
     const dialog = wrapper.findComponent(ConfirmDialog);
     expect(dialog.props("confirmDisabled")).toBe(true);
     expect(dialog.props("busy")).toBe(false);
-    expect(wrapper.text()).toContain("需要 120 个主用名额，现有 90");
+    expect(dialog.props("message")).toContain("需要 120 个主用名额，现有 90");
   });
 
   it("「重算全部线路」：确认后 POST", async () => {

@@ -36,14 +36,13 @@ public class SystemSettingServiceImpl implements SystemSettingService {
 
     @Override
     @Transactional
-    public FrontSettingsChange updateFrontSettings(FrontSettingsUpdateRequest request) {
-        FrontSettings previous = frontSettings();
+    public FrontSettings updateFrontSettings(FrontSettingsUpdateRequest request) {
         FrontSettings current = new FrontSettings(request.getRegion(), request.getAirportsPerUser(), request.getBandwidthPerUserMbps());
         validate(current);
         repository.save(SettingKey.FRONT_REGION, current.region().name());
         repository.save(SettingKey.FRONT_AIRPORTS_PER_USER, Integer.toString(current.airportsPerUser()));
         repository.save(SettingKey.FRONT_BANDWIDTH_PER_USER_MBPS, Integer.toString(current.bandwidthPerUserMbps()));
-        return new FrontSettingsChange(previous, current);
+        return current;
     }
 
     private static void validate(FrontSettings s) {

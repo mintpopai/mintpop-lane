@@ -8,12 +8,6 @@ public interface SystemSettingService {
 
     FrontSettings frontSettings();
 
-    /** 校验范围后三项全部写库；返回旧新两份，调用方据 changed() 决定是否触发全体重算 */
-    FrontSettingsChange updateFrontSettings(FrontSettingsUpdateRequest request);
-
-    record FrontSettingsChange(FrontSettings previous, FrontSettings current) {
-        public boolean changed() {
-            return !previous.equals(current);
-        }
-    }
+    /** 校验范围后三项全部写库并返回新值。只改配置、不动任何人的线路：全体重算只能由管理员手动触发 */
+    FrontSettings updateFrontSettings(FrontSettingsUpdateRequest request);
 }

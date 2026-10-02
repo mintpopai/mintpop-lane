@@ -98,7 +98,7 @@ export interface AdminApi {
   getLinkHealth(days?: number): Promise<LinkHealthResponse>;
   /** 全局配置：第一跳地区、每人机场数、每人带宽 */
   getFrontSettings(): Promise<FrontSettingsResponse>;
-  /** 保存全局配置；任一项变化服务端会启动全体重算，正在重算时报 410055 */
+  /** 保存全局配置；只改配置、不触发全体重算，正在重算时报 410055 */
   updateFrontSettings(body: FrontSettingsUpdateRequest): Promise<FrontSettingsResponse>;
   frontRebuildStatus(): Promise<FrontRebuildStatus>;
   /** 手动触发全体重算；正在跑时报 410055 */

@@ -30,8 +30,8 @@ const bandwidthPerUserMbps = ref("20");
 const status = ref<FrontRebuildStatus | null>(null);
 const preview = ref<FrontRebuildPreview | null>(null);
 
-/** 待确认的动作：保存设置 或 手动重算 */
-const pendingAction = ref<"SAVE" | "REBUILD" | null>(null);
+/** 手动重算的确认弹窗；保存设置不重算线路，不用确认 */
+const confirmingRebuild = ref(false);
 const submitting = ref(false);
 
 let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -71,10 +71,7 @@ const previewText = computed(() =>
 );
 
 const confirmMessage = computed(() => {
-  const head =
-    pendingAction.value === "SAVE"
-      ? "保存后将重新拉取全部订阅并为所有用户重新分配线路，客户端会自动热更新。"
-      : "将重新拉取全部订阅并为所有用户重新分配线路，客户端会自动热更新。";
+  const head = "将重新拉取全部订阅并为所有用户重新分配线路，客户端会自动热更新。";
   if (!preview.value) {
     return `${head} 正在预检容量…`;
   }
@@ -107,7 +104,7 @@ async function load(): Promise<void> {
 
 /**
  * 容量预检。来源二选一：
- * - FORM：按表单里的当前值算（页面常显、保存前确认）
+ * - FORM：按表单里的当前值算（页面常显，保存前就能看到改完够不够）
  * - SAVED：按已保存的配置算（手动重算跑的是已保存值，不是表单里没保存的改动）
  */
 async function refreshPreview(source: "FORM" | "SAVED"): Promise<void> {
@@ -156,15 +153,31 @@ function syncPolling(): void {
   }
 }
 
-function askSave(): void {
+/** 只保存配置，不动任何人的线路；要让存量用户按新值重排，保存后再手动点「重算全部线路」 */
+async function save(): Promise<void> {
   const n = airportsNumber.value;
   const b = bandwidthNumber.value;
   if (!Number.isInteger(n) || n < 1 || n > 10 || !Number.isInteger(b) || b < 1 || b > 1000) {
     showToast("error", "每人机场数 1 到 10，每人带宽 1 到 1000 Mbps");
     return;
   }
-  pendingAction.value = "SAVE";
-  void refreshPreview("FORM");
+  submitting.value = true;
+  try {
+    saved.value = await adminApi().updateFrontSettings({
+      region: region.value,
+      airportsPerUser: n,
+      bandwidthPerUserMbps: b,
+    });
+    showToast("success", "已保存。存量用户的线路不变，需要时点「重算全部线路」");
+  } catch (error) {
+    // 410054 取值非法、410055 正在重算，服务端给的中文提示直接用
+    showToast(
+      "error",
+      error instanceof BizError ? error.message : `保存失败：${(error as Error).message}`,
+    );
+  } finally {
+    submitting.value = false;
+  }
 }
 
 /** 表单回到已保存的值；预检随 watch 自动按回退后的值重算 */
@@ -178,41 +191,28 @@ function revert(): void {
 }
 
 function askRebuild(): void {
-  pendingAction.value = "REBUILD";
+  confirmingRebuild.value = true;
   void refreshPreview("SAVED");
 }
 
 /** 关弹窗；常显的预检回到按表单值算 */
-function cancelAction(): void {
-  const wasRebuild = pendingAction.value === "REBUILD";
-  pendingAction.value = null;
-  if (wasRebuild) {
-    void refreshPreview("FORM");
-  }
+function cancelRebuild(): void {
+  confirmingRebuild.value = false;
+  void refreshPreview("FORM");
 }
 
-async function confirmAction(): Promise<void> {
-  if (!pendingAction.value || !preview.value?.sufficient) {
+async function confirmRebuild(): Promise<void> {
+  if (!preview.value?.sufficient) {
     return;
   }
   submitting.value = true;
   try {
-    if (pendingAction.value === "SAVE") {
-      const changed = dirty.value;
-      saved.value = await adminApi().updateFrontSettings({
-        region: region.value,
-        airportsPerUser: airportsNumber.value,
-        bandwidthPerUserMbps: bandwidthNumber.value,
-      });
-      showToast("success", changed ? "已保存，正在为全部用户重算线路" : "已保存");
-    } else {
-      await adminApi().startFrontRebuild();
-      showToast("success", "已开始为全部用户重算线路");
-    }
-    pendingAction.value = null;
+    await adminApi().startFrontRebuild();
+    showToast("success", "已开始为全部用户重算线路");
+    confirmingRebuild.value = false;
     await pollStatus();
   } catch (error) {
-    // 410054 取值非法、410055 正在重算，服务端给的中文提示直接用
+    // 410055 正在重算，服务端给的中文提示直接用
     showToast(
       "error",
       error instanceof BizError ? error.message : `操作失败：${(error as Error).message}`,
@@ -233,7 +233,8 @@ onBeforeUnmount(() => {
 <template>
   <PageHead title="全局配置">
     <template #facts>
-      机场订阅线路的全局参数。任一项改动都会重新拉取全部订阅并为所有用户重新分配线路。
+      机场订阅线路的全局参数。保存只改配置、不动存量用户的线路，之后的单人分配按新值走；
+      要让全部用户按新值重排，保存后点「重算全部线路」。
     </template>
     <template #actions>
       <button
@@ -337,7 +338,7 @@ onBeforeUnmount(() => {
           type="button"
           class="admin-btn save"
           :disabled="!dirty || running || submitting"
-          @click="askSave()"
+          @click="save()"
         >
           保存
         </button>
@@ -373,14 +374,14 @@ onBeforeUnmount(() => {
   <ClientVersionCard />
 
   <ConfirmDialog
-    v-if="pendingAction"
-    :title="pendingAction === 'SAVE' ? '保存并重算全部线路' : '重算全部线路'"
+    v-if="confirmingRebuild"
+    title="重算全部线路"
     :message="confirmMessage"
     confirm-text="确认"
     :busy="submitting"
     :confirm-disabled="!preview || !preview.sufficient"
-    @confirm="confirmAction()"
-    @cancel="cancelAction()"
+    @confirm="confirmRebuild()"
+    @cancel="cancelRebuild()"
   />
 </template>
 
