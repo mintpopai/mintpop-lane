@@ -90,6 +90,7 @@ public enum BizCodeEnum {
     FRONT_REBUILD_RUNNING(410055, "正在为全部用户重算线路，请等本次完成后再试"),
     FRONT_CAPACITY_INSUFFICIENT(410056, "主用名额不足，无法为全部用户分配线路"),
     FRONT_REBUILD_FETCH_FAILED(410057, "订阅拉取失败，本次重算已中止"),
+    FRONT_MANUAL_INVALID(410058, "手动分配的线路不合法"),
 
     /* 用户自助（控制台） */
     PLAN_NOT_AVAILABLE(510001, "套餐不存在或已下架"),

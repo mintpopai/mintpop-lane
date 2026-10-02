@@ -16,6 +16,8 @@ public record AdminUserResponse(
         UserStatus status,
         /** 该用户的第一跳机场订阅列表，按顺位排列；未分配为空列表 */
         List<FrontSubscriptionBrief> frontSubscriptions,
+        /** 第一跳列表是否管理员手动指定；未分配时为 false */
+        boolean frontManual,
         Long landNodeId,
         String landNodeName,
         /** 该用户的期望出口 IP，取自其落地节点；未分配或落地未填出口时为 null */

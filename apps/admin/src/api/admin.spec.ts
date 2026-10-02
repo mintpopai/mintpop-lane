@@ -194,6 +194,7 @@ describe("createAdminApi", () => {
     await api.deleteAirport(1);
     await api.allocateUserFront(5);
     await api.clearUserFront(5);
+    await api.assignUserFrontManually(5, [3, 4]);
 
     // fakeClient 的 request 桩按无参声明，calls 的元素类型收窄成 []；
     // 这里按实际调用形状断言成 [路径, RequestInit?] 后再取路径与方法
@@ -210,6 +211,7 @@ describe("createAdminApi", () => {
       ["/admin/airports/1", "DELETE"],
       ["/admin/users/5/front/allocate", "POST"],
       ["/admin/users/5/front", "DELETE"],
+      ["/admin/users/5/front", "PUT"],
     ]);
   });
 
@@ -389,12 +391,14 @@ describe("createAdminApi 换机申请", () => {
       body: JSON.stringify(body),
     });
 
-    await api.startFrontRebuild();
-    expect(request).toHaveBeenLastCalledWith("/admin/front/rebuild", { method: "POST" });
+    await api.startFrontRebuild(true);
+    expect(request).toHaveBeenLastCalledWith("/admin/front/rebuild?keepManual=true", {
+      method: "POST",
+    });
 
-    await api.previewFrontRebuild("US", 25);
+    await api.previewFrontRebuild("US", 25, false);
     expect(request).toHaveBeenLastCalledWith(
-      "/admin/front/rebuild/preview?region=US&bandwidthPerUserMbps=25",
+      "/admin/front/rebuild/preview?region=US&bandwidthPerUserMbps=25&keepManual=false",
     );
   });
 

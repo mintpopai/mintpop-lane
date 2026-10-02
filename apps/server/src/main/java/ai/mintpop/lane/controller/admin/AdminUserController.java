@@ -1,6 +1,7 @@
 package ai.mintpop.lane.controller.admin;
 
 import ai.mintpop.lane.dto.PageResult;
+import ai.mintpop.lane.request.FrontManualAssignRequest;
 import ai.mintpop.lane.request.UserSaveRequest;
 import ai.mintpop.lane.response.AdminUserResponse;
 import ai.mintpop.lane.response.ApiResponse;
@@ -64,6 +65,13 @@ public class AdminUserController {
     @PostMapping("/{id}/front/allocate")
     public ApiResponse<List<FrontSubscriptionBrief>> allocateFront(@PathVariable Long id) {
         return ApiResponse.success(frontSubscriptionService.allocate(id));
+    }
+
+    /** 手动指定该用户的第一跳订阅列表（按顺位，第 0 个主用），标记为手动 */
+    @PutMapping("/{id}/front")
+    public ApiResponse<List<FrontSubscriptionBrief>> assignFrontManually(@PathVariable Long id,
+                                                                         @Valid @RequestBody FrontManualAssignRequest request) {
+        return ApiResponse.success(frontSubscriptionService.assignManually(id, request.getAirportSubscriptionIds()));
     }
 
     /** 清空该用户的第一跳订阅列表 */

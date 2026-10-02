@@ -105,8 +105,17 @@ public final class FrontAllocationPlanner {
      * 复杂度 O(M·N²)，1 万用户约 3 亿次简单比较，秒级。
      */
     public static LinkedHashMap<Long, List<Slot>> planAll(List<Long> userIdsInOrder, List<Candidate> candidates, FrontSettings settings) {
+        return planAll(userIdsInOrder, candidates, settings, List.of());
+    }
+
+    /**
+     * 同上，但先把 fixed（保留不动的手动分配）计入负载：它们占的主用名额与各场景下的落点照算，
+     * 只是不参与重排，也不出现在返回结果里。
+     */
+    public static LinkedHashMap<Long, List<Slot>> planAll(List<Long> userIdsInOrder, List<Candidate> candidates,
+                                                          FrontSettings settings, List<Assignment> fixed) {
         LinkedHashMap<Long, List<Slot>> result = new LinkedHashMap<>();
-        List<Assignment> assigned = new ArrayList<>();
+        List<Assignment> assigned = new ArrayList<>(fixed);
         for (Long userId : userIdsInOrder) {
             List<Slot> slots = plan(assigned, candidates, settings);
             result.put(userId, slots);

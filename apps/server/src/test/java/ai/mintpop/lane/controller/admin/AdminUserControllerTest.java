@@ -476,6 +476,32 @@ class AdminUserControllerTest extends MysqlTestBase {
     }
 
     @Test
+    @DisplayName("手动分配：PUT /front 按传入顺位落库并标记 frontManual；再点自动分配后标记回到 false")
+    void assignFrontManuallyThenAuto() throws Exception {
+        Long a = fixtures.createAirport("泰山云");
+        Long subA = fixtures.createAirportSubscription(a, "ts-01", 300);
+        fixtures.createSubscriptionNode(subA, "🇺🇸[US]Santa Clara 01", NodeStatus.ENABLED);
+        Long b = fixtures.createAirport("华山云");
+        Long subB = fixtures.createAirportSubscription(b, "hs-01", 300);
+        fixtures.createSubscriptionNode(subB, "🇺🇸[US]Los Angeles 01", NodeStatus.ENABLED);
+
+        mockMvc.perform(put("/api/admin/users/" + memberNoSubId + "/front").header("Authorization", bearer(adminId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(java.util.Map.of("airportSubscriptionIds", List.of(subB, subA)))))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].subscriptionName").value("hs-01"))
+                .andExpect(jsonPath("$.data[1].subscriptionName").value("ts-01"));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.frontManual").value(true));
+
+        mockMvc.perform(post("/api/admin/users/" + memberNoSubId + "/front/allocate")
+                        .header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.code").value(0));
+        mockMvc.perform(get("/api/admin/users/" + memberNoSubId).header("Authorization", bearer(adminId)))
+                .andExpect(jsonPath("$.data.frontManual").value(false));
+    }
+
+    @Test
     @DisplayName("整体保存（改处置态、备注）不动第一跳订阅列表——第一跳只由独立的分配/取消分配接口改写")
     void saveLeavesFrontSubscriptionsIntact() throws Exception {
         Long airportId = fixtures.createAirport("泰山云");

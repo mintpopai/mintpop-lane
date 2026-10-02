@@ -87,7 +87,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
         Long subId = fixtures.createAirportSubscription(airportId, "ts-01", 300);
         fixtures.createAirportSubscription(airportId, "ts-02", 110);
         Long userId = fixtures.createUser("logto-front-user", null);
-        userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId));
+        userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId), false);
 
         mockMvc.perform(get("/api/admin/airports").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data[0].name").value("泰山云"))
@@ -160,7 +160,7 @@ class AdminAirportControllerTest extends MysqlTestBase {
         Long id = fixtures.createAirport("泰山云");
         Long subId = fixtures.createAirportSubscription(id, "ts-01", 300);
         Long userId = fixtures.createUser("logto-front-user", null);
-        userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId));
+        userFrontSubscriptionRepository.replaceForUser(userId, List.of(subId), false);
 
         Map<String, Object> body = body("泰山云");
         body.put("primaryEnabled", false);

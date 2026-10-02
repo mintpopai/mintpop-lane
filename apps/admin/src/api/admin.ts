@@ -82,6 +82,11 @@ export interface AdminApi {
   deleteAirport(id: number): Promise<void>;
   /** 自动分配：整份重算该用户在各机场的第一跳订阅，返回分配后的完整列表 */
   allocateUserFront(id: number): Promise<FrontSubscriptionBrief[]>;
+  /** 手动分配：按顺位指定该用户的第一跳订阅（第 0 个主用），返回落库后的完整列表 */
+  assignUserFrontManually(
+    id: number,
+    airportSubscriptionIds: number[],
+  ): Promise<FrontSubscriptionBrief[]>;
   /** 取消分配：清空该用户的第一跳 */
   clearUserFront(id: number): Promise<void>;
   listPlans(): Promise<PlanResponse[]>;
@@ -101,12 +106,13 @@ export interface AdminApi {
   /** 保存全局配置；只改配置、不触发全体重算，正在重算时报 410055 */
   updateFrontSettings(body: FrontSettingsUpdateRequest): Promise<FrontSettingsResponse>;
   frontRebuildStatus(): Promise<FrontRebuildStatus>;
-  /** 手动触发全体重算；正在跑时报 410055 */
-  startFrontRebuild(): Promise<void>;
-  /** 按表单里的新值预检容量：地区决定候选订阅，每人带宽决定名额 */
+  /** 手动触发全体重算；keepManual 为真时保留手动分配的用户。正在跑时报 410055 */
+  startFrontRebuild(keepManual: boolean): Promise<void>;
+  /** 按表单里的新值与重算方式预检容量：地区决定候选订阅，每人带宽决定名额 */
   previewFrontRebuild(
     region: NodeRegion,
     bandwidthPerUserMbps: number,
+    keepManual: boolean,
   ): Promise<FrontRebuildPreview>;
   /** 服务端当前认定的桌面端最新版本（每分钟自动从更新清单拉取） */
   getClientVersion(): Promise<ClientVersionStatus>;
@@ -274,6 +280,13 @@ export function createAdminApi(http: HttpClient): AdminApi {
       return http.request(`/admin/users/${id}/front/allocate`, { method: "POST" });
     },
 
+    assignUserFrontManually(id, airportSubscriptionIds) {
+      return http.request(`/admin/users/${id}/front`, {
+        method: "PUT",
+        body: JSON.stringify({ airportSubscriptionIds }),
+      });
+    },
+
     clearUserFront(id) {
       return http.request(`/admin/users/${id}/front`, { method: "DELETE" });
     },
@@ -348,14 +361,16 @@ export function createAdminApi(http: HttpClient): AdminApi {
       return http.request("/admin/client-version/refresh", { method: "POST" });
     },
 
-    startFrontRebuild() {
-      return http.request("/admin/front/rebuild", { method: "POST" });
+    startFrontRebuild(keepManual) {
+      const query = new URLSearchParams({ keepManual: String(keepManual) });
+      return http.request(`/admin/front/rebuild?${query.toString()}`, { method: "POST" });
     },
 
-    previewFrontRebuild(region, bandwidthPerUserMbps) {
+    previewFrontRebuild(region, bandwidthPerUserMbps, keepManual) {
       const query = new URLSearchParams({
         region,
         bandwidthPerUserMbps: String(bandwidthPerUserMbps),
+        keepManual: String(keepManual),
       });
       return http.request(`/admin/front/rebuild/preview?${query.toString()}`);
     },

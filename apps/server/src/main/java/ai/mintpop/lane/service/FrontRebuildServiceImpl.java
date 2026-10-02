@@ -50,19 +50,19 @@ public class FrontRebuildServiceImpl implements FrontRebuildService {
     }
 
     @Override
-    public FrontRebuildPreview preview(FrontSettings settings) {
-        return runner.preview(settings);
+    public FrontRebuildPreview preview(FrontSettings settings, boolean keepManual) {
+        return runner.preview(settings, keepManual);
     }
 
     @Override
-    public void start() {
+    public void start(boolean keepManual) {
         if (!running.compareAndSet(false, true)) {
             throw new BizException(BizCodeEnum.FRONT_REBUILD_RUNNING);
         }
         Instant startedAt = clock.instant();
         status.set(new FrontRebuildStatus(FrontRebuildPhase.RUNNING, startedAt, null, null, null, null));
         try {
-            executor.execute(() -> run(startedAt));
+            executor.execute(() -> run(startedAt, keepManual));
         } catch (RuntimeException e) {
             // 提交失败（如线程池拒绝）：任务没跑起来，必须释放互斥并把状态落成 FAILED，否则永远卡在 RUNNING
             log.error("全体重算任务提交失败", e);
@@ -73,17 +73,18 @@ public class FrontRebuildServiceImpl implements FrontRebuildService {
         }
     }
 
-    private void run(Instant startedAt) {
+    private void run(Instant startedAt, boolean keepManual) {
         try {
             RefreshOutcome refresh = subRefreshService.refreshAllNow();
             if (!refresh.failedSubscriptionNames().isEmpty()) {
                 throw new BizException(BizCodeEnum.FRONT_REBUILD_FETCH_FAILED,
                         String.join("、", refresh.failedSubscriptionNames()));
             }
-            RebuildResult result = runner.applyAll();
+            RebuildResult result = runner.applyAll(keepManual);
             status.set(new FrontRebuildStatus(FrontRebuildPhase.SUCCEEDED, startedAt, clock.instant(),
-                    result.userCount(), result.subscriptionCount(), null));
-            nodeNotifyService.notifyFrontRebuildFinished(result.userCount(), result.subscriptionCount());
+                    result.userCount(), result.subscriptionCount(), null, result.keptManualCount()));
+            nodeNotifyService.notifyFrontRebuildFinished(result.userCount(), result.subscriptionCount(),
+                    result.keptManualCount());
         } catch (BizException e) {
             fail(startedAt, e.getMessage());
         } catch (RuntimeException e) {

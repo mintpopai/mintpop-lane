@@ -32,6 +32,15 @@ const preview = ref<FrontRebuildPreview | null>(null);
 
 /** 手动重算的确认弹窗；保存设置不重算线路，不用确认 */
 const confirmingRebuild = ref(false);
+/**
+ * 重算方式：保留手动分配的用户（默认，更保守），或全部覆盖。
+ * 页面常显的预检也按它算，与点重算时看到的数字一致
+ */
+const keepManual = ref(true);
+const keepManualOptions = [
+  { value: true, label: "保留手动分配的用户" },
+  { value: false, label: "全部覆盖（手动分配的也重排）" },
+];
 const submitting = ref(false);
 
 let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -64,14 +73,20 @@ const dirty = computed(
 
 const running = computed(() => status.value?.phase === "RUNNING");
 
-const previewText = computed(() =>
-  preview.value
-    ? `需要 ${preview.value.requiredPrimary} 个主用名额，现有 ${preview.value.availablePrimary}`
-    : "",
-);
+const previewText = computed(() => {
+  if (!preview.value) {
+    return "";
+  }
+  const base = `需要 ${preview.value.requiredPrimary} 个主用名额，现有 ${preview.value.availablePrimary}`;
+  return preview.value.keptManualCount > 0
+    ? `${base}（已除去保留的 ${preview.value.keptManualCount} 个手动分配用户）`
+    : base;
+});
 
 const confirmMessage = computed(() => {
-  const head = "将重新拉取全部订阅并为所有用户重新分配线路，客户端会自动热更新。";
+  const head = keepManual.value
+    ? "将重新拉取全部订阅，为手动分配以外的用户重新分配线路，客户端会自动热更新。"
+    : "将重新拉取全部订阅并为所有用户重新分配线路（含手动分配的用户），客户端会自动热更新。";
   if (!preview.value) {
     return `${head} 正在预检容量…`;
   }
@@ -117,7 +132,11 @@ async function refreshPreview(source: "FORM" | "SAVED"): Promise<void> {
     return;
   }
   try {
-    preview.value = await adminApi().previewFrontRebuild(target.region, target.bandwidth);
+    preview.value = await adminApi().previewFrontRebuild(
+      target.region,
+      target.bandwidth,
+      keepManual.value,
+    );
   } catch (error) {
     preview.value = null;
     showToast(
@@ -129,6 +148,11 @@ async function refreshPreview(source: "FORM" | "SAVED"): Promise<void> {
 
 watch([region, bandwidthPerUserMbps], () => {
   void refreshPreview("FORM");
+});
+
+/** 弹窗里切换重算方式：预检随之按已保存值重算 */
+watch(keepManual, () => {
+  void refreshPreview(confirmingRebuild.value ? "SAVED" : "FORM");
 });
 
 async function pollStatus(): Promise<void> {
@@ -207,7 +231,7 @@ async function confirmRebuild(): Promise<void> {
   }
   submitting.value = true;
   try {
-    await adminApi().startFrontRebuild();
+    await adminApi().startFrontRebuild(keepManual.value);
     showToast("success", "已开始为全部用户重算线路");
     confirmingRebuild.value = false;
     await pollStatus();
@@ -360,6 +384,9 @@ onBeforeUnmount(() => {
         }}</span>
         个订阅</span
       >
+      <span v-if="status.keptManualCount"
+        >保留手动分配 <span class="fact">{{ status.keptManualCount }}</span> 人</span
+      >
       <span class="fact muted">完成于 {{ formatDateTime(status.finishedAt) }}</span>
     </p>
     <p v-else class="status-line">
@@ -381,7 +408,17 @@ onBeforeUnmount(() => {
     :confirm-disabled="!preview || !preview.sufficient"
     @confirm="confirmRebuild()"
     @cancel="cancelRebuild()"
-  />
+  >
+    <div class="admin-field rebuild-mode">
+      <label for="rebuild-mode">重算方式</label>
+      <Select
+        id="rebuild-mode"
+        v-model="keepManual"
+        :options="keepManualOptions"
+        aria-label="重算方式"
+      />
+    </div>
+  </ConfirmDialog>
 </template>
 
 <style scoped>
@@ -482,6 +519,10 @@ onBeforeUnmount(() => {
 
 .muted {
   color: var(--color-ink-secondary);
+}
+
+.rebuild-mode {
+  margin-top: 16px;
 }
 
 .status-card {

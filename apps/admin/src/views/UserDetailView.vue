@@ -13,6 +13,7 @@ import type {
 } from "../api/types";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import CredentialIssueModal from "../components/CredentialIssueModal.vue";
+import FrontManualModal from "../components/FrontManualModal.vue";
 import Select from "../components/AdminSelect.vue";
 import { useRebindStore } from "../stores/rebind";
 import { showToast } from "../toast";
@@ -62,6 +63,7 @@ const linkDirty = computed(() => user.value !== null && landNodeId.value !== use
 const allocatingFront = ref(false);
 const pendingClearFront = ref(false);
 const clearingFront = ref(false);
+const manualFrontOpen = ref(false);
 
 /** 顺位的中文名：0 主用，其余「备用N」 */
 function positionLabel(position: number): string {
@@ -522,13 +524,17 @@ async function confirmUnbind(): Promise<void> {
       <!-- 机场订阅与落地节点两张卡并排一行：都是给这个用户分配线路，放一起读 -->
       <div class="line-row">
         <!-- 第一跳（机场订阅）：分配只由管理员手动触发——「自动分配」整份重算主用与备用，
-           「取消分配」清空。第一跳不再开放手工指定节点，只能来自机场订阅 -->
+           「手动分配」按顺位挑订阅（全体重算可选择保留），「取消分配」清空。
+           粒度是机场订阅，不开放手工指定单个节点 -->
         <section class="admin-card front-card">
-          <h4 class="block-title">机场订阅</h4>
+          <h4 class="block-title">
+            机场订阅
+            <span v-if="user?.frontManual" class="pill manual-pill">手动分配</span>
+          </h4>
           <!-- 与落地节点卡同一种读法：标题下一行，内容在左、动作在右，与下拉 + 保存钮上下对齐 -->
           <div class="front-card-body">
             <p v-if="user && user.frontSubscriptions.length === 0" class="front-empty">
-              未分配，点「自动分配」按负载分配
+              未分配，点「自动分配」按负载分配，或「手动分配」自己挑
             </p>
             <ul v-else-if="user" class="front-sub-list">
               <li
@@ -549,6 +555,14 @@ async function confirmUnbind(): Promise<void> {
                 @click="allocateFront()"
               >
                 {{ allocatingFront ? "分配中…" : "自动分配" }}
+              </button>
+              <button
+                type="button"
+                class="admin-btn-ghost"
+                :disabled="!user"
+                @click="manualFrontOpen = true"
+              >
+                手动分配
               </button>
               <button
                 type="button"
@@ -921,6 +935,13 @@ async function confirmUnbind(): Promise<void> {
       </div>
     </div>
 
+    <FrontManualModal
+      v-if="manualFrontOpen && user"
+      :user-id="userId"
+      :current="user.frontSubscriptions"
+      @close="manualFrontOpen = false"
+      @saved="loadUser()"
+    />
     <ConfirmDialog
       v-if="pendingClearFront"
       title="取消机场订阅分配"
@@ -1007,6 +1028,12 @@ async function confirmUnbind(): Promise<void> {
   font-size: 14px;
   font-weight: 600;
   color: var(--color-ink);
+}
+
+/* 标题旁的「手动分配」标记：手动定的列表在全体重算选保留时不会被改 */
+.manual-pill {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 /* 机场订阅 + 落地节点两卡并排、等高；窄屏退回上下堆叠 */

@@ -36,6 +36,7 @@ function makeUser(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse
     role: "MEMBER",
     status: "ACTIVE",
     frontSubscriptions: [],
+    frontManual: false,
     landNodeId: 11,
     landNodeName: "LAND-东京-03",
     egressIp: "1.2.3.4",

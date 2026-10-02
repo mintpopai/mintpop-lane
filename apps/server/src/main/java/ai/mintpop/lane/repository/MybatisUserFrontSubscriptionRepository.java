@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** 用户第一跳机场订阅列表的 MySQL 实现 */
@@ -49,28 +50,32 @@ public class MybatisUserFrontSubscriptionRepository implements UserFrontSubscrip
     }
 
     @Override
-    public void replaceForUser(Long userId, List<Long> airportSubscriptionIdsInOrder) {
+    public Set<Long> findManualUserIds() {
+        return mapper.selectList(Wrappers.<UserFrontSubscription>lambdaQuery()
+                        .select(UserFrontSubscription::getUserId)
+                        .eq(UserFrontSubscription::getManual, true))
+                .stream().map(UserFrontSubscription::getUserId).collect(Collectors.toSet());
+    }
+
+    @Override
+    public void replaceForUser(Long userId, List<Long> airportSubscriptionIdsInOrder, boolean manual) {
         deleteByUserId(userId);
         for (int position = 0; position < airportSubscriptionIdsInOrder.size(); position++) {
-            UserFrontSubscription row = new UserFrontSubscription();
-            row.setUserId(userId);
-            row.setPosition(position);
-            row.setAirportSubscriptionId(airportSubscriptionIdsInOrder.get(position));
-            mapper.insert(row);
+            mapper.insert(row(userId, position, airportSubscriptionIdsInOrder.get(position), manual));
         }
     }
 
     @Override
-    public void replaceAll(Map<Long, List<Long>> subscriptionIdsByUser) {
-        mapper.delete(Wrappers.<UserFrontSubscription>lambdaQuery().isNotNull(UserFrontSubscription::getId));
+    public void replaceAll(Map<Long, List<Long>> subscriptionIdsByUser, Set<Long> keepUserIds) {
+        var delete = Wrappers.<UserFrontSubscription>lambdaQuery().isNotNull(UserFrontSubscription::getId);
+        if (!keepUserIds.isEmpty()) {
+            delete.notIn(UserFrontSubscription::getUserId, keepUserIds);
+        }
+        mapper.delete(delete);
         List<UserFrontSubscription> rows = new ArrayList<>();
         subscriptionIdsByUser.forEach((userId, subIds) -> {
             for (int position = 0; position < subIds.size(); position++) {
-                UserFrontSubscription row = new UserFrontSubscription();
-                row.setUserId(userId);
-                row.setPosition(position);
-                row.setAirportSubscriptionId(subIds.get(position));
-                rows.add(row);
+                rows.add(row(userId, position, subIds.get(position), false));
             }
         });
         if (!rows.isEmpty()) {
@@ -96,6 +101,15 @@ public class MybatisUserFrontSubscriptionRepository implements UserFrontSubscrip
                         .eq(UserFrontSubscription::getPosition, 0))
                 .stream()
                 .collect(Collectors.groupingBy(UserFrontSubscription::getAirportSubscriptionId, Collectors.counting()));
+    }
+
+    private static UserFrontSubscription row(Long userId, int position, Long airportSubscriptionId, boolean manual) {
+        UserFrontSubscription row = new UserFrontSubscription();
+        row.setUserId(userId);
+        row.setPosition(position);
+        row.setAirportSubscriptionId(airportSubscriptionId);
+        row.setManual(manual);
+        return row;
     }
 
     /** 已按 user_id、position 排好序的行，按用户分组并保持顺位 */

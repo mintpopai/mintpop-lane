@@ -49,6 +49,7 @@ function idle(): FrontRebuildStatus {
     userCount: null,
     subscriptionCount: null,
     error: null,
+    keptManualCount: null,
   };
 }
 
@@ -60,6 +61,7 @@ beforeEach(() => {
     requiredPrimary: 120,
     availablePrimary: 150,
     sufficient: true,
+    keptManualCount: 0,
   });
 });
 
@@ -114,6 +116,7 @@ describe("SettingsView", () => {
       requiredPrimary: 120,
       availablePrimary: 90,
       sufficient: false,
+      keptManualCount: 0,
     });
     const wrapper = mount(SettingsView, { attachTo: document.body });
     await flushPromises();
@@ -134,7 +137,40 @@ describe("SettingsView", () => {
     wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
     await flushPromises();
 
-    expect(startFrontRebuild).toHaveBeenCalled();
+    expect(startFrontRebuild).toHaveBeenCalledWith(true);
+  });
+
+  it("重算方式切到「全部覆盖」：预检与启动都带 keepManual=false", async () => {
+    const wrapper = mount(SettingsView, { attachTo: document.body });
+    await flushPromises();
+    await wrapper.find("button.rebuild").trigger("click");
+    await flushPromises();
+    previewFrontRebuild.mockClear();
+
+    const modeSelect = wrapper
+      .findAllComponents({ name: "AdminSelect" })
+      .find((c) => c.props("ariaLabel") === "重算方式");
+    modeSelect!.vm.$emit("update:modelValue", false);
+    await flushPromises();
+    expect(previewFrontRebuild).toHaveBeenCalledWith("US", 20, false);
+    expect(wrapper.findComponent(ConfirmDialog).props("message")).toContain("含手动分配的用户");
+
+    wrapper.findComponent(ConfirmDialog).vm.$emit("confirm");
+    await flushPromises();
+    expect(startFrontRebuild).toHaveBeenCalledWith(false);
+  });
+
+  it("保留手动分配时预检文案注明除去的手动用户数", async () => {
+    previewFrontRebuild.mockResolvedValue({
+      requiredPrimary: 100,
+      availablePrimary: 150,
+      sufficient: true,
+      keptManualCount: 20,
+    });
+    const wrapper = mount(SettingsView, { attachTo: document.body });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("已除去保留的 20 个手动分配用户");
   });
 
   it("显示最近一次重算结果：成功带人数，失败带原因", async () => {
@@ -145,6 +181,7 @@ describe("SettingsView", () => {
       userCount: null,
       subscriptionCount: null,
       error: "主用名额不足，无法为全部用户分配线路：需要 3 个主用名额，现有 2",
+      keptManualCount: null,
     });
     const wrapper = mount(SettingsView, { attachTo: document.body });
     await flushPromises();
@@ -184,7 +221,7 @@ describe("SettingsView", () => {
     await wrapper.find("button.rebuild").trigger("click");
     await flushPromises();
 
-    expect(previewFrontRebuild).toHaveBeenCalledWith("US", 20);
+    expect(previewFrontRebuild).toHaveBeenCalledWith("US", 20, true);
   });
 
   describe("状态轮询", () => {

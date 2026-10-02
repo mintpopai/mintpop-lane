@@ -23,6 +23,7 @@ import java.util.concurrent.Executor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -47,13 +48,13 @@ class FrontRebuildServiceImplTest {
         Executor inline = Runnable::run;
         service = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService, inline, Clock.fixed(NOW, ZoneOffset.UTC));
         when(subRefreshService.refreshAllNow()).thenReturn(new RefreshOutcome(List.of()));
-        when(runner.applyAll()).thenReturn(new RebuildResult(120, 9));
+        when(runner.applyAll(anyBoolean())).thenReturn(new RebuildResult(120, 9, 0));
     }
 
     @Test
     @DisplayName("成功：先刷新订阅再重排，状态 SUCCEEDED 带人数，推完成通知")
     void succeeds() {
-        service.start();
+        service.start(false);
 
         var status = service.status();
         assertThat(status.phase()).isEqualTo(FrontRebuildPhase.SUCCEEDED);
@@ -61,7 +62,8 @@ class FrontRebuildServiceImplTest {
         assertThat(status.subscriptionCount()).isEqualTo(9);
         assertThat(status.startedAt()).isEqualTo(NOW);
         assertThat(status.finishedAt()).isEqualTo(NOW);
-        verify(nodeNotifyService).notifyFrontRebuildFinished(120, 9);
+        verify(nodeNotifyService).notifyFrontRebuildFinished(120, 9, 0);
+        verify(runner).applyAll(false);
     }
 
     @Test
@@ -69,9 +71,9 @@ class FrontRebuildServiceImplTest {
     void fetchFailureAbortsRebuildBeforeTouchingLists() {
         when(subRefreshService.refreshAllNow()).thenReturn(new RefreshOutcome(List.of("泰山-01", "B-02")));
 
-        service.start();
+        service.start(false);
 
-        verify(runner, never()).applyAll();
+        verify(runner, never()).applyAll(anyBoolean());
         assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
         assertThat(service.status().error()).contains("泰山-01、B-02").doesNotContain("以下订阅");
         verify(nodeNotifyService).notifyFrontRebuildAborted(anyString());
@@ -80,13 +82,13 @@ class FrontRebuildServiceImplTest {
     @Test
     @DisplayName("容量不足：状态 FAILED 带服务端明细文案")
     void capacityFailureRecorded() {
-        when(runner.applyAll()).thenThrow(new BizException(BizCodeEnum.FRONT_CAPACITY_INSUFFICIENT, "需要 3 个主用名额，现有 2"));
+        when(runner.applyAll(anyBoolean())).thenThrow(new BizException(BizCodeEnum.FRONT_CAPACITY_INSUFFICIENT, "需要 3 个主用名额，现有 2"));
 
-        service.start();
+        service.start(false);
 
         assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
         assertThat(service.status().error()).contains("需要 3 个主用名额，现有 2");
-        verify(nodeNotifyService, never()).notifyFrontRebuildFinished(anyInt(), anyInt());
+        verify(nodeNotifyService, never()).notifyFrontRebuildFinished(anyInt(), anyInt(), anyInt());
     }
 
     @Test
@@ -94,10 +96,10 @@ class FrontRebuildServiceImplTest {
     void rejectsConcurrentStart() {
         // 用「挂起」的执行器：任务提交了但不跑，模拟 RUNNING 中
         service = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService, task -> { }, Clock.fixed(NOW, ZoneOffset.UTC));
-        service.start();
+        service.start(false);
         assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.RUNNING);
 
-        assertThatThrownBy(service::start)
+        assertThatThrownBy(() -> service.start(false))
                 .isInstanceOf(BizException.class)
                 .extracting(e -> ((BizException) e).getBizCode()).isEqualTo(BizCodeEnum.FRONT_REBUILD_RUNNING);
     }
@@ -114,16 +116,27 @@ class FrontRebuildServiceImplTest {
         Executor rejecting = task -> { throw new java.util.concurrent.RejectedExecutionException("满了"); };
         service = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService, rejecting, Clock.fixed(NOW, ZoneOffset.UTC));
 
-        assertThatThrownBy(service::start).isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
+        assertThatThrownBy(() -> service.start(false)).isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
         assertThat(service.status().phase()).isEqualTo(FrontRebuildPhase.FAILED);
         assertThat(service.status().error()).contains("RejectedExecutionException");
 
         // 互斥必须已释放：同一实例上再 start 不能报 410055（仍是拒绝执行器，抛的应是 Rejected 而非 BizException）
-        assertThatThrownBy(service::start).isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
+        assertThatThrownBy(() -> service.start(false)).isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
 
         FrontRebuildServiceImpl working = new FrontRebuildServiceImpl(subRefreshService, runner, nodeNotifyService,
                 Runnable::run, Clock.fixed(NOW, ZoneOffset.UTC));
-        working.start();
+        working.start(false);
         assertThat(working.status().phase()).isEqualTo(FrontRebuildPhase.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("保留手动分配：keepManual 透传给 runner，状态与通知带保留人数")
+    void keepManualPassedThrough() {
+        when(runner.applyAll(true)).thenReturn(new RebuildResult(100, 9, 20));
+
+        service.start(true);
+
+        assertThat(service.status().keptManualCount()).isEqualTo(20);
+        verify(nodeNotifyService).notifyFrontRebuildFinished(100, 9, 20);
     }
 }

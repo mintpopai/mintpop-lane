@@ -141,6 +141,8 @@ export interface AdminUserResponse {
   status: UserStatus;
   /** 该用户当前分配到的第一跳，按机场订阅顺位排列；未分配时为空数组 */
   frontSubscriptions: FrontSubscriptionBrief[];
+  /** 第一跳列表是否管理员手动指定；未分配时为 false */
+  frontManual: boolean;
   landNodeId: number | null;
   landNodeName: string | null;
   /** 取自其落地节点，未分配或落地未填出口时为 null */
@@ -659,13 +661,20 @@ export interface FrontRebuildStatus {
   userCount: number | null;
   subscriptionCount: number | null;
   error: string | null;
+  /** 成功时原样保留的手动分配用户数（选择覆盖时为 0）；其它阶段 null */
+  keptManualCount: number | null;
 }
 
-/** 容量预检：需要 = 有激活席位的用户数，现有 = 有节点的订阅主用名额之和 */
+/**
+ * 容量预检：需要 = 要重排的激活席位用户数，现有 = 有节点的订阅主用名额之和。
+ * 保留手动分配时，需要里不含手动用户，现有里先扣掉他们占的名额
+ */
 export interface FrontRebuildPreview {
   requiredPrimary: number;
   availablePrimary: number;
   sufficient: boolean;
+  /** 原样保留的手动分配用户数；选择覆盖时为 0 */
+  keptManualCount: number;
 }
 
 /** 桌面端最新版本的拉取状态：服务端据此强制落后的桌面端更新；进程内保存，重启后重新拉取 */

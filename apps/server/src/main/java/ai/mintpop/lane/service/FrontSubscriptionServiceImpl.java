@@ -1,6 +1,7 @@
 package ai.mintpop.lane.service;
 
 import ai.mintpop.lane.dto.AirportSubscriptionDto;
+import ai.mintpop.lane.dto.FrontSettings;
 import ai.mintpop.lane.dto.ProxyNodeDto;
 import ai.mintpop.lane.entity.Airport;
 import ai.mintpop.lane.enumeration.BizCodeEnum;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -86,7 +88,43 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
             throw new BizException(BizCodeEnum.FRONT_CAPACITY_FULL);
         }
         userFrontSubscriptionRepository.replaceForUser(userId,
-                planned.stream().map(Slot::airportSubscriptionId).toList());
+                planned.stream().map(Slot::airportSubscriptionId).toList(), false);
+        return briefsOf(List.of(userId)).getOrDefault(userId, List.of());
+    }
+
+    /** 与 allocate 拿同一把锁（全部订阅行 FOR UPDATE），免得与并发的自动分配/全体重算交错 */
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public List<FrontSubscriptionBrief> assignManually(Long userId, List<Long> airportSubscriptionIdsInOrder) {
+        userRepository.findById(userId).orElseThrow(() -> new BizException(BizCodeEnum.USER_NOT_FOUND));
+        List<Long> ids = airportSubscriptionIdsInOrder;
+        if (ids.isEmpty() || ids.size() > FrontSettings.MAX_AIRPORTS_PER_USER) {
+            throw new BizException(BizCodeEnum.FRONT_MANUAL_INVALID,
+                    "至少 1 条、最多 " + FrontSettings.MAX_AIRPORTS_PER_USER + " 条");
+        }
+
+        Map<Long, AirportSubscriptionDto> subs = airportSubscriptionRepository.findAllForUpdate().stream()
+                .collect(Collectors.toMap(AirportSubscriptionDto::getId, Function.identity()));
+        Set<Long> usable = usableSubscriptionIds();
+        Set<Long> airportsSeen = new HashSet<>();
+        for (Long id : ids) {
+            AirportSubscriptionDto sub = subs.get(id);
+            if (sub == null) {
+                throw new BizException(BizCodeEnum.AIRPORT_SUBSCRIPTION_NOT_FOUND);
+            }
+            if (!usable.contains(id)) {
+                throw new BizException(BizCodeEnum.FRONT_MANUAL_INVALID, "订阅「" + sub.getName() + "」没有当前地区的节点");
+            }
+            if (!airportsSeen.add(sub.getAirportId())) {
+                throw new BizException(BizCodeEnum.FRONT_MANUAL_INVALID, "同一家机场只能出现一次");
+            }
+        }
+        AirportSubscriptionDto primary = subs.get(ids.get(0));
+        if (!airportRepository.findPrimaryEnabledIds().contains(primary.getAirportId())) {
+            throw new BizException(BizCodeEnum.FRONT_MANUAL_INVALID, "主用所在机场是「仅备用」，不能当主用");
+        }
+
+        userFrontSubscriptionRepository.replaceForUser(userId, ids, true);
         return briefsOf(List.of(userId)).getOrDefault(userId, List.of());
     }
 
@@ -117,6 +155,11 @@ public class FrontSubscriptionServiceImpl implements FrontSubscriptionService {
             }
             return briefs;
         }));
+    }
+
+    @Override
+    public Set<Long> manualUserIds() {
+        return userFrontSubscriptionRepository.findManualUserIds();
     }
 
     /** 至少有一个落在当前地区的节点的订阅。FRONT 节点没有状态，不看 status */

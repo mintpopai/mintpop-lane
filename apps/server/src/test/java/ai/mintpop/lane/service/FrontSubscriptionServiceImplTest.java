@@ -175,4 +175,51 @@ class FrontSubscriptionServiceImplTest extends MysqlTestBase {
 
         assertThat(userFrontSubscriptionRepository.countPrimaryByAirportSubscription().get(a)).isEqualTo(3L);
     }
+
+    @Test
+    @DisplayName("手动分配：按传入顺位落库、标记手动；主用名额满了照样允许")
+    void assignManuallyIgnoresCapacity() {
+        Long a = usableSubscription("A", 20);          // 容量 1
+        Long b = usableSubscription("B", 300);
+        Long other = fixtures.createUser("other", null);
+        fixtures.assignFront(other, a);                // A 的主用名额已满
+        Long user = fixtures.createUser("u1", null);
+
+        List<FrontSubscriptionBrief> briefs = frontSubscriptionService.assignManually(user, List.of(a, b));
+
+        assertThat(briefs).extracting(FrontSubscriptionBrief::airportSubscriptionId).containsExactly(a, b);
+        assertThat(userFrontSubscriptionRepository.findManualUserIds()).containsExactly(user);
+        assertThat(userFrontSubscriptionRepository.countPrimaryByAirportSubscription().get(a)).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("手动分配校验：空列表、同一机场两次、主用在仅备用机场、订阅没有当前地区节点、订阅不存在都拒绝，原列表不动")
+    void assignManuallyRejectsInvalidLists() {
+        Long a = usableSubscription("A", 300);
+        Long airportA = airportSubscriptionRepository.findById(a).orElseThrow().getAirportId();
+        Long a2 = fixtures.createAirportSubscription(airportA, "A-02", 300);
+        fixtures.createSubscriptionNode(a2, "🇺🇸[US]A-02", NodeStatus.ENABLED);
+        Long backupOnly = usableSubscription("B", 300);
+        fixtures.setAirportPrimaryEnabled(airportSubscriptionRepository.findById(backupOnly).orElseThrow().getAirportId(), false);
+        Long empty = fixtures.createAirportSubscription(fixtures.createAirport("C"), "C-01", 300);
+        Long user = fixtures.createUser("u1", null);
+        fixtures.assignFront(user, a);
+
+        assertManualRejected(user, List.of(), ai.mintpop.lane.enumeration.BizCodeEnum.FRONT_MANUAL_INVALID);
+        assertManualRejected(user, List.of(a, a2), ai.mintpop.lane.enumeration.BizCodeEnum.FRONT_MANUAL_INVALID);
+        assertManualRejected(user, List.of(backupOnly, a), ai.mintpop.lane.enumeration.BizCodeEnum.FRONT_MANUAL_INVALID);
+        assertManualRejected(user, List.of(a, empty), ai.mintpop.lane.enumeration.BizCodeEnum.FRONT_MANUAL_INVALID);
+        assertManualRejected(user, List.of(a, 999_999L), ai.mintpop.lane.enumeration.BizCodeEnum.AIRPORT_SUBSCRIPTION_NOT_FOUND);
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(user)).containsExactly(a);
+
+        // 仅备用机场放在备用位是允许的
+        frontSubscriptionService.assignManually(user, List.of(a, backupOnly));
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(user)).containsExactly(a, backupOnly);
+    }
+
+    private void assertManualRejected(Long user, List<Long> ids, ai.mintpop.lane.enumeration.BizCodeEnum code) {
+        assertThatThrownBy(() -> frontSubscriptionService.assignManually(user, ids))
+                .isInstanceOf(BizException.class)
+                .extracting(e -> ((BizException) e).getBizCode()).isEqualTo(code);
+    }
 }

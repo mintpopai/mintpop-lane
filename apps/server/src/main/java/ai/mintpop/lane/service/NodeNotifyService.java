@@ -215,7 +215,7 @@ public class NodeNotifyService {
 
     /** 全体重算完成 */
     @Async
-    public void notifyFrontRebuildFinished(int userCount, int subscriptionCount) {
+    public void notifyFrontRebuildFinished(int userCount, int subscriptionCount, int keptManualCount) {
         if (!notifyProperties.isConfigured()) {
             return;
         }
@@ -223,6 +223,9 @@ public class NodeNotifyService {
             LinkedHashMap<String, String> fields = new LinkedHashMap<>();
             fields.put("分配用户数", Integer.toString(userCount));
             fields.put("参与订阅数", Integer.toString(subscriptionCount));
+            if (keptManualCount > 0) {
+                fields.put("保留手动分配", keptManualCount + " 个用户未重排");
+            }
             fields.put("后续", "客户端将在下一次心跳（≤ 60 秒）内自动热更新配置");
             feishuBotClient.sendCard(FeishuCardTemplate.GREEN, "MintPop Lane 全体线路重算完成", fields);
         } catch (Exception e) {

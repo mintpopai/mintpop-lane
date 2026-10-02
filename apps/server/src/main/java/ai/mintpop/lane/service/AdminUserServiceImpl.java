@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -65,10 +66,12 @@ public class AdminUserServiceImpl implements AdminUserService {
                                         Collectors.toList())));
         // 同上，第一跳订阅列表也一次取回本页所有用户的，避免逐行查询
         Map<Long, List<FrontSubscriptionBrief>> frontSubscriptionsByUser = frontSubscriptionService.briefsOf(userIds);
+        Set<Long> frontManualUserIds = frontSubscriptionService.manualUserIds();
 
         List<AdminUserResponse> records = page.records().stream()
                 .map(user -> toResponse(user, nodes, briefs.getOrDefault(user.getId(), List.of()),
-                        frontSubscriptionsByUser.getOrDefault(user.getId(), List.of())))
+                        frontSubscriptionsByUser.getOrDefault(user.getId(), List.of()),
+                        frontManualUserIds.contains(user.getId())))
                 .toList();
         return new PageResult<>(records, page.total(), page.pageNo(), page.pageSize());
     }
@@ -87,7 +90,8 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .toList();
         List<FrontSubscriptionBrief> frontSubscriptions = frontSubscriptionService.briefsOf(List.of(id))
                 .getOrDefault(id, List.of());
-        return toResponse(user, nodes, briefs, frontSubscriptions);
+        return toResponse(user, nodes, briefs, frontSubscriptions,
+                frontSubscriptionService.manualUserIds().contains(id));
     }
 
     /**
@@ -169,7 +173,7 @@ public class AdminUserServiceImpl implements AdminUserService {
      */
     private AdminUserResponse toResponse(UserDto user, Map<Long, ProxyNodeDto> nodes,
                                          List<AdminUserResponse.ActiveSubscriptionBrief> activeSubscriptions,
-                                         List<FrontSubscriptionBrief> frontSubscriptions) {
+                                         List<FrontSubscriptionBrief> frontSubscriptions, boolean frontManual) {
         ProxyNodeDto land = user.getLandNodeId() == null ? null : nodes.get(user.getLandNodeId());
 
         return new AdminUserResponse(
@@ -179,6 +183,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 user.getRole(),
                 user.getStatus(),
                 frontSubscriptions,
+                frontManual,
                 user.getLandNodeId(),
                 land == null ? null : land.getName(),
                 land == null ? null : land.getEgressIp(),

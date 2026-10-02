@@ -64,7 +64,7 @@ class FrontRebuildRunnerTest extends MysqlTestBase {
         Long noSeat = fixtures.createUser("no-seat", null);
         fixtures.assignFront(noSeat, a);
 
-        RebuildResult result = runner.applyAll();
+        RebuildResult result = runner.applyAll(false);
 
         assertThat(result.userCount()).isEqualTo(4);
         assertThat(result.subscriptionCount()).isEqualTo(3);
@@ -83,7 +83,7 @@ class FrontRebuildRunnerTest extends MysqlTestBase {
         activeUser("u3");
         fixtures.assignFront(u1, a);
 
-        assertThatThrownBy(() -> runner.applyAll())
+        assertThatThrownBy(() -> runner.applyAll(false))
                 .isInstanceOf(BizException.class)
                 .hasMessageContaining("需要 3 个主用名额，现有 2")
                 .extracting(e -> ((BizException) e).getBizCode()).isEqualTo(BizCodeEnum.FRONT_CAPACITY_INSUFFICIENT);
@@ -97,7 +97,7 @@ class FrontRebuildRunnerTest extends MysqlTestBase {
         fixtures.createAirportSubscription(airportId, "Empty-01", 3000);
         activeUser("u1");
 
-        assertThatThrownBy(() -> runner.applyAll())
+        assertThatThrownBy(() -> runner.applyAll(false))
                 .hasMessageContaining("需要 1 个主用名额，现有 0");
     }
 
@@ -108,10 +108,10 @@ class FrontRebuildRunnerTest extends MysqlTestBase {
         activeUser("u1");
         activeUser("u2");
 
-        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 20)))
-                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true));
-        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 200)))
-                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 1, false));
+        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 20), false))
+                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true, 0));
+        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 200), false))
+                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 1, false, 0));
     }
 
     @Test
@@ -122,12 +122,57 @@ class FrontRebuildRunnerTest extends MysqlTestBase {
         fixtures.setAirportPrimaryEnabled(airportSubscriptionRepository.findById(b).orElseThrow().getAirportId(), false);
         List<Long> users = List.of(activeUser("u1"), activeUser("u2"));
 
-        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 20)))
-                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true));
+        assertThat(runner.preview(new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 3, 20), false))
+                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true, 0));
 
-        runner.applyAll();
+        runner.applyAll(false);
         for (Long u : users) {
             assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(u)).containsExactly(a, b);
         }
+    }
+
+    @Test
+    @DisplayName("保留手动分配：手动用户列表不动、不参与重排，其占的主用名额计入负载与预检；覆盖则一并重排并清掉手动标记")
+    void keepManualLeavesManualListsAndCountsTheirLoad() {
+        Long a = usableSubscription("A", 40);    // 容量 2
+        Long b = usableSubscription("B", 20);    // 容量 1
+        Long manual = activeUser("manual");
+        Long u1 = activeUser("u1");
+        Long u2 = activeUser("u2");
+        fixtures.assignFrontManually(manual, b);   // 手动钉在 B，B 的名额被占满
+
+        var settings = new ai.mintpop.lane.dto.FrontSettings(ai.mintpop.lane.enumeration.NodeRegion.US, 1, 20);
+        assertThat(runner.preview(settings, true))
+                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(2, 2, true, 1));
+        assertThat(runner.preview(settings, false))
+                .isEqualTo(new ai.mintpop.lane.response.FrontRebuildPreview(3, 3, true, 0));
+
+        RebuildResult kept = runner.applyAll(true);
+
+        assertThat(kept.userCount()).isEqualTo(2);
+        assertThat(kept.keptManualCount()).isEqualTo(1);
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(manual)).containsExactly(b);
+        // B 已被手动用户占满，自动用户的主用只能落在 A
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(u1).get(0)).isEqualTo(a);
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(u2).get(0)).isEqualTo(a);
+        assertThat(userFrontSubscriptionRepository.findManualUserIds()).containsExactly(manual);
+
+        RebuildResult overwritten = runner.applyAll(false);
+
+        assertThat(overwritten.userCount()).isEqualTo(3);
+        assertThat(overwritten.keptManualCount()).isZero();
+        assertThat(userFrontSubscriptionRepository.findManualUserIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("保留手动分配时，手动用户即使没有激活席位也原样保留")
+    void keepManualKeepsUsersWithoutSeat() {
+        Long a = usableSubscription("A", 300);
+        Long noSeat = fixtures.createUser("no-seat", null);
+        fixtures.assignFrontManually(noSeat, a);
+
+        runner.applyAll(true);
+
+        assertThat(userFrontSubscriptionRepository.findSubscriptionIdsByUserId(noSeat)).containsExactly(a);
     }
 }

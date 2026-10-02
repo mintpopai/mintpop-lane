@@ -28,9 +28,10 @@ public class AdminFrontRebuildController {
         this.systemSettingService = systemSettingService;
     }
 
+    /** keepManual：true 保留管理员手动指定的列表，false 所有人从零重排（手动标记一并清掉） */
     @PostMapping
-    public ApiResponse<Void> start() {
-        frontRebuildService.start();
+    public ApiResponse<Void> start(@RequestParam boolean keepManual) {
+        frontRebuildService.start(keepManual);
         return ApiResponse.success();
     }
 
@@ -42,13 +43,14 @@ public class AdminFrontRebuildController {
     /** 预检按表单里的新值算：地区决定候选订阅，每人带宽决定名额；机场数不影响主用名额，沿用现值 */
     @GetMapping("/preview")
     public ApiResponse<FrontRebuildPreview> preview(@RequestParam NodeRegion region,
-                                                    @RequestParam int bandwidthPerUserMbps) {
+                                                    @RequestParam int bandwidthPerUserMbps,
+                                                    @RequestParam boolean keepManual) {
         if (bandwidthPerUserMbps < FrontSettings.MIN_BANDWIDTH_PER_USER_MBPS
                 || bandwidthPerUserMbps > FrontSettings.MAX_BANDWIDTH_PER_USER_MBPS) {
             throw new BizException(BizCodeEnum.SETTING_INVALID);
         }
         FrontSettings current = systemSettingService.frontSettings();
         return ApiResponse.success(frontRebuildService.preview(
-                new FrontSettings(region, current.airportsPerUser(), bandwidthPerUserMbps)));
+                new FrontSettings(region, current.airportsPerUser(), bandwidthPerUserMbps), keepManual));
     }
 }

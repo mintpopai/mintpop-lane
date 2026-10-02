@@ -59,32 +59,35 @@ class AdminFrontRebuildControllerTest extends MysqlTestBase {
         fixtures.clearAll();
         adminId = fixtures.createUser("logto-admin", ADMIN, ACTIVE, null);
         org.mockito.Mockito.when(frontRebuildService.status()).thenReturn(ai.mintpop.lane.response.FrontRebuildStatus.idle());
-        org.mockito.Mockito.when(frontRebuildService.preview(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true));
+        org.mockito.Mockito.when(frontRebuildService.preview(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(new ai.mintpop.lane.response.FrontRebuildPreview(2, 15, true, 1));
     }
 
     @Test
-    @DisplayName("POST 启动；GET 读状态；GET preview 透传设置")
+    @DisplayName("POST 启动（透传 keepManual）；GET 读状态；GET preview 透传设置与 keepManual")
     void startStatusPreview() throws Exception {
-        mockMvc.perform(post("/api/admin/front/rebuild").header("Authorization", bearer(adminId)))
+        mockMvc.perform(post("/api/admin/front/rebuild").header("Authorization", bearer(adminId))
+                        .param("keepManual", "true"))
                 .andExpect(jsonPath("$.code").value(0));
-        verify(frontRebuildService).start();
+        verify(frontRebuildService).start(true);
 
         mockMvc.perform(get("/api/admin/front/rebuild").header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.data.phase").value("IDLE"));
 
         mockMvc.perform(get("/api/admin/front/rebuild/preview").header("Authorization", bearer(adminId))
-                        .param("region", "US").param("bandwidthPerUserMbps", "20"))
+                        .param("region", "US").param("bandwidthPerUserMbps", "20").param("keepManual", "false"))
                 .andExpect(jsonPath("$.data.requiredPrimary").value(2))
                 .andExpect(jsonPath("$.data.availablePrimary").value(15))
-                .andExpect(jsonPath("$.data.sufficient").value(true));
+                .andExpect(jsonPath("$.data.sufficient").value(true))
+                .andExpect(jsonPath("$.data.keptManualCount").value(1));
+        verify(frontRebuildService).preview(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(false));
     }
 
     @Test
     @DisplayName("preview 带宽越界（0）报 410054，不进入服务层")
     void previewRejectsOutOfRangeBandwidth() throws Exception {
         mockMvc.perform(get("/api/admin/front/rebuild/preview").header("Authorization", bearer(adminId))
-                        .param("region", "US").param("bandwidthPerUserMbps", "0"))
+                        .param("region", "US").param("bandwidthPerUserMbps", "0").param("keepManual", "true"))
                 .andExpect(jsonPath("$.code").value(410054));
     }
 
@@ -95,13 +98,13 @@ class AdminFrontRebuildControllerTest extends MysqlTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("region", "US", "airportsPerUser", 3, "bandwidthPerUserMbps", 20))))
                 .andExpect(jsonPath("$.code").value(0));
-        verify(frontRebuildService, never()).start();
+        verify(frontRebuildService, never()).start(org.mockito.ArgumentMatchers.anyBoolean());
 
         mockMvc.perform(put("/api/admin/settings").header("Authorization", bearer(adminId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("region", "US", "airportsPerUser", 2, "bandwidthPerUserMbps", 20))))
                 .andExpect(jsonPath("$.code").value(0));
-        verify(frontRebuildService, never()).start();
+        verify(frontRebuildService, never()).start(org.mockito.ArgumentMatchers.anyBoolean());
 
         org.mockito.Mockito.when(frontRebuildService.status()).thenReturn(new ai.mintpop.lane.response.FrontRebuildStatus(
                 ai.mintpop.lane.enumeration.FrontRebuildPhase.RUNNING, Instant.now(), null, null, null, null));

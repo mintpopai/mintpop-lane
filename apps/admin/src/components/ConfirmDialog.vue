@@ -18,6 +18,8 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
 <template>
   <Modal :title="title" @close="emit('cancel')">
     <p class="message">{{ message }}</p>
+    <!-- 确认前要多选一项时（如重算方式）放这里，排在说明之下 -->
+    <slot />
     <template #footer>
       <button type="button" class="admin-btn-ghost" :disabled="busy" @click="emit('cancel')">
         取消

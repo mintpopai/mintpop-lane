@@ -43,6 +43,9 @@ vi.mock("../api", () => ({
     listDeviceRebindRequests,
     allocateUserFront,
     clearUserFront,
+    listAirports: vi.fn(async () => []),
+    listAirportSubscriptions: vi.fn(async () => []),
+    assignUserFrontManually: vi.fn(async () => []),
   }),
 }));
 vi.mock("../toast", () => ({ showToast: vi.fn() }));
@@ -57,6 +60,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     role: "MEMBER",
     status: "ACTIVE",
     frontSubscriptions: [],
+    frontManual: false,
     landNodeId: null,
     landNodeName: null,
     egressIp: null,
@@ -632,6 +636,18 @@ describe("UserDetailView · 第一跳", () => {
     getUser.mockResolvedValue(user({ frontSubscriptions: [] }));
     await mountView([]);
     await vi.waitFor(() => expect(document.body.textContent).toContain("未分配，点「自动分配」"));
+  });
+
+  it("手动分配的列表在标题旁标出「手动分配」；点「手动分配」打开弹窗", async () => {
+    getUser.mockResolvedValue(user({ frontSubscriptions: assigned, frontManual: true }));
+    await mountView([]);
+    await vi.waitFor(() =>
+      expect(document.querySelector(".front-card .manual-pill")?.textContent).toContain("手动分配"),
+    );
+
+    await buttonInCard(".front-card", "手动分配").trigger("click");
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("手动分配机场订阅"));
   });
 
   it("点「自动分配」直接调接口并刷新", async () => {

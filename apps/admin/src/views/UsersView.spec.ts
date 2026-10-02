@@ -32,6 +32,7 @@ function user(overrides: Partial<AdminUserResponse> = {}): AdminUserResponse {
     role: "MEMBER",
     status: "ACTIVE",
     frontSubscriptions: [],
+    frontManual: false,
     landNodeId: null,
     landNodeName: null,
     egressIp: null,

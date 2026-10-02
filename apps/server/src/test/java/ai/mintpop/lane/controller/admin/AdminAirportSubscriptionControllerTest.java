@@ -283,7 +283,7 @@ class AdminAirportSubscriptionControllerTest extends MysqlTestBase {
     void deleteBlockedByFrontSubscriptionReference() throws Exception {
         Long airportSubscriptionId = createGroupImportingTwoNodes();
         Long userId = fixtures.createUser("logto-user-front-sub", null);
-        userFrontSubscriptionRepository.replaceForUser(userId, List.of(airportSubscriptionId));
+        userFrontSubscriptionRepository.replaceForUser(userId, List.of(airportSubscriptionId), false);
 
         mockMvc.perform(delete("/api/admin/airport-subscriptions/" + airportSubscriptionId).header("Authorization", bearer(adminId)))
                 .andExpect(jsonPath("$.code").value(410013));
