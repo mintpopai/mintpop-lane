@@ -233,8 +233,7 @@ onBeforeUnmount(() => {
 <template>
   <PageHead title="全局配置">
     <template #facts>
-      机场订阅线路的全局参数。保存只改配置、不动存量用户的线路，之后的单人分配按新值走；
-      要让全部用户按新值重排，保存后点「重算全部线路」。
+      机场订阅线路的全局参数。保存只改配置、不动存量用户的线路，之后的单人分配按新值走；要让全部用户按新值重排，保存后点「重算全部线路」。
     </template>
     <template #actions>
       <button
