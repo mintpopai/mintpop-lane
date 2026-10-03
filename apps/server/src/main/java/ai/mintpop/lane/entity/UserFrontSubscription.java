@@ -25,7 +25,7 @@ public class UserFrontSubscription {
     private Long airportSubscriptionId;
 
     /** 是否管理员手动指定；同一用户各行取值相同 */
-    private Boolean manual;
+    private Boolean manuallyAssigned;
 
     @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private Instant createdAt;

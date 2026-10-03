@@ -176,7 +176,7 @@ public class DatabaseFixtures {
     /** 同 assignFront，但标记为管理员手动指定 */
     public void assignFrontManually(Long userId, Long... airportSubscriptionIds) {
         for (int position = 0; position < airportSubscriptionIds.length; position++) {
-            jdbc.update("INSERT INTO user_front_subscription (user_id, position, airport_subscription_id, manual) VALUES (?, ?, ?, 1)",
+            jdbc.update("INSERT INTO user_front_subscription (user_id, position, airport_subscription_id, manually_assigned) VALUES (?, ?, ?, 1)",
                     userId, position, airportSubscriptionIds[position]);
         }
     }

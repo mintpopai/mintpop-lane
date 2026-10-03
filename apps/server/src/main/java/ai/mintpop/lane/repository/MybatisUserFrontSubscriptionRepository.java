@@ -53,7 +53,7 @@ public class MybatisUserFrontSubscriptionRepository implements UserFrontSubscrip
     public Set<Long> findManualUserIds() {
         return mapper.selectList(Wrappers.<UserFrontSubscription>lambdaQuery()
                         .select(UserFrontSubscription::getUserId)
-                        .eq(UserFrontSubscription::getManual, true))
+                        .eq(UserFrontSubscription::getManuallyAssigned, true))
                 .stream().map(UserFrontSubscription::getUserId).collect(Collectors.toSet());
     }
 
@@ -108,7 +108,7 @@ public class MybatisUserFrontSubscriptionRepository implements UserFrontSubscrip
         row.setUserId(userId);
         row.setPosition(position);
         row.setAirportSubscriptionId(airportSubscriptionId);
-        row.setManual(manual);
+        row.setManuallyAssigned(manual);
         return row;
     }
 
