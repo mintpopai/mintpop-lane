@@ -31,10 +31,10 @@ import org.testcontainers.mysql.MySQLContainer;
 @Import(CurrentDesktopClientHeader.class)
 public abstract class MysqlTestBase {
 
-    // 钉死到与生产同一小版本：浮动的 mysql:8.4 拉到的是最新小版本，8.4.0 的解析器把 MANUAL 当关键字、
-    // 后续小版本又放开了，测试绿而生产 1064（V33 实录）。生产库升级小版本时同步改这里
+    // 钉死到与生产同一小版本（生产为 8.4.10）：浮动的 mysql:8.4 拉到的是最新小版本，8.4.10 的解析器
+    // 把 MANUAL 当关键字、8.4.11 放开了，测试绿而生产 1064（V33 实录）。生产库升级小版本时同步改这里
     @ServiceConnection
-    protected static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.0");
+    protected static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4.10");
 
     @Autowired
     private SubscriptionRenderCache renderCache;
